@@ -11,7 +11,7 @@ const Header = () => {
 
   return (
     <div className="fixed top-0 z-800 w-full h-[64px] items-center justify-center border-b-[1px] border-solid border-[rgba(0,0,0,0.08)]">
-      <div class="absolute inset-0 z-[-1] bg-white/88 backdrop-saturate-[1.5] backdrop-blur-[32px]"></div>
+      <div className="absolute inset-0 z-[-1] bg-white/88 backdrop-saturate-[1.5] backdrop-blur-[32px]"></div>
       {/* 3xl 이상 정의하고 반응형 여기다 집어넣기 */}
       <header className="flex max-w-[1024px] h-full items-center mx-auto">
         <nav className="flex items-center h-full gap-8">

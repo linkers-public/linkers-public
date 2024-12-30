@@ -24,6 +24,13 @@ const SideNavigator = () => {
       },
       {
         icon: '',
+        label: '메이커 제안 현황',
+        type: 'my',
+        isActive: pathname === '/my/maker-proposal',
+        href: '/my/maker-proposal',
+      },
+      {
+        icon: '',
         label: '팀 프로필',
         type: 'team',
         isActive: pathname === '/my/team-profile',
@@ -42,18 +49,18 @@ const SideNavigator = () => {
   return (
     <section className="flex h-full">
       <nav className="flex flex-col w-[200px] gap-4 mx-5 my-10">
-        <div className="flex flex-col gap-2">
-          <span className="text-p2 text-black80">마이</span>
-          <div className="flex flex-col gap-1 px-2">
+        <div className="flex flex-col gap-4">
+          <span className="text-p1 text-black80">마이</span>
+          <div className="flex flex-col gap-4">
             {routes
               .filter((route) => route.type === 'my')
               .map((route, index) => (
                 <div
                   key={index}
-                  className={`px-2 py-1 text-black100  rounded-[14px] ${
+                  className={`px-2 py-1 rounded-[14px] text-subtitle2  ${
                     route.isActive
-                      ? 'bg-primary text-white text-subtitle3'
-                      : 'text-p2 hover:bg-black20'
+                      ? ' text-palette-coolNeutral-10'
+                      : 'text-palette-coolNeutral-80'
                   }`}
                 >
                   <Link
@@ -66,18 +73,18 @@ const SideNavigator = () => {
               ))}
           </div>
         </div>
-        <div className="flex flex-col gap-2">
-          <span className="text-p2 text-black80">팀</span>
-          <div className="flex flex-col gap-1 px-2">
+        <div className="flex flex-col gap-4 mt-4">
+          <span className="text-p1 text-black80">팀</span>
+          <div className="flex flex-col gap-4">
             {routes
               .filter((route) => route.type === 'team')
               .map((route, index) => (
                 <div
                   key={index}
-                  className={`px-2 py-1 text-black100  rounded-[14px] ${
+                  className={`px-2 py-1  rounded-[14px] text-subtitle2  ${
                     route.isActive
-                      ? 'bg-primary text-white text-subtitle3'
-                      : 'text-p2 hover:bg-black20'
+                      ? ' text-palette-coolNeutral-10'
+                      : 'text-palette-coolNeutral-80'
                   }`}
                 >
                   <Link
