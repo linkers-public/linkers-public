@@ -4,8 +4,8 @@ import { SearchIcon, ChevronDown } from 'lucide-react'
 
 const SearchMakersClient = () => {
   return (
-    <>
-      <h2 className="text-h3 ml-1 mb-4">메이커 찾기</h2>
+    <div className="flex flex-col gap-4">
+      <h3 className="text-h3">메이커 찾기</h3>
       <section className="flex gap-4">
         <div className="flex shadow-normal py-2 px-4 gap-6 rounded-[12px] hover:shadow-emphasize">
           <span className="text-palette-coolNeutral-40">경력</span>
@@ -50,7 +50,7 @@ const SearchMakersClient = () => {
           />
         </div>
       </section> */}
-      <section className="flex mt-6 gap-2">
+      <section className="flex gap-2">
         <div className="px-2 py-1 shadow-emphasize rounded-[12px] text-[12px] hover:shadow-emphasize">
           😊 새로 가입했어요
         </div>
@@ -71,7 +71,7 @@ const SearchMakersClient = () => {
         <MakerMeta />
         <MakerMeta />
       </ul>
-    </>
+    </div>
   )
 }
 
@@ -81,6 +81,7 @@ const MakerMeta = () => {
       {/* 요약 내용 */}
       <div className="flex gap-4 items-center">
         <div className="w-14 h-14 rounded-full bg-palette-coolNeutral-90"></div>
+
         <div className="flex flex-col">
           <span className="text-subtitle2">김유빈</span>
           <p className="text-p3">경력 2년</p>

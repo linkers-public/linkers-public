@@ -24,7 +24,7 @@ export default function RootLayout({
       <body className={`${notoSansKR.className} antialiased`}>
         <Header />
         <main className="flex w-full h-full min-h-[calc(100vh-60px)] pt-[80px]">
-          <div className="mx-auto max-w-[1060px]">{children}</div>
+          <div className="flex mx-auto w-full max-w-[1060px] ">{children}</div>
         </main>
       </body>
     </html>
