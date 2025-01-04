@@ -27,10 +27,7 @@
     "**/*.tsx",
     "**/*.js",
     "**/*.jsx",
-    ".next/types/**/*.ts",
-    "src/layout/SideBar.jsx",
-    "src/layout/Header.jsx",
-    "src/layout/Footer.jsx"
+    ".next/types/**/*.ts"
   ],
   "exclude": ["node_modules"]
 }

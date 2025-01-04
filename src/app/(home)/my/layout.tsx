@@ -7,7 +7,11 @@ export default function RootLayout({
 }>) {
   return (
     <section className="flex flew-row w-full">
-      <ProfileDecider />
+      <div className="flex h-full">
+        <nav className="flex flex-col w-[200px] gap-4 mx-5 my-10">
+          <ProfileDecider />
+        </nav>
+      </div>
       <div className="flex-1 mt-8">{children}</div>
     </section>
   )
