@@ -1,4 +1,4 @@
-import MakerProposalClient from './maker-proposal.client'
+import MakerProposalClient from './MakerProposalClient'
 
 export default function Page() {
   return <MakerProposalClient />
