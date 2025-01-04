@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useEffect, useRef, useState } from 'react'
-import { getMakerProposals } from '@/apis/mangers-no-rls'
+import { getMakerProposals } from '@/apis/mock/managers-no-rls'
 import MultiSelectButton from '@/components/MultiSelector'
 import { Slider } from '@/components/ui/slider'
 import { XCircle } from 'lucide-react'

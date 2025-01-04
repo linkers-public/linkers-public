@@ -2,15 +2,6 @@
 
 import { createSupabaseBrowserClient } from '@/supabase/supabase-client'
 
-export const getManager = async (id: number) => {
-  const supabase = createSupabaseBrowserClient()
-  const { data, error } = await supabase
-    .from('managers_no_rls')
-    .select('*')
-    .eq('id', id)
-    .single()
-}
-
 // ----------------------------------------------------
 
 type ProposalStatus = '수락' | '거절' | '미응답'
