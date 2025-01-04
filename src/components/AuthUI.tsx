@@ -13,6 +13,7 @@ const AuthUI = ({ role }: { role: string }) => {
 
   const getUserInfo = async () => {
     const result = await supabaseClient.auth.getUser()
+    // @ts-ignore
     if (result?.data?.user) setUser(result?.data?.user)
   }
 
