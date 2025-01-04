@@ -88,58 +88,56 @@ const SideNavigator = () => {
   }
 
   return (
-    <section className="flex h-full">
-      <nav className="flex flex-col w-[200px] gap-4 mx-5 my-10">
+    <>
+      <div className="flex flex-col gap-4">
+        <span className="text-p1 text-black80">마이</span>
         <div className="flex flex-col gap-4">
-          <span className="text-p1 text-black80">마이</span>
-          <div className="flex flex-col gap-4">
-            {routes
-              .filter((route) => route.type === 'my')
-              .map((route, index) => (
-                <div
-                  key={index}
-                  className={`px-2 py-1 rounded-[14px] text-subtitle2 ${
-                    route.isActive
-                      ? 'text-palette-coolNeutral-10'
-                      : 'text-palette-coolNeutral-80'
-                  }`}
+          {routes
+            .filter((route) => route.type === 'my')
+            .map((route, index) => (
+              <div
+                key={index}
+                className={`px-2 py-1 rounded-[14px] text-subtitle2 ${
+                  route.isActive
+                    ? 'text-palette-coolNeutral-10'
+                    : 'text-palette-coolNeutral-80'
+                }`}
+              >
+                <Link
+                  href={route.href}
+                  className="w-full h-full px-2"
                 >
-                  <Link
-                    href={route.href}
-                    className="w-full h-full px-2"
-                  >
-                    {route.label}
-                  </Link>
-                </div>
-              ))}
-          </div>
+                  {route.label}
+                </Link>
+              </div>
+            ))}
         </div>
-        <div className="flex flex-col gap-4 mt-4">
-          <span className="text-p1 text-black80">팀</span>
-          <div className="flex flex-col gap-4">
-            {routes
-              .filter((route) => route.type === 'team')
-              .map((route, index) => (
-                <div
-                  key={index}
-                  className={`px-2 py-1 rounded-[14px] text-subtitle2 ${
-                    route.isActive
-                      ? 'text-palette-coolNeutral-10'
-                      : 'text-palette-coolNeutral-80'
-                  }`}
+      </div>
+      <div className="flex flex-col gap-4 mt-4">
+        <span className="text-p1 text-black80">팀</span>
+        <div className="flex flex-col gap-4">
+          {routes
+            .filter((route) => route.type === 'team')
+            .map((route, index) => (
+              <div
+                key={index}
+                className={`px-2 py-1 rounded-[14px] text-subtitle2 ${
+                  route.isActive
+                    ? 'text-palette-coolNeutral-10'
+                    : 'text-palette-coolNeutral-80'
+                }`}
+              >
+                <Link
+                  href={route.href}
+                  className="w-full h-full px-2"
                 >
-                  <Link
-                    href={route.href}
-                    className="w-full h-full px-2"
-                  >
-                    {route.label}
-                  </Link>
-                </div>
-              ))}
-          </div>
+                  {route.label}
+                </Link>
+              </div>
+            ))}
         </div>
-      </nav>
-    </section>
+      </div>
+    </>
   )
 }
 
