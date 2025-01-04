@@ -1,22 +1,17 @@
-'use client'
-
 import React from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 
 const Logo = () => {
   const router = useRouter()
 
-  const onClickLogo = () => {
-    router.push('/')
-  }
-
   return (
-    <div
-      onClick={onClickLogo}
+    <Link
+      href="/"
       className="text-subtitle1 hover:cursor-pointer"
     >
       MAKERS
-    </div>
+    </Link>
   )
 }
 

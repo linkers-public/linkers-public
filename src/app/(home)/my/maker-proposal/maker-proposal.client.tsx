@@ -1,7 +1,6 @@
 'use client'
 
 import React, { useEffect, useRef, useState } from 'react'
-import { getMakerProposals } from '@/apis/mangers-no-rls'
 import MultiSelectButton from '@/components/MultiSelector'
 import { Slider } from '@/components/ui/slider'
 import { XCircle } from 'lucide-react'
@@ -38,7 +37,7 @@ const MakerProposalClient = () => {
 
   useEffect(() => {
     const fetchProfiles = async () => {
-      const data = await getMakerProposals(filters)
+      const data = null
       setProfiles(data)
     }
     fetchProfiles()
@@ -55,11 +54,11 @@ const MakerProposalClient = () => {
 
   const handleFilterChange = (
     key: 'specialization' | 'experience' | 'job',
-    value: string | string[] | number[], // [number, number] 대신 number[]로 변경
+    value: string | string[] | number[],
   ) => {
     setFilters((prev) => {
       if (key === 'experience' && Array.isArray(value)) {
-        return { ...prev, [key]: value as [number, number] } // 명시적으로 타입 지정
+        return { ...prev, [key]: value as [number, number] }
       }
       return { ...prev, [key]: value }
     })

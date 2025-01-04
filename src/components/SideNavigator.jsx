@@ -3,48 +3,89 @@
 import React, { useMemo } from 'react'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
+import { useAccountStore } from '@/stores/useAccoutStore'
 
 const SideNavigator = () => {
   const pathname = usePathname()
+  const account = useAccountStore((state) => state.account)
+
   const routes = useMemo(() => {
-    return [
-      {
-        icon: '',
-        label: '내 프로필',
-        type: 'my',
-        isActive: pathname === '/my/profile',
-        href: '/my/profile',
-      },
-      {
-        icon: '',
-        label: '상담 현황',
-        type: 'my',
-        isActive: pathname === '/my/counsel',
-        href: '/my/counsel',
-      },
-      {
-        icon: '',
-        label: '메이커 제안 현황',
-        type: 'my',
-        isActive: pathname === '/my/maker-proposal',
-        href: '/my/maker-proposal',
-      },
-      {
-        icon: '',
-        label: '팀 프로필',
-        type: 'team',
-        isActive: pathname === '/my/team-profile',
-        href: '/my/team-profile',
-      },
-      {
-        icon: '',
-        label: '프로젝트',
-        type: 'team',
-        isActive: pathname === '/my/projects',
-        href: '/my/projects',
-      },
-    ]
-  }, [pathname])
+    if (account?.role === 'MAKER') {
+      return [
+        {
+          icon: '',
+          label: '내 프로필',
+          type: 'my',
+          isActive: pathname === '/my/profile',
+          href: '/my/profile',
+        },
+        {
+          icon: '',
+          label: '제안 현황',
+          type: 'my',
+          isActive: pathname === '/my/proposal',
+          href: '/my/proposal',
+        },
+        {
+          icon: '',
+          label: '팀 프로필',
+          type: 'team',
+          isActive: pathname === '/my/team-profile',
+          href: '/my/team-profile',
+        },
+        {
+          icon: '',
+          label: '프로젝트',
+          type: 'team',
+          isActive: pathname === '/my/projects',
+          href: '/my/projects',
+        },
+      ]
+    } else if (account?.role === 'MANAGER') {
+      return [
+        {
+          icon: '',
+          label: '내 프로필',
+          type: 'my',
+          isActive: pathname === '/my/profile',
+          href: '/my/profile',
+        },
+        {
+          icon: '',
+          label: '관심 메이커',
+          type: 'my',
+          isActive: pathname === '/my/favorite-makers',
+          href: '/my/favorite-makers',
+        },
+        {
+          icon: '',
+          label: '상담 현황',
+          type: 'my',
+          isActive: pathname === '/my/counsel',
+          href: '/my/counsel',
+        },
+        {
+          icon: '',
+          label: '팀 프로필',
+          type: 'team',
+          isActive: pathname === '/my/team-profile',
+          href: '/my/team-profile',
+        },
+        {
+          icon: '',
+          label: '프로젝트',
+          type: 'team',
+          isActive: pathname === '/my/projects',
+          href: '/my/projects',
+        },
+      ]
+    }
+    return []
+  }, [pathname, account?.role])
+
+  if (routes.length === 0) {
+    return null
+  }
 
   return (
     <section className="flex h-full">
@@ -57,9 +98,9 @@ const SideNavigator = () => {
               .map((route, index) => (
                 <div
                   key={index}
-                  className={`px-2 py-1 rounded-[14px] text-subtitle2  ${
+                  className={`px-2 py-1 rounded-[14px] text-subtitle2 ${
                     route.isActive
-                      ? ' text-palette-coolNeutral-10'
+                      ? 'text-palette-coolNeutral-10'
                       : 'text-palette-coolNeutral-80'
                   }`}
                 >
@@ -81,9 +122,9 @@ const SideNavigator = () => {
               .map((route, index) => (
                 <div
                   key={index}
-                  className={`px-2 py-1  rounded-[14px] text-subtitle2  ${
+                  className={`px-2 py-1 rounded-[14px] text-subtitle2 ${
                     route.isActive
-                      ? ' text-palette-coolNeutral-10'
+                      ? 'text-palette-coolNeutral-10'
                       : 'text-palette-coolNeutral-80'
                   }`}
                 >

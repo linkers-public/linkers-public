@@ -2,6 +2,8 @@ import type { Metadata } from 'next'
 import { Noto_Sans_KR, Inter } from 'next/font/google'
 import Header from '@/layout/Header'
 import './globals.css'
+import GlobalNavigator from '@/components/GlobalNavigator'
+import AccountProvider from './_providers/AccountProvider'
 
 export const metadata: Metadata = {
   title: 'Create Next App',
@@ -22,9 +24,11 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${notoSansKR.className} antialiased`}>
+        <AccountProvider />
+        <GlobalNavigator />
         <Header />
-        <main className="flex w-full h-full min-h-[calc(100vh-60px)] pt-[80px]">
-          <div className="flex mx-auto w-full max-w-[1060px] ">{children}</div>
+        <main className="flex w-full h-full min-h-[calc(100vh-96px)] pt-1">
+          <div className="flex mx-auto w-full max-w-[1024px] ">{children}</div>
         </main>
       </body>
     </html>
