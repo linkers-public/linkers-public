@@ -1,10 +1,38 @@
 'use client'
 
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { formatDate } from '@/lib/dateFormat'
+import { useRouter } from 'next/navigation'
+import { useProfileStore } from '@/stores/useProfileStore'
+import { fetchUserProfile } from '@/apis/profile.service'
 
-const ProfileClient = ({ profile }: { profile: any }) => {
+export const ProfileClient = () => {
+  const router = useRouter()
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const { profile, setProfile } = useProfileStore()
+
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const { data, error } = await fetchUserProfile()
+
+        if (error) {
+          setError(error)
+          return
+        }
+        setProfile(data)
+      } catch (err) {
+        setError(err)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchProfile()
+  }, [router, setProfile])
+
   const {
     bio,
     username,
@@ -14,21 +42,39 @@ const ProfileClient = ({ profile }: { profile: any }) => {
     account_educations,
     account_license,
   } = profile
-
+  console.log(profile)
   const onclickBookmark = () => {}
   const onclickProposal = () => {}
 
-  const navigateToEditProfile = () => {}
-  const navigateToEditExperience = (id?: string) => {}
-  const navigateToEditEducation = (id?: string) => {}
-  const navigateToCreateExperience = () => {}
-  const navigateToCreateEducation = () => {}
+  const navigateToEditProfile = () => {
+    router.push('/my/update')
+  }
+  const navigateToEditExperience = (id) => {
+    router.push(`/my/profile/careers/${id}/update`)
+  }
+  const navigateToEditEducation = (id) => {
+    router.push(`/my/profile/educations/${id}/update`)
+  }
+  const navigateToCreateExperience = () => {
+    router.push('/my/profile/careers/create')
+  }
+  const navigateToCreateEducation = () => {
+    router.push('/my/profile/educations/create')
+  }
 
-  if (profile === null) {
+  if (isLoading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <p className="text-lg text-palette-coolNeutral-60">로딩중...</p>
+      </div>
+    )
+  }
+
+  if (error) {
     return (
       <div className="flex justify-center items-center h-64">
         <p className="text-lg text-palette-coolNeutral-60">
-          프로필 정보가 없습니다.
+          에러가 발생했습니다: {error.message}
         </p>
       </div>
     )
@@ -65,8 +111,6 @@ const ProfileClient = ({ profile }: { profile: any }) => {
   )
 }
 
-export default ProfileClient
-
 const ProfileMeta = ({
   username,
   mainJob,
@@ -75,14 +119,6 @@ const ProfileMeta = ({
   onClickBookmark,
   onClickProposal,
   onEditProfile,
-}: {
-  username: string
-  mainJob: string[]
-  expertise: string[]
-  bio: string
-  onClickBookmark: () => void
-  onClickProposal: () => void
-  onEditProfile: () => void
 }) => {
   return (
     <section className="flex flex-col gap-4">
@@ -97,7 +133,7 @@ const ProfileMeta = ({
               <p className="text-p3">{mainJob[0]}</p>
             </div>
             <div className="flex items-center gap-1">
-              {expertise?.map((ex: string) => (
+              {expertise?.map((ex) => (
                 <span
                   className="text-p4 "
                   key={ex}
@@ -124,27 +160,23 @@ const WorkExperienceMeta = ({
   account_work_experiences,
   onEditExperience,
   onCreateExperience,
-}: {
-  account_work_experiences: any[]
-  onEditExperience: (id: string) => void
-  onCreateExperience: () => void
 }) => {
   return (
     <>
       <h3 className="text-subtitle2">이력</h3>
       <div className="flex flex-col gap-2 itmes-center">
-        {account_work_experiences?.map((exp: any, index: number) => (
+        {account_work_experiences?.map((exp, index) => (
           <div
             className="flex gap-2"
             key={index}
           >
             <div className="w-8 h-8 rounded-full bg-palette-coolNeutral-90"></div>
-            <div className="flex flex-col">
+            <div className="flex flex-1 flex-col">
               <div
                 className="text-subtitle3"
                 key={index}
               >
-                {exp.name}
+                {exp.company_name}
               </div>
               <div className="text-p2 text-palette-coolNeutral-60">
                 {formatDate(exp.start_date)} ~{' '}
@@ -152,7 +184,7 @@ const WorkExperienceMeta = ({
               </div>
 
               <div className="flex flex-col mt-2">
-                {exp.content?.map((item: string, index: number) => (
+                {exp.content?.map((item, index) => (
                   <span
                     className="text-p2 text-palette-coolNeutral-20"
                     key={index}
@@ -162,8 +194,22 @@ const WorkExperienceMeta = ({
                 ))}
               </div>
             </div>
+            <Button
+              onClick={() => onEditExperience(exp.id)}
+              size={'icon'}
+              variant={'outline'}
+            >
+              {' '}
+              +{' '}
+            </Button>
           </div>
         ))}
+        <Button
+          onClick={onCreateExperience}
+          variant={'outline'}
+        >
+          추가하기
+        </Button>
       </div>
     </>
   )
@@ -173,16 +219,12 @@ const EduCationMeta = ({
   account_educations,
   onEditEducation,
   onCreateEducation,
-}: {
-  account_educations: any[]
-  onEditEducation: (id: string) => void
-  onCreateEducation: () => void
 }) => {
   return (
     <>
       <h3 className="text-subtitle2">학력</h3>
       <div className="flex flex-col gap-2 itmes-center">
-        {account_educations?.map((edu: any, index: number) => (
+        {account_educations?.map((edu, index) => (
           <div
             className="flex gap-2"
             key={index}
@@ -212,11 +254,11 @@ const EduCationMeta = ({
   )
 }
 
-const LicenseMeta = ({ account_license }: { account_license: string[] }) => {
+const LicenseMeta = ({ account_license }) => {
   return (
     <>
       <h3 className="text-subtitle2">자격증</h3>
-      {account_license?.map((license: any, index: number) => (
+      {account_license?.map((license, index) => (
         <div key={index}>{license.name}</div>
       ))}
     </>

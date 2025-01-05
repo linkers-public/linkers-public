@@ -6,7 +6,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <section className="flex flew-row w-full">
+    <section className="flex w-full">
       <div className="flex h-full">
         <nav className="flex flex-col w-[200px] gap-4 mx-5 my-10">
           <ProfileDecider />
