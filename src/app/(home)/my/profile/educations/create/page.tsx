@@ -1,7 +1,8 @@
 import React from 'react'
+import EducationCreateClient from './EducationCreateClient '
 
 const page = () => {
-  return <div>page</div>
+  return <EducationCreateClient />
 }
 
 export default page

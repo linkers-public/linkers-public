@@ -6,12 +6,14 @@ import { formatDate } from '@/lib/dateFormat'
 import { useRouter } from 'next/navigation'
 import { useProfileStore } from '@/stores/useProfileStore'
 import { fetchUserProfile } from '@/apis/profile.service'
+import { useAccountStore } from '@/stores/useAccoutStore'
 
 export const ProfileClient = () => {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
   const { profile, setProfile } = useProfileStore()
+  const account = useAccountStore((state) => state.account)
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -62,6 +64,8 @@ export const ProfileClient = () => {
     router.push('/my/profile/educations/create')
   }
 
+  const isOwner = account?.id === profile?.account_id
+
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -91,21 +95,27 @@ export const ProfileClient = () => {
           onClickBookmark={onclickBookmark}
           onClickProposal={onclickProposal}
           onEditProfile={navigateToEditProfile}
+          isOwner={isOwner}
         />
 
         <WorkExperienceMeta
           account_work_experiences={account_work_experiences}
           onEditExperience={navigateToEditExperience}
           onCreateExperience={navigateToCreateExperience}
+          isOwner={isOwner}
         />
 
         <EduCationMeta
           account_educations={account_educations}
           onEditEducation={navigateToEditEducation}
           onCreateEducation={navigateToCreateEducation}
+          isOwner={isOwner}
         />
 
-        <LicenseMeta account_license={account_license} />
+        <LicenseMeta
+          account_license={account_license}
+          isOwner={isOwner}
+        />
       </div>
     </div>
   )
@@ -119,6 +129,7 @@ const ProfileMeta = ({
   onClickBookmark,
   onClickProposal,
   onEditProfile,
+  isOwner,
 }) => {
   return (
     <section className="flex flex-col gap-4">
@@ -160,29 +171,35 @@ const WorkExperienceMeta = ({
   account_work_experiences,
   onEditExperience,
   onCreateExperience,
+  isOwner,
 }) => {
   return (
     <>
-      <h3 className="text-subtitle2">이력</h3>
-      <div className="flex flex-col gap-2 itmes-center">
+      <div className="flex justify-between items-center">
+        <h3 className="text-subtitle2">이력</h3>
+        {isOwner && (
+          <Button
+            onClick={onCreateExperience}
+            variant="outline"
+            size="sm"
+          >
+            추가하기
+          </Button>
+        )}
+      </div>
+      <div className="flex flex-col gap-2">
         {account_work_experiences?.map((exp, index) => (
           <div
             className="flex gap-2"
             key={index}
           >
-            <div className="w-8 h-8 rounded-full bg-palette-coolNeutral-90"></div>
+            <div className="w-8 h-8 rounded-full bg-palette-coolNeutral-90" />
             <div className="flex flex-1 flex-col">
-              <div
-                className="text-subtitle3"
-                key={index}
-              >
-                {exp.company_name}
-              </div>
+              <div className="text-subtitle3">{exp.company_name}</div>
               <div className="text-p2 text-palette-coolNeutral-60">
                 {formatDate(exp.start_date)} ~{' '}
                 {exp.end_date ? formatDate(exp.end_date) : '현재'}
               </div>
-
               <div className="flex flex-col mt-2">
                 {exp.content?.map((item, index) => (
                   <span
@@ -194,22 +211,17 @@ const WorkExperienceMeta = ({
                 ))}
               </div>
             </div>
-            <Button
-              onClick={() => onEditExperience(exp.id)}
-              size={'icon'}
-              variant={'outline'}
-            >
-              {' '}
-              +{' '}
-            </Button>
+            {isOwner && (
+              <Button
+                onClick={() => onEditExperience(exp.id)}
+                size="icon"
+                variant="ghost"
+              >
+                ✏️
+              </Button>
+            )}
           </div>
         ))}
-        <Button
-          onClick={onCreateExperience}
-          variant={'outline'}
-        >
-          추가하기
-        </Button>
       </div>
     </>
   )
@@ -219,29 +231,47 @@ const EduCationMeta = ({
   account_educations,
   onEditEducation,
   onCreateEducation,
+  isOwner,
 }) => {
   return (
     <>
-      <h3 className="text-subtitle2">학력</h3>
-      <div className="flex flex-col gap-2 itmes-center">
+      <div className="flex justify-between items-center">
+        <h3 className="text-subtitle2">학력</h3>
+        {isOwner && (
+          <Button
+            onClick={onCreateEducation}
+            variant="outline"
+            size="sm"
+          >
+            추가하기
+          </Button>
+        )}
+      </div>
+      <div className="flex flex-col gap-2">
         {account_educations?.map((edu, index) => (
           <div
             className="flex gap-2"
             key={index}
           >
-            <div className="w-8 h-8 rounded-full bg-palette-coolNeutral-90"></div>
-            <div className="flex flex-col">
-              <div className="flex gap-2">
-                <div
-                  className="text-subtitle3"
-                  key={index}
-                >
-                  {edu.name}
+            <div className="w-8 h-8 rounded-full bg-palette-coolNeutral-90" />
+            <div className="flex flex-1 flex-col">
+              <div className="flex justify-between items-center">
+                <div className="flex gap-2">
+                  <div className="text-subtitle3">{edu.name}</div>
+                  <div className="text-p2 text-palette-coolNeutral-60">
+                    {formatDate(edu.start_date)} ~{' '}
+                    {edu.end_date ? formatDate(edu.end_date) : '현재'}
+                  </div>
                 </div>
-                <div className="text-p2 text-palette-coolNeutral-60">
-                  {formatDate(edu.start_date)} ~{' '}
-                  {edu.end_date ? formatDate(edu.end_date) : '현재'}
-                </div>
+                {isOwner && (
+                  <Button
+                    onClick={() => onEditEducation(edu.id)}
+                    size="icon"
+                    variant="ghost"
+                  >
+                    ✏️
+                  </Button>
+                )}
               </div>
               <div className="text-p2 text-palette-coolNeutral-20">
                 {edu.content}
@@ -254,13 +284,38 @@ const EduCationMeta = ({
   )
 }
 
-const LicenseMeta = ({ account_license }) => {
+const LicenseMeta = ({ account_license, isOwner }) => {
   return (
     <>
-      <h3 className="text-subtitle2">자격증</h3>
-      {account_license?.map((license, index) => (
-        <div key={index}>{license.name}</div>
-      ))}
+      <div className="flex justify-between items-center">
+        <h3 className="text-subtitle2">자격증</h3>
+        {isOwner && (
+          <Button
+            variant="outline"
+            size="sm"
+          >
+            추가하기
+          </Button>
+        )}
+      </div>
+      <div className="flex flex-col gap-2">
+        {account_license?.map((license, index) => (
+          <div
+            className="flex justify-between items-center"
+            key={index}
+          >
+            <div>{license.name}</div>
+            {isOwner && (
+              <Button
+                size="icon"
+                variant="ghost"
+              >
+                ✏️
+              </Button>
+            )}
+          </div>
+        ))}
+      </div>
     </>
   )
 }

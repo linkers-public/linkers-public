@@ -49,8 +49,51 @@ export const createCareer = async (data: any) => {
 }
 export const deleteCareer = async (id: string) => {}
 
-export const updateEducation = async (data: any) => {}
-export const createEducation = async (data: any) => {}
+export const updateEducation = async (id: number, data: any) => {
+  const supabase = createSupabaseBrowserClient()
+
+  console.log('Update education data:', data)
+
+  const { data: sessionData, error: sessionError } =
+    await supabase.auth.getSession()
+  if (!sessionData.session) {
+    throw new Error('인증되지 않은 사용자입니다.')
+  }
+
+  const { data: education, error } = await supabase
+    .from('account_educations')
+    .update(data)
+    .eq('id', id)
+    .select('*')
+  if (error) {
+    console.error('Update error:', error)
+  }
+
+  return { education, error }
+}
+export const createEducation = async (data: any) => {
+  const supabase = createSupabaseBrowserClient()
+
+  console.log('Create education data:', data)
+
+  const { data: sessionData, error: sessionError } =
+    await supabase.auth.getSession()
+  if (!sessionData.session) {
+    throw new Error('인증되지 않은 사용자입니다.')
+  }
+
+  const { data: education, error } = await supabase
+    .from('account_educations')
+    .insert(data)
+    .select('*')
+    .single()
+
+  if (error) {
+    console.error('Create error:', error)
+  }
+
+  return { data: education, error }
+}
 export const deleteEducation = async (id: string) => {}
 
 export const updateLicense = async (data: any) => {}
