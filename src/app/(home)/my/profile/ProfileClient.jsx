@@ -16,7 +16,7 @@ export const ProfileClient = () => {
   const account = useAccountStore((state) => state.account)
 
   useEffect(() => {
-    const fetchProfile = async () => {
+    const getProfile = async () => {
       try {
         const { data, error } = await fetchUserProfile()
 
@@ -32,8 +32,8 @@ export const ProfileClient = () => {
       }
     }
 
-    fetchProfile()
-  }, [router, setProfile])
+    getProfile()
+  }, [setProfile])
 
   const {
     bio,
@@ -44,7 +44,7 @@ export const ProfileClient = () => {
     account_educations,
     account_license,
   } = profile
-  console.log(profile)
+
   const onclickBookmark = () => {}
   const onclickProposal = () => {}
 

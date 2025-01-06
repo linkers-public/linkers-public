@@ -1,5 +1,3 @@
-'use client'
-
 import { createSupabaseBrowserClient } from '@/supabase/supabase-client'
 
 export const updateCareer = async (id: number, data: any) => {

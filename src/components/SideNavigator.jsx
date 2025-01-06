@@ -2,13 +2,12 @@
 
 import React, { useMemo } from 'react'
 import { usePathname } from 'next/navigation'
+import { useProfileStore } from '@/stores/useProfileStore'
 import Link from 'next/link'
-import { useAccountStore } from '@/stores/useAccoutStore'
 
 const SideNavigator = () => {
   const pathname = usePathname()
-  const account = useAccountStore((state) => state.account)
-
+  const account = useProfileStore((state) => state.profile)
   const routes = useMemo(() => {
     if (account?.role === 'MAKER') {
       return [
@@ -54,8 +53,8 @@ const SideNavigator = () => {
           icon: '',
           label: '관심 메이커',
           type: 'my',
-          isActive: pathname === '/my/favorite-makers',
-          href: '/my/favorite-makers',
+          isActive: pathname === '/my/bookmarked-makers',
+          href: '/my/bookmarked-makers',
         },
         {
           icon: '',

@@ -88,31 +88,34 @@ export type Database = {
       account_work_experiences: {
         Row: {
           account_id: string
-          content: string
+          company_name: string | null
+          content: Json | null
           created_at: string
           end_date: string | null
           id: number
-          name: string | null
+          position: string | null
           start_date: string
           updated_at: string
         }
         Insert: {
           account_id?: string
-          content: string
+          company_name?: string | null
+          content?: Json | null
           created_at?: string
           end_date?: string | null
           id?: number
-          name?: string | null
+          position?: string | null
           start_date: string
           updated_at?: string
         }
         Update: {
           account_id?: string
-          content?: string
+          company_name?: string | null
+          content?: Json | null
           created_at?: string
           end_date?: string | null
           id?: number
-          name?: string | null
+          position?: string | null
           start_date?: string
           updated_at?: string
         }
@@ -136,6 +139,7 @@ export type Database = {
           role: Database["public"]["Enums"]["user_role"]
           updated_at: string
           user_id: string
+          username: string
         }
         Insert: {
           bio: string
@@ -146,6 +150,7 @@ export type Database = {
           role: Database["public"]["Enums"]["user_role"]
           updated_at?: string
           user_id?: string
+          username?: string
         }
         Update: {
           bio?: string
@@ -156,10 +161,262 @@ export type Database = {
           role?: Database["public"]["Enums"]["user_role"]
           updated_at?: string
           user_id?: string
+          username?: string
         }
         Relationships: []
       }
-      manger_boomarks: {
+      chat: {
+        Row: {
+          chat_created_at: string | null
+          chat_id: number
+          estimate_id: number | null
+        }
+        Insert: {
+          chat_created_at?: string | null
+          chat_id?: number
+          estimate_id?: number | null
+        }
+        Update: {
+          chat_created_at?: string | null
+          chat_id?: number
+          estimate_id?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "estimate"
+            referencedColumns: ["estimate_id"]
+          },
+        ]
+      }
+      chat_message: {
+        Row: {
+          attachment: string | null
+          chat_id: number | null
+          chat_message_id: number
+          estimate_id: number | null
+          message: string | null
+          message_sent_at: string | null
+          sender_id: number | null
+          sender_type: string | null
+        }
+        Insert: {
+          attachment?: string | null
+          chat_id?: number | null
+          chat_message_id?: number
+          estimate_id?: number | null
+          message?: string | null
+          message_sent_at?: string | null
+          sender_id?: number | null
+          sender_type?: string | null
+        }
+        Update: {
+          attachment?: string | null
+          chat_id?: number | null
+          chat_message_id?: number
+          estimate_id?: number | null
+          message?: string | null
+          message_sent_at?: string | null
+          sender_id?: number | null
+          sender_type?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_message_chat_id_fkey"
+            columns: ["chat_id"]
+            isOneToOne: false
+            referencedRelation: "chat"
+            referencedColumns: ["chat_id"]
+          },
+          {
+            foreignKeyName: "chat_message_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "estimate"
+            referencedColumns: ["estimate_id"]
+          },
+        ]
+      }
+      client: {
+        Row: {
+          client_id: number
+          client_status: string | null
+          company_name: string | null
+          contact_info: string | null
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          client_id: number
+          client_status?: string | null
+          company_name?: string | null
+          contact_info?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          client_id?: number
+          client_status?: string | null
+          company_name?: string | null
+          contact_info?: string | null
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      counsel: {
+        Row: {
+          client_id: number | null
+          cost: number
+          counsel_date: string | null
+          counsel_id: number
+          counsel_status: string | null
+          counsel_type: string | null
+          due_date: string
+          outline: string | null
+          output: string | null
+          start_date: string
+        }
+        Insert: {
+          client_id?: number | null
+          cost?: number
+          counsel_date?: string | null
+          counsel_id: number
+          counsel_status?: string | null
+          counsel_type?: string | null
+          due_date?: string
+          outline?: string | null
+          output?: string | null
+          start_date?: string
+        }
+        Update: {
+          client_id?: number | null
+          cost?: number
+          counsel_date?: string | null
+          counsel_id?: number
+          counsel_status?: string | null
+          counsel_type?: string | null
+          due_date?: string
+          outline?: string | null
+          output?: string | null
+          start_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "counsel_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client"
+            referencedColumns: ["client_id"]
+          },
+        ]
+      }
+      estimate: {
+        Row: {
+          client_id: number | null
+          counsel_id: number | null
+          estimate_date: string | null
+          estimate_due_date: string | null
+          estimate_id: number
+          estimate_start_date: string | null
+          estimate_status: string | null
+          manager_id: string | null
+          team_id: number | null
+        }
+        Insert: {
+          client_id?: number | null
+          counsel_id?: number | null
+          estimate_date?: string | null
+          estimate_due_date?: string | null
+          estimate_id?: number
+          estimate_start_date?: string | null
+          estimate_status?: string | null
+          manager_id?: string | null
+          team_id?: number | null
+        }
+        Update: {
+          client_id?: number | null
+          counsel_id?: number | null
+          estimate_date?: string | null
+          estimate_due_date?: string | null
+          estimate_id?: number
+          estimate_start_date?: string | null
+          estimate_status?: string | null
+          manager_id?: string | null
+          team_id?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "estimate_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "estimate_counsel_id_fkey"
+            columns: ["counsel_id"]
+            isOneToOne: false
+            referencedRelation: "counsel"
+            referencedColumns: ["counsel_id"]
+          },
+          {
+            foreignKeyName: "estimate_manager_id_fkey"
+            columns: ["manager_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "estimate_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      estimate_version: {
+        Row: {
+          detail: string | null
+          end_date: string | null
+          estimate_id: number | null
+          estimate_version_id: number
+          start_date: string | null
+          total_amount: number | null
+          version_date: string | null
+        }
+        Insert: {
+          detail?: string | null
+          end_date?: string | null
+          estimate_id?: number | null
+          estimate_version_id: number
+          start_date?: string | null
+          total_amount?: number | null
+          version_date?: string | null
+        }
+        Update: {
+          detail?: string | null
+          end_date?: string | null
+          estimate_id?: number | null
+          estimate_version_id?: number
+          start_date?: string | null
+          total_amount?: number | null
+          version_date?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "estimate_version_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "estimate"
+            referencedColumns: ["estimate_id"]
+          },
+        ]
+      }
+      manager_bookmarks: {
         Row: {
           created_at: string
           id: number
@@ -192,6 +449,245 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "accounts"
             referencedColumns: ["user_id"]
+          },
+        ]
+      }
+      milestone: {
+        Row: {
+          estimate_id: number | null
+          estimate_version_id: number | null
+          milestone_due_date: string | null
+          milestone_id: number
+          milestone_start_date: string | null
+          milestone_status: string | null
+          payment_amount: string | null
+          title: string | null
+        }
+        Insert: {
+          estimate_id?: number | null
+          estimate_version_id?: number | null
+          milestone_due_date?: string | null
+          milestone_id: number
+          milestone_start_date?: string | null
+          milestone_status?: string | null
+          payment_amount?: string | null
+          title?: string | null
+        }
+        Update: {
+          estimate_id?: number | null
+          estimate_version_id?: number | null
+          milestone_due_date?: string | null
+          milestone_id?: number
+          milestone_start_date?: string | null
+          milestone_status?: string | null
+          payment_amount?: string | null
+          title?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "milestone_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "estimate"
+            referencedColumns: ["estimate_id"]
+          },
+          {
+            foreignKeyName: "milestone_estimate_version_id_fkey"
+            columns: ["estimate_version_id"]
+            isOneToOne: false
+            referencedRelation: "estimate_version"
+            referencedColumns: ["estimate_version_id"]
+          },
+        ]
+      }
+      payment: {
+        Row: {
+          client_id: number | null
+          milestone_id: number | null
+          payment_amount: string | null
+          payment_date: string | null
+          payment_id: number
+          payment_method: string | null
+          payment_status: string | null
+        }
+        Insert: {
+          client_id?: number | null
+          milestone_id?: number | null
+          payment_amount?: string | null
+          payment_date?: string | null
+          payment_id: number
+          payment_method?: string | null
+          payment_status?: string | null
+        }
+        Update: {
+          client_id?: number | null
+          milestone_id?: number | null
+          payment_amount?: string | null
+          payment_date?: string | null
+          payment_id?: number
+          payment_method?: string | null
+          payment_status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "payment_milestone_id_fkey"
+            columns: ["milestone_id"]
+            isOneToOne: false
+            referencedRelation: "milestone"
+            referencedColumns: ["milestone_id"]
+          },
+        ]
+      }
+      team_counsel: {
+        Row: {
+          client_id: number | null
+          counsel_date: string | null
+          counsel_id: number | null
+          counsel_status: string | null
+          manager_id: string | null
+          team_counsel_id: number
+          team_id: number | null
+        }
+        Insert: {
+          client_id?: number | null
+          counsel_date?: string | null
+          counsel_id?: number | null
+          counsel_status?: string | null
+          manager_id?: string | null
+          team_counsel_id?: number
+          team_id?: number | null
+        }
+        Update: {
+          client_id?: number | null
+          counsel_date?: string | null
+          counsel_id?: number | null
+          counsel_status?: string | null
+          manager_id?: string | null
+          team_counsel_id?: number
+          team_id?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_counsel_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "client"
+            referencedColumns: ["client_id"]
+          },
+          {
+            foreignKeyName: "team_counsel_counsel_id_fkey"
+            columns: ["counsel_id"]
+            isOneToOne: false
+            referencedRelation: "counsel"
+            referencedColumns: ["counsel_id"]
+          },
+          {
+            foreignKeyName: "team_counsel_manager_id_fkey"
+            columns: ["manager_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "team_counsel_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      team_members: {
+        Row: {
+          created_at: string
+          id: number
+          maker_id: string | null
+          status: string | null
+          team_id: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: number
+          maker_id?: string | null
+          status?: string | null
+          team_id?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: number
+          maker_id?: string | null
+          status?: string | null
+          team_id?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_members_maker_id_fkey"
+            columns: ["maker_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "team_members_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      team_project: {
+        Row: {
+          estimate_id: number | null
+          estimate_status: string | null
+          project_end_date: string | null
+          project_name: string | null
+          project_start_date: string | null
+          team_id: number | null
+          team_project_id: number
+        }
+        Insert: {
+          estimate_id?: number | null
+          estimate_status?: string | null
+          project_end_date?: string | null
+          project_name?: string | null
+          project_start_date?: string | null
+          team_id?: number | null
+          team_project_id: number
+        }
+        Update: {
+          estimate_id?: number | null
+          estimate_status?: string | null
+          project_end_date?: string | null
+          project_name?: string | null
+          project_start_date?: string | null
+          team_id?: number | null
+          team_project_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_project_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "estimate"
+            referencedColumns: ["estimate_id"]
+          },
+          {
+            foreignKeyName: "team_project_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -241,7 +737,7 @@ export type Database = {
         Row: {
           bio: string
           created_at: string
-          deleted_at: string
+          deleted_at: string | null
           id: number
           manager_id: string
           name: string
@@ -253,7 +749,7 @@ export type Database = {
         Insert: {
           bio: string
           created_at?: string
-          deleted_at: string
+          deleted_at?: string | null
           id?: number
           manager_id?: string
           name: string
@@ -265,7 +761,7 @@ export type Database = {
         Update: {
           bio?: string
           created_at?: string
-          deleted_at?: string
+          deleted_at?: string | null
           id?: number
           manager_id?: string
           name?: string
