@@ -9,3 +9,5 @@ export const useAccountStore = create<AccountState>((set) => ({
   account: null,
   setAccount: (account) => set({ account }),
 }))
+
+export const selectAccount = (state: any) => state.account

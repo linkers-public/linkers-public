@@ -5,26 +5,20 @@ import { Button } from '@/components/ui/button'
 import { formatDate } from '@/lib/dateFormat'
 import { useRouter } from 'next/navigation'
 import { useProfileStore } from '@/stores/useProfileStore'
-import { fetchUserProfile } from '@/apis/profile.service'
-import { useAccountStore } from '@/stores/useAccoutStore'
+import { selectAccount, useAccountStore } from '@/stores/useAccoutStore'
 
 export const ProfileClient = () => {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
-  const { profile, setProfile } = useProfileStore()
-  const account = useAccountStore((state) => state.account)
+  const { profile, fetchProfile } = useProfileStore()
+  const account = useAccountStore(selectAccount)
 
   useEffect(() => {
     const getProfile = async () => {
+      setIsLoading(true)
       try {
-        const { data, error } = await fetchUserProfile()
-
-        if (error) {
-          setError(error)
-          return
-        }
-        setProfile(data)
+        await fetchProfile()
       } catch (err) {
         setError(err)
       } finally {
@@ -33,7 +27,7 @@ export const ProfileClient = () => {
     }
 
     getProfile()
-  }, [setProfile])
+  }, [])
 
   const {
     bio,

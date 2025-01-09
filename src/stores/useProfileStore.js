@@ -1,66 +1,7 @@
+import { fetchUserProfile } from '@/apis/profile.service'
 import { create } from 'zustand'
 
-interface WorkExperience {
-  id: number
-  position: string
-  company_name: string
-  start_date: string
-  end_date: string | null
-  content: string[]
-}
-
-interface Education {
-  id: number
-  name: string
-  start_date: string
-  end_date: string | null
-  content: string
-}
-
-interface License {
-  id: number
-  name: string
-}
-
-interface Profile {
-  bio: string
-  username: string
-  main_job: string[]
-  expertise: string[]
-  account_work_experiences: WorkExperience[]
-  account_educations: Education[]
-  account_license: License[]
-}
-
-interface ProfileStore {
-  profile: Profile
-  setProfile: (profile: Profile) => void
-
-  updateBasicProfile: (
-    updates: Partial<
-      Pick<Profile, 'bio' | 'username' | 'main_job' | 'expertise'>
-    >,
-  ) => void
-
-  updateWorkExperience: (
-    id: number,
-    experience: Partial<WorkExperience>,
-  ) => void
-  addWorkExperience: (experience: any) => void
-  deleteWorkExperience: (id: number) => void
-
-  updateEducation: (id: number, education: Partial<Education>) => void
-  addEducation: (education: Education) => void
-  deleteEducation: (id: number) => void
-
-  updateLicense: (id: number, license: Partial<License>) => void
-  addLicense: (license: License) => void
-  deleteLicense: (id: number) => void
-
-  resetProfile: () => void
-}
-
-const initialProfile: Profile = {
+const initialProfile = {
   bio: '',
   username: '',
   main_job: [],
@@ -70,10 +11,18 @@ const initialProfile: Profile = {
   account_license: [],
 }
 
-export const useProfileStore = create<ProfileStore>((set) => ({
+export const useProfileStore = create((set) => ({
   profile: initialProfile,
-  setProfile: (profile) => set({ profile }),
 
+  fetchProfile: async () => {
+    try {
+      const { data, error } = await fetchUserProfile()
+      if (error) throw error
+      set({ profile: data })
+    } catch (err) {
+      throw err
+    }
+  },
   updateBasicProfile: (updates) =>
     set((state) => ({
       profile: { ...state.profile, ...updates },
@@ -100,7 +49,7 @@ export const useProfileStore = create<ProfileStore>((set) => ({
       },
     })),
 
-  deleteWorkExperience: (id: number) =>
+  deleteWorkExperience: (id) =>
     set((state) => ({
       profile: {
         ...state.profile,
@@ -169,16 +118,14 @@ export const useProfileStore = create<ProfileStore>((set) => ({
   resetProfile: () => set({ profile: initialProfile }),
 }))
 
-export const selectEducations = (state: ProfileStore) =>
-  state.profile.account_educations
+export const selectEducations = (state) => state.profile.account_educations
 
-export const selectWorkExperiences = (state: ProfileStore) =>
+export const selectWorkExperiences = (state) =>
   state.profile.account_work_experiences
 
-export const selectLicenses = (state: ProfileStore) =>
-  state.profile.account_license
+export const selectLicenses = (state) => state.profile.account_license
 
-export const selectBasicProfile = (state: ProfileStore) => ({
+export const selectBasicProfile = (state) => ({
   bio: state.profile.bio,
   username: state.profile.username,
   main_job: state.profile.main_job,
