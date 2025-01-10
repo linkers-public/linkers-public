@@ -9,6 +9,7 @@ import Sidebar from '../../../components/Sidebar' // Sidebar 컴포넌트 임포
 // 팀 정보와 최근 메시지의 타입 정의
 interface CounselItem {
   team: string
+  teamBio: string
   content: string
   chatId: number // 채팅 ID 추가
   estimateId: number // estimateId 추가
@@ -22,10 +23,10 @@ const CounselStatus: React.FC = () => {
   const [counselList, setCounselList] = useState<CounselItem[]>([]) // 동적으로 채울 팀과 채팅 데이터
   const [messages, setMessages] = useState<any[]>([]) // 메시지 데이터
   const [newMessage, setNewMessage] = useState('') // 새 메시지 입력 상태
-  const [selectedChat, setSelectedChat] = useState<{ chatId: number, estimateId: number } | null>(null); // 선택된 상담의 chatId와 estimateId
+  const [selectedChat, setSelectedChat] = useState<{ chatId: number, estimateId: number, teamName: string, teamBio: string } | null>(null); // 선택된 상담의 chatId와 estimateId
 
   // 메시지 전송 함수
-  const handleSendMessage = async (msg: string) => {
+  const handleSendMessage = async (msg: string) => {setSelectedChat
     if (!msg.trim()) return // 공백 메시지 방지
 
     console.log(selectedChat)
@@ -83,6 +84,7 @@ const CounselStatus: React.FC = () => {
       // 팀명과 가장 최근 메시지, estimateId와 chatId를 counselList에 저장
       const updatedCounselList = data.map((item) => ({
         team: item.team.name, // 팀명
+        teamBio: item.team.bio,
         content: item.recentChat?.message || '최근 메시지가 없습니다.', // 최근 메시지
         chatId: item.recentChat?.chat_id || 0, // chat_id를 가져오도록 수정
         estimateId: item.recentChat?.estimate_id || 0, // estimateId 추가
@@ -96,8 +98,8 @@ const CounselStatus: React.FC = () => {
   }
 
   // 채팅 클릭 시 메시지 가져오기
-  const handleMessageClick = async (chatId: number, estimateId: number) => {
-    setSelectedChat({ chatId, estimateId }); // 선택된 채팅 정보 저장
+  const handleMessageClick = async (chatId: number, estimateId: number, teamName: string, teamBio: string) => {
+    setSelectedChat({ chatId, estimateId, teamName, teamBio }); // 선택된 채팅 정보 저장
     setMessages([]) // 메시지 초기화
     try {
       const messageData = await fetchMessagesByChatId(chatId)
@@ -194,7 +196,7 @@ const CounselStatus: React.FC = () => {
                   boxShadow: '0 2px 5px rgba(0, 0, 0, 0.1)',
                   cursor: 'pointer', // 클릭할 수 있도록 커서 변경
                 }}
-                onClick={() => handleMessageClick(item.chatId, item.estimateId)} // 상담 클릭 시 메시지 로드
+                onClick={() => handleMessageClick(item.chatId, item.estimateId, item.team, item.teamBio)} // 상담 클릭 시 메시지 로드
               >
                 <div
                   style={{
@@ -223,51 +225,119 @@ const CounselStatus: React.FC = () => {
             ))}
         </div>
       </main>
+      
+      <main style={{ flex: 2, padding: '20px', backgroundColor: '#f9f9f9' }}>
+        {/* 팀 정보 */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: '15px',
+            backgroundColor: '#fff',
+            borderRadius: '8px',
+            marginBottom: '20px',
+            boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <div
+              style={{
+                width: '50px',
+                height: '50px',
+                backgroundColor: selectedChat ? '#808080' : '#f1f1f1',
+                borderRadius: '50%',
+                marginRight: '15px',
+              }}
+            ></div>
+            <div>
+              <p style={{ margin: 0, fontWeight: 'bold', fontSize: '18px', color: selectedChat ? '#000' : '#aaa' }}>
+                {selectedChat ? selectedChat.teamName : '팀 정보 없음'}
+              </p>
+              <p style={{ margin: 0, color: selectedChat ? '#888' : '#ccc', fontSize: '14px' }}>
+                {selectedChat ? selectedChat.teamBio : '팀 설명 없음'}
+              </p>
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button
+              style={{
+                padding: '10px 20px',
+                backgroundColor: '#f1f1f1',
+                color: '#888',
+                borderRadius: '8px',
+                border: '1px solid #ddd',
+                cursor: selectedChat ? 'pointer' : 'not-allowed',
+              }}
+              disabled={!selectedChat}
+            >
+              견적서 모음
+            </button>
+            <button
+              style={{
+                padding: '10px 20px',
+                backgroundColor: selectedChat ? '#007bff' : '#ccc',
+                color: '#fff',
+                borderRadius: '8px',
+                border: 'none',
+                cursor: selectedChat ? 'pointer' : 'not-allowed',
+              }}
+              disabled={!selectedChat}
+            >
+              결제하기
+            </button>
+          </div>
+        </div>
 
-      {/* 메시지 영역 */}
-      <main style={{ flex: 3, padding: '20px', backgroundColor: '#fff' }}>
+        {/* 메시지 영역 */}
         <div
           style={{
             backgroundColor: '#fff',
             padding: '20px',
             borderRadius: '8px',
             boxShadow: '0 2px 5px rgba(0, 0, 0, 0.1)',
-            height: 'calc(100vh - 200px)',
+            height: 'calc(100vh - 300px)',
             overflowY: 'scroll',
-            border: '1px solid #ddd',
           }}
         >
           {/* 메시지 표시 */}
           {messages.map((msg, index) => (
-            <div key={index} style={{ marginBottom: '15px', display: 'flex', justifyContent: msg.sender === 'client' ? 'flex-end' : 'flex-start' }}>
+            <div key={index} style={{ marginBottom: '20px' }}>
               {msg.type === 'message' ? (
                 <div
                   style={{
-                    backgroundColor: '#f1f1f1',
-                    borderRadius: '8px',
-                    padding: '10px 15px',
-                    maxWidth: '70%',
-                    marginBottom: '10px',
-                    textAlign: 'left',
+                    display: 'flex',
+                    justifyContent: msg.sender === 'client' ? 'flex-end' : 'flex-start',
                   }}
                 >
-                  {msg.content}
+                  <div
+                    style={{
+                      backgroundColor: msg.sender === 'client' ? '#cce5ff' : '#d1ecf1',
+                      padding: '10px',
+                      borderRadius: '8px',
+                      maxWidth: '70%',
+                      boxShadow: '0 2px 5px rgba(0, 0, 0, 0.1)',
+                    }}
+                  >
+                    <p>{msg.content}</p>
+                  </div>
                 </div>
               ) : (
                 <Card
                   title={msg.title}
                   subtitle={msg.subtitle}
-                  content='dd'
-                  buttonText1='버튼1'
-                  buttonText2='버튼2'
-                  sender={msg.sender_type}
-                  onButtonClick1={() => router.push(`/estimate/${selectedChat?.estimateId}`)} // 카드 클릭 시 이동
-                  onButtonClick2={() => router.push(`/estimate/${selectedChat?.estimateId}`)} // 카드 클릭 시 이동
+                  content={msg.content}
+                  sender={msg.sender}
+                  buttonText1="확인"
+                  buttonText2="파일 첨부"
+                  onButtonClick1={() => alert('확인 버튼 클릭됨')}
+                  onButtonClick2={() => alert('파일 첨부 버튼 클릭됨')}
                 />
               )}
             </div>
           ))}
         </div>
+        
 
         {/* 메시지 전송 영역 */}
         <div style={{ display: 'flex', marginTop: '15px' }}>
@@ -276,29 +346,32 @@ const CounselStatus: React.FC = () => {
             placeholder="메시지를 입력하세요"
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
+            disabled={messages.length === 0}
             style={{
-              width: '80%',
+              flex: 1,
               padding: '10px',
               borderRadius: '8px',
               border: '1px solid #ddd',
-              fontSize: '16px',
-              marginRight: '10px',
+              backgroundColor: messages.length === 0 ? '#f1f1f1' : '#fff',
             }}
           />
           <button
             onClick={() => handleSendMessage(newMessage)}
+            disabled={messages.length === 0}
             style={{
               padding: '10px 15px',
-              backgroundColor: '#28a745',
+              backgroundColor: messages.length === 0 ? '#ccc' : '#007bff',
               color: '#fff',
               borderRadius: '8px',
-              fontSize: '16px',
+              marginLeft: '10px',
+              cursor: messages.length === 0 ? 'not-allowed' : 'pointer',
             }}
           >
             전송
           </button>
         </div>
       </main>
+      
     </div>
   )
 }
