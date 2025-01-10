@@ -151,51 +151,28 @@ export const fetchMessagesByChatId = async (chatId: number) => {
 }
 
 
-
-
 // 메시지 삽입 
-
-export const insertChatMessage = async (chatData: {
-  chat_id: number;
-  sender_id: number | null;
-  message_type: "message" | "card";  // message_type을 명확히 제한
-  message: string;
-  message_sent_at: string;
-  estimate_id: number | null;
-  sender_type?: string | null;
-  attachment?: string | null;
-}) => {
+export const insertChatMessage = async (data: any) => {
   const supabase = createSupabaseBrowserClient()
 
-  // 세션 정보 확인
-  const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
-  if (!sessionData?.session) {
+  console.log('Insert chat message data:', data)
+
+  const { data: sessionData, error: sessionError } =
+    await supabase.auth.getSession()
+  if (!sessionData.session) {
     throw new Error('인증되지 않은 사용자입니다.')
   }
 
-  const { chat_id, sender_id, message_type, message, message_sent_at, estimate_id, sender_type, attachment } = chatData
-
-  // 채팅 메시지 삽입
-  const { data, error } = await supabase
+  const { data: chatMessage, error } = await supabase
     .from('chat_message')
-    .insert([
-      {
-        chat_id: chat_id,
-        sender_id: sender_id,  // sender_id는 number | null로 설정
-        message_type: message_type,  // "message" 또는 "card"로 제한
-        message: message,  // 메시지 내용
-        message_sent_at: message_sent_at,  // 메시지 전송 시간
-        estimate_id: estimate_id,  // estimate_id는 선택적 필드
-        sender_type: sender_type ?? null,  // sender_type은 선택적, null로 설정
-        attachment: attachment ?? null,  // attachment는 선택적, null로 설정
-      }
-    ])
+    .insert(data)  
+    .select('*')   
+    .single()       
 
   if (error) {
-    console.error('Error inserting chat message:', error.message)
+    console.error('Create error:', error)
     throw new Error('채팅 메시지 삽입 실패')
   }
 
-  console.log('채팅 메시지 삽입 성공:', data)
-  return data  // 삽입된 메시지 데이터 반환
+  return { data: chatMessage, error }
 }

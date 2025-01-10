@@ -14,6 +14,7 @@ interface CardProps {
   onButtonClick2: () => void;
 }
 
+
 const Card: React.FC<CardProps> = ({
   title,
   subtitle,
