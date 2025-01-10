@@ -25,6 +25,16 @@ const CounselStatus: React.FC = () => {
   const [newMessage, setNewMessage] = useState('') // 새 메시지 입력 상태
   const [selectedChat, setSelectedChat] = useState<{ chatId: number, estimateId: number, teamName: string, teamBio: string } | null>(null); // 선택된 상담의 chatId와 estimateId
 
+  const formatTimestamp = (timestamp: string) => {
+    const date = new Date(timestamp)
+    const year = date.getFullYear().toString().slice(-2) // 연도의 마지막 두 자리
+    const month = (date.getMonth() + 1).toString().padStart(2, '0') // 월 (0부터 시작하므로 +1)
+    const day = date.getDate().toString().padStart(2, '0') // 일
+    const hours = date.getHours().toString().padStart(2, '0') // 시
+    const minutes = date.getMinutes().toString().padStart(2, '0') // 분
+    return `${year}.${month}.${day} ${hours}:${minutes}`
+  }
+
   // 메시지 전송 함수
   const handleSendMessage = async (msg: string) => {setSelectedChat
     if (!msg.trim()) return // 공백 메시지 방지
@@ -106,6 +116,7 @@ const CounselStatus: React.FC = () => {
       const formattedMessages = messageData.map((msg) => ({
         type: msg.message.message_type,
         content: msg.message.message,
+        timestamp: msg.message.message_sent_at,
         sender: msg.message.sender_type,
         title: msg.message.message_type === 'card' ? '견적서' : '',
         subtitle: msg.message.message_type === 'card' ? msg.estimateVersion?.detail : ''
@@ -288,40 +299,82 @@ const CounselStatus: React.FC = () => {
             </button>
           </div>
         </div>
-
-        {/* 메시지 영역 */}
+{/* 메시지 영역 */}
+<div
+  style={{
+    backgroundColor: '#fff',
+    padding: '20px',
+    borderRadius: '8px',
+    boxShadow: '0 2px 5px rgba(0, 0, 0, 0.1)',
+    height: 'calc(100vh - 300px)',
+    overflowY: 'scroll',
+  }}
+>
+  {/* 메시지 표시 */}
+  {messages.map((msg, index) => (
+    <div key={index} style={{ marginBottom: '20px' }}>
+      {msg.type === 'message' ? (
         <div
           style={{
-            backgroundColor: '#fff',
-            padding: '20px',
-            borderRadius: '8px',
-            boxShadow: '0 2px 5px rgba(0, 0, 0, 0.1)',
-            height: 'calc(100vh - 300px)',
-            overflowY: 'scroll',
+            display: 'flex',
+            flexDirection: 'column', // 세로로 정렬
+            alignItems: msg.sender === 'client' ? 'flex-end' : 'flex-start', // 발신자에 따라 정렬
+            marginBottom: '15px',
           }}
         >
-          {/* 메시지 표시 */}
-          {messages.map((msg, index) => (
-            <div key={index} style={{ marginBottom: '20px' }}>
-              {msg.type === 'message' ? (
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: msg.sender === 'client' ? 'flex-end' : 'flex-start',
-                  }}
-                >
-                  <div
-                    style={{
-                      backgroundColor: msg.sender === 'client' ? '#cce5ff' : '#d1ecf1',
-                      padding: '10px',
-                      borderRadius: '8px',
-                      maxWidth: '70%',
-                      boxShadow: '0 2px 5px rgba(0, 0, 0, 0.1)',
-                    }}
-                  >
-                    <p>{msg.content}</p>
-                  </div>
-                </div>
+          {/* sender_type이 manager일 경우 상단에 팀 이름과 아이콘 표시 */}
+          {msg.sender === 'manager' && (
+            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '5px' }}>
+              {/* 아이콘 */}
+              <img
+                src="/path/to/manager-icon.png" // 실제 아이콘 경로로 교체
+                alt="Manager Icon"
+                style={{
+                  width: '30px',
+                  height: '30px',
+                  borderRadius: '50%',
+                  marginRight: '10px',
+                }}
+              />
+              {/* 팀 이름 */}
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: '14px',
+                  color: '#888',
+                  fontWeight: 'bold',
+                }}
+              >
+                {selectedChat?.teamName || '팀 이름 없음'}
+              </p>
+            </div>
+          )}
+
+          {/* 메시지 박스 */}
+          <div
+            style={{
+              maxWidth: '70%',
+              padding: '10px 15px',
+              borderRadius: '12px',
+              backgroundColor: msg.sender === 'client' ? '#d4f1f4' : '#f1f1f1', // 클라이언트와 매니저 색상 구분
+              boxShadow: '0 2px 5px rgba(0, 0, 0, 0.1)',
+              wordWrap: 'break-word', // 긴 텍스트가 박스를 넘지 않도록
+            }}
+          >
+            <p style={{ margin: 0, fontSize: '14px', color: '#333' }}>{msg.content}</p>
+          </div>
+          
+            {/* 타임스탬프 */}
+            <p
+              style={{
+                marginTop: '5px', // 메시지 박스와 간격
+                fontSize: '12px',
+                color: '#888',
+              }}
+            >
+              {formatTimestamp(msg.timestamp)}
+            </p>
+          </div>
               ) : (
                 <Card
                   title={msg.title}
@@ -337,6 +390,7 @@ const CounselStatus: React.FC = () => {
             </div>
           ))}
         </div>
+
         
 
         {/* 메시지 전송 영역 */}

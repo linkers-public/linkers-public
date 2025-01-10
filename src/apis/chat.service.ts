@@ -93,6 +93,8 @@ export const fetchTeamAndRecentChats = async (clientId: number) => {
   return result
 }
 
+
+//메시지 가져오기기
 export const fetchMessagesByChatId = async (chatId: number) => {
   const supabase = createSupabaseBrowserClient()
 
