@@ -1,5 +1,5 @@
-import CounselStatusPage from './counsel-status.client'
+import TeamChatPage from './TeamChat'
 
 export default function Page() {
-  return <CounselStatusPage />
+  return <TeamChatPage />
 }
