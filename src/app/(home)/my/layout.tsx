@@ -1,4 +1,4 @@
-import ProfileDecider from '@/components/ProfileDecider'
+import SideNavigator from '@/components/SideNavigator'
 
 export default function RootLayout({
   children,
@@ -9,7 +9,7 @@ export default function RootLayout({
     <section className="flex w-full">
       <div className="flex h-full">
         <nav className="flex flex-col w-[200px] gap-4 mx-5 my-10">
-          <ProfileDecider />
+          <SideNavigator />
         </nav>
       </div>
       <div className="flex-1 mt-8">{children}</div>
