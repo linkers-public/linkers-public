@@ -5,6 +5,7 @@ import { fetchTeamAndRecentChats, fetchMessagesByChatId, insertChatMessage } fro
 import { useRouter } from 'next/navigation'
 import Card from './_components/card' // Card 컴포넌트 임포트
 import Sidebar from '../../../components/Sidebar' // Sidebar 컴포넌트 임포트
+import { uploadFile } from '@/apis/storage'
 
 // 팀 정보와 최근 메시지의 타입 정의
 interface CounselItem {
@@ -25,6 +26,9 @@ const CounselStatus: React.FC = () => {
   const [messages, setMessages] = useState<any[]>([]) // 메시지 데이터
   const [newMessage, setNewMessage] = useState('') // 새 메시지 입력 상태
   const [selectedChat, setSelectedChat] = useState<{ chatId: number, estimateId: number, teamName: string, teamBio: string } | null>(null); // 선택된 상담의 chatId와 estimateId
+  const [attachedFile, setAttachedFile] = useState<File | null>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [uploadedUrl, setUploadedUrl] = useState<string | null>(null);
 
 
   // 메시지 영역 참조
@@ -53,14 +57,82 @@ const CounselStatus: React.FC = () => {
     return `${hours}:${minutes}`
   }
 
+  // 파일 전송 함수 
+  // 파일 선택 및 업로드 후 attachment 메시지 삽입
+const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  if (!event.target.files || !event.target.files[0]) {
+    alert('파일을 선택해주세요.');
+    return;
+  }
+
+  const selectedFile = event.target.files[0];
+  setAttachedFile(selectedFile);
+
+  if (!selectedChat) {
+    alert('먼저 상담을 선택해주세요.');
+    return;
+  }
+
+  const { chatId, estimateId } = selectedChat;
+
+  try {
+    // 파일 업로드
+    const formData = new FormData();
+    formData.append('file', selectedFile);
+
+    const publicUrl = await uploadFile(formData);
+
+    // 파일 URL을 attachment 메시지로 삽입
+    const response = await insertChatMessage({
+      chat_id: chatId,
+      sender_id: null, // sender_id 값을 동적으로 설정해야 할 경우 수정
+      estimate_id: estimateId,
+      message_type: 'attachment',
+      message: '', // 첨부파일 메시지는 텍스트가 필요하지 않음
+      message_sent_at: new Date().toISOString(),
+      sender_type: 'client',
+      attachment: publicUrl,
+    });
+
+    if (response?.error) {
+      console.error('Attachment 메시지 전송 실패:', response.error);
+      alert('파일 업로드는 성공했지만, 메시지 삽입에 실패했습니다.');
+      return;
+    }
+
+    // UI에 attachment 메시지 추가
+    setMessages([
+      ...messages,
+      { type: 'attachment', content: publicUrl, sender: 'client' },
+    ]);
+
+    setAttachedFile(null); // 선택된 파일 초기화
+    alert('파일이 성공적으로 전송되었습니다.');
+  } catch (error) {
+    console.error('파일 업로드 또는 메시지 삽입 실패:', error);
+    alert('파일 업로드에 실패했습니다.');
+  }
+};
+
+
+
+
   // 메시지 전송 함수
   const handleSendMessage = async (msg: string) => {setSelectedChat
-    if (!msg.trim()) return // 공백 메시지 방지
+    if (!newMessage.trim() && !attachedFile) {
+      alert('Please enter a message or attach a file.');
+      return;
+    } // 공백 메시지 방지
 
     console.log(selectedChat)
     if (!selectedChat) {
       console.error('선택된 상담이 없습니다.');
       return;
+    }
+
+    console.log('Sending message:', newMessage);
+    if (attachedFile) {
+      console.log('Sending file:', attachedFile.name);
     }
 
     const { chatId, estimateId } = selectedChat; // selectedChat에서 chatId와 estimateId 가져오기
@@ -82,7 +154,7 @@ const CounselStatus: React.FC = () => {
         message: msg,
         message_sent_at: new Date().toISOString(),
         sender_type: 'client',
-        attachment: null, // 첨부파일이 있다면 여기에 추가
+        attachment: attachedFile, // 첨부파일이 있다면 여기에 추가
       })
 
       if (response.error) {
@@ -93,11 +165,12 @@ const CounselStatus: React.FC = () => {
       // 성공적으로 메시지를 전송한 후 UI에 메시지 추가
       setMessages([...messages, { type: 'message', content: msg, sender: 'client' }])
       setNewMessage('') // 입력창 초기화
-
+      setAttachedFile(null);
     } catch (error) {
       console.error('메시지 전송 에러:', error)
     }
   }
+
 
   // 검색어 변경 처리
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -138,7 +211,8 @@ const CounselStatus: React.FC = () => {
         timestamp: msg.message.message_sent_at,
         sender: msg.message.sender_type,
         title: msg.message.message_type === 'card' ? '견적서' : '',
-        subtitle: msg.message.message_type === 'card' ? msg.estimateVersion?.detail : ''
+        subtitle: msg.message.message_type === 'card' ? msg.estimateVersion?.detail : '',
+        attachment: msg.message.attachment
       }))
       setMessages(formattedMessages) // 메시지 상태 업데이트
       console.log('Estimate ID:', estimateId) // 클릭된 estimateId 출력
@@ -374,121 +448,227 @@ const CounselStatus: React.FC = () => {
     overflowY: 'scroll',
   }}
 >
-  {/* 메시지 표시 */}
-  {messages.map((msg, index) => (
-    <div key={index} style={{ marginBottom: '20px' }}>
-      {msg.type === 'message' ? (
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column', // 세로로 정렬
-            alignItems: msg.sender === 'client' ? 'flex-end' : 'flex-start', // 발신자에 따라 정렬
-            marginBottom: '15px',
-          }}
-        >
-          {/* sender_type이 manager일 경우 상단에 팀 이름과 아이콘 표시 */}
-          {msg.sender === 'manager' && (
-            <div style={{ display: 'flex', alignItems: 'center', marginBottom: '5px' }}>
-              {/* 아이콘 */}
-              <img
-                src="/path/to/manager-icon.png" // 실제 아이콘 경로로 교체
-                alt="Manager Icon"
-                style={{
-                  width: '30px',
-                  height: '30px',
-                  borderRadius: '50%',
-                  marginRight: '10px',
-                }}
-              />
-              {/* 팀 이름 */}
-              <p
-                style={{
-                  margin: 0,
-                  fontSize: '14px',
-                  color: '#888',
-                  fontWeight: 'bold',
-                }}
-              >
-                {selectedChat?.teamName || '팀 이름 없음'}
-              </p>
-            </div>
 
-          )}
-
-          {/* 메시지 박스 */}
-          <div
-            style={{
-              maxWidth: '70%',
-              padding: '10px 15px',
-              borderRadius: '12px',
-              backgroundColor: msg.sender === 'client' ? '#d4f1f4' : '#f1f1f1', // 클라이언트와 매니저 색상 구분
-              boxShadow: '0 2px 5px rgba(0, 0, 0, 0.1)',
-              wordWrap: 'break-word', // 긴 텍스트가 박스를 넘지 않도록
-            }}
-          >
-            <p style={{ margin: 0, fontSize: '14px', color: '#333' }}>{msg.content}</p>
-          </div>
-          
-            {/* 타임스탬프 */}
+{/* 메시지 표시 */}
+{messages.map((msg, index) => (
+  <div key={index} style={{ marginBottom: '20px' }}>
+    {msg && msg.type === 'message' ? (
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: msg.sender === 'client' ? 'flex-end' : 'flex-start',
+          marginBottom: '15px',
+        }}
+      >
+        {/* Manager 메시지일 경우 */}
+        {msg.sender === 'manager' && (
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: '5px' }}>
+            <img
+              src="https://lucide.dev/icons/user-pen"
+              alt="Manager Icon"
+              style={{
+                width: '30px',
+                height: '30px',
+                borderRadius: '50%',
+                marginRight: '10px',
+              }}
+            />
             <p
               style={{
-                marginTop: '5px', // 메시지 박스와 간격
-                fontSize: '12px',
+                margin: 0,
+                fontSize: '14px',
                 color: '#888',
+                fontWeight: 'bold',
               }}
             >
-              {formatRelativeTime(msg.timestamp)}
+              {selectedChat?.teamName || '팀 이름 없음'}
             </p>
           </div>
-              ) : (
-                <Card
-                  title={msg.title}
-                  subtitle={msg.subtitle}
-                  content={msg.content}
-                  sender={msg.sender}
-                  buttonText1="확인"
-                  buttonText2="파일 첨부"
-                  onButtonClick1={() => alert('확인 버튼 클릭됨')}
-                  onButtonClick2={() => alert('파일 첨부 버튼 클릭됨')}
-                />
-              )}
+        )}
+
+        {/* 일반 메시지 박스 */}
+        <div
+          style={{
+            maxWidth: '70%',
+            padding: '10px 15px',
+            borderRadius: '12px',
+            backgroundColor: msg.sender === 'client' ? '#d4f1f4' : '#f1f1f1',
+            boxShadow: '0 2px 5px rgba(0, 0, 0, 0.1)',
+            wordWrap: 'break-word',
+          }}
+        >
+          <p style={{ margin: 0, fontSize: '14px', color: '#333' }}>{msg.content}</p>
+        </div>
+
+        {/* 타임스탬프 */}
+        <p
+          style={{
+            marginTop: '5px',
+            fontSize: '12px',
+            color: '#888',
+          }}
+        >
+          {formatRelativeTime(msg.timestamp)}
+        </p>
+      </div>
+    ) : msg && msg.type === 'attachment' ? (
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: msg.sender === 'client' ? 'flex-end' : 'flex-start',
+          marginBottom: '15px',
+        }}
+      >
+        <div
+          style={{
+            maxWidth: '70%',
+            padding: '10px',
+            borderRadius: '12px',
+            backgroundColor: msg.sender === 'client' ? '#eaf7ea' : '#f1f1f1',
+            boxShadow: '0 2px 5px rgba(0, 0, 0, 0.1)',
+            wordWrap: 'break-word',
+          }}
+        >
+          {/* 이미지 첨부파일 */}
+          {msg.attachment && typeof msg.attachment === 'string' && msg.attachment.match(/\.(jpeg|jpg|gif|png)$/i) ? (
+            <img
+              src={msg.attachment}
+              alt="첨부 이미지"
+              style={{
+                maxWidth: '100%',
+                borderRadius: '8px',
+                marginBottom: '5px',
+              }}
+            />
+          ) : (
+            /* 일반 파일 첨부 */
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                padding: '10px',
+                border: '1px solid #ddd',
+                borderRadius: '8px',
+                backgroundColor: '#f9f9f9',
+                boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+              }}
+            >
+              <p
+                style={{
+                  fontSize: '14px',
+                  color: '#333',
+                  marginBottom: '5px',
+                  wordBreak: 'break-word',
+                }}
+              >
+                {msg.attachment && typeof msg.attachment === 'string' ? msg.attachment.split('/').pop() : '파일 없음'}
+              </p>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <a
+                  href={msg.attachment || '#'}
+                  download={msg.attachment && typeof msg.attachment === 'string' ? msg.attachment.split('/').pop() : ''}
+                  style={{
+                    color: '#007bff',
+                    textDecoration: 'none',
+                    fontSize: '14px',
+                  }}
+                >
+                  다운로드
+                </a>
+              </div>
             </div>
-          ))}
-          <div ref={messagesEndRef} />
+          )}
+        </div>
+
+        {/* 타임스탬프 */}
+        <p
+          style={{
+            marginTop: '5px',
+            fontSize: '12px',
+            color: '#888',
+          }}
+        >
+          {msg.timestamp ? formatRelativeTime(msg.timestamp) : ''}
+        </p>
+      </div>
+    ) : (
+      <Card
+        title={msg.title}
+        subtitle={msg.subtitle}
+        content={msg.content}
+        sender={msg.sender}
+        buttonText1="확인"
+        buttonText2="파일 첨부"
+        onButtonClick1={() => alert('확인 버튼 클릭됨')}
+        onButtonClick2={() => alert('파일 첨부 버튼 클릭됨')}
+      />
+    )}
+  </div>
+))}
+<div ref={messagesEndRef} />
+
+
+
+
         </div>
 
         
 
         {/* 메시지 전송 영역 */}
-        <div style={{ display: 'flex', marginTop: '15px' }}>
-          <input
-            type="text"
-            placeholder="메시지를 입력하세요"
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            disabled={messages.length === 0}
+        <div style={{ display: 'flex', alignItems: 'center', padding: '10px', borderTop: '1px solid #ddd' }}>
+
+          <label
             style={{
-              flex: 1,
-              padding: '10px',
-              borderRadius: '8px',
-              border: '1px solid #ddd',
-              backgroundColor: messages.length === 0 ? '#f1f1f1' : '#fff',
-            }}
-          />
-          <button
-            onClick={() => handleSendMessage(newMessage)}
-            disabled={messages.length === 0}
-            style={{
-              padding: '10px 15px',
-              backgroundColor: messages.length === 0 ? '#ccc' : '#007bff',
-              color: '#fff',
-              borderRadius: '8px',
-              marginLeft: '10px',
-              cursor: messages.length === 0 ? 'not-allowed' : 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '40px',
+              height: '40px',
+              backgroundColor: '#f1f1f1',
+              borderRadius: '50%',
+              marginRight: '10px',
+              cursor: 'pointer',
             }}
           >
-            전송
-          </button>
+            <input
+              type="file"
+              onChange={handleFileChange}
+              style={{ display: 'none' }}
+            />
+            📎 {/* Replace with an appropriate icon */}
+          </label>
+          <div style={{ display: 'flex', marginTop: '15px' }}>
+            <input
+              type="text"
+              placeholder="메시지를 입력하세요"
+              value={newMessage}
+              onChange={(e) => setNewMessage(e.target.value)}
+              disabled={messages.length === 0}
+              style={{
+                flex: 1,
+                padding: '10px',
+                borderRadius: '8px',
+                border: '1px solid #ddd',
+                backgroundColor: messages.length === 0 ? '#f1f1f1' : '#fff',
+              }}
+            />
+            <button
+              onClick={() => handleSendMessage(newMessage)}
+              disabled={messages.length === 0}
+              style={{
+                padding: '10px 15px',
+                backgroundColor: messages.length === 0 ? '#ccc' : '#007bff',
+                color: '#fff',
+                borderRadius: '8px',
+                marginLeft: '10px',
+                cursor: messages.length === 0 ? 'not-allowed' : 'pointer',
+              }}
+            >
+              전송
+            </button>
+          </div>
         </div>
       </main>
       

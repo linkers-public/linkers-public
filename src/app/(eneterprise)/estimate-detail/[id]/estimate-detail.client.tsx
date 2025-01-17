@@ -152,9 +152,9 @@ const ConsultationForm: React.FC = () => {
         />
       </div>
 
-      {/* 최종 도움항 */}
+      {/* 최종 도출안 */}
       <div style={{ marginBottom: '20px' }}>
-        <label style={{ display: 'block', marginBottom: '5px' }}>최종 도움항</label>
+        <label style={{ display: 'block', marginBottom: '5px' }}>최종 도출안</label>
         <table
           style={{
             width: '100%',

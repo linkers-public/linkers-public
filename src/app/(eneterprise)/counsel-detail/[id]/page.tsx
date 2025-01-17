@@ -1,4 +1,4 @@
-import ClientEstimateDetailPage from './client-estimates-detail.client'
+import ClientEstimateDetailPage from './counsel-detail.client'
 
 export default function Page() {
   return <ClientEstimateDetailPage />

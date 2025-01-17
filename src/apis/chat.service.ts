@@ -94,7 +94,7 @@ export const fetchTeamAndRecentChats = async (clientId: number) => {
 }
 
 
-//메시지 가져오기기
+//메시지 가져오기
 export const fetchMessagesByChatId = async (chatId: number) => {
   const supabase = createSupabaseBrowserClient()
 
@@ -165,6 +165,8 @@ export const insertChatMessage = async (data: any) => {
     throw new Error('인증되지 않은 사용자입니다.')
   }
 
+  
+
   const { data: chatMessage, error } = await supabase
     .from('chat_message')
     .insert(data)  
@@ -178,3 +180,5 @@ export const insertChatMessage = async (data: any) => {
 
   return { data: chatMessage, error }
 }
+
+
