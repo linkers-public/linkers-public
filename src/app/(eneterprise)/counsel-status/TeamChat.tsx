@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { fetchTeamAndRecentChats, fetchMessagesByChatId, insertChatMessage } from '@/apis/chat.service' // 작성한 API 임포트
 import { useRouter } from 'next/navigation'
 import Card from './_components/card' // Card 컴포넌트 임포트
@@ -13,6 +13,7 @@ interface CounselItem {
   content: string
   chatId: number // 채팅 ID 추가
   estimateId: number // estimateId 추가
+  recentChatTimeStamp: string
 }
 
 const CounselStatus: React.FC = () => {
@@ -25,14 +26,31 @@ const CounselStatus: React.FC = () => {
   const [newMessage, setNewMessage] = useState('') // 새 메시지 입력 상태
   const [selectedChat, setSelectedChat] = useState<{ chatId: number, estimateId: number, teamName: string, teamBio: string } | null>(null); // 선택된 상담의 chatId와 estimateId
 
-  const formatTimestamp = (timestamp: string) => {
-    const date = new Date(timestamp)
-    const year = date.getFullYear().toString().slice(-2) // 연도의 마지막 두 자리
-    const month = (date.getMonth() + 1).toString().padStart(2, '0') // 월 (0부터 시작하므로 +1)
-    const day = date.getDate().toString().padStart(2, '0') // 일
-    const hours = date.getHours().toString().padStart(2, '0') // 시
-    const minutes = date.getMinutes().toString().padStart(2, '0') // 분
-    return `${year}.${month}.${day} ${hours}:${minutes}`
+
+  // 메시지 영역 참조
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  // 메시지 업데이트 시 스크롤을 하단으로 이동
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [messages])
+
+  // 시간 포맷팅 함수
+  const formatRelativeTime = (timestamp: string) => {
+    const now = new Date()
+    const messageTime = new Date(timestamp)
+    const diffInSeconds = Math.floor((now.getTime() - messageTime.getTime()) / 1000)
+
+    if (diffInSeconds < 60) return '방금 전'
+    const year = messageTime.getFullYear().toString().slice(-2)
+    const month = (messageTime.getMonth() + 1).toString().padStart(2, '0')
+    const day = messageTime.getDate().toString().padStart(2, '0')
+    const hours = messageTime.getHours().toString().padStart(2, '0')
+    const minutes = messageTime.getMinutes().toString().padStart(2, '0')
+    
+    return `${hours}:${minutes}`
   }
 
   // 메시지 전송 함수
@@ -98,6 +116,7 @@ const CounselStatus: React.FC = () => {
         content: item.recentChat?.message || '최근 메시지가 없습니다.', // 최근 메시지
         chatId: item.recentChat?.chat_id || 0, // chat_id를 가져오도록 수정
         estimateId: item.recentChat?.estimate_id || 0, // estimateId 추가
+        recentChatTimeStamp: item.recentChat?.message_sent_at || '',
       }))
       setCounselList(updatedCounselList) // 상태 업데이트
     } catch (error) {
@@ -191,50 +210,95 @@ const CounselStatus: React.FC = () => {
         </div>
 
         {/* 상담 목록 */}
+        
+        
         <div>
-          {counselList
-            .filter((item) => item.team.includes(searchTerm)) // 검색어로 팀명 필터링
-            .map((item, index) => (
-              <div
-                key={index}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  padding: '12px',
-                  marginBottom: '12px',
-                  backgroundColor: '#fff',
-                  borderRadius: '8px',
-                  boxShadow: '0 2px 5px rgba(0, 0, 0, 0.1)',
-                  cursor: 'pointer', // 클릭할 수 있도록 커서 변경
-                }}
-                onClick={() => handleMessageClick(item.chatId, item.estimateId, item.team, item.teamBio)} // 상담 클릭 시 메시지 로드
-              >
-                <div
-                  style={{
-                    width: '40px',
-                    height: '40px',
-                    backgroundColor: '#808080',
-                    borderRadius: '50%',
-                    display: 'flex',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    marginRight: '15px',
-                  }}
-                >
-                  <img
-                    src="/images/image.png"
-                    alt="file icon"
-                    style={{ width: '16px', height: '16px' }}
-                  />
-                </div>
+  {counselList
+    .filter((item) => item.team.includes(searchTerm)) // 검색어로 팀명 필터링
+    .map((item, index) => (
+      <div
+        key={index}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between', // 오른쪽에 시간 표시
+          padding: '12px',
+          marginBottom: '12px',
+          backgroundColor: '#fff',
+          borderRadius: '8px',
+          boxShadow: '0 2px 5px rgba(0, 0, 0, 0.1)',
+          cursor: 'pointer', // 클릭 가능
+        }}
+        onClick={() =>
+          handleMessageClick(item.chatId, item.estimateId, item.team, item.teamBio)
+        } // 상담 클릭 시 메시지 로드
+      >
+        {/* 왼쪽: 팀 정보 */}
+        <div style={{ display: 'flex', alignItems: 'center' }}>
+          <div
+            style={{
+              width: '40px',
+              height: '40px',
+              backgroundColor: '#808080',
+              borderRadius: '50%',
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              marginRight: '15px',
+            }}
+          >
+            <img
+              src="/images/image.png"
+              alt="file icon"
+              style={{ width: '16px', height: '16px' }}
+            />
+          </div>
 
-                <div>
-                  <p style={{ margin: '0 0 5px 0', fontWeight: 'bold', fontSize: '16px' }}>{item.team}</p>
-                  <p style={{ margin: 0, color: '#888', fontSize: '14px' }}>{item.content}</p>
-                </div>
-              </div>
-            ))}
+          <div>
+            <p
+              style={{
+                margin: '0 0 5px 0',
+                fontWeight: 'bold',
+                fontSize: '16px',
+              }}
+            >
+              {item.team}
+            </p>
+            <p
+              style={{
+                margin: 0,
+                color: '#888',
+                fontSize: '14px',
+                maxHeight: '38px',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                lineHeight: '19px',
+                display: '-webkit-box',
+                WebkitLineClamp: 2, // 최대 2줄로 제한
+                WebkitBoxOrient: 'vertical',
+              }}
+            >
+              {item.content}
+            </p>
+          </div>
         </div>
+
+        {/* 오른쪽: 시간 표시 */}
+        <div
+          style={{
+            color: '#888',
+            fontSize: '14px',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {item.recentChatTimeStamp
+            ? formatRelativeTime(item.recentChatTimeStamp)
+            : ''}
+        </div>
+      </div>
+    ))}
+</div>
+
       </main>
       
       <main style={{ flex: 2, padding: '20px', backgroundColor: '#f9f9f9' }}>
@@ -348,6 +412,7 @@ const CounselStatus: React.FC = () => {
                 {selectedChat?.teamName || '팀 이름 없음'}
               </p>
             </div>
+
           )}
 
           {/* 메시지 박스 */}
@@ -372,7 +437,7 @@ const CounselStatus: React.FC = () => {
                 color: '#888',
               }}
             >
-              {formatTimestamp(msg.timestamp)}
+              {formatRelativeTime(msg.timestamp)}
             </p>
           </div>
               ) : (
@@ -389,6 +454,7 @@ const CounselStatus: React.FC = () => {
               )}
             </div>
           ))}
+          <div ref={messagesEndRef} />
         </div>
 
         
