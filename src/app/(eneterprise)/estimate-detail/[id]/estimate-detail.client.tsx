@@ -48,7 +48,7 @@ const ConsultationForm: React.FC = () => {
         backgroundColor: '#fff',
       }}
     >
-      <h2 style={{ textAlign: 'center', marginBottom: '20px' }}>상담 요청서</h2>
+      <h2 style={{ textAlign: 'center', marginBottom: '20px' }}>견적서</h2>
 
       {/* 고객사 이름 */}
       <div style={{ marginBottom: '20px' }}>
@@ -56,6 +56,21 @@ const ConsultationForm: React.FC = () => {
         <input
           type="text"
           placeholder="귀하의 회사를 적어주세요 예: SK 이노베이션 레벨리 사원님"
+          style={{
+            width: '100%',
+            padding: '10px',
+            borderRadius: '5px',
+            border: '1px solid #ddd',
+          }}
+        />
+      </div>
+
+      {/* 이메일 */}
+      <div style={{ marginBottom: '20px' }}>
+        <label style={{ display: 'block', marginBottom: '5px' }}>이메일</label>
+        <input
+          type="email"
+          placeholder="이메일을 적어주세요"
           style={{
             width: '100%',
             padding: '10px',
@@ -137,20 +152,7 @@ const ConsultationForm: React.FC = () => {
         />
       </div>
 
-      {/* 이메일 */}
-      <div style={{ marginBottom: '20px' }}>
-        <label style={{ display: 'block', marginBottom: '5px' }}>이메일</label>
-        <input
-          type="email"
-          placeholder="이메일을 적어주세요"
-          style={{
-            width: '100%',
-            padding: '10px',
-            borderRadius: '5px',
-            border: '1px solid #ddd',
-          }}
-        />
-      </div>
+      
 
       {/* 최종 도출안 */}
       <div style={{ marginBottom: '20px' }}>
