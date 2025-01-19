@@ -182,3 +182,93 @@ export const insertChatMessage = async (data: any) => {
 }
 
 
+
+
+// `teamId`를 기준으로 estimate 데이터를 가져오고 chat 데이터를 연결하는 함수
+// `teamId`를 기준으로 estimate 데이터를 가져오고 chat 데이터를 연결하는 함수
+export const fetchChatsAndMessagesByTeamId = async (teamId: number, tab: 'message' | 'attachment') => {
+  const supabase = createSupabaseBrowserClient();
+
+  // 세션 정보 확인
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  if (!sessionData?.session) {
+    throw new Error('인증되지 않은 사용자입니다.');
+  }
+
+  // teamId에 해당하는 estimate 데이터 조회
+  const { data: estimates, error: estimateError } = await supabase
+    .from('estimate')
+    .select('estimate_id')
+    .eq('team_id', teamId)
+    .eq('estimate_status', 'accept'); // estimate_status가 'accept'인 데이터만 가져옴
+
+  if (estimateError) {
+    console.error('Error fetching estimates:', estimateError.message);
+    throw new Error('estimate 데이터를 조회할 수 없습니다.');
+  }
+
+  if (!estimates || estimates.length === 0) {
+    throw new Error(`teamId ${teamId}에 해당하는 estimate 데이터가 없습니다.`);
+  }
+
+  // estimateId로 chat 데이터 가져오기
+  const estimateIds = estimates.map((estimate) => estimate.estimate_id);
+  console.log("estimateId::", estimateIds);
+  const { data: chats, error: chatError } = await supabase
+    .from('chat') // chat 테이블에서 데이터 조회
+    .select('*')
+    .in('estimate_id', estimateIds);
+
+  if (chatError) {
+    console.error('Error fetching chats:', chatError.message);
+    throw new Error('chat 데이터를 조회할 수 없습니다.');
+  }
+
+  if (!chats || chats.length === 0) {
+    throw new Error('해당 estimateId로 연결된 chat 데이터가 없습니다.');
+  }
+
+  // chatId로 메시지 데이터 가져오기
+  const chatIds = chats.map((chat) => chat.chat_id);
+  let filteredMessages: any[] = [];
+
+  if (tab === 'message') {
+    // message와 attachment 모두 가져오기
+    const { data: messages, error: messageError } = await supabase
+      .from('chat_message')
+      .select('*')
+      .in('chat_id', chatIds)
+      .in('message_type', ['message', 'attachment']); // message와 attachment만 필터링
+
+    if (messageError) {
+      console.error('Error fetching messages:', messageError.message);
+      throw new Error('메시지 데이터를 조회할 수 없습니다.');
+    }
+
+    if (!messages || messages.length === 0) {
+      throw new Error('해당 chatId로 연결된 메시지가 없습니다.');
+    }
+
+    filteredMessages = messages;
+  } else if (tab === 'attachment') {
+    // attachment만 가져오기
+    const { data: attachments, error: attachmentError } = await supabase
+      .from('chat_message')
+      .select('*')
+      .in('chat_id', chatIds)
+      .eq('message_type', 'attachment'); // attachment만 필터링
+
+    if (attachmentError) {
+      console.error('Error fetching attachments:', attachmentError.message);
+      throw new Error('첨부파일 데이터를 조회할 수 없습니다.');
+    }
+
+    if (!attachments || attachments.length === 0) {
+      throw new Error('해당 chatId로 연결된 첨부파일이 없습니다.');
+    }
+
+    filteredMessages = attachments;
+  }
+
+  return { data: filteredMessages };
+};

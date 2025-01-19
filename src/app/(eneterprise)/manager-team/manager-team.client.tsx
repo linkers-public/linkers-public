@@ -1,22 +1,103 @@
 'use client'
 
-import { useState } from 'react'
-import Link from 'next/link' // Link 컴포넌트 임포트
+import React, { useEffect, useState } from 'react';
+import { fetchChatsAndMessagesByTeamId, fetchMessagesByChatId } from '@/apis/chat.service';
 import Sidebar from '../../../components/Sidebar' // Sidebar 컴포넌트 임포트
 import { Users, MousePointer2, Paperclip } from 'lucide-react';
 
 const Home: React.FC = () => {
-  const [selectedTab, setSelectedTab] = useState('마일스톤')
+  const [selectedTab, setSelectedTab] = useState('메시지');
+  const [chatId, setChatId] = useState<number | null>(null);
+  const [messages, setMessages] = useState<any[]>([]);
+  const [attachments, setAttachments] = useState<any[]>([]);
   const [openProjects, setOpenProjects] = useState(false) // 드롭다운 상태 관리
+  const [newMessage, setNewMessage] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [milestones, setMilestones] = useState<any[]>([]); // Milestones data
+
+  const teamId = 8
+  // 팀 ID로 message와 attachment 데이터를 가져오기
+  useEffect(() => {
+    const fetchMessageData = async () => {
+      try {
+        if (selectedTab === '메시지') {
+          const { data: messageData } = await fetchChatsAndMessagesByTeamId(teamId, 'message');
+          setMessages(messageData);
+        } else if (selectedTab === '첨부파일') {
+          const { data: attachmentData } = await fetchChatsAndMessagesByTeamId(teamId, 'attachment');
+          setAttachments(attachmentData);
+        } else if (selectedTab === '마일스톤') {
+          // Simulate milestone fetching
+          const milestoneData = [
+            {
+              title: '마일스톤 제목 1 최대 한줄',
+              details: '마일스톤 세부 사항 최대 2줄 말줄임...',
+              deadline: '기한 24/09/11 ~ 25/03/22',
+              status: '정산 완료',
+            },
+            {
+              title: '마일스톤 제목 2 최대 한줄',
+              details: '마일스톤 세부 사항 최대 2줄 말줄임...',
+              deadline: '기한 24/09/11 ~ 25/03/22',
+              status: '대기 중',
+            },
+          ];
+          setMilestones(milestoneData);
+        }
+      } catch (error) {
+        console.error('데이터를 가져오는 중 오류 발생:', error);
+      }
+    };
+
+    fetchMessageData();
+  }, [teamId, selectedTab]);
 
   const handleTabClick = (tab: string) => {
-    setSelectedTab(tab)
-  }
+    setSelectedTab(tab);
+  };
 
-  const handleClickProjects = () => {
-    setOpenProjects(!openProjects)
-  }
+  const handleSendMessage = async () => {
+    if (!newMessage.trim() && !selectedFile) {
+      alert('메시지나 파일을 입력하세요.');
+      return;
+    }
+    console.log('메시지 전송:', newMessage, '파일:', selectedFile);
 
+    try {
+      // 메시지 전송 API 호출
+      // 메시지 로직 예시 (API 호출 코드 필요)
+      /*
+      await insertChatMessage({
+        chat_id: chatId,
+        message: newMessage,
+        message_type: selectedFile ? 'attachment' : 'message',
+        attachment: selectedFile ? await uploadFile(selectedFile) : null,
+        sender_type: 'client',
+      });
+      */
+
+      // UI 갱신
+      setMessages((prev) => [
+        ...prev,
+        {
+          message: newMessage,
+          message_type: selectedFile ? 'attachment' : 'message',
+          attachment: selectedFile ? URL.createObjectURL(selectedFile) : null,
+        },
+      ]);
+      setNewMessage('');
+      setSelectedFile(null);
+    } catch (error) {
+      console.error('메시지 전송 중 오류 발생:', error);
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setSelectedFile(e.target.files[0]);
+    }
+  };
+  
   return (
     <div style={{ display: 'flex' }}>
       {/* Sidebar */}
@@ -152,352 +233,318 @@ const Home: React.FC = () => {
 
 
         {/* 탭 섹션 */}
-<div
-  style={{
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderBottom: '2px solid #e0e0e0',
-    marginBottom: '20px',
-  }}
->
-  <button
-    style={{
-      flex: 1,
-      textAlign: 'center',
-      padding: '10px 0',
-      fontSize: '16px',
-      fontWeight: 'bold',
-      color: selectedTab === '마일스톤' ? '#007bff' : '#000',
-      border: 'none',
-      borderBottom: selectedTab === '마일스톤' ? '2px solid #007bff' : 'none',
-      backgroundColor: 'transparent',
-      cursor: 'pointer',
-    }}
-    onClick={() => handleTabClick('마일스톤')}
-  >
-    마일스톤
-  </button>
-  <button
-    style={{
-      flex: 1,
-      textAlign: 'center',
-      padding: '10px 0',
-      fontSize: '16px',
-      fontWeight: 'bold',
-      color: selectedTab === '메시지' ? '#007bff' : '#000',
-      border: 'none',
-      borderBottom: selectedTab === '메시지' ? '2px solid #007bff' : 'none',
-      backgroundColor: 'transparent',
-      cursor: 'pointer',
-    }}
-    onClick={() => handleTabClick('메시지')}
-  >
-    메시지
-  </button>
-  <button
-    style={{
-      flex: 1,
-      textAlign: 'center',
-      padding: '10px 0',
-      fontSize: '16px',
-      fontWeight: 'bold',
-      color: selectedTab === '첨부파일' ? '#007bff' : '#000',
-      border: 'none',
-      borderBottom: selectedTab === '첨부파일' ? '2px solid #007bff' : 'none',
-      backgroundColor: 'transparent',
-      cursor: 'pointer',
-    }}
-    onClick={() => handleTabClick('첨부파일')}
-  >
-    첨부파일
-  </button>
-</div>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          borderBottom: '2px solid #e0e0e0',
+          marginBottom: '20px',
+        }}
+      >
+        <button
+            style={{
+              flex: 1,
+              textAlign: 'center',
+              padding: '10px 0',
+              fontSize: '16px',
+              fontWeight: 'bold',
+              color: selectedTab === '마일스톤' ? '#007bff' : '#000',
+              border: 'none',
+              borderBottom: selectedTab === '마일스톤' ? '2px solid #007bff' : 'none',
+              backgroundColor: 'transparent',
+              cursor: 'pointer',
+            }}
+            onClick={() => handleTabClick('마일스톤')}
+          >
+            마일스톤
+          </button>
+        <button
+          style={{
+            flex: 1,
+            textAlign: 'center',
+            padding: '10px 0',
+            fontSize: '16px',
+            fontWeight: 'bold',
+            color: selectedTab === '메시지' ? '#007bff' : '#000',
+            border: 'none',
+            borderBottom: selectedTab === '메시지' ? '2px solid #007bff' : 'none',
+            backgroundColor: 'transparent',
+            cursor: 'pointer',
+          }}
+          onClick={() => handleTabClick('메시지')}
+        >
+          메시지
+        </button>
+        <button
+          style={{
+            flex: 1,
+            textAlign: 'center',
+            padding: '10px 0',
+            fontSize: '16px',
+            fontWeight: 'bold',
+            color: selectedTab === '첨부파일' ? '#007bff' : '#000',
+            border: 'none',
+            borderBottom: selectedTab === '첨부파일' ? '2px solid #007bff' : 'none',
+            backgroundColor: 'transparent',
+            cursor: 'pointer',
+          }}
+          onClick={() => handleTabClick('첨부파일')}
+        >
+          첨부파일
+        </button>
+      </div>
 
-
-        {/* 동적 콘텐츠 */}
-        {selectedTab === '마일스톤' && (
-          <section>
-            <h2 style={{ marginBottom: '20px' }}>프로젝트명</h2>
-            <div
-              style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}
-            >
-              {['정산 완료', '결제 완료', '진행중', '...'].map(
-                (status, index) => (
-                  <div
-                    key={index}
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      padding: '10px',
-                      backgroundColor: '#f9f9f9',
-                      borderRadius: '8px',
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center' }}>
-                      <div
-                        style={{
-                          width: '10px',
-                          height: '10px',
-                          backgroundColor: '#007bff',
-                          borderRadius: '50%',
-                          marginRight: '10px',
-                        }}
-                      ></div>
-                      <div>
-                        <strong>
-                          메일스톤에 해당되는 제목이 들어가겠습니다.
-                        </strong>
-                        <p>메일스톤에 해당되는 내용이 들어가겠습니다.</p>
-                      </div>
-                    </div>
-                    <div>기한 10 / 14</div>
-                    <div
-                      style={{
-                        padding: '5px 10px',
-                        backgroundColor:
-                          status === '정산 완료'
-                            ? '#28a745'
-                            : status === '결제 완료'
-                              ? '#ffc107'
-                              : status === '진행중'
-                                ? '#007bff'
-                                : '#6c757d',
-                        color: '#fff',
-                        borderRadius: '5px',
-                      }}
-                    >
-                      {status}
-                    </div>
-                  </div>
-                ),
-              )}
-            </div>
-          </section>
-        )}
-
-        {selectedTab === '메시지' && (
+      {/* 동적 콘텐츠 */}
+      {selectedTab === '마일스톤' && (
           <div>
-            {/* 상대방 정보 */}
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                marginBottom: '20px',
-              }}
-            >
-              <Users />
-              <strong>상대방 이름</strong>
-            </div>
-
-            {/* 메시지 영역 */}
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '20px',
-                marginBottom: '20px',
-                height: '300px',
-                overflowY: 'scroll',
-                padding: '10px',
-                backgroundColor: '#f9f9f9',
-                borderRadius: '8px',
-              }}
-            >
-              {/* 상대방 메시지 */}
+            <h2 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '20px' }}>프로젝트명</h2>
+            {milestones.map((milestone, index) => (
               <div
+                key={index}
                 style={{
                   display: 'flex',
-                  alignItems: 'flex-start',
-                  gap: '10px',
-                }}
-              >
-                <Users />
-                <div
-                  style={{
-                    backgroundColor: '#f1f1f1',
-                    padding: '10px',
-                    borderRadius: '8px',
-                    maxWidth: '70%',
-                  }}
-                >
-                  <p style={{ margin: '0', fontSize: '14px' }}>
-                    채팅 내용입니다.채팅 내용입니다.채팅 내용입니다.채팅 내용입니다.채팅
-                    내용입니다.
-                  </p>
-                  <span style={{ fontSize: '12px', color: '#888' }}>오전 10:14</span>
-                </div>
-              </div>
-
-              {/* 내 메시지 */}
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'flex-end',
-                  alignItems: 'flex-start',
-                  gap: '10px',
-                }}
-              >
-                <div
-                  style={{
-                    backgroundColor: '#d1ecf1',
-                    padding: '10px',
-                    borderRadius: '8px',
-                    maxWidth: '70%',
-                  }}
-                >
-                  <p style={{ margin: '0', fontSize: '14px' }}>
-                    채팅 내용입니다.채팅 내용입니다.채팅 내용입니다.채팅 내용입니다.채팅
-                    내용입니다.
-                  </p>
-                  <span style={{ fontSize: '12px', color: '#888' }}>오전 10:15</span>
-                </div>
-              </div>
-            </div>
-
-            {/* 메시지 입력 영역 */}
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-                padding: '10px',
-                backgroundColor: '#fff',
-                borderTop: '1px solid #ddd',
-              }}
-            >
-              {/* 파일 첨부 버튼 */}
-              <label
-                style={{
-                  display: 'flex',
+                  justifyContent: 'space-between',
                   alignItems: 'center',
-                  justifyContent: 'center',
-                  width: '40px',
-                  height: '40px',
-                  backgroundColor: '#f1f1f1',
-                  borderRadius: '50%',
-                  cursor: 'pointer',
-                }}
-              >
-                <Paperclip />
-                <input
-                  type="file"
-                  style={{ display: 'none' }}
-                  onChange={(e) => console.log(e.target.files)} // 파일 선택 핸들러
-                />
-              </label>
-
-              {/* 메시지 입력창 */}
-              <input
-                type="text"
-                placeholder="메시지를 입력하세요"
-                style={{
-                  flex: 1,
-                  padding: '10px',
-                  borderRadius: '4px',
                   border: '1px solid #ddd',
-                  fontSize: '14px',
-                }}
-              />
-
-              {/* 전송 버튼 */}
-              <button
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: '40px',
-                  height: '40px',
-                  backgroundColor: '#007bff',
-                  borderRadius: '50%',
-                  border: 'none',
-                  cursor: 'pointer',
-                }}
-                onClick={() => console.log('메시지 전송')} // 전송 버튼 핸들러
-              >
-                <MousePointer2 />
-              </button>
-            </div>
-
-          </div>
-        )}
-
-
-        {selectedTab === '첨부파일' && (
-          <div>
-            <div
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: '20px',
-              }}
-            >
-              <strong>첨부파일 목록</strong>
-              <button
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  fontSize: '20px',
-                  cursor: 'pointer',
+                  borderRadius: '8px',
+                  padding: '15px',
+                  marginBottom: '10px',
+                  backgroundColor: '#fff',
                 }}
               >
-                ×
-              </button>
-            </div>
-            <div
-              style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}
-            >
-              {[...Array(5)].map((_, index) => (
+                <div style={{ flex: 3 }}>
+                  <p style={{ fontWeight: 'bold', marginBottom: '5px' }}>{milestone.title}</p>
+                  <p
+                    style={{
+                      fontSize: '14px',
+                      color: '#666',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
+                    {milestone.details}
+                  </p>
+                </div>
                 <div
-                  key={index}
                   style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    backgroundColor: '#f9f9f9',
-                    padding: '10px',
-                    borderRadius: '8px',
+                    flex: 1,
+                    textAlign: 'center',
+                    fontSize: '14px',
+                    color: '#666',
                   }}
                 >
-                  {/* 회색 원 배경에 아이콘 이미지 추가 */}
+                  {milestone.deadline}
+                </div>
+                <div
+                  style={{
+                    flex: 1,
+                    display: 'flex',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                  }}
+                >
                   <div
                     style={{
-                      width: '40px', // 원의 크기
-                      height: '40px',
-                      backgroundColor: '#808080', // 회색 배경
-                      borderRadius: '50%', // 원 모양
-                      display: 'flex',
-                      justifyContent: 'center',
-                      alignItems: 'center',
+                      padding: '5px 15px',
+                      borderRadius: '20px',
+                      backgroundColor:
+                        milestone.status === '정산 완료'
+                          ? '#ddd'
+                          : milestone.status === '대기 중'
+                          ? '#f9c74f'
+                          : '#ccc',
+                      color: '#333',
+                      fontSize: '14px',
+                      fontWeight: 'bold',
+                      textAlign: 'center',
                     }}
                   >
-                    <img
-                      src="/images/image.png" // 이미지 파일 경로
-                      alt="file icon"
-                      style={{ width: '16px', height: '16px' }} // 이미지 크기
-                    />
+                    {milestone.status}
                   </div>
-                  <div>
-                    <p>파일 이름 {index + 1}.pdf</p>
-                    <span>2024-12-15</span>
-                  </div>
-                  <button
-                    style={{
-                      padding: '5px 10px',
-                      backgroundColor: '#007bff',
-                      color: '#fff',
-                      borderRadius: '4px',
-                    }}
-                  >
-                    다운로드
-                  </button>
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
           </div>
         )}
+
+      {selectedTab === '메시지' && (
+        <div>
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '20px',
+              marginBottom: '20px',
+              height: '300px',
+              overflowY: 'scroll',
+              padding: '10px',
+              backgroundColor: '#f9f9f9',
+              borderRadius: '8px',
+            }}
+          >
+            {messages.map((msg, index) => (
+              <div
+                key={index}
+                style={{
+                  display: 'flex',
+                  justifyContent: msg.sender_type === 'client' ? 'flex-end' : 'flex-start',
+                  gap: '10px',
+                }}
+              >
+                <div
+                  style={{
+                    backgroundColor: msg.sender_type === 'client' ? '#d1ecf1' : '#f1f1f1',
+                    padding: '10px',
+                    borderRadius: '8px',
+                    maxWidth: '70%',
+                  }}
+                >
+                  {msg.message_type === 'attachment' ? (
+                    <a
+                      href={msg.attachment}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ textDecoration: 'none', color: '#007bff' }}
+                    >
+                      {msg.attachment.split('/').pop()}
+                    </a>
+                  ) : (
+                    <p style={{ margin: '0', fontSize: '14px' }}>{msg.message}</p>
+                  )}
+                  <span style={{ fontSize: '12px', color: '#888' }}>
+                    {new Date(msg.message_sent_at).toLocaleTimeString()}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* 메시지 입력 영역 */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              padding: '10px',
+              backgroundColor: '#fff',
+              borderTop: '1px solid #ddd',
+            }}
+          >
+            {/* 파일 첨부 버튼 */}
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '40px',
+                height: '40px',
+                backgroundColor: '#f1f1f1',
+                borderRadius: '50%',
+                cursor: 'pointer',
+              }}
+            >
+              <Paperclip />
+              <input
+                type="file"
+                style={{ display: 'none' }}
+                onChange={handleFileChange}
+              />
+            </label>
+
+            {/* 메시지 입력창 */}
+            <input
+              type="text"
+              placeholder="메시지를 입력하세요"
+              value={newMessage}
+              onChange={(e) => setNewMessage(e.target.value)}
+              style={{
+                flex: 1,
+                padding: '10px',
+                borderRadius: '4px',
+                border: '1px solid #ddd',
+                fontSize: '14px',
+              }}
+            />
+
+            {/* 전송 버튼 */}
+            <button
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: '40px',
+                height: '40px',
+                backgroundColor: '#007bff',
+                borderRadius: '50%',
+                border: 'none',
+                cursor: 'pointer',
+              }}
+              onClick={handleSendMessage}
+            >
+              <MousePointer2 />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {selectedTab === '첨부파일' && (
+        <div>
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '15px',
+            }}
+          >
+            {attachments.map((file, index) => (
+              <div
+                key={index}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  backgroundColor: '#f9f9f9',
+                  padding: '10px',
+                  borderRadius: '8px',
+                }}
+              >
+                <div
+                  style={{
+                    width: '40px',
+                    height: '40px',
+                    backgroundColor: '#808080',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                  }}
+                >
+                  <Paperclip/>
+                </div>
+                <div>
+                  <p>{file.attachment.split('/').pop()}</p>
+                  <span>{new Date(file.message_sent_at).toLocaleDateString()}</span>
+                </div>
+                <a
+                  href={file.attachment}
+                  download
+                  style={{
+                    padding: '5px 10px',
+                    backgroundColor: '#007bff',
+                    color: '#fff',
+                    borderRadius: '4px',
+                    textDecoration: 'none',
+                  }}
+                >
+                  다운로드
+                </a>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       </main>
     </div>
   )
