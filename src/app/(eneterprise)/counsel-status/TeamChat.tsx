@@ -12,8 +12,8 @@ interface CounselItem {
   team: string
   teamBio: string
   content: string
-  chatId: number // 채팅 ID 추가
-  estimateId: number // estimateId 추가
+  chatId: number 
+  estimateId: number 
   recentChatTimeStamp: string
 }
 
@@ -27,9 +27,6 @@ const CounselStatus: React.FC = () => {
   const [newMessage, setNewMessage] = useState('') // 새 메시지 입력 상태
   const [selectedChat, setSelectedChat] = useState<{ chatId: number, estimateId: number, teamName: string, teamBio: string } | null>(null); // 선택된 상담의 chatId와 estimateId
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
-  const [file, setFile] = useState<File | null>(null);
-  const [uploadedUrl, setUploadedUrl] = useState<string | null>(null);
-
 
   // 메시지 영역 참조
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -53,123 +50,155 @@ const CounselStatus: React.FC = () => {
     const day = messageTime.getDate().toString().padStart(2, '0')
     const hours = messageTime.getHours().toString().padStart(2, '0')
     const minutes = messageTime.getMinutes().toString().padStart(2, '0')
-    
+
     return `${hours}:${minutes}`
   }
 
   // 파일 전송 함수 
-  // 파일 선택 및 업로드 후 attachment 메시지 삽입
-const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-  if (!event.target.files || !event.target.files[0]) {
-    alert('파일을 선택해주세요.');
-    return;
-  }
-
-  const selectedFile = event.target.files[0];
-  setAttachedFile(selectedFile);
-
-  if (!selectedChat) {
-    alert('먼저 상담을 선택해주세요.');
-    return;
-  }
-
-  const { chatId, estimateId } = selectedChat;
-
-  try {
-    // 파일 업로드
-    const formData = new FormData();
-    formData.append('file', selectedFile);
-
-    const publicUrl = await uploadFile(formData);
-
-    // 파일 URL을 attachment 메시지로 삽입
-    const response = await insertChatMessage({
-      chat_id: chatId,
-      sender_id: null, // sender_id 값을 동적으로 설정해야 할 경우 수정
-      estimate_id: estimateId,
-      message_type: 'attachment',
-      message: '', // 첨부파일 메시지는 텍스트가 필요하지 않음
-      message_sent_at: new Date().toISOString(),
-      sender_type: 'client',
-      attachment: publicUrl,
-    });
-
-    if (response?.error) {
-      console.error('Attachment 메시지 전송 실패:', response.error);
-      alert('파일 업로드는 성공했지만, 메시지 삽입에 실패했습니다.');
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (!event.target.files || !event.target.files[0]) {
+      alert('파일을 선택해주세요.');
       return;
     }
-
-    // UI에 attachment 메시지 추가
-    setMessages([
-      ...messages,
-      { type: 'attachment', content: publicUrl, sender: 'client' },
-    ]);
-
-    setAttachedFile(null); // 선택된 파일 초기화
-    alert('파일이 성공적으로 전송되었습니다.');
-  } catch (error) {
-    console.error('파일 업로드 또는 메시지 삽입 실패:', error);
-    alert('파일 업로드에 실패했습니다.');
-  }
-};
-
-
-
-
-  // 메시지 전송 함수
-  const handleSendMessage = async (msg: string) => {setSelectedChat
-    if (!newMessage.trim() && !attachedFile) {
-      alert('Please enter a message or attach a file.');
+  
+    const selectedFile = event.target.files[0];
+    setAttachedFile(selectedFile);
+  
+    if (!selectedChat) {
+      alert('먼저 상담을 선택해주세요.');
       return;
-    } // 공백 메시지 방지
+    }
+  
+    const { chatId, estimateId } = selectedChat;
+  
+    try {
+      // 파일 업로드
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+  
+      const publicUrl = await uploadFile(formData);
+  
+      // API 호출로 attachment 메시지 추가
+      const response = await insertChatMessage({
+        chat_id: chatId,
+        sender_id: null, // sender_id 값을 동적으로 설정해야 할 경우 수정
+        estimate_id: estimateId,
+        message_type: 'attachment',
+        message: '', // 첨부파일 메시지는 텍스트가 필요하지 않음
+        message_sent_at: new Date().toISOString(),
+        sender_type: 'client',
+        attachment: publicUrl, // 업로드된 파일 URL
+      });
+  
+      if (response?.error) {
+        console.error('Attachment 메시지 전송 실패:', response.error);
+        alert('파일 업로드는 성공했지만, 메시지 삽입에 실패했습니다.');
+        return;
+      }
+  
+      // UI에 attachment 메시지 추가
+      setMessages((prevMessages) => [
+        ...prevMessages,
+        {
+          type: 'attachment',
+          content: publicUrl,
+          sender: 'client',
+          timestamp: new Date().toISOString(),
+        },
+      ]);
+  
+      setAttachedFile(null); // 선택된 파일 초기화
+      alert('파일이 성공적으로 전송되었습니다.');
+    } catch (error) {
+      console.error('파일 업로드 또는 메시지 삽입 실패:', error);
+      alert('파일 업로드에 실패했습니다.');
+    }
+  };
+  
 
-    console.log(selectedChat)
+
+
+
+  const handleSendMessage = async () => {
+    if (!newMessage.trim() && !attachedFile) {
+      alert('메시지나 파일을 입력해주세요.');
+      return;
+    }
+  
     if (!selectedChat) {
       console.error('선택된 상담이 없습니다.');
       return;
     }
-
-    console.log('Sending message:', newMessage);
-    if (attachedFile) {
-      console.log('Sending file:', attachedFile.name);
-    }
-
-    const { chatId, estimateId } = selectedChat; // selectedChat에서 chatId와 estimateId 가져오기
-
-    console.log("Sending message with chatId:", chatId, "estimateId:", estimateId);
-
-    if (!chatId) {
-      console.error('Chat ID가 없습니다.')
-      return;
-    }
-
+  
+    const { chatId, estimateId } = selectedChat;
+  
     try {
-      // 메시지 전송 API 호출
-      const response = await insertChatMessage({
-        chat_id: chatId,
-        sender_id: null, // sender_id 값은 실제로 동적으로 처리해야 함
-        estimate_id: estimateId,
-        message_type: 'message',
-        message: msg,
-        message_sent_at: new Date().toISOString(),
-        sender_type: 'client',
-        attachment: attachedFile, // 첨부파일이 있다면 여기에 추가
-      })
-
-      if (response.error) {
-        console.error('메시지 전송 실패:', response.error)
-        return
+      let newMessageData;
+  
+      // 파일이 첨부된 경우 처리
+      if (attachedFile) {
+        const formData = new FormData();
+        formData.append('file', attachedFile);
+  
+        const publicUrl = await uploadFile(formData);
+  
+        // API 호출로 attachment 메시지 추가
+        newMessageData = await insertChatMessage({
+          chat_id: chatId,
+          sender_id: null, // 실제 값 필요
+          estimate_id: estimateId,
+          message_type: 'attachment',
+          message: '', // 파일 메시지의 경우 빈 값
+          message_sent_at: new Date().toISOString(),
+          sender_type: 'client',
+          attachment: publicUrl,
+        });
+  
+        // UI에 추가
+        setMessages((prevMessages) => [
+          ...prevMessages,
+          {
+            type: 'attachment',
+            content: publicUrl,
+            sender: 'client',
+            timestamp: new Date().toISOString(),
+          },
+        ]);
+  
+        setAttachedFile(null); // 파일 상태 초기화
       }
-
-      // 성공적으로 메시지를 전송한 후 UI에 메시지 추가
-      setMessages([...messages, { type: 'message', content: msg, sender: 'client' }])
-      setNewMessage('') // 입력창 초기화
-      setAttachedFile(null);
+  
+      // 텍스트 메시지인 경우 처리
+      if (newMessage.trim()) {
+        newMessageData = await insertChatMessage({
+          chat_id: chatId,
+          sender_id: null, // 실제 값 필요
+          estimate_id: estimateId,
+          message_type: 'message',
+          message: newMessage,
+          message_sent_at: new Date().toISOString(),
+          sender_type: 'client',
+        });
+  
+        // UI에 추가
+        setMessages((prevMessages) => [
+          ...prevMessages,
+          {
+            type: 'message',
+            content: newMessage,
+            sender: 'client',
+            timestamp: new Date().toISOString(),
+          },
+        ]);
+  
+        setNewMessage(''); // 메시지 입력 초기화
+      }
     } catch (error) {
-      console.error('메시지 전송 에러:', error)
+      console.error('메시지 전송 실패:', error);
+      alert('메시지 전송에 실패했습니다.');
     }
-  }
+  };
+  
 
 
   // 검색어 변경 처리
@@ -284,97 +313,97 @@ const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
         </div>
 
         {/* 상담 목록 */}
-        
-        
+
+
         <div>
-  {counselList
-    .filter((item) => item.team.includes(searchTerm)) // 검색어로 팀명 필터링
-    .map((item, index) => (
-      <div
-        key={index}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between', // 오른쪽에 시간 표시
-          padding: '12px',
-          marginBottom: '12px',
-          backgroundColor: '#fff',
-          borderRadius: '8px',
-          boxShadow: '0 2px 5px rgba(0, 0, 0, 0.1)',
-          cursor: 'pointer', // 클릭 가능
-        }}
-        onClick={() =>
-          handleMessageClick(item.chatId, item.estimateId, item.team, item.teamBio)
-        } // 상담 클릭 시 메시지 로드
-      >
-        {/* 왼쪽: 팀 정보 */}
-        <div style={{ display: 'flex', alignItems: 'center' }}>
-          <div
-            style={{
-              width: '40px',
-              height: '40px',
-              backgroundColor: '#808080',
-              borderRadius: '50%',
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'center',
-              marginRight: '15px',
-            }}
-          >
-            <img
-              src="/images/image.png"
-              alt="file icon"
-              style={{ width: '16px', height: '16px' }}
-            />
-          </div>
+          {counselList
+            .filter((item) => item.team.includes(searchTerm)) // 검색어로 팀명 필터링
+            .map((item, index) => (
+              <div
+                key={index}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between', // 오른쪽에 시간 표시
+                  padding: '12px',
+                  marginBottom: '12px',
+                  backgroundColor: '#fff',
+                  borderRadius: '8px',
+                  boxShadow: '0 2px 5px rgba(0, 0, 0, 0.1)',
+                  cursor: 'pointer', // 클릭 가능
+                }}
+                onClick={() =>
+                  handleMessageClick(item.chatId, item.estimateId, item.team, item.teamBio)
+                } // 상담 클릭 시 메시지 로드
+              >
+                {/* 왼쪽: 팀 정보 */}
+                <div style={{ display: 'flex', alignItems: 'center' }}>
+                  <div
+                    style={{
+                      width: '40px',
+                      height: '40px',
+                      backgroundColor: '#808080',
+                      borderRadius: '50%',
+                      display: 'flex',
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                      marginRight: '15px',
+                    }}
+                  >
+                    <img
+                      src="/images/image.png"
+                      alt="file icon"
+                      style={{ width: '16px', height: '16px' }}
+                    />
+                  </div>
 
-          <div>
-            <p
-              style={{
-                margin: '0 0 5px 0',
-                fontWeight: 'bold',
-                fontSize: '16px',
-              }}
-            >
-              {item.team}
-            </p>
-            <p
-              style={{
-                margin: 0,
-                color: '#888',
-                fontSize: '14px',
-                maxHeight: '38px',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                lineHeight: '19px',
-                display: '-webkit-box',
-                WebkitLineClamp: 2, // 최대 2줄로 제한
-                WebkitBoxOrient: 'vertical',
-              }}
-            >
-              {item.content}
-            </p>
-          </div>
-        </div>
+                  <div>
+                    <p
+                      style={{
+                        margin: '0 0 5px 0',
+                        fontWeight: 'bold',
+                        fontSize: '16px',
+                      }}
+                    >
+                      {item.team}
+                    </p>
+                    <p
+                      style={{
+                        margin: 0,
+                        color: '#888',
+                        fontSize: '14px',
+                        maxHeight: '38px',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        lineHeight: '19px',
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2, // 최대 2줄로 제한
+                        WebkitBoxOrient: 'vertical',
+                      }}
+                    >
+                      {item.content}
+                    </p>
+                  </div>
+                </div>
 
-        {/* 오른쪽: 시간 표시 */}
-        <div
-          style={{
-            color: '#888',
-            fontSize: '14px',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {item.recentChatTimeStamp
-            ? formatRelativeTime(item.recentChatTimeStamp)
-            : ''}
+                {/* 오른쪽: 시간 표시 */}
+                <div
+                  style={{
+                    color: '#888',
+                    fontSize: '14px',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {item.recentChatTimeStamp
+                    ? formatRelativeTime(item.recentChatTimeStamp)
+                    : ''}
+                </div>
+              </div>
+            ))}
         </div>
-      </div>
-    ))}
-</div>
 
       </main>
-      
+
       <main style={{ flex: 2, padding: '20px', backgroundColor: '#f9f9f9' }}>
         {/* 팀 정보 */}
         <div
@@ -437,184 +466,171 @@ const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
             </button>
           </div>
         </div>
-{/* 메시지 영역 */}
-<div
-  style={{
-    backgroundColor: '#fff',
-    padding: '20px',
-    borderRadius: '8px',
-    boxShadow: '0 2px 5px rgba(0, 0, 0, 0.1)',
-    height: 'calc(100vh - 300px)',
-    overflowY: 'scroll',
-  }}
->
-
-{/* 메시지 표시 */}
-{messages.map((msg, index) => (
-  <div key={index} style={{ marginBottom: '20px' }}>
-    {msg && msg.type === 'message' ? (
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: msg.sender === 'client' ? 'flex-end' : 'flex-start',
-          marginBottom: '15px',
-        }}
-      >
-        {/* Manager 메시지일 경우 */}
-        {msg.sender === 'manager' && (
-          <div style={{ display: 'flex', alignItems: 'center', marginBottom: '5px' }}>
-            <img
-              src="https://lucide.dev/icons/user-pen"
-              alt="Manager Icon"
-              style={{
-                width: '30px',
-                height: '30px',
-                borderRadius: '50%',
-                marginRight: '10px',
-              }}
-            />
-            <p
-              style={{
-                margin: 0,
-                fontSize: '14px',
-                color: '#888',
-                fontWeight: 'bold',
-              }}
-            >
-              {selectedChat?.teamName || '팀 이름 없음'}
-            </p>
-          </div>
-        )}
-
-        {/* 일반 메시지 박스 */}
+        {/* 메시지 영역 */}
         <div
           style={{
-            maxWidth: '70%',
-            padding: '10px 15px',
-            borderRadius: '12px',
-            backgroundColor: msg.sender === 'client' ? '#d4f1f4' : '#f1f1f1',
+            backgroundColor: '#fff',
+            padding: '20px',
+            borderRadius: '8px',
             boxShadow: '0 2px 5px rgba(0, 0, 0, 0.1)',
-            wordWrap: 'break-word',
+            height: 'calc(100vh - 300px)',
+            overflowY: 'scroll',
           }}
         >
-          <p style={{ margin: 0, fontSize: '14px', color: '#333' }}>{msg.content}</p>
-        </div>
 
-        {/* 타임스탬프 */}
-        <p
-          style={{
-            marginTop: '5px',
-            fontSize: '12px',
-            color: '#888',
-          }}
-        >
-          {formatRelativeTime(msg.timestamp)}
-        </p>
-      </div>
-    ) : msg && msg.type === 'attachment' ? (
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: msg.sender === 'client' ? 'flex-end' : 'flex-start',
-          marginBottom: '15px',
-        }}
-      >
-        <div
-          style={{
-            maxWidth: '70%',
-            padding: '10px',
-            borderRadius: '12px',
-            backgroundColor: msg.sender === 'client' ? '#eaf7ea' : '#f1f1f1',
-            boxShadow: '0 2px 5px rgba(0, 0, 0, 0.1)',
-            wordWrap: 'break-word',
-          }}
-        >
-          {/* 이미지 첨부파일 */}
-          {msg.attachment && typeof msg.attachment === 'string' && msg.attachment.match(/\.(jpeg|jpg|gif|png)$/i) ? (
-            <img
-              src={msg.attachment}
-              alt="첨부 이미지"
-              style={{
-                maxWidth: '100%',
-                borderRadius: '8px',
-                marginBottom: '5px',
-              }}
-            />
-          ) : (
-            /* 일반 파일 첨부 */
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                padding: '10px',
-                border: '1px solid #ddd',
-                borderRadius: '8px',
-                backgroundColor: '#f9f9f9',
-                boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
-              }}
-            >
-              <p
-                style={{
-                  fontSize: '14px',
-                  color: '#333',
-                  marginBottom: '5px',
-                  wordBreak: 'break-word',
-                }}
-              >
-                {msg.attachment && typeof msg.attachment === 'string' ? msg.attachment.split('/').pop() : '파일 없음'}
-              </p>
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <a
-                  href={msg.attachment || '#'}
-                  download={msg.attachment && typeof msg.attachment === 'string' ? msg.attachment.split('/').pop() : ''}
+          {/* 메시지 표시 */}
+          {messages.map((msg, index) => (
+            <div key={index} style={{ marginBottom: '20px' }}>
+              {msg && msg.type === 'message' ? (
+                <div
                   style={{
-                    color: '#007bff',
-                    textDecoration: 'none',
-                    fontSize: '14px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: msg.sender === 'client' ? 'flex-end' : 'flex-start',
+                    marginBottom: '15px',
                   }}
                 >
-                  다운로드
-                </a>
-              </div>
+                  {/* Manager 메시지일 경우 */}
+                  {msg.sender === 'manager' && (
+                    <div style={{ display: 'flex', alignItems: 'center', marginBottom: '5px' }}>
+                    
+                      <p
+                        style={{
+                          margin: 0,
+                          fontSize: '14px',
+                          color: '#888',
+                          fontWeight: 'bold',
+                        }}
+                      >
+                        {selectedChat?.teamName || '팀 이름 없음'}
+                      </p>
+                    </div>
+                  )}
+
+                  {/* 일반 메시지 박스 */}
+                  <div
+                    style={{
+                      maxWidth: '70%',
+                      padding: '10px 15px',
+                      borderRadius: '12px',
+                      backgroundColor: msg.sender === 'client' ? '#d4f1f4' : '#f1f1f1',
+                      boxShadow: '0 2px 5px rgba(0, 0, 0, 0.1)',
+                      wordWrap: 'break-word',
+                    }}
+                  >
+                    <p style={{ margin: 0, fontSize: '14px', color: '#333' }}>{msg.content}</p>
+                  </div>
+
+                  {/* 타임스탬프 */}
+                  <p
+                    style={{
+                      marginTop: '5px',
+                      fontSize: '12px',
+                      color: '#888',
+                    }}
+                  >
+                    {formatRelativeTime(msg.timestamp)}
+                  </p>
+                </div>
+              ) : msg && msg.type === 'attachment' ? (
+                <div
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: msg.sender === 'client' ? 'flex-end' : 'flex-start',
+                    marginBottom: '15px',
+                  }}
+                >
+                  <div
+                    style={{
+                      maxWidth: '70%',
+                      padding: '10px',
+                      borderRadius: '12px',
+                      backgroundColor: msg.sender === 'client' ? '#eaf7ea' : '#f1f1f1',
+                      boxShadow: '0 2px 5px rgba(0, 0, 0, 0.1)',
+                      wordWrap: 'break-word',
+                    }}
+                  >
+                    {/* 이미지 첨부파일 */}
+                    {msg.attachment && typeof msg.attachment === 'string' && msg.attachment.match(/\.(jpeg|jpg|gif|png)$/i) ? (
+                      <img
+                        src={msg.attachment}
+                        alt="첨부 이미지"
+                        style={{
+                          maxWidth: '100%',
+                          borderRadius: '8px',
+                          marginBottom: '5px',
+                        }}
+                      />
+                    ) : (
+                      /* 일반 파일 첨부 */
+                      <div
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          padding: '10px',
+                          border: '1px solid #ddd',
+                          borderRadius: '8px',
+                          backgroundColor: '#f9f9f9',
+                          boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+                        }}
+                      >
+                        <p
+                          style={{
+                            fontSize: '14px',
+                            color: '#333',
+                            marginBottom: '5px',
+                            wordBreak: 'break-word',
+                          }}
+                        >
+                          {msg.attachment && typeof msg.attachment === 'string' ? msg.attachment.split('/').pop() : '파일 없음'}
+                        </p>
+                        <div style={{ display: 'flex', gap: '10px' }}>
+                          <a
+                            href={msg.attachment || '#'}
+                            download={msg.attachment && typeof msg.attachment === 'string' ? msg.attachment.split('/').pop() : ''}
+                            style={{
+                              color: '#007bff',
+                              textDecoration: 'none',
+                              fontSize: '14px',
+                            }}
+                          >
+                            다운로드
+                          </a>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 타임스탬프 */}
+                  <p
+                    style={{
+                      marginTop: '5px',
+                      fontSize: '12px',
+                      color: '#888',
+                    }}
+                  >
+                    {msg.timestamp ? formatRelativeTime(msg.timestamp) : ''}
+                  </p>
+                </div>
+              ) : (
+                <Card
+                  title={msg.title}
+                  subtitle={msg.subtitle}
+                  content={msg.content}
+                  sender={msg.sender}
+                  buttonText1="확인"
+                  buttonText2="파일 첨부"
+                  onButtonClick1={() => alert('확인 버튼 클릭됨')}
+                  onButtonClick2={() => alert('파일 첨부 버튼 클릭됨')}
+                />
+              )}
             </div>
-          )}
+          ))}
+          <div ref={messagesEndRef} />
         </div>
 
-        {/* 타임스탬프 */}
-        <p
-          style={{
-            marginTop: '5px',
-            fontSize: '12px',
-            color: '#888',
-          }}
-        >
-          {msg.timestamp ? formatRelativeTime(msg.timestamp) : ''}
-        </p>
-      </div>
-    ) : (
-      <Card
-        title={msg.title}
-        subtitle={msg.subtitle}
-        content={msg.content}
-        sender={msg.sender}
-        buttonText1="확인"
-        buttonText2="파일 첨부"
-        onButtonClick1={() => alert('확인 버튼 클릭됨')}
-        onButtonClick2={() => alert('파일 첨부 버튼 클릭됨')}
-      />
-    )}
-  </div>
-))}
-<div ref={messagesEndRef} />
 
-
-
-
-        </div>
-
-        
 
         {/* 메시지 전송 영역 */}
         <div style={{ display: 'flex', alignItems: 'center', padding: '10px', borderTop: '1px solid #ddd' }}>
@@ -671,7 +687,7 @@ const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
           </div>
         </div>
       </main>
-      
+
     </div>
   )
 }

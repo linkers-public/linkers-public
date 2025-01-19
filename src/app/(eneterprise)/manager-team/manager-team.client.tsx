@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link' // Link 컴포넌트 임포트
 import Sidebar from '../../../components/Sidebar' // Sidebar 컴포넌트 임포트
+import { Users, MousePointer2, Paperclip } from 'lucide-react';
 
 const Home: React.FC = () => {
   const [selectedTab, setSelectedTab] = useState('마일스톤')
@@ -79,84 +80,140 @@ const Home: React.FC = () => {
           </div>
         </header>
 
-        {/* 팀명 및 결제 버튼 */}
+        {/* 팀명 및 결제 버튼 UI */}
         <div
           style={{
             display: 'flex',
             justifyContent: 'space-between',
             alignItems: 'center',
+            padding: '15px',
+            backgroundColor: '#fff',
+            borderRadius: '8px',
+            boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
             marginBottom: '20px',
           }}
         >
-          <div>
-            <strong>팀 명</strong>: 상담팀
+          {/* 팀 정보 */}
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            <div
+              style={{
+                width: '40px',
+                height: '40px',
+                backgroundColor: '#e0e0e0',
+                borderRadius: '50%',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                marginRight: '10px',
+              }}
+            >
+              <Users/>
+            </div>
+            <div>
+              <p style={{ margin: 0, fontSize: '16px', fontWeight: 'bold' }}>
+                팀 명 (마지막 접속일 / 평균 진행도)
+              </p>
+              <p style={{ margin: 0, fontSize: '14px', color: '#666' }}>
+                팀 소개 한줄 팀 소개 한줄 팀 소개 한줄
+              </p>
+            </div>
           </div>
-          <div>
+
+          {/* 결제 및 진행 취소 버튼 */}
+          <div style={{ display: 'flex', gap: '10px' }}>
             <button
               style={{
                 padding: '10px 20px',
-                marginRight: '10px',
-                backgroundColor: '#ddd',
-                borderRadius: '4px',
+                backgroundColor: '#f1f1f1',
+                border: '1px solid #ddd',
+                borderRadius: '8px',
+                color: '#333',
                 cursor: 'pointer',
               }}
+              onClick={() => console.log('진행취소')}
             >
-              여기까지
+              진행취소
             </button>
             <button
               style={{
                 padding: '10px 20px',
                 backgroundColor: '#007bff',
                 color: '#fff',
-                borderRadius: '4px',
+                border: 'none',
+                borderRadius: '8px',
                 cursor: 'pointer',
               }}
+              onClick={() => console.log('결제하기')}
             >
               결제하기
             </button>
           </div>
         </div>
 
+
         {/* 탭 섹션 */}
-        <div style={{ marginBottom: '20px' }}>
-          <button
-            style={{
-              padding: '10px',
-              backgroundColor:
-                selectedTab === '마일스톤' ? '#007bff' : '#f1f1f1',
-              color: selectedTab === '마일스톤' ? '#fff' : '#000',
-              borderRadius: '4px',
-              marginRight: '10px',
-            }}
-            onClick={() => handleTabClick('마일스톤')}
-          >
-            마일스톤
-          </button>
-          <button
-            style={{
-              padding: '10px',
-              backgroundColor: selectedTab === '메시지' ? '#007bff' : '#f1f1f1',
-              color: selectedTab === '메시지' ? '#fff' : '#000',
-              borderRadius: '4px',
-              marginRight: '10px',
-            }}
-            onClick={() => handleTabClick('메시지')}
-          >
-            메시지
-          </button>
-          <button
-            style={{
-              padding: '10px',
-              backgroundColor:
-                selectedTab === '첨부파일' ? '#007bff' : '#f1f1f1',
-              color: selectedTab === '첨부파일' ? '#fff' : '#000',
-              borderRadius: '4px',
-            }}
-            onClick={() => handleTabClick('첨부파일')}
-          >
-            첨부파일
-          </button>
-        </div>
+<div
+  style={{
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderBottom: '2px solid #e0e0e0',
+    marginBottom: '20px',
+  }}
+>
+  <button
+    style={{
+      flex: 1,
+      textAlign: 'center',
+      padding: '10px 0',
+      fontSize: '16px',
+      fontWeight: 'bold',
+      color: selectedTab === '마일스톤' ? '#007bff' : '#000',
+      border: 'none',
+      borderBottom: selectedTab === '마일스톤' ? '2px solid #007bff' : 'none',
+      backgroundColor: 'transparent',
+      cursor: 'pointer',
+    }}
+    onClick={() => handleTabClick('마일스톤')}
+  >
+    마일스톤
+  </button>
+  <button
+    style={{
+      flex: 1,
+      textAlign: 'center',
+      padding: '10px 0',
+      fontSize: '16px',
+      fontWeight: 'bold',
+      color: selectedTab === '메시지' ? '#007bff' : '#000',
+      border: 'none',
+      borderBottom: selectedTab === '메시지' ? '2px solid #007bff' : 'none',
+      backgroundColor: 'transparent',
+      cursor: 'pointer',
+    }}
+    onClick={() => handleTabClick('메시지')}
+  >
+    메시지
+  </button>
+  <button
+    style={{
+      flex: 1,
+      textAlign: 'center',
+      padding: '10px 0',
+      fontSize: '16px',
+      fontWeight: 'bold',
+      color: selectedTab === '첨부파일' ? '#007bff' : '#000',
+      border: 'none',
+      borderBottom: selectedTab === '첨부파일' ? '2px solid #007bff' : 'none',
+      backgroundColor: 'transparent',
+      cursor: 'pointer',
+    }}
+    onClick={() => handleTabClick('첨부파일')}
+  >
+    첨부파일
+  </button>
+</div>
+
 
         {/* 동적 콘텐츠 */}
         {selectedTab === '마일스톤' && (
@@ -203,10 +260,10 @@ const Home: React.FC = () => {
                           status === '정산 완료'
                             ? '#28a745'
                             : status === '결제 완료'
-                            ? '#ffc107'
-                            : status === '진행중'
-                            ? '#007bff'
-                            : '#6c757d',
+                              ? '#ffc107'
+                              : status === '진행중'
+                                ? '#007bff'
+                                : '#6c757d',
                         color: '#fff',
                         borderRadius: '5px',
                       }}
@@ -222,6 +279,7 @@ const Home: React.FC = () => {
 
         {selectedTab === '메시지' && (
           <div>
+            {/* 상대방 정보 */}
             <div
               style={{
                 display: 'flex',
@@ -229,69 +287,142 @@ const Home: React.FC = () => {
                 marginBottom: '20px',
               }}
             >
-              <img
-                src="/circle-icon.png"
-                alt="receiver"
-                style={{
-                  width: '40px',
-                  height: '40px',
-                  borderRadius: '50%',
-                  marginRight: '10px',
-                }}
-              />
+              <Users />
               <strong>상대방 이름</strong>
             </div>
 
+            {/* 메시지 영역 */}
             <div
               style={{
                 display: 'flex',
                 flexDirection: 'column',
-                gap: '10px',
+                gap: '20px',
                 marginBottom: '20px',
+                height: '300px',
+                overflowY: 'scroll',
+                padding: '10px',
+                backgroundColor: '#f9f9f9',
+                borderRadius: '8px',
               }}
             >
+              {/* 상대방 메시지 */}
               <div
                 style={{
-                  backgroundColor: '#f1f1f1',
-                  padding: '10px',
-                  borderRadius: '8px',
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '10px',
                 }}
               >
-                <p>상대방이 보낸 메세지입니다. 여기에 내용을 작성하세요.</p>
-                <span>오전 10:14</span>
+                <Users />
+                <div
+                  style={{
+                    backgroundColor: '#f1f1f1',
+                    padding: '10px',
+                    borderRadius: '8px',
+                    maxWidth: '70%',
+                  }}
+                >
+                  <p style={{ margin: '0', fontSize: '14px' }}>
+                    채팅 내용입니다.채팅 내용입니다.채팅 내용입니다.채팅 내용입니다.채팅
+                    내용입니다.
+                  </p>
+                  <span style={{ fontSize: '12px', color: '#888' }}>오전 10:14</span>
+                </div>
               </div>
+
+              {/* 내 메시지 */}
               <div
                 style={{
-                  backgroundColor: '#d1ecf1',
-                  padding: '10px',
-                  borderRadius: '8px',
+                  display: 'flex',
+                  justifyContent: 'flex-end',
+                  alignItems: 'flex-start',
+                  gap: '10px',
                 }}
               >
-                <p>내가 보낸 메시지입니다. 여기에 내용을 작성하세요.</p>
-                <span>오전 10:15</span>
+                <div
+                  style={{
+                    backgroundColor: '#d1ecf1',
+                    padding: '10px',
+                    borderRadius: '8px',
+                    maxWidth: '70%',
+                  }}
+                >
+                  <p style={{ margin: '0', fontSize: '14px' }}>
+                    채팅 내용입니다.채팅 내용입니다.채팅 내용입니다.채팅 내용입니다.채팅
+                    내용입니다.
+                  </p>
+                  <span style={{ fontSize: '12px', color: '#888' }}>오전 10:15</span>
+                </div>
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <input
-                type="text"
-                placeholder="메시지를 입력하세요"
-                style={{ flex: 1, padding: '10px', borderRadius: '4px' }}
-              />
-              <button
+            {/* 메시지 입력 영역 */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                padding: '10px',
+                backgroundColor: '#fff',
+                borderTop: '1px solid #ddd',
+              }}
+            >
+              {/* 파일 첨부 버튼 */}
+              <label
                 style={{
-                  padding: '10px 20px',
-                  backgroundColor: '#007bff',
-                  color: '#fff',
-                  borderRadius: '4px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '40px',
+                  height: '40px',
+                  backgroundColor: '#f1f1f1',
+                  borderRadius: '50%',
                   cursor: 'pointer',
                 }}
               >
-                보내기
+                <Paperclip />
+                <input
+                  type="file"
+                  style={{ display: 'none' }}
+                  onChange={(e) => console.log(e.target.files)} // 파일 선택 핸들러
+                />
+              </label>
+
+              {/* 메시지 입력창 */}
+              <input
+                type="text"
+                placeholder="메시지를 입력하세요"
+                style={{
+                  flex: 1,
+                  padding: '10px',
+                  borderRadius: '4px',
+                  border: '1px solid #ddd',
+                  fontSize: '14px',
+                }}
+              />
+
+              {/* 전송 버튼 */}
+              <button
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '40px',
+                  height: '40px',
+                  backgroundColor: '#007bff',
+                  borderRadius: '50%',
+                  border: 'none',
+                  cursor: 'pointer',
+                }}
+                onClick={() => console.log('메시지 전송')} // 전송 버튼 핸들러
+              >
+                <MousePointer2 />
               </button>
             </div>
+
           </div>
         )}
+
 
         {selectedTab === '첨부파일' && (
           <div>
