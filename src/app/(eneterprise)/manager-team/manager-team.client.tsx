@@ -99,8 +99,9 @@ const Home: React.FC = () => {
   };
   
   return (
-    <div style={{ display: 'flex' }}>
-      {/* Sidebar */}
+    <div
+      style={{ display: 'flex', height: '100vh', backgroundColor: '#f9f9f9' }}
+    >      {/* Sidebar */}
       <Sidebar />
 
       {/* Main Content */}
