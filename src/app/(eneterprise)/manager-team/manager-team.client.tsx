@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { fetchChatsAndMessagesByTeamId, fetchMessagesByChatId } from '@/apis/chat.service';
-import Sidebar from '../../../components/Sidebar' // Sidebar 컴포넌트 임포트
+import Sidebar from '../../../components/DashboardSidebar' // Sidebar 컴포넌트 임포트
 import { Users, MousePointer2, Paperclip } from 'lucide-react';
 
 const Home: React.FC = () => {

@@ -4,7 +4,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { fetchTeamAndRecentChats, fetchMessagesByChatId, insertChatMessage } from '@/apis/chat.service' // 작성한 API 임포트
 import { useRouter } from 'next/navigation'
 import Card from './_components/card' // Card 컴포넌트 임포트
-import Sidebar from '../../../components/Sidebar' // Sidebar 컴포넌트 임포트
+import Sidebar from '../../../components/DashboardSidebar' // Sidebar 컴포넌트 임포트
 import { uploadFile } from '@/apis/storage'
 
 // 팀 정보와 최근 메시지의 타입 정의

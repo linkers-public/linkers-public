@@ -1,7 +1,7 @@
 import React from "react";
 import Link from "next/link";
 
-const Sidebar = () => {
+const DashboardSidebar = () => {
   return (
     <aside
       style={{
@@ -85,4 +85,4 @@ const Sidebar = () => {
   );
 };
 
-export default Sidebar;
+export default DashboardSidebar;

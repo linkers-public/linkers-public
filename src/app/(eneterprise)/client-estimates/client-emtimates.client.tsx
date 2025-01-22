@@ -3,7 +3,7 @@
 
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
-import Sidebar from "../../../components/Sidebar";  // Sidebar 컴포넌트 임포트
+import Sidebar from "../../../components/DashboardSidebar";  // Sidebar 컴포넌트 임포트
 
 const ManagerEstimatesPage: React.FC = () => {
   const router = useRouter();
