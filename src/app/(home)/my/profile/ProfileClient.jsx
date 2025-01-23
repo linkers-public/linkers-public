@@ -59,7 +59,13 @@ export const ProfileClient = () => {
   }
 
   const isOwner = account?.id === profile?.account_id
-
+  const alreadyOnboarding =
+    profile.expertise?.length === 0 &&
+    profile.main_job?.length === 0 &&
+    profile.bio?.length === 0 &&
+    profile.account_work_experiences?.length === 0 &&
+    profile.account_educations?.length === 0 &&
+    profile.account_license?.length === 0
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -92,24 +98,35 @@ export const ProfileClient = () => {
           isOwner={isOwner}
         />
 
-        <WorkExperienceMeta
-          account_work_experiences={account_work_experiences}
-          onEditExperience={navigateToEditExperience}
-          onCreateExperience={navigateToCreateExperience}
-          isOwner={isOwner}
-        />
-
-        <EduCationMeta
-          account_educations={account_educations}
-          onEditEducation={navigateToEditEducation}
-          onCreateEducation={navigateToCreateEducation}
-          isOwner={isOwner}
-        />
-
-        <LicenseMeta
-          account_license={account_license}
-          isOwner={isOwner}
-        />
+        {!alreadyOnboarding ? (
+          <>
+            <div>
+              <WorkExperienceMeta
+                account_work_experiences={account_work_experiences}
+                onEditExperience={navigateToEditExperience}
+                onCreateExperience={navigateToCreateExperience}
+                isOwner={isOwner}
+              />
+              <EduCationMeta
+                account_educations={account_educations}
+                onEditEducation={navigateToEditEducation}
+                onCreateEducation={navigateToCreateEducation}
+                isOwner={isOwner}
+              />
+              <LicenseMeta
+                account_license={account_license}
+                isOwner={isOwner}
+              />
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="flex justify-center text-[42px]">
+              아직 정보를 입력하지 않았습니다.
+            </div>
+            <Button>추가하기</Button>
+          </>
+        )}
       </div>
     </div>
   )
@@ -150,10 +167,17 @@ const ProfileMeta = ({
           </div>
         </div>
         <div className="flex  justify-center gap-4">
-          <Button>매니저 버튼 1</Button>
-          <Button variant="secondary">매니저 버튼 2</Button>
+          {isOwner ? (
+            <Button>편집하기</Button>
+          ) : (
+            <>
+              <Button> 북마크 </Button>
+              <Button> 제안하기 </Button>
+            </>
+          )}
         </div>
       </div>
+
       <div className="px-2">
         <span className="text-p2 text-palette-coolNeutral-30">{bio}</span>
       </div>
@@ -167,6 +191,10 @@ const WorkExperienceMeta = ({
   onCreateExperience,
   isOwner,
 }) => {
+  if (!account_work_experiences) {
+    return null
+  }
+
   return (
     <>
       <div className="flex justify-between items-center">
@@ -227,6 +255,9 @@ const EduCationMeta = ({
   onCreateEducation,
   isOwner,
 }) => {
+  if (!account_educations) {
+    return null
+  }
   return (
     <>
       <div className="flex justify-between items-center">
@@ -279,6 +310,9 @@ const EduCationMeta = ({
 }
 
 const LicenseMeta = ({ account_license, isOwner }) => {
+  if (!account_license) {
+    return null
+  }
   return (
     <>
       <div className="flex justify-between items-center">

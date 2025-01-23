@@ -37,12 +37,14 @@ const TeamProfileClient = () => {
     updated_at,
     team_members,
   } = teamProfile || {}
-  console.log(teamProfile)
+
   const editIntroduction = () => {}
   const editProfile = () => {}
   const editTeam = () => {}
   const editProject = () => {}
   const editCareer = () => {}
+
+  const isManager = account?.id === manager_id
 
   if (isLoading) {
     return (
