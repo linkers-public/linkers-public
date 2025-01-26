@@ -1,32 +1,35 @@
 'use client'
+
 import React from 'react'
-import { SearchIcon, ChevronDown } from 'lucide-react'
+import { SearchIcon } from 'lucide-react'
+import { useMakerFilter } from '@/hooks/use-maker-filter'
+import { useRouter } from 'next/navigation'
+import {
+  ExperienceFilter,
+  JobFilter,
+  SpecializationFilter,
+} from '@/components/CommonMakerFilter'
 
 const SearchMakersClient = () => {
+  const router = useRouter()
+  const { filters, handleFilterChange } = useMakerFilter()
+
   return (
     <div className="flex flex-col gap-4">
       <h3 className="text-h3">메이커 찾기</h3>
       <section className="flex gap-4">
-        <div className="flex shadow-normal py-2 px-4 gap-6 rounded-[12px] hover:shadow-emphasize">
-          <span className="text-palette-coolNeutral-40">경력</span>
-          <ChevronDown
-            color="#5a5c63"
-            size={24}
+        <div className="flex gap-2 relative">
+          <ExperienceFilter
+            value={filters.experience}
+            onChange={(value) => handleFilterChange('experience', value)}
           />
-        </div>
-
-        <div className="flex shadow-normal py-2 px-4 gap-6 rounded-[12px] hover:shadow-emphasize">
-          <span className="text-palette-coolNeutral-40">경력</span>
-          <ChevronDown
-            color="#5a5c63"
-            size={24}
+          <JobFilter
+            value={filters.job}
+            onChange={(value) => handleFilterChange('job', value)}
           />
-        </div>
-        <div className="flex shadow-normal py-2 px-4 gap-6 rounded-[12px] hover:shadow-emphasize">
-          <span className="text-palette-coolNeutral-40">경력</span>
-          <ChevronDown
-            color="#5a5c63"
-            size={24}
+          <SpecializationFilter
+            value={filters.specialization}
+            onChange={(value) => handleFilterChange('specialization', value)}
           />
         </div>
         <div className="flex-1 flex gap-4 shadow-normal py-2 px-4 rounded-[12px] hover:shadow-emphasize">
@@ -34,19 +37,8 @@ const SearchMakersClient = () => {
           <span className="text-palette-coolNeutral-40">검색</span>
         </div>
       </section>
-      <section className="flex gap-2">
-        <div className="px-2 py-1 shadow-emphasize rounded-[12px] text-[12px] hover:shadow-emphasize">
-          😊 새로 가입했어요
-        </div>
-        <div className="px-2 py-1 shadow-emphasize rounded-[12px] text-[12px] hover:shadow-emphasize">
-          🔥 활동이 많아요
-        </div>
-        <div className="px-2 py-1 shadow-emphasize rounded-[12px] text-[12px] hover:shadow-emphasize">
-          🌡 응답률이 좋아요
-        </div>
-      </section>
 
-      <ul className="flex flex-wrap gap-8 justify-between mt-6">
+      <ul className="flex flex-wrap gap-6 justify-between mt-6">
         <MakerMeta />
         <MakerMeta />
         <MakerMeta />
