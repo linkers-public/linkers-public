@@ -34,22 +34,6 @@ const SearchMakersClient = () => {
           <span className="text-palette-coolNeutral-40">검색</span>
         </div>
       </section>
-      {/* <section className="flex mt-1 gap-2">
-        <div className="flex items-center gap-2 px-2 py-1 shadow-normal rounded-[12px] text-[12px] hover:shadow-emphasize">
-          경력 6년 이상
-          <XCircle
-            size={16}
-            color="#5a5c63"
-          />
-        </div>
-        <div className="flex items-center gap-2 px-2 py-1 shadow-normal rounded-[12px] text-[12px] hover:shadow-emphasize">
-          IT 분야
-          <XCircle
-            size={16}
-            color="#5a5c63"
-          />
-        </div>
-      </section> */}
       <section className="flex gap-2">
         <div className="px-2 py-1 shadow-emphasize rounded-[12px] text-[12px] hover:shadow-emphasize">
           😊 새로 가입했어요

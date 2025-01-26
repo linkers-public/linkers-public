@@ -7,9 +7,9 @@ export const fetchBookmarkList = async ({
   specialization,
 }: {
   isProposed: boolean
-  experience: [number, number]
-  job: string[]
-  specialization: string[]
+  experience?: [number, number]
+  job?: string[]
+  specialization?: string[]
 }) => {
   const supabase = createSupabaseBrowserClient()
 
@@ -27,13 +27,13 @@ export const fetchBookmarkList = async ({
     )
     .eq('proposal_status', isProposed)
 
-  if (job.length > 0) {
-    query = query.contains('maker.main_job', job)
-  }
+  // if (job.length > 0) {
+  //   query = query.contains('maker.main_job', job)
+  // }
 
-  if (specialization.length > 0) {
-    query = query.contains('maker.expertise', specialization)
-  }
+  // if (specialization.length > 0) {
+  //   query = query.contains('maker.expertise', specialization)
+  // }
   return await query
 }
 export const unbookmark = async (makerId: string) => {
