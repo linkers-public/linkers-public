@@ -23,7 +23,7 @@ interface BookmarkCardProps {
   onPropose?: (makerId: string) => void
 }
 
-export const MakerCard = ({
+export const ManageableMakerCard = ({
   bookmark,
   onUnbookmark,
   onPropose,

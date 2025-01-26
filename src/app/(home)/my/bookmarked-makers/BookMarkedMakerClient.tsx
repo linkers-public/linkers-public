@@ -11,7 +11,7 @@ import {
 } from '@/components/CommonMakerFilter'
 import { toast } from '@/hooks/use-toast'
 import { useMakerFilter } from '@/hooks/use-maker-filter'
-import { MakerCard } from '@/components/MakerMeta'
+import { ManageableMakerCard } from '@/components/ManageableMakerCard'
 
 //TODO - ZOD 반영
 interface Maker {
@@ -64,7 +64,7 @@ const BookMarkedMakerClient = () => {
       }
     }
     getBookmarkList()
-  }, [filters, isProposed])
+  }, [filters, isProposed]) // TODO 필터 연동
 
   const handleUnbookmark = useCallback(async (makerId: string) => {
     try {
@@ -164,7 +164,7 @@ const BookMarkedMakerClient = () => {
         {bookmarkList.length > 0 ? (
           bookmarkList.map((bookmark) => {
             return (
-              <MakerCard
+              <ManageableMakerCard
                 key={bookmark.id}
                 bookmark={bookmark}
                 onUnbookmark={handleUnbookmark}

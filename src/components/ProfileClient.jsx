@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation'
 import { useProfileStore } from '@/stores/useProfileStore'
 import { selectAccount, useAccountStore } from '@/stores/useAccoutStore'
 
-export const ProfileClient = () => {
+export const ProfileClient = ({ username, isOwner = false }) => {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -18,7 +18,7 @@ export const ProfileClient = () => {
     const getProfile = async () => {
       setIsLoading(true)
       try {
-        await fetchProfile()
+        await fetchProfile(username)
       } catch (err) {
         setError(err)
       } finally {
@@ -27,11 +27,11 @@ export const ProfileClient = () => {
     }
 
     getProfile()
-  }, [])
+  }, [username])
 
   const {
     bio,
-    username,
+    username: profileUsername,
     main_job,
     expertise,
     account_work_experiences,
@@ -43,22 +43,41 @@ export const ProfileClient = () => {
   const onclickProposal = () => {}
 
   const navigateToEditProfile = () => {
-    router.push('/my/update')
-  }
-  const navigateToEditExperience = (id) => {
-    router.push(`/my/profile/careers/${id}/update`)
-  }
-  const navigateToEditEducation = (id) => {
-    router.push(`/my/profile/educations/${id}/update`)
-  }
-  const navigateToCreateExperience = () => {
-    router.push('/my/profile/careers/create')
-  }
-  const navigateToCreateEducation = () => {
-    router.push('/my/profile/educations/create')
+    router.push(isOwner ? '/my/update' : `/profile/${username}/update`)
   }
 
-  const isOwner = account?.id === profile?.account_id
+  const navigateToEditExperience = (id) => {
+    router.push(
+      isOwner
+        ? `/my/profile/careers/${id}/update`
+        : `/profile/${username}/careers/${id}/update`,
+    )
+  }
+
+  const navigateToEditEducation = (id) => {
+    router.push(
+      isOwner
+        ? `/my/profile/educations/${id}/update`
+        : `/profile/${username}/educations/${id}/update`,
+    )
+  }
+
+  const navigateToCreateExperience = () => {
+    router.push(
+      isOwner
+        ? '/my/profile/careers/create'
+        : `/profile/${username}/careers/create`,
+    )
+  }
+
+  const navigateToCreateEducation = () => {
+    router.push(
+      isOwner
+        ? '/my/profile/educations/create'
+        : `/profile/${username}/educations/create`,
+    )
+  }
+
   const alreadyOnboarding =
     profile.expertise?.length === 0 &&
     profile.main_job?.length === 0 &&
@@ -66,6 +85,7 @@ export const ProfileClient = () => {
     profile.account_work_experiences?.length === 0 &&
     profile.account_educations?.length === 0 &&
     profile.account_license?.length === 0
+
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -88,7 +108,7 @@ export const ProfileClient = () => {
     <div className="flex flex-col gap-4 w-full">
       <div className="flex flex-col gap-4">
         <ProfileMeta
-          username={username}
+          username={profileUsername}
           mainJob={main_job}
           expertise={expertise}
           bio={bio}
@@ -124,7 +144,7 @@ export const ProfileClient = () => {
             <div className="flex justify-center text-[42px]">
               아직 정보를 입력하지 않았습니다.
             </div>
-            <Button>추가하기</Button>
+            {isOwner && <Button>추가하기</Button>}
           </>
         )}
       </div>
