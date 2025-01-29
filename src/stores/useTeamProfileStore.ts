@@ -1,9 +1,6 @@
 'use client'
 
-import {
-  fetchTeamProfile,
-  fetchTeamProfileByTeamManager,
-} from '@/apis/team.service'
+import { fetchTeamProfileByTeamManager } from '@/apis/team.service'
 import { create } from 'zustand'
 
 interface TeamMember {

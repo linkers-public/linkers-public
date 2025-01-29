@@ -31,7 +31,8 @@ export const fetchTeamProfile = async (teamId: string) => {
   const { data, error } = await supabase
     .from('teams')
     .select(`*, team_members:team_members(*)`)
-    .eq('id', teamId).single
+    .eq('id', teamId)
+    .single()
 
   return { data, error }
 }

@@ -1,4 +1,4 @@
-import SearchMakersClient from './search-makers.client'
+import SearchMakersClient from './SearchMakersClient'
 
 export default function Page() {
   return <SearchMakersClient />

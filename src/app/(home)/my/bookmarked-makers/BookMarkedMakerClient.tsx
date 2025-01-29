@@ -1,14 +1,19 @@
 'use client'
 
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Button } from '@/components/ui/button'
-import { fetchBookmarkList } from '@/apis/bookmark.service'
+import { fetchBookmarkList, unbookmark } from '@/apis/bookmark.service'
 import { PostgrestError } from '@supabase/supabase-js'
-import MultiSelectButton from '@/components/MultiSelector'
-import { Slider } from '@/components/ui/slider'
-import { XCircle } from 'lucide-react'
+import {
+  ExperienceFilter,
+  JobFilter,
+  SpecializationFilter,
+} from '@/components/CommonMakerFilter'
+import { toast } from '@/hooks/use-toast'
+import { useMakerFilter } from '@/hooks/use-maker-filter'
+import { ManageableMakerCard } from '@/components/ManageableMakerCard'
 
+//TODO - ZOD 반영
 interface Maker {
   username: string
   main_job: string[] | null
@@ -19,14 +24,17 @@ interface Maker {
   updated_at: string
   deleted_at: string | null
   role: 'MAKER' | 'MANAGER' | 'NONE'
+  account_work_experiences: any[]
 }
 
+//TODO - ZOD 반영
 interface Bookmark {
   id: number
   maker_id: string
   maker: Maker
   created_at: string
   manager_id: string
+  proposal_status: boolean
 }
 
 const BookMarkedMakerClient = () => {
@@ -34,23 +42,13 @@ const BookMarkedMakerClient = () => {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<PostgrestError | null>(null)
   const [bookmarkList, setBookmarkList] = useState<Bookmark[]>([])
-  const [showSlider, setShowSlider] = useState(false)
-  const sliderRef = useRef<HTMLDivElement | null>(null)
-
-  const [filters, setFilters] = useState<{
-    specialization: string[]
-    experience: [number, number]
-    job: string[]
-  }>({
-    specialization: [],
-    experience: [0, 20],
-    job: [],
-  })
+  const [isProposed, setIsProposed] = useState<boolean>(false)
+  const { filters, handleFilterChange } = useMakerFilter()
 
   useEffect(() => {
     const getBookmarkList = async () => {
       try {
-        const { data, error } = await fetchBookmarkList()
+        const { data, error } = await fetchBookmarkList({ isProposed })
         if (error) {
           setError(error)
           return
@@ -66,141 +64,119 @@ const BookMarkedMakerClient = () => {
       }
     }
     getBookmarkList()
-  }, [filters])
+  }, [filters, isProposed]) // TODO 필터 연동
 
-  const handleFilterChange = (
-    key: 'specialization' | 'experience' | 'job',
-    value: string | string[] | number[],
-  ) => {
-    setFilters((prev) => {
-      if (key === 'experience' && Array.isArray(value)) {
-        return { ...prev, [key]: value as [number, number] }
-      }
-      return { ...prev, [key]: value }
-    })
-  }
+  const handleUnbookmark = useCallback(async (makerId: string) => {
+    try {
+      await unbookmark(makerId)
 
-  const handleUnbookmark = async (makerId: string) => {}
+      setBookmarkList((prev) =>
+        prev.filter((bookmark) => bookmark.maker_id !== makerId),
+      )
+      toast({
+        title: '찜 취소 완료',
+        description: '메이커 찜이 취소되었습니다.',
+      })
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: '에러 발생',
+        description: '작업 중 문제가 발생했습니다.',
+      })
+    }
+  }, [])
+
   const handlePropose = async (makerId: string) => {}
 
-  if (isLoading) {
+  //TODO - 유틸 추출
+  const calculateTotalExperience = (experiences: any[]) => {
+    const today = new Date()
+
+    const totalMonths = experiences.reduce((acc, exp) => {
+      const startDate = new Date(exp.start_date)
+      const endDate = exp.end_date ? new Date(exp.end_date) : today
+
+      const months =
+        (endDate.getFullYear() - startDate.getFullYear()) * 12 +
+        (endDate.getMonth() - startDate.getMonth())
+
+      return acc + months
+    }, 0)
+
+    const years = Math.floor(totalMonths / 12)
+    const months = totalMonths % 12
+
+    return { years, months }
+  }
+
+  if (isLoading)
     return (
       <div className="flex justify-center items-center h-64">로딩중...</div>
     )
-  }
-
-  if (error) {
+  if (error)
     return (
       <div className="flex justify-center items-center h-64">
         에러가 발생했습니다
       </div>
     )
-  }
 
   return (
     <div className="flex flex-col gap-4 w-full">
-      <h3 className="text-h3">관심 메이커</h3>
+      <h3 className="text-h3">내가 찜한 메이커</h3>
 
       <div className="flex flex-col gap-4">
-        <div className="flex gap-2 relative">
-          <button
-            className="flex items-center justify-center px-4 py-2 rounded-[12px] shadow-normal min-w-[120px]"
-            onClick={() => setShowSlider((prev) => !prev)}
+        <div className="flex gap-2">
+          <div
+            onClick={() => setIsProposed(true)}
+            className={`flex justify-center items-center px-3 py-1 rounded-[12px] text-p3 ${
+              isProposed ? 'shadow-emphasize' : 'shadow-normal'
+            }`}
           >
-            <span className="text-p2 text-palette-coolNeutral-40">
-              경력 : {filters.experience[0]}년 ~ {filters.experience[1]}년
-            </span>
-          </button>
+            제안함
+          </div>
+          <div
+            onClick={() => setIsProposed(false)}
+            className={`flex justify-center items-center px-3 py-1 rounded-[12px] text-p3 ${
+              !isProposed ? 'shadow-emphasize' : 'shadow-normal'
+            }`}
+          >
+            제안하지 않음
+          </div>
+        </div>
 
-          {showSlider && (
-            <div
-              ref={sliderRef}
-              className="flex flex-col gap-6 absolute top-full mt-2 bg-white shadow-emphasize p-4 rounded-[12px] z-50"
-            >
-              <div className="flex items-center justify-between">
-                <div className="text-subtitle2">경력</div>
-                <div
-                  className="cursor-pointer rounded-full p-1 hover:bg-gray-200"
-                  onClick={() => setShowSlider(false)}
-                >
-                  <XCircle />
-                </div>
-              </div>
-              <Slider
-                value={filters.experience}
-                onValueChange={(value) =>
-                  handleFilterChange('experience', value as [number, number])
-                }
-                min={1}
-                max={20}
-                step={1}
-                className="w-40"
-              />
-              <p className="text-md text-gray-600 whitespace-nowrap">
-                선택된 경력: {filters.experience[0]}년 ~ {filters.experience[1]}
-                년
-              </p>
-            </div>
-          )}
-
-          <MultiSelectButton
-            values={filters.job}
-            onChange={(values) => handleFilterChange('job', values)}
-            placeholder="직무를 선택하세요"
-            options={[
-              { label: '프론트엔드', value: '프론트엔드' },
-              { label: '백엔드', value: '백엔드' },
-              { label: '데이터 분석', value: '데이터 분석' },
-              { label: '디자인', value: '디자인' },
-            ]}
+        <div className="flex gap-2 relative">
+          <ExperienceFilter
+            value={filters.experience}
+            onChange={(value) => handleFilterChange('experience', value)}
           />
-
-          <MultiSelectButton
-            values={filters.specialization}
-            onChange={(values) => handleFilterChange('specialization', values)}
-            placeholder="분야를 선택하세요"
-            options={[
-              { label: '웹 개발', value: '웹 개발' },
-              { label: '모바일 개발', value: '모바일 개발' },
-              { label: 'AI', value: 'AI' },
-              { label: 'UI/UX', value: 'UI/UX' },
-            ]}
+          <JobFilter
+            value={filters.job}
+            onChange={(value) => handleFilterChange('job', value)}
+          />
+          <SpecializationFilter
+            value={filters.specialization}
+            onChange={(value) => handleFilterChange('specialization', value)}
           />
         </div>
       </div>
 
       <div className="flex flex-col gap-4">
-        {bookmarkList.map((bookmark) => (
-          <div
-            key={bookmark.id}
-            className="flex shadow-normal justify-between py-4 px-6 rounded-[12px] gap-2"
-          >
-            <div className="flex gap-4 items-center">
-              <div className="w-12 h-12 rounded-full bg-palette-coolNeutral-90" />
-              <div>
-                <h3 className="text-subtitle2">{bookmark.maker.username}</h3>
-                <div className="flex gap-2 text-p3 text-palette-coolNeutral-60">
-                  <span>{bookmark.maker.main_job?.[0]}</span>
-                  <span>{bookmark.maker.expertise?.[0]}</span>
-                </div>
-              </div>
-            </div>
-            <div className="flex flex-col justify-center gap-4">
-              <Button
-                className="bg-palette-primary-normal text-subtitle3 text-white rounded-[12px] w-[240px] h-[48px]"
-                onClick={() => handlePropose(bookmark.maker_id)}
-              >
-                제안하기
-              </Button>
-              <Button
-                className="text-subtitle3 text-white shadow-normal border rounded-[12px] w-[240px] h-[48px]"
-                onClick={() => handleUnbookmark(bookmark.maker_id)}
-              >
-                관심 취소
-              </Button>
-            </div>
+        {bookmarkList.length > 0 ? (
+          bookmarkList.map((bookmark) => {
+            return (
+              <ManageableMakerCard
+                key={bookmark.id}
+                bookmark={bookmark}
+                onUnbookmark={handleUnbookmark}
+                onPropose={handlePropose}
+              />
+            )
+          })
+        ) : (
+          <div className="flex justify-center items-center h-64">
+            찜한 메이커가 없습니다.
           </div>
-        ))}
+        )}
       </div>
     </div>
   )

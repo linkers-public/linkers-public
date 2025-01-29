@@ -1,5 +1,4 @@
 import { createServerSideClient } from '@/supabase/supabase-server'
-import { redirect } from 'next/navigation'
 
 export const fetchLoginUserInfo = async () => {
   const supabase = await createServerSideClient()

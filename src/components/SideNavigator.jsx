@@ -58,6 +58,13 @@ const SideNavigator = () => {
         },
         {
           icon: '',
+          label: '팀 제안 현황',
+          type: 'my',
+          isActive: pathname === '/my/proposal',
+          href: '/my/proposal',
+        },
+        {
+          icon: '',
           label: '상담 현황',
           type: 'my',
           isActive: pathname === '/my/counsel',

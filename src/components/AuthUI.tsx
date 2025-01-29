@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react'
 import { createSupabaseBrowserClient } from '@/supabase/supabase-client'
-import useHydration from '@/hooks/useHydrate'
+import useHydration from '@/hooks/use-hydrate'
 
 const AuthUI = ({ role }: { role: string }) => {
   const isMounted = useHydration()
