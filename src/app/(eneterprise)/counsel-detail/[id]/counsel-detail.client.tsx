@@ -48,16 +48,16 @@ const ClientEstimateDetailPage: React.FC = () => {
         width: '700px',
         margin: '20px auto',
         padding: '20px',
-        border: '1px solid #ccc',
+        border: '1px solid ',
         borderRadius: '8px',
         backgroundColor: '#fff',
       }}
     >
-      <h2 style={{ textAlign: 'center', marginBottom: '20px' }}>상담서</h2>
+      <h2 style={{ textAlign: 'center', fontSize: 20, marginBottom: '20px', fontWeight: 'bold' }}>상담서</h2>
 
       {/* 고객사 이름 */}
       <div style={{ marginBottom: '20px' }}>
-        <label style={{ display: 'block', marginBottom: '5px' }}>고객사 이름</label>
+        <label style={{ display: 'block', marginBottom: '10px', fontWeight: 'bold', }}>고객사 이름</label>
         <input
           type="text"
           value={client?.name || 'Unknown Company'}
@@ -73,7 +73,7 @@ const ClientEstimateDetailPage: React.FC = () => {
 
       {/* 이메일 */}
       <div style={{ marginBottom: '20px' }}>
-        <label style={{ display: 'block', marginBottom: '5px' }}>이메일</label>
+        <label style={{ display: 'block', marginBottom: '10px', fontWeight: 'bold', }}>이메일</label>
         <input
           type="email"
           value={client?.email || 'Unknown Email'}
@@ -88,70 +88,96 @@ const ClientEstimateDetailPage: React.FC = () => {
       </div>
 
       {/* 예산 견적 비용 */}
+  
       <div style={{ marginBottom: '20px' }}>
-        <label style={{ display: 'block', marginBottom: '5px' }}>예산 견적 비용</label>
-        <input
-          type="text"
-          value={`${counsel.cost}만원`}
-          readOnly
-          style={{
-            width: '100%',
-            padding: '10px',
-            borderRadius: '5px',
-            border: '1px solid #ddd',
-          }}
-        />
-      </div>
+            <label style={{ display: 'block', marginBottom: '10px', fontWeight: 'bold',  }}>예상 견적 비용</label>
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap',  }}>
+              {[counsel.cost].map((item, index) => (
+                <div
+                  key={index}
+                  style={{
+                    padding: '5px 15px',
+                    borderRadius: '20px',
+                    border: '1px solid #ddd',
+                    backgroundColor: '#f9f9f9',
+                    fontSize: '14px',
+                    textAlign: 'center',
+                  }}
+                >
+                  {item}
+                </div>
+              ))}
+            </div>
+          </div>
 
       {/* 프로젝트 기간 */}
       <div style={{ marginBottom: '20px' }}>
-        <label style={{ display: 'block', marginBottom: '5px' }}>프로젝트 기간</label>
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <input
-            type="date"
-            value={counsel.startDate || ''}
-            readOnly
-            style={{
-              flex: 1,
-              padding: '10px',
-              borderRadius: '5px',
-              border: '1px solid #ddd',
-            }}
-          />
-          <span style={{ alignSelf: 'center' }}>부터</span>
-          <input
-            type="date"
-            value={counsel.dueDate || ''}
-            readOnly
-            style={{
-              flex: 1,
-              padding: '10px',
-              borderRadius: '5px',
-              border: '1px solid #ddd',
-            }}
-          />
-        </div>
-      </div>
+            <label style={{ display: 'block', marginBottom: '10px', fontWeight: 'bold',  }}>프로젝트 기간</label>
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap',  }}>
+              {[counsel.period].map((item, index) => (
+                <div
+                  key={index}
+                  style={{
+                    padding: '5px 15px',
+                    borderRadius: '20px',
+                    border: '1px solid #ddd',
+                    backgroundColor: '#f9f9f9',
+                    fontSize: '14px',
+                    textAlign: 'center',
+                  }}
+                >
+                  {item}
+                </div>
+              ))}
+            </div>
+          </div>
 
       {/* 분야 */}
       <div style={{ marginBottom: '20px' }}>
-        <label style={{ display: 'block', marginBottom: '5px' }}>분야</label>
-        <input
-          type="text"
-          value={counsel.field || ''}
-          readOnly
-          style={{
-            width: '100%',
-            padding: '10px',
-            borderRadius: '5px',
-            border: '1px solid #ddd',
-          }}
-        />
-      </div>
+            <label style={{ display: 'block', marginBottom: '10px', fontWeight: 'bold',  }}>분야</label>
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap',  }}>
+              {[counsel.field].map((item, index) => (
+                <div
+                  key={index}
+                  style={{
+                    padding: '5px 15px',
+                    borderRadius: '20px',
+                    border: '1px solid #ddd',
+                    backgroundColor: '#f9f9f9',
+                    fontSize: '14px',
+                    textAlign: 'center',
+                  }}
+                >
+                  {item}
+                </div>
+              ))}
+            </div>
+          </div>
+      {/* 최종도출안안 */}
+      <div style={{ marginBottom: '20px' }}>
+            <label style={{ display: 'block', marginBottom: '10px', fontWeight: 'bold',  }}>최종 도출안</label>
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap',  }}>
+              {[counsel.output].map((item, index) => (
+                <div
+                  key={index}
+                  style={{
+                    padding: '5px 15px',
+                    borderRadius: '20px',
+                    border: '1px solid #ddd',
+                    backgroundColor: '#f9f9f9',
+                    fontSize: '14px',
+                    textAlign: 'center',
+                  }}
+                >
+                  {item}
+                </div>
+              ))}
+            </div>
+          </div>
 
       {/* 상담 내용 */}
       <div style={{ marginBottom: '20px' }}>
-        <label style={{ display: 'block', marginBottom: '5px' }}>상담 내용</label>
+        <label style={{ display: 'block', marginBottom: '5px', fontWeight: 'bold' }}>상담 내용</label>
         <textarea
           value={counsel.outline || ''}
           readOnly

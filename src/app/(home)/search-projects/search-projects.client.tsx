@@ -7,13 +7,14 @@ import { fetchAllCounsel } from '@/apis/counsel.service';
 type Project = {
   id: number;
   title: string;
-  cost: number;
+  cost: string;
   status: 'pending' | 'recruiting' | 'end';
   startDate: string;
   dueDate: string;
   skills: string[];
   field: string;
   isRemote: boolean;
+  period: string;
 };
 
 const calculateDurationInMonths = (startDate: string, dueDate: string) => {
@@ -67,8 +68,7 @@ const ProjectMeta = ({
   project: Project;
   onClick: () => void;
 }) => {
-  // 금액 변환: 원 → 만원
-  const formattedCost = `${Math.round(project.cost / 10000)}만원`;
+
 
   // 상태 변환: recruiting → 모집중
   const formattedStatus =
@@ -78,59 +78,52 @@ const ProjectMeta = ({
       ? '대기중'
       : '종료';
 
-  // 예상 기간 계산 (개월 수)
-  const durationInMonths = calculateDurationInMonths(project.startDate, project.dueDate);
-
   return (
     <li
-      className="flex py-4 px-6 shadow-emphasize w-full rounded-[12px] cursor-pointer hover:shadow-lg transition-shadow"
+      className="flex py-5 px-6 shadow-lg w-full rounded-xl cursor-pointer bg-white hover:shadow-2xl transition-all duration-300 border border-gray-200"
       onClick={onClick}
     >
-      <div className="flex flex-col gap-3">
-        <h3 className="font-semibold text-[20px] leading-snug tracking-[-0.04em]">
+      <div className="flex flex-col gap-4 w-full">
+        {/* 프로젝트 제목 */}
+        <h3 className="font-semibold text-[22px] leading-snug tracking-tight text-gray-900">
           {project.title}
         </h3>
-        <div className="flex gap-4">
-          <div className="flex gap-1">
-            <span className="text-palette-coolNeutral-60 text-p2">예상 금액:</span>
-            <span className="text-palette-coolNeutral-60 text-p2">{formattedCost}</span>
+
+        {/* 예상 금액 및 기간 */}
+        <div className="flex flex-wrap gap-4 text-gray-600 text-sm">
+          <div className="flex items-center gap-1">
+            <span className="font-medium">💰 예상 금액:</span>
+            <span>{project.cost}</span>
           </div>
-          <div className="flex gap-1">
-            <span className="text-palette-coolNeutral-60 text-p2">시작일:</span>
-            <span className="text-palette-coolNeutral-60 text-p2">{project.startDate}</span>
+          <div className="flex items-center gap-1">
+            <span className="font-medium">⏳ 예상 기간:</span>
+            <span>{project.period}</span>
           </div>
-          <div className="flex gap-1">
-            <span className="text-palette-coolNeutral-60 text-p2">예상 기간:</span>
-            <span className="text-palette-coolNeutral-60 text-p2">
-              {durationInMonths}개월
-            </span>
-          </div>
-        </div>
-        <div className="flex gap-1">
-          <span className="text-palette-coolNeutral-60 text-p3">{project.field}</span>
         </div>
 
-        <div className="flex mt-1 gap-2">
-          {project.skills.map((skill, index) => (
+        {/* 프로젝트 분야 */}
+        <div className="flex flex-wrap gap-2 mt-1">
+          {[project.field].map((skill, index) => (
             <div
               key={index}
-              className="px-2 py-1 shadow-normal text-palette-coolNeutral-40 rounded-[8px] text-[12px] bg-palette-coolNeutral-95"
+              className="px-3 py-1 text-gray-700 text-xs font-medium bg-gray-100 rounded-lg shadow-sm"
             >
               {skill}
             </div>
           ))}
         </div>
 
-        <div className="flex mt-2 gap-2">
-          <div className="bg-palette-green-90 text-palette-lime-30 text-p4 px-2 rounded-[6px]">
-            {project.isRemote ? '원격' : '현장'}
+        {/* 상태 및 근무 방식 */}
+        <div className="flex flex-wrap gap-2 mt-3">
+          <div className="px-3 py-1 text-sm font-medium rounded-md shadow-sm bg-green-100 text-green-700">
+            {project.isRemote ? "🌍 원격" : "🏢 현장"}
           </div>
           <div
-            className={`${
-              formattedStatus === '모집중'
-                ? 'bg-palette-violet-60 text-white'
-                : 'bg-palette-coolNeutral-60 text-palette-coolNeutral-40'
-            } text-p4 px-2 rounded-[6px]`}
+            className={`px-3 py-1 text-sm font-medium rounded-md shadow-sm ${
+              formattedStatus === "모집중"
+                ? "bg-purple-600 text-white"
+                : "bg-gray-400 text-gray-100"
+            }`}
           >
             {formattedStatus}
           </div>
@@ -138,6 +131,7 @@ const ProjectMeta = ({
       </div>
     </li>
   );
+     
 };
 
 export default SearchProjectsClient;

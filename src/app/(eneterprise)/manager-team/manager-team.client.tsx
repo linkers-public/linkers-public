@@ -30,15 +30,27 @@ const Home: React.FC = () => {
           // Simulate milestone fetching
           const milestoneData = [
             {
-              title: '마일스톤 제목 1 최대 한줄',
-              details: '마일스톤 세부 사항 최대 2줄 말줄임...',
-              deadline: '기한 24/09/11 ~ 25/03/22',
+              title: '1. 데이터셋 전처리',
+              details: '중복 제거, 특수문자 제거, 불완전한 데이터 보완 ...',
+              deadline: '기한 25/02/11 ~ 25/02/22',
               status: '정산 완료',
             },
             {
-              title: '마일스톤 제목 2 최대 한줄',
-              details: '마일스톤 세부 사항 최대 2줄 말줄임...',
-              deadline: '기한 24/09/11 ~ 25/03/22',
+              title: '2. LLM 성능 평가',
+              details: '자동화된 평가 스크립트 개발...',
+              deadline: '기한 25/02/23 ~ 25/03/01',
+              status: '대기 중',
+            },
+            {
+              title: '3. Red Teaming 및 안전성 평가',
+              details: '레드 티밍 전략 개발, 공격 시나리오 설계 및 수행...',
+              deadline: '기한 25/03/01 ~ 25/03/15',
+              status: '대기 중',
+            },
+            {
+              title: '4. 결과 분석 및 최적화 방안',
+              details: '평가 결과 분석 보고서 작성, 성능 개선 전략 수립...',
+              deadline: '기한 25/03/15 ~ 25/03/30',
               status: '대기 중',
             },
           ];
@@ -216,19 +228,7 @@ const Home: React.FC = () => {
             >
               진행취소
             </button>
-            <button
-              style={{
-                padding: '10px 20px',
-                backgroundColor: '#007bff',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '8px',
-                cursor: 'pointer',
-              }}
-              onClick={() => console.log('결제하기')}
-            >
-              결제하기
-            </button>
+            
           </div>
         </div>
 
@@ -299,75 +299,97 @@ const Home: React.FC = () => {
       {/* 동적 콘텐츠 */}
       {selectedTab === '마일스톤' && (
           <div>
-            <h2 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '20px' }}>프로젝트명</h2>
-            {milestones.map((milestone, index) => (
+          <h2 style={{ fontSize: '18px', fontWeight: 'bold', marginBottom: '20px' }}>LLM 신뢰성 평가 프로젝트</h2>
+          {milestones.map((milestone, index) => (
+            <div
+              key={index}
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                border: '1px solid #ddd',
+                borderRadius: '8px',
+                padding: '15px',
+                marginBottom: '10px',
+                backgroundColor: '#fff',
+              }}
+            >
+              <div style={{ flex: 3 }}>
+                <p style={{ fontWeight: 'bold', marginBottom: '5px' }}>{milestone.title}</p>
+                <p
+                  style={{
+                    fontSize: '14px',
+                    color: '#666',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
+                  {milestone.details}
+                </p>
+              </div>
               <div
-                key={index}
                 style={{
+                  flex: 1,
+                  textAlign: 'center',
+                  fontSize: '14px',
+                  color: '#666',
+                }}
+              >
+                {milestone.deadline}
+              </div>
+              <div
+                style={{
+                  flex: 1,
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
-                  border: '1px solid #ddd',
-                  borderRadius: '8px',
-                  padding: '15px',
-                  marginBottom: '10px',
-                  backgroundColor: '#fff',
+                  gap: '10px',
                 }}
               >
-                <div style={{ flex: 3 }}>
-                  <p style={{ fontWeight: 'bold', marginBottom: '5px' }}>{milestone.title}</p>
-                  <p
-                    style={{
-                      fontSize: '14px',
-                      color: '#666',
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                    }}
-                  >
-                    {milestone.details}
-                  </p>
-                </div>
                 <div
                   style={{
-                    flex: 1,
-                    textAlign: 'center',
+                    padding: '5px 15px',
+                    borderRadius: '20px',
+                    backgroundColor:
+                      milestone.status === '정산 완료'
+                        ? '#ddd'
+                        : milestone.status === '대기 중'
+                        ? '#f9c74f'
+                        : '#ccc',
+                    color: '#333',
                     fontSize: '14px',
-                    color: '#666',
+                    fontWeight: 'bold',
+                    textAlign: 'center',
                   }}
                 >
-                  {milestone.deadline}
+                  {milestone.status}
                 </div>
-                <div
+                <button
                   style={{
-                    flex: 1,
-                    display: 'flex',
-                    justifyContent: 'center',
-                    alignItems: 'center',
+                    padding: '10px 20px',
+                    backgroundColor:
+                      milestone.status === '정산 완료' ? '#ccc' : '#007bff',
+                    color: milestone.status === '정산 완료' ? '#888' : '#fff',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: milestone.status === '정산 완료' ? 'not-allowed' : 'pointer',
                   }}
+                  onClick={() => {
+                    if (milestone.status !== '정산 완료') {
+                      console.log('결제하기');
+                    }
+                  }}
+                  disabled={milestone.status === '정산 완료'}
                 >
-                  <div
-                    style={{
-                      padding: '5px 15px',
-                      borderRadius: '20px',
-                      backgroundColor:
-                        milestone.status === '정산 완료'
-                          ? '#ddd'
-                          : milestone.status === '대기 중'
-                          ? '#f9c74f'
-                          : '#ccc',
-                      color: '#333',
-                      fontSize: '14px',
-                      fontWeight: 'bold',
-                      textAlign: 'center',
-                    }}
-                  >
-                    {milestone.status}
-                  </div>
-                </div>
+                  결제하기
+                </button>
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
+        </div>
+        
+        
         )}
 
       {selectedTab === '메시지' && (

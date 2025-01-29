@@ -19,7 +19,7 @@ export const fetchAllCounsel = async () => {
       const mappedData = data.map((counsel) => ({
         id: counsel.counsel_id,
         title: counsel.title || 'No title provided',
-        cost: counsel.cost || 0,
+        cost: counsel.cost || 'Unknown cost',
         status: counsel.counsel_status || 'pending',
         startDate: counsel.start_date,
         dueDate: counsel.due_date,
@@ -27,6 +27,7 @@ export const fetchAllCounsel = async () => {
         field: counsel.feild || 'Unknown field',
         outline: counsel.outline || 'No outline provided',
         clientId: counsel.client_id || null,
+        period: counsel.period || 'Unknown period'
       }));
   
       return mappedData;
@@ -74,7 +75,7 @@ export const fetchCounselWithClient = async (counselId: number) => {
       const { data: clientData, error: clientError } = await supabase
         .from('client')
         .select('*') // Select all fields from the client table
-        .eq('client_id', clientId)
+        .eq('user_id', clientId)
         .single();
 
       if (clientError) {
@@ -83,7 +84,7 @@ export const fetchCounselWithClient = async (counselId: number) => {
       }
 
       client = {
-        id: clientData.client_id,
+        id: clientData.user_id,
         name: clientData.company_name || 'Unknown Company',
         email: clientData.email || 'Unknown Email',
         contact: clientData.contact_info || 'Unknown Contact',
@@ -106,6 +107,8 @@ export const fetchCounselWithClient = async (counselId: number) => {
         skills: counsel.skill || [],
         field: counsel.feild || 'Unknown',
         outline: counsel.outline || '',
+        output: counsel.output || '',
+        period: counsel.period || '',
       },
       client: client || {
         id: null,
