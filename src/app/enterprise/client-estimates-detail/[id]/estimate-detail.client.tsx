@@ -24,19 +24,19 @@ const ConsultationForm: React.FC = () => {
   const clientId = 'baa0fd5e-4add-44f2-b1df-1ec59a838b7e'
   // 날짜와 비용을 처리하는 함수들
   const handleStartDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setProjectStartDate(e.target.value);  // e.target.value로 값을 받아옴
+    setProjectStartDate(e.target.value); 
   };
 
   const handleEndDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setProjectEndDate(e.target.value);  // e.target.value로 값을 받아옴
+    setProjectEndDate(e.target.value); 
   };
 
   const handleBudgetChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setBudget(Number(e.target.value));  // 숫자로 변환하여 상태 업데이트
+    setBudget(Number(e.target.value));  
   };
 
   const handleDetailEstimateChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setDetailEstimate(e.target.value);  // 숫자로 변환하여 상태 업데이트
+    setDetailEstimate(e.target.value);  
   };
 
 

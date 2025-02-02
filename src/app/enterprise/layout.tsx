@@ -1,5 +1,5 @@
 import Header from '../../components/ClientNavigator'
-import { ReactNode } from 'react';
+import EnterpriseSidebar from '../../components/EnterpriseSidebar'
 
 export const metadata = {
   title: 'Next.js',
@@ -15,7 +15,10 @@ export default function RootLayout({
     <html lang="en">
       <body>
         <Header /> {/* 모든 페이지에 Header 포함 */}
-        <main>{children}</main> {/* 페이지 콘텐츠 */}
+        <div className="flex">
+        <EnterpriseSidebar/>
+        {children}{/* 페이지 콘텐츠 */}
+        </div>
       </body>
     </html>
   );

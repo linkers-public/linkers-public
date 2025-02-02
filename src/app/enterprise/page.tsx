@@ -8,7 +8,6 @@ const page = async () => {
 
   return (
     <div className="flex">
-      <EnterpriseSidebar/>
       <div>홈페이지</div>
       {user && <div>유저가 로그인했습니다: {user.user?.email}</div>}
       {error && <div>에러: {error.message}</div>}
