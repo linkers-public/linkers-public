@@ -41,8 +41,8 @@ const Card: React.FC<CardProps> = ({
         marginBottom: '20px',
         width: '90%', // 너비를 90%로 설정하여 여유 공간 확보
         maxWidth: '500px', // 최대 너비를 500px로 제한하여 과도하게 커지지 않도록 함
-        marginLeft: 'auto',
-        marginRight: 'auto', // 카드가 가운데 정렬되도록 설정
+        // marginLeft: 'auto',
+        // marginRight: 'auto', // 카드가 가운데 정렬되도록 설정
         marginLeft: sender === 'client' ? 'auto' : '0', // sender가 'client'이면 오른쪽 정렬
         marginRight: sender === 'manager' ? 'auto' : '0', // sender가 'manager'이면 왼쪽 정렬
       }}

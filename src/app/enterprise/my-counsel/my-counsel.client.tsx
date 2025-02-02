@@ -203,9 +203,9 @@ const ProjectList = () => {
             >
               {project.status}
             </span>
-            <p style={{ margin: "0", fontSize: "12px", color: "#888" }}>
+            {/* <p style={{ margin: "0", fontSize: "12px", color: "#888" }}>
               {project.team}
-            </p>
+            </p> */}
           </div>
         </div>
       ))}

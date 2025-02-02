@@ -21,9 +21,9 @@ const ClientEstimateDetailPage: React.FC = () => {
       }
 
       try {
-        const { counsel, client } = await fetchCounselWithClient(Number(counselId));
-        setCounsel(counsel);
-        setClient(client);
+        const result = await fetchCounselWithClient(Number(counselId));
+        setCounsel(result?.counsel);
+        setClient(result?.client);
       } catch (error) {
         console.error('Error fetching counsel details:', error);
       } finally {

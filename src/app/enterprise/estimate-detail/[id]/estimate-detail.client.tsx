@@ -5,21 +5,11 @@ import { useRouter, useParams } from 'next/navigation'; // useParams로 URL 매�
 import { fetchCounselWithClient } from '@/apis/counsel.service';
 import { insertEstimate } from '@/apis/estimate.service'
 
-interface Row {
-  startDate: string;
-  endDate: string;
-  days: number;
-  title: string;
-  detail: string;
-  cost: string;
-  output: string;
-  progress: string;
-}
 
 const ConsultationForm: React.FC = () => {
   const [counsel, setCounsel] = useState<any>(null);
   const [client, setClient] = useState<any>(null);
-  const [rows, setRows] = useState<Row[]>([
+  const [rows, setRows] = useState<any[]>([
     { startDate: '', endDate: '', days: 0, title: '', detail: '', cost: '', output: '', progress: '' },
     { startDate: '', endDate: '', days: 0, title: '', detail: '', cost: '', output: '', progress: '100' },
   ]);
@@ -65,10 +55,10 @@ const ConsultationForm: React.FC = () => {
       }
 
       try {
-        const { counsel, client } = await fetchCounselWithClient(Number(counselId));
-        if (counsel) {
-          setCounsel(counsel);
-          setClient(client);
+        const result = await fetchCounselWithClient(Number(counselId));
+        if (result?.counsel) {
+          setCounsel(result.counsel);
+          setClient(result.client);
         }
       } catch (error) {
         console.error('Error fetching counsel details:', error);
@@ -81,7 +71,7 @@ const ConsultationForm: React.FC = () => {
   }, [counselId]);
 
   // 마일스톤 데이터 변경 함수
-  const handleInputChange = (index: number, field: keyof Row, value: string) => {
+  const handleInputChange = (index: number, field: string, value: string) => {
     const newRows = [...rows];
 
     // 해당 인덱스의 특정 필드를 업데이트
@@ -91,7 +81,7 @@ const ConsultationForm: React.FC = () => {
   };
 
   const addRow = () => {
-    const newRow: Row = { startDate: '', endDate: '', days: 0, title: '', detail: '', cost: '', output: '', progress: '' };
+    const newRow = { startDate: '', endDate: '', days: 0, title: '', detail: '', cost: '', output: '', progress: '' };
     const updatedRows = [...rows.slice(0, -1), newRow, rows[rows.length - 1]];
     setRows(updatedRows);
   };

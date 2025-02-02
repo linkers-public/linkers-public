@@ -119,7 +119,7 @@ const CounselStatus: React.FC = () => {
 
 
 
-  const handleSendMessage = async () => {
+  const handleSendMessage = async (newMessage: string) => {
     if (!newMessage.trim() && !attachedFile) {
       alert('메시지나 파일을 입력해주세요.');
       return;
@@ -210,7 +210,7 @@ const CounselStatus: React.FC = () => {
   const fetchData = async () => {
     const clientId = 'baa0fd5e-4add-44f2-b1df-1ec59a838b7e' // 실제 client_id를 동적으로 처리해야 함
     try {
-      const data = await fetchTeamAndRecentChats(clientId)
+      const data = await fetchTeamAndRecentChats(Number(clientId))
       // 팀명과 가장 최근 메시지, estimateId와 chatId를 counselList에 저장
       const updatedCounselList = data.map((item) => ({
         team: item.team.name, // 팀명

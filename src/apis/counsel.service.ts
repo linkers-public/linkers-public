@@ -37,21 +37,16 @@ export const fetchAllCounsel = async () => {
     }
   };
 
-/**
- * Fetches counsel data by ID and includes the related client information.
- * @param counselId - The ID of the counsel to fetch.
- * @returns An object containing counsel and client data.
- */
+
 export const fetchCounselWithClient = async (counselId: number) => {
   const supabase = createSupabaseBrowserClient();
 
   console.log('Fetching counsel with ID:', counselId);
 
   try {
-    // Step 1: Fetch counsel data by counsel_id
     const { data: counsel, error: counselError } = await supabase
       .from('counsel')
-      .select('*') // Select all fields from the counsel table
+      .select('*') 
       .eq('counsel_id', counselId)
       .single();
 
@@ -62,12 +57,10 @@ export const fetchCounselWithClient = async (counselId: number) => {
 
     if (!counsel) {
       console.warn(`No counsel found for counsel_id ${counselId}`);
-      return null; // Return null if no counsel is found
+      return null; 
     }
 
-    console.log('Counsel data fetched:', counsel);
 
-    // Step 2: Fetch client data using client_id
     const clientId = counsel.client_id;
     let client = null;
 
@@ -96,27 +89,29 @@ export const fetchCounselWithClient = async (counselId: number) => {
     }
 
     // Step 3: Combine and return counsel and client data
-    return {
-      counsel: {
-        id: counsel.counsel_id,
-        title: counsel.title || 'No title',
-        cost: counsel.cost || 0,
-        status: counsel.counsel_status || 'pending',
-        startDate: counsel.start_date,
-        dueDate: counsel.due_date,
-        skills: counsel.skill || [],
-        field: counsel.feild || 'Unknown',
-        outline: counsel.outline || '',
-        output: counsel.output || '',
-        period: counsel.period || '',
-      },
-      client: client || {
-        id: null,
-        name: 'Unknown Company',
-        email: 'Unknown Email',
-        contact: 'Unknown Contact',
-      },
-    };
+    // return {
+    //   counsel: {
+    //     id: counsel.counsel_id,
+    //     title: counsel.title || 'No title',
+    //     cost: counsel.cost || 0,
+    //     status: counsel.counsel_status || 'pending',
+    //     startDate: counsel.start_date,
+    //     dueDate: counsel.due_date,
+    //     skills: counsel.skill || [],
+    //     field: counsel.feild || 'Unknown',
+    //     outline: counsel.outline || '',
+    //     output: counsel.output || '',
+    //     period: counsel.period || '',
+    //   },
+    //   client: client || {
+    //     id: null,
+    //     name: 'Unknown Company',
+    //     email: 'Unknown Email',
+    //     contact: 'Unknown Contact',
+    //   },
+    // };
+
+    return {counsel, client};
   } catch (error) {
     console.error('Unexpected error occurred while fetching data:', error);
     throw error;
