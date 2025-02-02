@@ -1,6 +1,5 @@
 import { createServerSideClientRSC } from '@/supabase/supabase-server'
 import React from 'react'
-import EnterpriseSidebar from '../../components/EnterpriseSidebar'
 
 const page = async () => {
   const supabase = await createServerSideClientRSC()

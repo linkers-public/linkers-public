@@ -1,7 +1,7 @@
 import { createSupabaseBrowserClient } from '@/supabase/supabase-client'
 
 // `client_id`를 기준으로 해당하는 모든 팀 정보와 가장 최근의 채팅 메시지를 가져오는 함수
-export const fetchTeamAndRecentChats = async (clientId: number) => {
+export const fetchTeamAndRecentChats = async (clientId: string) => {
   const supabase = createSupabaseBrowserClient()
 
   // 세션 정보 확인

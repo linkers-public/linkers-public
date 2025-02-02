@@ -24,10 +24,9 @@ const ManagerEstimatesPage: React.FC = () => {
     }
   };
 
-  // 페이지 로드 시 데이터 불러오기
   useEffect(() => {
-    fetchEstimates();  // component가 렌더링될 때 API 호출
-  }, [counselId]);  // counselId가 변경될 때마다 재호출
+    fetchEstimates();  
+  }, [counselId]);  
 
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(e.target.value); // 검색어 상태 업데이트
@@ -44,24 +43,39 @@ const ManagerEstimatesPage: React.FC = () => {
         <h2>견적서 목록</h2>
 
         {/* 상단 검색 및 필터 */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            gap: '15px',
+            marginBottom: '20px',
+            flexWrap: 'wrap',
+          }}
+        >
           <input
             type="text"
             placeholder="팀명으로 검색해보세요"
             value={searchTerm}
             onChange={handleSearchChange}
             style={{
-              width: '60%',
+              flex: 1,
+              minWidth: '200px',
               padding: '10px',
               borderRadius: '8px',
               border: '1px solid #ddd',
               fontSize: '16px',
+              backgroundColor: '#fff',
             }}
           />
 
-          <div style={{ display: 'flex', gap: '10px' }}>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
             <select
-              style={{ padding: '10px', borderRadius: '8px', border: '1px solid #ddd' }}
+              style={{
+                padding: '10px',
+                borderRadius: '8px',
+                border: '1px solid #ddd',
+                backgroundColor: '#fff',
+              }}
             >
               <option value="">필터 1</option>
               <option value="filter1-1">필터 1-1</option>
@@ -69,7 +83,12 @@ const ManagerEstimatesPage: React.FC = () => {
             </select>
 
             <select
-              style={{ padding: '10px', borderRadius: '8px', border: '1px solid #ddd' }}
+              style={{
+                padding: '10px',
+                borderRadius: '8px',
+                border: '1px solid #ddd',
+                backgroundColor: '#fff',
+              }}
             >
               <option value="">필터 2</option>
               <option value="filter2-1">필터 2-1</option>
@@ -94,14 +113,18 @@ const ManagerEstimatesPage: React.FC = () => {
                   borderRadius: '8px',
                   boxShadow: '0 2px 5px rgba(0, 0, 0, 0.1)',
                   border: '1px solid #ddd',
-                  cursor: 'pointer',  // 클릭 가능한 느낌을 주기 위한 커서 스타일
+                  cursor: 'pointer', // 클릭 가능한 느낌을 주기 위한 커서 스타일
+                  transition: 'all 0.3s ease',
                 }}
-                onClick={() => handleCardClick(estimate.estimate_id)}  // 카드 클릭 시 상세 페이지로 이동
+                onClick={() => handleCardClick(estimate.estimate_id)} // 카드 클릭 시 상세 페이지로 이동
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f1f1'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#fff'}
               >
+                {/* 왼쪽: 아이콘 */}
                 <div
                   style={{
-                    width: '40px',
-                    height: '40px',
+                    width: '50px',
+                    height: '50px',
                     backgroundColor: '#808080',
                     borderRadius: '50%',
                     display: 'flex',
@@ -113,19 +136,41 @@ const ManagerEstimatesPage: React.FC = () => {
                   <img
                     src={estimate.imageUrl || '/images/image.png'}
                     alt="file icon"
-                    style={{ width: '16px', height: '16px' }}
+                    style={{ width: '20px', height: '20px' }}
                   />
                 </div>
 
+                {/* 팀명 및 설명 */}
                 <div style={{ flex: 1 }}>
-                  <p style={{ margin: '0', fontWeight: 'bold' }}>
+                  <p
+                    style={{
+                      margin: '0 0 5px 0',
+                      fontWeight: 'bold',
+                      fontSize: '16px',
+                      color: '#333',
+                    }}
+                  >
                     견적서 {estimate.estimate_id} - {estimate.estimate_version[0]?.version_date}
                   </p>
-                  <p style={{ margin: '0', color: '#888' }}>
+                  <p
+                    style={{
+                      margin: 0,
+                      color: '#888',
+                      fontSize: '14px',
+                      maxHeight: '38px',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      lineHeight: '19px',
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2, // 최대 2줄로 제한
+                      WebkitBoxOrient: 'vertical',
+                    }}
+                  >
                     {estimate.estimate_version[0]?.detail}
                   </p>
                 </div>
 
+                {/* 상태 */}
                 <div
                   style={{
                     display: 'flex',
@@ -150,8 +195,8 @@ const ManagerEstimatesPage: React.FC = () => {
               </div>
             ))}
         </div>
-
       </main>
+
     </div>
   );
 };
