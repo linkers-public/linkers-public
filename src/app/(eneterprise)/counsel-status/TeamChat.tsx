@@ -208,7 +208,7 @@ const CounselStatus: React.FC = () => {
 
   // 데이터 가져오기
   const fetchData = async () => {
-    const clientId = 1 // 실제 client_id를 동적으로 처리해야 함
+    const clientId = 'baa0fd5e-4add-44f2-b1df-1ec59a838b7e' // 실제 client_id를 동적으로 처리해야 함
     try {
       const data = await fetchTeamAndRecentChats(clientId)
       // 팀명과 가장 최근 메시지, estimateId와 chatId를 counselList에 저장

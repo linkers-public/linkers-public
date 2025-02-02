@@ -10,6 +10,7 @@ export const fetchTeamAndRecentChats = async (clientId: number) => {
     throw new Error('인증되지 않은 사용자입니다.')
   }
 
+  console.log("clientID",clientId)
   // client_id에 해당하는 estimate 테이블에서 estimate_status가 'accept'인 모든 데이터 가져오기
   const { data: estimates, error: estimateError } = await supabase
     .from('estimate')

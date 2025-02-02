@@ -1,8 +1,9 @@
 'use client'
 
 import React, { useEffect, useState } from 'react';
+import { useRouter, useParams } from 'next/navigation'; // useParams로 URL 매개변수 추출
 import { fetchChatsAndMessagesByTeamId, fetchMessagesByChatId } from '@/apis/chat.service';
-import Sidebar from '../../../components/DashboardSidebar' // Sidebar 컴포넌트 임포트
+import Sidebar from '../../../../components/DashboardSidebar' // Sidebar 컴포넌트 임포트
 import { Users, MousePointer2, Paperclip } from 'lucide-react';
 
 const Home: React.FC = () => {
@@ -14,7 +15,8 @@ const Home: React.FC = () => {
   const [newMessage, setNewMessage] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [milestones, setMilestones] = useState<any[]>([]); // Milestones data
-
+  const params = useParams(); // useParams를 사용하여 URL의 매개변수 추출
+  const counselId = params?.id; // URL에서 id 추출
   const teamId = 8
   // 팀 ID로 message와 attachment 데이터를 가져오기
   useEffect(() => {
