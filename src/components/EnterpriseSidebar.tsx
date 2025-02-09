@@ -1,4 +1,5 @@
 import React from 'react';
+import Link from 'next/link'
 
 const EnterpriseSidebar = () => {
   return (
@@ -7,7 +8,9 @@ const EnterpriseSidebar = () => {
       {/* 메뉴 항목 */}
       <div className="flex flex-col gap-6">
         <div className="flex items-center gap-3 text-base font-medium text-gray-600 cursor-pointer hover:text-blue-600 hover:bg-gray-100 p-3 rounded-md transition-all">
-          <span>보낸 프로젝트</span>
+          <Link href="/enterprise/my-counsel">
+            <span>보낸 프로젝트</span>
+          </Link>
         </div>
         <div className="flex items-center gap-3 text-base font-medium text-gray-600 cursor-pointer hover:text-blue-600 hover:bg-gray-100 p-3 rounded-md transition-all">
           <span>완료 프로젝트</span>

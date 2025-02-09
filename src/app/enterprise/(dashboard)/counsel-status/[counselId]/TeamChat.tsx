@@ -2,9 +2,11 @@
 
 import React, { useState, useEffect, useRef } from 'react'
 import { fetchTeamAndRecentChats, fetchMessagesByChatId, insertChatMessage } from '@/apis/chat.service' // 작성한 API 임포트
-import { useRouter } from 'next/navigation'
+import { useRouter, useParams, useSearchParams  } from 'next/navigation'
 import Card from './_components/card' // Card 컴포넌트 임포트
-import Sidebar from '../../../../components/DashboardSidebar' // Sidebar 컴포넌트 임포트
+import Sidebar from '../../../../../components/DashboardSidebar' // Sidebar 컴포넌트 임포트
+import EnterpriseSidebar from '../../../../../components/EnterpriseSidebar';
+
 import { uploadFile } from '@/apis/storage'
 
 // 팀 정보와 최근 메시지의 타입 정의
@@ -27,7 +29,12 @@ const CounselStatus: React.FC = () => {
   const [newMessage, setNewMessage] = useState('') // 새 메시지 입력 상태
   const [selectedChat, setSelectedChat] = useState<{ chatId: number, estimateId: number, teamName: string, teamBio: string } | null>(null); // 선택된 상담의 chatId와 estimateId
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
+  
   const clientId = 'baa0fd5e-4add-44f2-b1df-1ec59a838b7e' // 실제 client_id를 동적으로 처리해야 함
+  // const params = useParams(); // useParams를 사용하여 URL의 매개변수 추출
+  // const counselId = params?.counselId; // URL에서 id 추출
+  const searchParams = useSearchParams();
+  const counseld = searchParams.get('counseld'); // '3'
 
   // 메시지 영역 참조
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -280,7 +287,9 @@ const CounselStatus: React.FC = () => {
       style={{ display: 'flex', height: '100vh', backgroundColor: '#f9f9f9', width: '100%', marginRight: '20px'}}
     >
       {/* Sidebar */}
+      <EnterpriseSidebar/>
       <Sidebar />
+
 
       {/* Main Content */}
       <main style={{ flex: 1, padding: '20px', backgroundColor: '#f9f9f9' }}>

@@ -1,20 +1,35 @@
+'use client';
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { useRouter, useParams } from "next/navigation"; // useRouter 훅을 사용하여 URL 파라미터 접근
+import { useRouter, useParams } from "next/navigation";
 
 const DashboardSidebar = () => {
-  const router = useRouter(); // useRouter로 Next.js의 router를 사용
-  const params = useParams(); // useParams를 사용하여 URL의 매개변수 추출
-  const counselId = params?.id; // URL에서 id 추출
-const [queryParams, setQueryParams] = useState<Record<string, string>>({});
+  const router = useRouter();
+  const params = useParams();
 
-useEffect(() => {
-  // URL에서 counselId를 가져오고 이를 사용하여 다른 상태를 업데이트 할 수 있습니다
-}, [counselId]);
+  // ✅ counselId 상태 (세션 유지)
+  const [counseld, setCounseld] = useState<string | null>(
+    typeof window !== "undefined" ? sessionStorage.getItem("counselId") : null
+  );
+
+  useEffect(() => {
+    if (params?.counselId && /^\d+$/.test(params.counselId as string)) {
+      setCounseld(params.counselId as string);
+      sessionStorage.setItem("counselId", params.counselId as string);
+    }
+  }, [params]);
+
+  // ✅ 경로 생성: counselId가 있으면 URL 경로에 포함
   const generateHref = (path: string) => {
-    return counselId ? `/${path}/${counselId}` : `/${path}`;
+    let basePath = `/${path}`;
+    const idToUse = counseld ?? (params?.counselId as string);
 
+    if (idToUse) {
+      basePath += `/${idToUse}`;
+    }
+
+    return basePath;
   };
 
   return (
@@ -43,7 +58,7 @@ useEffect(() => {
           }}
         >
           <Link
-            href={generateHref("enterprise/client-estimates")}
+            href={generateHref("enterprise/estimate-list")}
             style={{
               textDecoration: "none",
               color: "#ECF0F1",

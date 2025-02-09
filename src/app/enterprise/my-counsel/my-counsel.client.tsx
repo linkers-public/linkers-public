@@ -1,232 +1,138 @@
-import React from "react";
+'use client';
 
-const ProjectList = () => {
-  const projects = [
-    { title: "프로젝트명(상담서 제목)", status: "상담 중" },
-    { title: "프로젝트명(상담서 제목)", status: "진행 중" },
-    { title: "프로젝트명(상담서 제목)", status: "정산 대기" },
-    { title: "프로젝트명(상담서 제목)", status: "정산 완료" },
-  ];
+import React, { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { fetchAllCounsel } from '@/apis/counsel.service';
+import EnterpriseSidebar from '../../../components/EnterpriseSidebar';
+
+const SearchProjectsClient: React.FC = () => {
+  const router = useRouter();
+  const [projects, setProjects] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const data = await fetchAllCounsel(); // API에서 프로젝트 목록 가져오기
+        if (Array.isArray(data)) {
+          setProjects(data); // 변환 없이 원본 데이터를 그대로 사용
+        } else {
+          console.error('Invalid data format:', data);
+          setProjects([]); // 데이터 형식이 다를 경우 빈 배열 설정
+        }
+      } catch (error) {
+        console.error('Error fetching projects:', error);
+        setProjects([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  const handleProjectClick = (counselId: number) => {
+    router.push(`/enterprise/estimate-list/${counselId}`); // 상세 페이지 이동
+  };
 
   return (
-    <div style={{ padding: "20px" }}>
-      {/* Filter Section */}
-      <div
-      style={{
-        display: "flex",
-        gap: "10px",
-        padding: "10px",
-      }}
-    >
-      {/* First Filter */}
-      <div style={{ position: "relative", width: "120px" }}>
-        <select
-          style={{
-            width: "100%",
-            height: "40px",
-            border: "1px solid #000",
-            borderRadius: "20px",
-            padding: "0 10px",
-            fontSize: "14px",
-            cursor: "pointer",
-            appearance: "none",
-            backgroundColor: "#fff",
-            textAlign: "center",
-            outline: "none",
-          }}
-        >
-          <option>필터 1</option>
-          <option>옵션 1</option>
-          <option>옵션 2</option>
-          <option>옵션 3</option>
-        </select>
-        {/* Dropdown Icon */}
-        <span
-          style={{
-            position: "absolute",
-            top: "50%",
-            right: "10px",
-            transform: "translateY(-50%)",
-            pointerEvents: "none",
-            fontSize: "12px",
-          }}
-        >
-          ▼
-        </span>
+    <div className="flex w-full h-screen bg-gray-100">
+      {/* 왼쪽 사이드바 */}
+      <div >
+        <EnterpriseSidebar />
       </div>
 
-      {/* Second Filter */}
-      <div style={{ position: "relative", width: "120px" }}>
-        <select
-          style={{
-            width: "100%",
-            height: "40px",
-            border: "1px solid #000",
-            borderRadius: "20px",
-            padding: "0 10px",
-            fontSize: "14px",
-            cursor: "pointer",
-            appearance: "none",
-            backgroundColor: "#fff",
-            textAlign: "center",
-            outline: "none",
-          }}
-        >
-          <option>필터 2</option>
-          <option>옵션 1</option>
-          <option>옵션 2</option>
-          <option>옵션 3</option>
-        </select>
-        <span
-          style={{
-            position: "absolute",
-            top: "50%",
-            right: "10px",
-            transform: "translateY(-50%)",
-            pointerEvents: "none",
-            fontSize: "12px",
-          }}
-        >
-          ▼
-        </span>
-      </div>
+      {/* 오른쪽 콘텐츠 (프로젝트 목록) */}
+      <div className="flex flex-col w-3/4 p-6">
+        <h2 className="text-h3 ml-1 mb-4">내 프로젝트</h2>
 
-      {/* Third Filter */}
-      <div style={{ position: "relative", width: "120px" }}>
-        <select
-          style={{
-            width: "100%",
-            height: "40px",
-            border: "1px solid #000",
-            borderRadius: "20px",
-            padding: "0 10px",
-            fontSize: "14px",
-            cursor: "pointer",
-            appearance: "none",
-            backgroundColor: "#fff",
-            textAlign: "center",
-            outline: "none",
-          }}
-        >
-          <option>필터 3</option>
-          <option>옵션 1</option>
-          <option>옵션 2</option>
-          <option>옵션 3</option>
-        </select>
-        <span
-          style={{
-            position: "absolute",
-            top: "50%",
-            right: "10px",
-            transform: "translateY(-50%)",
-            pointerEvents: "none",
-            fontSize: "12px",
-          }}
-        >
-          ▼
-        </span>
-      </div>
-    </div>
-
-      {/* Left Section: Project Details */}
-      
-      {projects.map((project, index) => (
-        <div
-          key={index}
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            border: "1px solid #000", // Black border for card style
-            borderRadius: "8px",
-            padding: "20px",
-            marginBottom: "10px",
-            backgroundColor: "#fff",
-          }}
-        >
-          {/* Left Section: Project Details */}
-          <div style={{ display: "flex", alignItems: "flex-start", gap: "10px" }}>
-            {/* Icon */}
-            <div
-              style={{
-                width: "50px",
-                height: "50px",
-                backgroundColor: "#f2f2f2",
-                borderRadius: "8px",
-                display: "flex",
-                justifyContent: "center",
-                alignItems: "center",
-              }}
-            >
-              <img
-                src="placeholder-icon.png"
-                alt="Project Icon"
-                style={{ width: "30px", height: "30px" }}
+        {loading ? (
+          <p className="text-gray-500 text-center">🔄 로딩 중...</p>
+        ) : projects.length === 0 ? (
+          <p className="text-gray-500 text-center">📂 표시할 프로젝트가 없습니다.</p>
+        ) : (
+          <section className="flex flex-col gap-4 w-full">
+            {projects.map((project) => (
+              <ProjectMeta
+                key={project.id}
+                project={project}
+                onClick={() => handleProjectClick(project.counsel_id)}
               />
-            </div>
-
-            {/* Text Content */}
-            <div>
-              <h3 style={{ margin: "0 0 5px 0", fontSize: "16px" }}>
-                {project.title}
-              </h3>
-              <p style={{ margin: "0 0 5px 0", color: "#888", fontSize: "14px" }}>
-                프로젝트 진행 기간<br />
-                예상 비용
-              </p>
-              <p
-                style={{
-                  margin: "0",
-                  color: "#555",
-                  fontSize: "14px",
-                  lineHeight: "1.5",
-                }}
-              >
-                상담 내용을 요약한 내용 요약상담 내용을 요약한 내용 요약상담 내용을 요약한
-                내용 요약...
-              </p>
-            </div>
-          </div>
-
-          {/* Right Section: Status */}
-          <div style={{ textAlign: "right" }}>
-            <span
-              style={{
-                display: "inline-block",
-                padding: "5px 15px",
-                borderRadius: "15px",
-                backgroundColor: getStatusColor(project.status),
-                color: "#fff",
-                fontSize: "14px",
-                marginBottom: "5px",
-              }}
-            >
-              {project.status}
-            </span>
-            {/* <p style={{ margin: "0", fontSize: "12px", color: "#888" }}>
-              {project.team}
-            </p> */}
-          </div>
-        </div>
-      ))}
+            ))}
+          </section>
+        )}
+      </div>
     </div>
   );
 };
 
-// Function to determine status color
-const getStatusColor = (status: string) => {
-  switch (status) {
-    case "상담 중":
-      return "#ff9800"; // Orange
-    case "진행 중":
-      return "#4caf50"; // Green
-    case "정산 대기":
-      return "#fbc02d"; // Yellow
-    case "정산 완료":
-      return "#2196f3"; // Blue
-    default:
-      return "#999"; // Default Gray
-  }
+const ProjectMeta = ({
+  project,
+  onClick,
+}: {
+  project: any;
+  onClick: () => void;
+}) => {
+  // 상태 변환: recruiting → 모집중, pending → 대기중, end → 종료
+  const formattedStatus =
+    project.status === 'recruiting'
+      ? '모집중'
+      : project.status === 'pending'
+        ? '대기중'
+        : '종료';
+
+  return (
+    <li
+      className="flex py-5 px-6 shadow-lg w-full rounded-xl cursor-pointer bg-white hover:shadow-2xl transition-all duration-300 border border-gray-200"
+      onClick={onClick}
+    >
+      <div className="flex flex-col gap-4 w-full">
+        {/* 프로젝트 제목 */}
+        <h3 className="font-semibold text-[22px] leading-snug tracking-tight text-gray-900">
+          {project.title}
+        </h3>
+
+        {/* 예상 금액 및 기간 */}
+        <div className="flex flex-wrap gap-4 text-gray-600 text-sm">
+          <div className="flex items-center gap-1">
+            <span className="font-medium">💰 예상 금액:</span>
+            <span>{project.cost}</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="font-medium">⏳ 예상 기간:</span>
+            <span>{project.period}</span>
+          </div>
+        </div>
+
+        {/* 프로젝트 분야 */}
+        <div className="flex flex-wrap gap-2 mt-1">
+          {(Array.isArray(project.feild) ? project.feild : [project.feild]).map(
+            (skill: string, index: number) => (
+              <div
+                key={index}
+                className="px-3 py-1 text-gray-700 text-xs font-medium bg-gray-100 rounded-lg shadow-sm"
+              >
+                {skill}
+              </div>
+            )
+          )}
+        </div>
+
+        {/* 상태 및 근무 방식 */}
+        <div className="flex flex-wrap gap-2 mt-3">
+
+          <div
+            className={`px-3 py-1 text-sm font-medium rounded-md shadow-sm ${formattedStatus === '모집중'
+                ? 'bg-purple-600 text-white'
+                : 'bg-gray-400 text-gray-100'
+              }`}
+          >
+            {formattedStatus}
+          </div>
+        </div>
+      </div>
+    </li>
+  );
 };
 
-export default ProjectList;
+export default SearchProjectsClient;

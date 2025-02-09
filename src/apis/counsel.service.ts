@@ -14,23 +14,9 @@ export const fetchAllCounsel = async () => {
         console.error('Error fetching counsel data:', error.message);
         throw new Error('Failed to fetch counsel data.');
       }
-  
-      // Map the data for frontend-friendly consumption
-      const mappedData = data.map((counsel) => ({
-        id: counsel.counsel_id,
-        title: counsel.title || 'No title provided',
-        cost: counsel.cost || 'Unknown cost',
-        status: counsel.counsel_status || 'pending',
-        startDate: counsel.start_date,
-        dueDate: counsel.due_date,
-        skills: counsel.skill || [],
-        field: counsel.feild || 'Unknown field',
-        outline: counsel.outline || 'No outline provided',
-        clientId: counsel.client_id || null,
-        period: counsel.period || 'Unknown period'
-      }));
-  
-      return mappedData;
+      console.log(data);
+      
+      return data;
     } catch (error) {
       console.error('Unexpected error while fetching counsel data:', error);
       throw error;
@@ -88,28 +74,6 @@ export const fetchCounselWithClient = async (counselId: number) => {
       console.warn('No client_id found in the counsel data.');
     }
 
-    // Step 3: Combine and return counsel and client data
-    // return {
-    //   counsel: {
-    //     id: counsel.counsel_id,
-    //     title: counsel.title || 'No title',
-    //     cost: counsel.cost || 0,
-    //     status: counsel.counsel_status || 'pending',
-    //     startDate: counsel.start_date,
-    //     dueDate: counsel.due_date,
-    //     skills: counsel.skill || [],
-    //     field: counsel.feild || 'Unknown',
-    //     outline: counsel.outline || '',
-    //     output: counsel.output || '',
-    //     period: counsel.period || '',
-    //   },
-    //   client: client || {
-    //     id: null,
-    //     name: 'Unknown Company',
-    //     email: 'Unknown Email',
-    //     contact: 'Unknown Contact',
-    //   },
-    // };
 
     return {counsel, client};
   } catch (error) {

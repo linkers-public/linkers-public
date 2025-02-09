@@ -10,19 +10,19 @@ const ClientNavigator: React.FC = () => {
       <Logo /> 
         {/* 중앙: 네비게이션 링크 */}
         <div className="flex items-center gap-6">
-          <Link href="/">
+          <Link href="/enterprise">
             <span className="text-sm font-bold text-gray-600 hover:text-gray-900">
-              홈
+              기업 홈
             </span>
           </Link>
-          <Link href="/consultation">
+          <Link href="/enterprise/counsel-form">
             <span className="text-sm font-bold text-gray-600 hover:text-gray-900">
               상담서 작성
             </span>
           </Link>
-          <Link href="/projects">
+          <Link href="/enterprise/my-counsel">
             <span className="text-sm font-bold text-gray-600 hover:text-gray-900">
-              프로젝트
+              보낸 프로젝트
             </span>
           </Link>
         </div>

@@ -203,3 +203,70 @@ export const getEstimateDetails = async (counselId: String) => {
     milestones: milestonesData,
   };
 };
+
+export const getEstimateAndVersionDetails = async (counselId: number, estimateVersionId: number) => {
+  const supabase = createSupabaseBrowserClient();
+
+  console.log("Fetching data for counselId:", counselId, "estimateVersionId:", estimateVersionId);
+
+  try {
+    // ✅ 1. counsel 테이블에서 상담 정보 가져오기
+    const { data: counselData, error: counselError } = await supabase
+      .from("counsel")
+      .select("*")
+      .eq("counsel_id", counselId)
+      .single();
+
+    if (counselError || !counselData) {
+      console.error("Counsel 조회 실패:", counselError);
+      throw new Error("상담 데이터 조회 실패");
+    }
+
+    // ✅ 2. estimate 테이블에서 견적서 데이터 가져오기 (counselId 기준)
+    const { data: estimateData, error: estimateError } = await supabase
+      .from("estimate")
+      .select("*")
+      .eq("counsel_id", counselId)
+      .single();
+
+    if (estimateError || !estimateData) {
+      console.error("Estimate 조회 실패:", estimateError);
+      throw new Error("견적 데이터 조회 실패");
+    }
+
+    // ✅ 3. estimate_version 테이블에서 특정 견적서 버전 데이터 가져오기 (estimateVersionId 기준)
+    const { data: estimateVersionData, error: versionError } = await supabase
+      .from("estimate_version")
+      .select("*")
+      .eq("estimate_version_id", estimateVersionId)
+      .single();
+
+    if (versionError || !estimateVersionData) {
+      console.error("Estimate Version 조회 실패:", versionError);
+      throw new Error("견적 버전 데이터 조회 실패");
+    }
+
+    // ✅ 4. 해당 estimate_id에 대한 milestones 가져오기
+    const { data: milestonesData, error: milestonesError } = await supabase
+      .from("milestone")
+      .select("*")
+      .eq("estimate_id", estimateData.estimate_id);
+
+    if (milestonesError) {
+      console.error("Milestones 조회 실패:", milestonesError);
+      throw new Error("마일스톤 데이터 조회 실패");
+    }
+
+    // ✅ 최종적으로 모든 데이터 반환
+    return {
+      counsel: counselData,                 // 상담 데이터
+      estimate: estimateData,               // 견적 데이터
+      estimateVersion: estimateVersionData, // 견적 버전 데이터
+      milestones: milestonesData,           // 마일스톤 데이터
+    };
+
+  } catch (error) {
+    console.error("데이터 조회 실패:", error);
+    throw new Error("전체 데이터 조회 중 오류 발생");
+  }
+};

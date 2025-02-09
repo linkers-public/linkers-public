@@ -1,4 +1,4 @@
-import Header from '../../components/ClientNavigator'
+import Header from '../../components/EnterpriseNavigator'
 import EnterpriseSidebar from '../../components/EnterpriseSidebar'
 
 export const metadata = {
@@ -16,7 +16,7 @@ export default function RootLayout({
       <body>
         <Header /> {/* 모든 페이지에 Header 포함 */}
         <div className="flex">
-        <EnterpriseSidebar/>
+        
         {children}{/* 페이지 콘텐츠 */}
         </div>
       </body>
