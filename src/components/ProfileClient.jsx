@@ -11,14 +11,19 @@ export const ProfileClient = ({ username, isOwner = false }) => {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
-  const { profile, fetchProfile } = useProfileStore()
+  const { profile, fetchMyProfileData, fetchUserProfileData } =
+    useProfileStore()
   const account = useAccountStore(selectAccount)
 
   useEffect(() => {
     const getProfile = async () => {
       setIsLoading(true)
       try {
-        await fetchProfile(username)
+        if (isOwner) {
+          await fetchMyProfileData()
+        } else {
+          await fetchUserProfileData(username)
+        }
       } catch (err) {
         setError(err)
       } finally {
@@ -28,7 +33,6 @@ export const ProfileClient = ({ username, isOwner = false }) => {
 
     getProfile()
   }, [username])
-
   const {
     bio,
     username: profileUsername,
