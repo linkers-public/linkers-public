@@ -6,9 +6,11 @@ export default async function ProfilePage({
 }: {
   params: { username: string }
 }) {
+  const decodedUsername = decodeURIComponent(params.username)
+
   return (
     <ProfileClient
-      username={params.username}
+      username={decodedUsername}
       isOwner={false}
     />
   )
