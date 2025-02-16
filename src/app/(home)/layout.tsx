@@ -9,7 +9,7 @@ export default function RootLayout({
 }>) {
   return (
     <>
-      <AccountProvider />
+      {/* <AccountProvider /> */}
       <GlobalNavigator />
       <Header />
       <main className="flex w-full h-full min-h-[calc(100vh-96px)] pt-1">

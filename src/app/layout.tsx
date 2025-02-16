@@ -21,8 +21,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${notoSansKR.className} antialiased`}>{children}</body>
-      <Toaster />
+      <body className={`${notoSansKR.className} antialiased`}>
+        {children}
+        <Toaster />
+      </body>
     </html>
   )
 }

@@ -101,30 +101,53 @@ export const deleteLicense = async (id: string) => {}
 export const updateProfile = async (data: any) => {}
 export const updateProfileImage = async (data: any) => {}
 
-export const fetchUserProfile = async (userId?: string) => {
+export const fetchMyProfile = async () => {
   const supabase = createSupabaseBrowserClient()
 
-  if (!userId) {
-    const user = await supabase.auth.getUser()
-    userId = user.data.user?.id
-  }
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser()
+  if (authError) throw authError
+  if (!user) throw new Error('Not authenticated')
 
   const { data, error } = await supabase
     .from('accounts')
     .select(
       `
       *,
-      account_work_experiences!account_id(*),
-      account_educations!account_id(*),
-      account_license!account_id(*)
+      account_work_experiences (*),
+      account_educations (*),
+      account_license (*)
     `,
     )
-    .eq('user_id', userId as string)
+    .eq('user_id', user.id)
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+export const fetchUserProfile = async (username: string) => {
+  const supabase = createSupabaseBrowserClient()
+
+  const { data, error } = await supabase
+    .from('accounts')
+    .select(
+      `
+      *,
+      account_work_experiences (*),
+      account_educations (*),
+      account_license (*)
+    `,
+    )
+    .eq('username', username)
     .single()
 
   if (error) {
-    return { error }
+    console.error('Error fetching profile:', error)
+    throw error
   }
 
-  return { data }
+  return data
 }

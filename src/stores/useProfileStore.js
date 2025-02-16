@@ -1,4 +1,4 @@
-import { fetchUserProfile } from '@/apis/profile.service'
+import { fetchMyProfile, fetchUserProfile } from '@/apis/profile.service'
 import { create } from 'zustand'
 
 const initialProfile = {
@@ -13,16 +13,24 @@ const initialProfile = {
 
 export const useProfileStore = create((set) => ({
   profile: initialProfile,
-
-  fetchProfile: async () => {
+  fetchMyProfileData: async () => {
     try {
-      const { data, error } = await fetchUserProfile()
-      if (error) throw error
+      const data = await fetchMyProfile()
       set({ profile: data })
     } catch (err) {
       throw err
     }
   },
+
+  fetchUserProfileData: async (username) => {
+    try {
+      const data = await fetchUserProfile(username)
+      set({ profile: data })
+    } catch (err) {
+      throw err
+    }
+  },
+
   updateBasicProfile: (updates) =>
     set((state) => ({
       profile: { ...state.profile, ...updates },
