@@ -5,70 +5,109 @@ import { useRouter, useParams } from 'next/navigation';
 import { fetchChatsAndMessagesByTeamId, fetchMessagesByChatId } from '@/apis/chat.service';
 import Sidebar from '../../../../../components/DashboardSidebar' 
 import EnterpriseSidebar from '../../../../../components/EnterpriseSidebar';
-
+import {getClientTeamAndMilestones} from '@/apis/estimate.service'
 import { Users, MousePointer2, Paperclip } from 'lucide-react';
 
+enum MilestoneStatus {
+  pending = '대기중',
+  in_progress = '진행중',
+  completed_payment = '정산완료',
+  task_completed = '작업완료'
+}
+
+const statusColors = {
+  pending: '#ffcc00', // Yellow
+  in_progress: '#007bff', // Blue
+  completed_payment: '#28a745', // Green
+  task_completed: '#dc3545' // Red
+};
 const Home: React.FC = () => {
-  const [selectedTab, setSelectedTab] = useState('메시지');
-  const [chatId, setChatId] = useState<number | null>(null);
+  const [selectedTab, setSelectedTab] = useState('마일스톤');
   const [messages, setMessages] = useState<any[]>([]);
   const [attachments, setAttachments] = useState<any[]>([]);
-  const [openProjects, setOpenProjects] = useState(false) // 드롭다운 상태 관리
   const [newMessage, setNewMessage] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [milestones, setMilestones] = useState<any[]>([]); // Milestones data
-  const params = useParams(); // useParams를 사용하여 URL의 매개변수 추출
-  const rawCounselId = params?.counselId;
-  const counselId = Array.isArray(rawCounselId) ? rawCounselId[0] : rawCounselId;
+  const [team, setTeam] = useState<any>(null); 
+  const params = useParams(); 
+  const counselId = params?.counselId; 
+  const clientId = 'baa0fd5e-4add-44f2-b1df-1ec59a838b7e' // 실제 client_id를 동적으로 처리해야 함
+  const [progressCount, setProgressCount] = useState(0);
+  const [totalAmount, setTotalAmount] = useState(0);
+  const [paidAmount, setPaidAmount] = useState(0);
+  const [nextDueDate, setNextDueDate] = useState<string | null>(null);
 
-  const teamId = 8
-  // 팀 ID로 message와 attachment 데이터를 가져오기
+  const formatDate = (date: string) => {
+    if (!date) return '없음';
+    const d = new Date(date);
+    return `${String(d.getFullYear()).slice(-2)}년 ${String(d.getMonth() + 1).padStart(2, '0')}월 ${String(d.getDate()).padStart(2, '0')}일`;
+  };
+
   useEffect(() => {
     const fetchMessageData = async () => {
       try {
+        const data = await getClientTeamAndMilestones(clientId, Number(counselId), ["in_progress"]);
+        
+        if (data?.team) {
+          setTeam(data.team);
+        }
+  
         if (selectedTab === '메시지') {
-          const { data: messageData } = await fetchChatsAndMessagesByTeamId(teamId, 'message');
+          const { data: messageData } = await fetchChatsAndMessagesByTeamId(Number(counselId), 'message');
           setMessages(messageData);
         } else if (selectedTab === '첨부파일') {
-          const { data: attachmentData } = await fetchChatsAndMessagesByTeamId(teamId, 'attachment');
+          const { data: attachmentData } = await fetchChatsAndMessagesByTeamId(Number(counselId), 'attachment');
           setAttachments(attachmentData);
-        } else if (selectedTab === '마일스톤') {
-          // Simulate milestone fetching
-          const milestoneData = [
-            {
-              title: '1. 데이터셋 전처리',
-              details: '중복 제거, 특수문자 제거, 불완전한 데이터 보완 ...',
-              deadline: '기한 25/02/11 ~ 25/02/22',
-              status: '정산 완료',
-            },
-            {
-              title: '2. LLM 성능 평가',
-              details: '자동화된 평가 스크립트 개발...',
-              deadline: '기한 25/02/23 ~ 25/03/01',
-              status: '대기 중',
-            },
-            {
-              title: '3. Red Teaming 및 안전성 평가',
-              details: '레드 티밍 전략 개발, 공격 시나리오 설계 및 수행...',
-              deadline: '기한 25/03/01 ~ 25/03/15',
-              status: '대기 중',
-            },
-            {
-              title: '4. 결과 분석 및 최적화 방안',
-              details: '평가 결과 분석 보고서 작성, 성능 개선 전략 수립...',
-              deadline: '기한 25/03/15 ~ 25/03/30',
-              status: '대기 중',
-            },
-          ];
-          setMilestones(milestoneData);
+        } else if (selectedTab === '마일스톤' && data?.milestones) {
+          const milestonesData = data.milestones
+            .map(milestone => ({
+              ...milestone,
+              formattedDeadline: `${formatDate(milestone.milestone_start_date ?? '')} ~ ${formatDate(milestone.milestone_due_date ?? '')}`,
+              status: MilestoneStatus[milestone.milestone_status as keyof typeof MilestoneStatus] || '알 수 없음',
+              milestone_start_date: milestone.milestone_start_date || '9999-12-31', // 기본값 설정
+              milestone_due_date: milestone.milestone_due_date || '9999-12-31', // 기본값 설정
+              payment_amount: milestone.payment_amount ?? 0 // null 방지
+            }))
+            .sort((a, b) => new Date(a.milestone_start_date).getTime() - new Date(b.milestone_start_date).getTime());
+  
+          setMilestones(milestonesData);
+  
+          // 진행도 계산 (task_completed 개수 / 전체 개수)
+          const completedCount = milestonesData.filter(m => m.milestone_status === 'task_completed').length;
+          setProgressCount(completedCount);
+  
+          // 총 금액 계산 (모든 milestone의 payment_amount 합)
+          const total = milestonesData.reduce((sum, m) => sum + m.payment_amount, 0);
+          setTotalAmount(total);
+  
+          // 지급 금액 계산 (completed_payment인 milestone의 payment_amount 합)
+          const paid = milestonesData
+            .filter(m => m.milestone_status === 'completed_payment')
+            .reduce((sum, m) => sum + m.payment_amount, 0);
+          setPaidAmount(paid);
+  
+          // 다음 접수 기한 설정 (in_progress 중 가장 빠른 due_date)
+          const inProgressMilestones = milestonesData
+            .filter(m => m.milestone_status === 'in_progress')
+            .map(m => m.milestone_due_date)
+            .filter(date => date && date !== '9999-12-31') // 기본값 제거
+            .sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+  
+          if (inProgressMilestones.length > 0) {
+            const nextDate = new Date(inProgressMilestones[0]);
+            setNextDueDate(`${nextDate.getFullYear() % 100}년 ${String(nextDate.getMonth() + 1).padStart(2, '0')}월 ${String(nextDate.getDate()).padStart(2, '0')}일`);
+          } else {
+            setNextDueDate('없음');
+          }
         }
       } catch (error) {
         console.error('데이터를 가져오는 중 오류 발생:', error);
       }
     };
-
+  
     fetchMessageData();
-  }, [teamId, selectedTab]);
+  }, [selectedTab, clientId, counselId]);
+  
 
   const handleTabClick = (tab: string) => {
     setSelectedTab(tab);
@@ -82,19 +121,6 @@ const Home: React.FC = () => {
     console.log('메시지 전송:', newMessage, '파일:', selectedFile);
 
     try {
-      // 메시지 전송 API 호출
-      // 메시지 로직 예시 (API 호출 코드 필요)
-      /*
-      await insertChatMessage({
-        chat_id: chatId,
-        message: newMessage,
-        message_type: selectedFile ? 'attachment' : 'message',
-        attachment: selectedFile ? await uploadFile(selectedFile) : null,
-        sender_type: 'client',
-      });
-      */
-
-      // UI 갱신
       setMessages((prev) => [
         ...prev,
         {
@@ -134,161 +160,27 @@ const Home: React.FC = () => {
           flex: 1,
           padding: '20px',
           backgroundColor: '#fff',
-          overflowY: 'auto', // 세로로 스크롤이 가능하도록 설정
+          overflowY: 'auto', 
         }}
       >
-        <header
+
+<header
           style={{
             display: 'flex',
             gap: '20px',
             marginBottom: '20px',
             justifyContent: 'space-between',
             padding: '10px',
-            backgroundColor: '#f9f9f9',  // 부드러운 배경색
-            borderRadius: '12px',  // 둥근 모서리
-            boxShadow: '0 4px 10px rgba(0, 0, 0, 0.1)',  // 부드러운 그림자 추가
-            flexWrap: 'wrap', // 화면 크기에 따라 박스를 자동으로 랩핑
+            backgroundColor: '#f9f9f9',
+            borderRadius: '12px',
+            boxShadow: '0 4px 10px rgba(0, 0, 0, 0.1)',
+            flexWrap: 'wrap',
           }}
         >
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              padding: '15px 20px',
-              backgroundColor: '#fff',
-              borderRadius: '12px',
-              boxShadow: '0 2px 6px rgba(0, 0, 0, 0.1)',  // 각 박스에 작은 그림자 추가
-              textAlign: 'center',
-              flex: '1 1 22%', // 각 박스가 동일한 넓이를 가짐
-              minWidth: '200px', // 화면이 작아지면 최소 너비 유지
-            }}
-          >
-            <div
-              style={{
-                fontSize: '14px',
-                fontWeight: '600',
-                color: '#999',  // 제목 색상
-                marginBottom: '5px',
-              }}
-            >
-              진행도
-            </div>
-            <div
-              style={{
-                fontSize: '20px',
-                fontWeight: '700',
-                color: '#333',  // 강조된 값 색상
-              }}
-            >
-              03 / 04
-            </div>
-          </div>
-
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              padding: '15px 20px',
-              backgroundColor: '#fff',
-              borderRadius: '12px',
-              boxShadow: '0 2px 6px rgba(0, 0, 0, 0.1)',
-              textAlign: 'center',
-              flex: '1 1 22%',
-              minWidth: '200px',
-            }}
-          >
-            <div
-              style={{
-                fontSize: '14px',
-                fontWeight: '600',
-                color: '#999',
-                marginBottom: '5px',
-              }}
-            >
-              총 금액
-            </div>
-            <div
-              style={{
-                fontSize: '20px',
-                fontWeight: '700',
-                color: '#333',
-              }}
-            >
-              2,240,000 원
-            </div>
-          </div>
-
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              padding: '15px 20px',
-              backgroundColor: '#fff',
-              borderRadius: '12px',
-              boxShadow: '0 2px 6px rgba(0, 0, 0, 0.1)',
-              textAlign: 'center',
-              flex: '1 1 22%',
-              minWidth: '200px',
-            }}
-          >
-            <div
-              style={{
-                fontSize: '14px',
-                fontWeight: '600',
-                color: '#999',
-                marginBottom: '5px',
-              }}
-            >
-              지급 금액
-            </div>
-            <div
-              style={{
-                fontSize: '20px',
-                fontWeight: '700',
-                color: '#333',
-              }}
-            >
-              1,240,000 원
-            </div>
-          </div>
-
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              padding: '15px 20px',
-              backgroundColor: '#fff',
-              borderRadius: '12px',
-              boxShadow: '0 2px 6px rgba(0, 0, 0, 0.1)',
-              textAlign: 'center',
-              flex: '1 1 22%',
-              minWidth: '200px',
-            }}
-          >
-            <div
-              style={{
-                fontSize: '14px',
-                fontWeight: '600',
-                color: '#999',
-                marginBottom: '5px',
-              }}
-            >
-              다음 접수 기한
-            </div>
-            <div
-              style={{
-                fontSize: '20px',
-                fontWeight: '700',
-                color: '#333',
-              }}
-            >
-              24년 02월 31일
-            </div>
-          </div>
+          <SummaryCard title="진행도" value={`${String(progressCount).padStart(2, '0')} / ${String(milestones.length).padStart(2, '0')}`} />
+          <SummaryCard title="총 금액" value={`${totalAmount.toLocaleString()} 원`} />
+          <SummaryCard title="지급 금액" value={`${paidAmount.toLocaleString()} 원`} />
+          <SummaryCard title="다음 접수 기한" value={nextDueDate || '없음'} />
         </header>
 
 
@@ -323,11 +215,11 @@ const Home: React.FC = () => {
               <Users />
             </div>
             <div>
-              <p style={{ margin: 0, fontSize: '18px', fontWeight: 'bold' }}>
-                팀 명 (마지막 접속일 / 평균 진행도)
+            <p style={{ margin: 0, fontSize: '18px', fontWeight: 'bold' }}>
+                {team ? team.name : '팀 정보 없음'}
               </p>
               <p style={{ margin: 0, fontSize: '14px', color: '#666' }}>
-                팀 소개 한줄 팀 소개 한줄 팀 소개 한줄
+                {team ? `팀 설명: ${team.bio || '없음'}` : '팀 설명 없음'}
               </p>
             </div>
           </div>
@@ -408,54 +300,39 @@ const Home: React.FC = () => {
                 <div style={{ flex: 3 }}>
                   <p style={{ fontWeight: 'bold', marginBottom: '5px' }}>{milestone.title}</p>
                   <p style={{ fontSize: '14px', color: '#666', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {milestone.details}
+                    {milestone.detail}
                   </p>
                 </div>
-                <div style={{ flex: 1, textAlign: 'center', fontSize: '14px', color: '#666' }}>
-                  {milestone.deadline}
-                </div>
-                <div
+                <div style={{ flex: 1, textAlign: 'center', fontSize: '14px', color: '#666' }}>{milestone.formattedDeadline}</div>
+                <div style={{
+                  flex: 1,
+                  textAlign: 'center',
+                  fontSize: '14px',
+                  fontWeight: 'bold',
+                  padding: '5px 12px',
+                  borderRadius: '15px',
+                  backgroundColor: statusColors[milestone.milestone_status as keyof typeof statusColors],
+                  color: '#fff',
+                  minWidth: '90px'
+                }}>{milestone.status}</div>
+                <button
                   style={{
-                    flex: 1,
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    gap: '10px',
+                    padding: '10px 20px',
+                    backgroundColor: milestone.milestone_status === 'task_completed' ? '#007bff' : '#ccc',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: milestone.milestone_status === 'task_completed' ? 'pointer' : 'not-allowed',
                   }}
+                  onClick={() => {
+                    if (milestone.milestone_status === 'task_completed') {
+                      console.log('결제하기');
+                    }
+                  }}
+                  disabled={milestone.milestone_status !== 'task_completed'}
                 >
-                  <div
-                    style={{
-                      padding: '5px 15px',
-                      borderRadius: '20px',
-                      backgroundColor:
-                        milestone.status === '정산 완료' ? '#ddd' : milestone.status === '대기 중' ? '#f9c74f' : '#ccc',
-                      color: '#333',
-                      fontSize: '14px',
-                      fontWeight: 'bold',
-                      textAlign: 'center',
-                    }}
-                  >
-                    {milestone.status}
-                  </div>
-                  <button
-                    style={{
-                      padding: '10px 20px',
-                      backgroundColor: milestone.status === '정산 완료' ? '#ccc' : '#007bff',
-                      color: milestone.status === '정산 완료' ? '#888' : '#fff',
-                      border: 'none',
-                      borderRadius: '8px',
-                      cursor: milestone.status === '정산 완료' ? 'not-allowed' : 'pointer',
-                    }}
-                    onClick={() => {
-                      if (milestone.status !== '정산 완료') {
-                        console.log('결제하기');
-                      }
-                    }}
-                    disabled={milestone.status === '정산 완료'}
-                  >
-                    결제하기
-                  </button>
-                </div>
+                  결제하기
+                </button>
               </div>
             ))}
           </div>
@@ -643,5 +520,25 @@ const Home: React.FC = () => {
 
   )
 }
+
+const SummaryCard = ({ title, value }: { title: string; value: string }) => (
+  <div
+    style={{
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      padding: '15px 20px',
+      backgroundColor: '#fff',
+      borderRadius: '12px',
+      boxShadow: '0 2px 6px rgba(0, 0, 0, 0.1)',
+      textAlign: 'center',
+      flex: '1 1 22%',
+      minWidth: '200px',
+    }}
+  >
+    <div style={{ fontSize: '14px', fontWeight: '600', color: '#999', marginBottom: '5px' }}>{title}</div>
+    <div style={{ fontSize: '20px', fontWeight: '700', color: '#333' }}>{value}</div>
+  </div>
+);
 
 export default Home

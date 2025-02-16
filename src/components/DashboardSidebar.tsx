@@ -3,15 +3,18 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter, useParams } from "next/navigation";
+import { getClientTeamAndMilestones } from '@/apis/estimate.service';
 
 const DashboardSidebar = () => {
   const router = useRouter();
   const params = useParams();
 
-  // ✅ counselId 상태 (세션 유지)
   const [counseld, setCounseld] = useState<string | null>(
     typeof window !== "undefined" ? sessionStorage.getItem("counselId") : null
   );
+  const [inProgressExists, setInProgressExists] = useState(false);
+  const [counselExists, setCounselExists] = useState(false);
+  const clientId = 'baa0fd5e-4add-44f2-b1df-1ec59a838b7e';
 
   useEffect(() => {
     if (params?.counselId && /^\d+$/.test(params.counselId as string)) {
@@ -20,7 +23,24 @@ const DashboardSidebar = () => {
     }
   }, [params]);
 
-  // ✅ 경로 생성: counselId가 있으면 URL 경로에 포함
+  useEffect(() => {
+    const fetchStatuses = async () => {
+      try {
+        if (counseld) {
+          const data = await getClientTeamAndMilestones(clientId, Number(counseld), ["in_progress", "accept"]);
+          if (data?.milestones) {
+            setInProgressExists(data.milestones.some(m => m.milestone_status === "in_progress"));
+            setCounselExists(data.estimate.estimate_status === "accept" || data.estimate.estimate_status === "in_progress");
+          }
+        }
+      } catch (error) {
+        console.error("프로젝트 및 상담 현황 데이터 불러오기 실패:", error);
+      }
+    };
+
+    fetchStatuses();
+  }, [counseld]);
+
   const generateHref = (path: string) => {
     let basePath = `/${path}`;
     const idToUse = counseld ?? (params?.counselId as string);
@@ -79,6 +99,8 @@ const DashboardSidebar = () => {
             borderRadius: "8px",
             boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
             transition: "background-color 0.3s ease",
+            opacity: counselExists ? 1 : 0.5,
+            pointerEvents: counselExists ? "auto" : "none",
           }}
         >
           <Link
@@ -103,6 +125,8 @@ const DashboardSidebar = () => {
             borderRadius: "8px",
             boxShadow: "0 2px 4px rgba(0,0,0,0.2)",
             transition: "background-color 0.3s ease",
+            opacity: inProgressExists ? 1 : 0.5,
+            pointerEvents: inProgressExists ? "auto" : "none",
           }}
         >
           <Link

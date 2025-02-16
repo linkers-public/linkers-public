@@ -1,7 +1,7 @@
 import { createSupabaseBrowserClient } from '@/supabase/supabase-client'
 
 // `client_id`를 기준으로 해당하는 모든 팀 정보와 가장 최근의 채팅 메시지를 가져오는 함수
-export const fetchTeamAndRecentChats = async (clientId: string) => {
+export const fetchTeamAndRecentChats = async (clientId: string, counselId: number) => {
   const supabase = createSupabaseBrowserClient()
 
   // 세션 정보 확인
@@ -11,12 +11,14 @@ export const fetchTeamAndRecentChats = async (clientId: string) => {
   }
 
   console.log("clientID",clientId)
+  console.log("counselId",counselId)
   // client_id에 해당하는 estimate 테이블에서 estimate_status가 'accept'인 모든 데이터 가져오기
   const { data: estimates, error: estimateError } = await supabase
     .from('estimate')
     .select('estimate_id, team_id')  // 필요한 필드만 선택 (team_id 포함)
     .eq('client_id', clientId)  // client_id에 해당하는 estimate 필터링
-    .eq('estimate_status', 'accept')  // estimate_status가 'accept'인 필터링
+    .eq('counsel_id', counselId) // counsel_id')
+    .in('estimate_status', ['accept','in_progress'])  // estimate_status가 'accept'인 필터링
 
   if (estimateError) {
     console.error('Error fetching estimates:', estimateError.message)
@@ -24,7 +26,8 @@ export const fetchTeamAndRecentChats = async (clientId: string) => {
   }
 
   if (!estimates || estimates.length === 0) {
-    throw new Error('해당하는 ' + clientId + '의 "accept" 상태 estimate가 없습니다.')
+    console.log('해당하는 ' + clientId + '의 "accept" 상태 estimate가 없습니다.')
+    // throw new Error('해당하는 ' + clientId + '의 "accept" 상태 estimate가 없습니다.')
   }
 
   // 세션에서 manager_id 확인
@@ -35,8 +38,8 @@ export const fetchTeamAndRecentChats = async (clientId: string) => {
   const teamIds = estimates.map(estimate => estimate.team_id); // 여러 팀 ID를 추출
   console.log('teamIds ::', teamIds)
   if (teamIds.length === 0) {
-    console.error('No team IDs found for clientId:', clientId)
-    throw new Error('해당 client_id에 해당하는 팀이 없습니다.')
+    console.log('No team IDs found for clientId:', clientId)
+    // throw new Error('해당 client_id에 해당하는 팀이 없습니다.')
   }
 
   const { data: teamData, error: teamError } = await supabase
@@ -47,7 +50,7 @@ export const fetchTeamAndRecentChats = async (clientId: string) => {
 
   if (teamError) {
     console.error('Error fetching team data:', teamError.message)
-    throw new Error('팀 정보 조회 실패')
+    // throw new Error('팀 정보 조회 실패')
   }
 
   console.log('teamData ::', teamData)  // 팀 데이터 확인
@@ -187,7 +190,7 @@ export const insertChatMessage = async (data: any) => {
 
 // `teamId`를 기준으로 estimate 데이터를 가져오고 chat 데이터를 연결하는 함수
 // `teamId`를 기준으로 estimate 데이터를 가져오고 chat 데이터를 연결하는 함수
-export const fetchChatsAndMessagesByTeamId = async (teamId: number, tab: 'message' | 'attachment') => {
+export const fetchChatsAndMessagesByTeamId = async (counselId: number, tab: 'message' | 'attachment') => {
   const supabase = createSupabaseBrowserClient();
 
   // 세션 정보 확인
@@ -200,8 +203,8 @@ export const fetchChatsAndMessagesByTeamId = async (teamId: number, tab: 'messag
   const { data: estimates, error: estimateError } = await supabase
     .from('estimate')
     .select('estimate_id')
-    .eq('team_id', teamId)
-    .eq('estimate_status', 'accept'); // estimate_status가 'accept'인 데이터만 가져옴
+    .eq('counsel_id', counselId)
+    .eq('estimate_status', 'in_progress'); // estimate_status가 'accept'인 데이터만 가져옴
 
   if (estimateError) {
     console.error('Error fetching estimates:', estimateError.message);
@@ -209,7 +212,7 @@ export const fetchChatsAndMessagesByTeamId = async (teamId: number, tab: 'messag
   }
 
   if (!estimates || estimates.length === 0) {
-    throw new Error(`teamId ${teamId}에 해당하는 estimate 데이터가 없습니다.`);
+    throw new Error(`counselId ${counselId}에 해당하는 estimate 데이터가 없습니다.`);
   }
 
   // estimateId로 chat 데이터 가져오기

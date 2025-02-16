@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { fetchCounselWithClient } from '@/apis/counsel.service';
-import { getEstimateAndVersionDetails } from '@/apis/estimate.service';
+import { getClientTeamAndMilestones, acceptEstimateVersion } from '@/apis/estimate.service';
 
 const ConsultationForm: React.FC = () => {
   const searchParams = useSearchParams();
@@ -15,6 +15,7 @@ const ConsultationForm: React.FC = () => {
   const [estimateVersion, setEstimateVersion] = useState<any>(null);
   const [milestones, setMilestones] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const clientId = 'baa0fd5e-4add-44f2-b1df-1ec59a838b7e' // 실제 client_id를 동적으로 처리해야 함
 
   useEffect(() => {
     const fetchData = async () => {
@@ -26,13 +27,12 @@ const ConsultationForm: React.FC = () => {
 
       try {
         const counselData = await fetchCounselWithClient(Number(counselId));
-        const estimateData = await getEstimateAndVersionDetails(Number(counselId), Number(estimateVersionId));
+        const estimateData = await getClientTeamAndMilestones(clientId, Number(counselId), ["pending"]);
 
         setCounsel(counselData?.counsel || {});
         setClient(counselData?.client || {});
         setEstimateVersion(estimateData?.estimateVersion || {});
         
-        // 🔥 마일스톤을 `시작일 기준 정렬`
         const sortedMilestones = (estimateData?.milestones || [])
         .filter(milestone => milestone.milestone_start_date) // null 제거
         .sort((a, b) => 
@@ -48,6 +48,22 @@ const ConsultationForm: React.FC = () => {
 
     fetchData();
   }, [counselId, estimateVersionId]);
+
+
+  const handleAccept = async () => {
+    try {
+        console.log("견적 수락 중...");
+        const response = await acceptEstimateVersion(Number(estimateVersionId));
+        alert(response?.message); // 성공 메시지 표시
+    } catch (error) {
+        console.error("견적 수락 실패:", error);
+        alert("견적 수락에 실패했습니다. 다시 시도해 주세요."); // 실패 메시지 표시
+    }
+};
+
+
+
+
 
   if (loading) return <p style={{ textAlign: 'center', fontSize: '16px', color: '#666' }}>Loading...</p>;
   if (!counsel) return <p style={{ textAlign: 'center', fontSize: '16px', color: 'red' }}>상담 내용을 불러올 수 없습니다.</p>;
@@ -156,6 +172,25 @@ const ConsultationForm: React.FC = () => {
           )}
         </tbody>
       </table>
+
+
+      <div style={{ textAlign: 'center', marginTop: '20px' }}>
+        <button
+          onClick={handleAccept}
+          style={{
+            padding: '12px 20px',
+            backgroundColor: '#007bff',
+            color: '#fff',
+            fontSize: '16px',
+            border: 'none',
+            borderRadius: '5px',
+            cursor: 'pointer',
+            transition: 'background-color 0.3s',
+          }}
+        >
+          수락하기
+        </button>
+      </div>
     </div>
   );
 };

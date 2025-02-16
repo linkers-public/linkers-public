@@ -1,272 +1,152 @@
 import { createSupabaseBrowserClient } from '@/supabase/supabase-client';
 
-export const insertEstimate = async (estimateData: any) => {
-    const supabase = createSupabaseBrowserClient();
+// 공통 에러 핸들링 함수
+const handleError = (message: string, error?: any) => {
+    console.error(message, error);
+    throw new Error(message);
+};
 
-    console.log('Insert Estimate data:', estimateData);
+// Supabase 클라이언트 생성
+const supabase = createSupabaseBrowserClient();
 
-    // 세션 확인
-    const { data: sessionData } = await supabase.auth.getSession();
-    if (!sessionData.session) {
-        throw new Error('인증되지 않은 사용자입니다.');
+// 세션 확인 함수 (예외 처리 추가)
+const checkSession = async (): Promise<string> => {
+    const { data: sessionData, error } = await supabase.auth.getSession();
+
+    if (error || !sessionData || !sessionData.session) {
+        handleError('인증되지 않은 사용자입니다.', error);
+        throw new Error('Unreachable code'); // 명확하게 throw
     }
-    console.log('manager_id: ' + sessionData.session.user.id);
 
-    const { data: team, error: teamError } = await supabase
-        .from('teams')
-        .select('id')
-        .eq('manager_id', sessionData.session.user.id)
-        .single();
+    return sessionData.session.user.id;
+};
 
-    if (teamError) {
-        console.error('팀 데이터 조회 실패:', teamError);
-        throw new Error('팀 데이터 조회 실패');
-    }
-    console.log('teamId: ' + team.id);
-
-    // Estimate 테이블에 데이터 삽입
-    const { data: insertedEstimate, error: estimateError } = await supabase
+// Estimate 데이터 조회 (null 허용)
+const fetchEstimate = async (clientId: string, counselId: number, status: string[]) => {
+    const { data, error } = await supabase
         .from('estimate')
-        .insert({
-            client_id: estimateData.clientId,
-            counsel_id: estimateData.counselId,
-            estimate_date: new Date().toISOString(),
-            estimate_due_date: estimateData.projectEndDate,
-            estimate_start_date: estimateData.projectStartDate,
-            estimate_status: 'pending',
-            manager_id: sessionData.session.user.id,
-            team_id: team.id,
-        })
         .select('*')
-        .single();
+        .eq('client_id', clientId)
+        .eq('counsel_id', counselId)
+        .in('estimate_status', status)
+        .maybeSingle(); // ✅ null 허용
 
-    if (estimateError) {
-        console.error('Estimate 삽입 실패:', estimateError);
-        throw new Error('견적 삽입 실패');
-    }
+    if (error) handleError('견적 데이터 조회 실패', error);
+    return data;
+};
 
-    // Estimate Version 테이블에 데이터 삽입
-    const { data: insertedEstimateVersion, error: versionError } = await supabase
+// 가장 최신의 Estimate Version 가져오기
+const fetchLatestEstimateVersion = async (estimateId: number | null) => {
+    if (!estimateId) return null; // ✅ `null`인 경우 null 반환
+
+    const { data, error } = await supabase
         .from('estimate_version')
-        .insert({
-            estimate_id: insertedEstimate.estimate_id,
-            version_date: new Date().toISOString(),
-            start_date: estimateData.projectStartDate,
-            end_date: estimateData.projectEndDate,
-            detail: estimateData.detailEstimate,
-            total_amount: estimateData.budget,
-        })
         .select('*')
-        .single();
+        .eq('estimate_id', estimateId)
+        .order('version_date', { ascending: false }) // 최신 버전이 가장 위로 오게 정렬
+        .limit(1) // 최신 1개만 가져옴
+        .maybeSingle();
 
-    if (versionError) {
-        console.error('Estimate Version 삽입 실패:', versionError);
-        throw new Error('견적 버전 삽입 실패');
-    }
+    if (error) handleError('최신 견적 버전 데이터 조회 실패', error);
+    return data;
+};
 
-    // 날짜 포맷 함수
-    const formatDateToDB = (date: Date): string => {
-        return date.toISOString().split('T')[0];  // 날짜만 'YYYY-MM-DD' 포맷으로 반환
-    };
+// Team 데이터 조회
+const fetchTeam = async (teamId: number) => {
+    if (!teamId) return null; // ✅ 
+    const { data, error } = await supabase
+        .from('teams')
+        .select('*')
+        .eq('id', teamId)
+        .maybeSingle(); // ✅ null 허용
 
-    // 마일스톤 삽입
-    let lastDueDate = new Date(estimateData.projectStartDate);  // 첫 번째 마일스톤의 시작일을 projectStartDate로 설정
+    if (error) handleError('팀 정보를 찾을 수 없습니다.', error);
+    return data;
+};
 
-    const insertMilestone = async (row: any, isFirstRow: boolean) => {
-        const start_date = isFirstRow ? new Date(lastDueDate) : new Date(lastDueDate.setDate(lastDueDate.getDate() + 1));  // 첫 번째는 projectStartDate, 그 이후는 이전 due_date에서 1일 더함
-        const due_date = new Date(start_date.getTime() + row.days * 24 * 60 * 60 * 1000);  // start_date + row.days 만큼 밀리초로 계산
+// Milestone 데이터 조회
+const fetchMilestones = async (estimateId: number | null) => {
+    if (!estimateId) return []; // ✅ `null`인 경우 빈 배열 반환
+    const { data, error } = await supabase
+        .from('milestone')
+        .select('*')
+        .eq('estimate_id', estimateId);
 
-        if (isNaN(start_date.getTime()) || isNaN(due_date.getTime())) {
-            throw new Error('유효하지 않은 날짜 값입니다.');
-        }
+    if (error) handleError('마일스톤 데이터를 찾을 수 없습니다.', error);
+    return data ;
+};
 
-        lastDueDate = due_date;  // 마지막 due_date 업데이트
-
-        const { error: milestoneError } = await supabase
-            .from('milestone')
-            .insert({
-                estimate_id: insertedEstimate.estimate_id,
-                estimate_version_id: insertedEstimateVersion.estimate_version_id,
-                milestone_due_date: formatDateToDB(due_date),
-                milestone_start_date: formatDateToDB(start_date),
-                payment_amount: row.paymentAmount,
-                title: row.title,
-                detail: row.detail,
-                progress: row.progress,
-                output: row.output
-            });
-
-        if (milestoneError) {
-            console.error('마일스톤 삽입 실패:', milestoneError);
-            throw new Error('마일스톤 삽입 실패');
-        }
-    };
-
-    // 마일스톤 데이터 삽입
-    const milestoneInserts = estimateData.milestones.map((row: any, index: number) => {
-        return insertMilestone(row, index === 0);  // 첫 번째 row는 true, 이후는 false
-    });
-
+// ✅ ClientId & CounselId로 Team, Milestone, 최신 Estimate Version 정보 가져오기
+export const getClientTeamAndMilestones = async (clientId: string, counselId: number, estimateStatus: string[]) => {
     try {
-        // 모든 마일스톤 삽입을 처리하고, 하나라도 실패하면 롤백됨
-        await Promise.all(milestoneInserts);
+        const managerId = await checkSession(); // 세션 체크
+        console.log('Fetching team, estimate version, and milestones for:', { clientId, counselId, managerId });
+
+        const estimate = await fetchEstimate(clientId, counselId, estimateStatus);
+
+        if (!estimate) {
+            console.warn('진행 중인 estimate가 없습니다.');
+            throw new Error('진행 중인 estimate가 없습니다.');
+        }
+
+        const team = await fetchTeam(estimate.team_id);
+        const milestones = await fetchMilestones(estimate.estimate_id);
+        const latestEstimateVersion = await fetchLatestEstimateVersion(estimate.estimate_id);
+
+        return { team, estimate, estimateVersion: latestEstimateVersion, milestones };
     } catch (error) {
-        // 만약 하나라도 실패하면, 이미 삽입된 모든 데이터 롤백
-        console.error('전체 작업 롤백:', error);
-        await supabase.from('estimate').delete().eq('estimate_id', insertedEstimate.estimate_id);
-        await supabase.from('estimate_version').delete().eq('estimate_version_id', insertedEstimateVersion.estimate_version_id);
-        await supabase.from('milestone').delete().eq('estimate_id', insertedEstimate.estimate_id);
-        throw new Error('마일스톤 삽입 중 오류 발생, 롤백됨');
+        handleError('팀 및 마일스톤 데이터 조회 중 오류 발생', error);
     }
-
-    // 최종적으로 삽입된 데이터 반환
-    return {
-        estimate: insertedEstimate,
-        estimateVersion: insertedEstimateVersion,
-    };
 };
 
+// 특정 estimate_version 조회
+const fetchEstimateVersion = async (estimateVersionId: number) => {
 
+    console.log("estimate_version", estimateVersionId)
+    const { data, error } = await supabase
+        .from('estimate_version')
+        .select('*')
+        .eq('estimate_version_id', estimateVersionId)
+        .maybeSingle();
 
-export const getEstimatesWithVersions = async (counselId: number) => {
-    const supabase = createSupabaseBrowserClient();
-  
-    console.log('counselId: ' + counselId);
-    // Estimate와 해당하는 Estimate Version 조회 (필터 적용)
-    const { data: estimatesWithVersions, error: estimatesError } = await supabase
-      .from('estimate')
-      .select('*, estimate_version(*)')  // estimate_version을 포함한 조회
-      .eq('counsel_id', counselId);
-  
-    if (estimatesError) {
-      console.error('Estimate 목록과 해당 Estimate Version 조회 실패:', estimatesError);
-      throw new Error('Estimate 목록과 해당 Estimate Version 조회 실패');
+    if (error || !data) {
+        handleError('해당 estimate_version을 찾을 수 없습니다.', error);
     }
-  
-    // 최종적으로 반환할 데이터
-    console.log('estimateWithVersion:', estimatesWithVersions)
-    return estimatesWithVersions;
-  };
-  
-// 견적서 상세 조회
-export const getEstimateDetails = async (counselId: String) => {
-  const supabase = createSupabaseBrowserClient();
 
-  // 세션 확인
-  const { data: sessionData } = await supabase.auth.getSession();
-  if (!sessionData.session) {
-    throw new Error('인증되지 않은 사용자입니다.');
-  }
-
-  console.log('manager_id: ' + sessionData.session.user.id);
-
-  // 해당 counsel_id로 estimate 조회
-  const { data: estimateData, error: estimateError } = await supabase
-    .from('estimate')
-    .select('*')
-    .eq('counsel_id', counselId)
-    .single();
-
-  if (estimateError || !estimateData) {
-    console.error('Estimate 조회 실패:', estimateError);
-    throw new Error('견적 조회 실패');
-  }
-
-  // 해당 estimate_id로 estimate_version 조회
-  const { data: estimateVersionData, error: versionError } = await supabase
-    .from('estimate_version')
-    .select('*')
-    .eq('estimate_id', estimateData.estimate_id)
-    .single();
-
-  if (versionError || !estimateVersionData) {
-    console.error('Estimate Version 조회 실패:', versionError);
-    throw new Error('견적 버전 조회 실패');
-  }
-
-  // 해당 estimate_id로 milestones 조회
-  const { data: milestonesData, error: milestonesError } = await supabase
-    .from('milestone')
-    .select('*')
-    .eq('estimate_id', estimateData.estimate_id);
-
-  if (milestonesError) {
-    console.error('Milestones 조회 실패:', milestonesError);
-    throw new Error('마일스톤 조회 실패');
-  }
-
-
-  // 최종적으로 반환할 데이터
-  return {
-    estimate: estimateData,
-    estimateVersion: estimateVersionData,
-    milestones: milestonesData,
-  };
+    return data;
 };
 
-export const getEstimateAndVersionDetails = async (counselId: number, estimateVersionId: number) => {
-  const supabase = createSupabaseBrowserClient();
+// estimate status 업데이트 함수
+const updateEstimateStatus = async (estimateId: number) => {
+    const { error } = await supabase
+        .from('estimate')
+        .update({ estimate_status: 'accept' })
+        .eq('estimate_id', estimateId);
 
-  console.log("Fetching data for counselId:", counselId, "estimateVersionId:", estimateVersionId);
-
-  try {
-    // ✅ 1. counsel 테이블에서 상담 정보 가져오기
-    const { data: counselData, error: counselError } = await supabase
-      .from("counsel")
-      .select("*")
-      .eq("counsel_id", counselId)
-      .single();
-
-    if (counselError || !counselData) {
-      console.error("Counsel 조회 실패:", counselError);
-      throw new Error("상담 데이터 조회 실패");
+    if (error) {
+        handleError('Estimate 상태 업데이트 실패', error);
     }
+};
 
-    // ✅ 2. estimate 테이블에서 견적서 데이터 가져오기 (counselId 기준)
-    const { data: estimateData, error: estimateError } = await supabase
-      .from("estimate")
-      .select("*")
-      .eq("counsel_id", counselId)
-      .single();
+// ✅ estimate_version_id를 받아 estimate의 status를 'accept'로 변경하는 API
+export const acceptEstimateVersion = async (estimateVersionId: number) => {
+    try {
+        await checkSession(); // 인증 확인
+        console.log(`Updating estimate status to 'accept' for estimate_version_id: ${estimateVersionId}`);
 
-    if (estimateError || !estimateData) {
-      console.error("Estimate 조회 실패:", estimateError);
-      throw new Error("견적 데이터 조회 실패");
+        // estimate_version 조회
+        const estimateVersion = await fetchEstimateVersion(estimateVersionId);
+        const estimateId = estimateVersion?.estimate_id;
+        console.log("estimateID:: ", estimateId)
+        if (!estimateId) {
+            throw new Error('연결된 estimate가 없습니다.');
+        }
+
+        // estimate status를 'accept'로 변경
+        await updateEstimateStatus(estimateId);
+
+        return { success: true, message: 'Estimate이 accept 상태로 변경되었습니다.' };
+    } catch (error) {
+        handleError('Estimate status 업데이트 중 오류 발생', error);
     }
-
-    // ✅ 3. estimate_version 테이블에서 특정 견적서 버전 데이터 가져오기 (estimateVersionId 기준)
-    const { data: estimateVersionData, error: versionError } = await supabase
-      .from("estimate_version")
-      .select("*")
-      .eq("estimate_version_id", estimateVersionId)
-      .single();
-
-    if (versionError || !estimateVersionData) {
-      console.error("Estimate Version 조회 실패:", versionError);
-      throw new Error("견적 버전 데이터 조회 실패");
-    }
-
-    // ✅ 4. 해당 estimate_id에 대한 milestones 가져오기
-    const { data: milestonesData, error: milestonesError } = await supabase
-      .from("milestone")
-      .select("*")
-      .eq("estimate_id", estimateData.estimate_id);
-
-    if (milestonesError) {
-      console.error("Milestones 조회 실패:", milestonesError);
-      throw new Error("마일스톤 데이터 조회 실패");
-    }
-
-    // ✅ 최종적으로 모든 데이터 반환
-    return {
-      counsel: counselData,                 // 상담 데이터
-      estimate: estimateData,               // 견적 데이터
-      estimateVersion: estimateVersionData, // 견적 버전 데이터
-      milestones: milestonesData,           // 마일스톤 데이터
-    };
-
-  } catch (error) {
-    console.error("데이터 조회 실패:", error);
-    throw new Error("전체 데이터 조회 중 오류 발생");
-  }
 };

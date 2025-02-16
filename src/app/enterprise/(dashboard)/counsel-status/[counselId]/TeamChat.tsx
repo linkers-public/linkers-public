@@ -31,10 +31,10 @@ const CounselStatus: React.FC = () => {
   const [attachedFile, setAttachedFile] = useState<File | null>(null);
   
   const clientId = 'baa0fd5e-4add-44f2-b1df-1ec59a838b7e' // 실제 client_id를 동적으로 처리해야 함
-  // const params = useParams(); // useParams를 사용하여 URL의 매개변수 추출
-  // const counselId = params?.counselId; // URL에서 id 추출
-  const searchParams = useSearchParams();
-  const counseld = searchParams.get('counseld'); // '3'
+  const params = useParams(); // useParams를 사용하여 URL의 매개변수 추출
+  const counselld = params?.counselId; // URL에서 id 추출
+  // const searchParams = useSearchParams();
+  // const counselld = searchParams.get('counseld'); // '3'
 
   // 메시지 영역 참조
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -218,7 +218,7 @@ const CounselStatus: React.FC = () => {
   const fetchData = async () => {
     try {
       console.log('clientId: ' + clientId)
-      const data = await fetchTeamAndRecentChats(clientId)
+      const data = await fetchTeamAndRecentChats(clientId, Number(counselld))
       // 팀명과 가장 최근 메시지, estimateId와 chatId를 counselList에 저장
       const updatedCounselList = data.map((item) => ({
         team: item.team.name, // 팀명
@@ -328,7 +328,16 @@ const CounselStatus: React.FC = () => {
 
 {/* 상담 목록 */}
 <div>
-  {counselList
+  {
+  
+  counselList.length === 0 ? (
+    <div style={{ padding: '20px', textAlign: 'center', color: '#888' }}>
+      <p>해당하는 팀 데이터가 없습니다.</p>
+      <p>견적서를 수락하러 가주세요.</p>
+    </div>
+  ) :
+  
+  (counselList
     .filter((item) => item.team.includes(searchTerm)) // 검색어로 팀명 필터링
     .map((item, index) => (
       <div
@@ -415,7 +424,8 @@ const CounselStatus: React.FC = () => {
             : ''}
         </div>
       </div>
-    ))}
+    )))
+  }
 </div>
 
 
