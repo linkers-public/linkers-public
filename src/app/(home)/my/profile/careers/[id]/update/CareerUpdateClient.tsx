@@ -10,6 +10,7 @@ import {
   useProfileStore,
 } from '@/stores/useProfileStore'
 import { updateCareer } from '@/apis/profile.service'
+import { Tables } from '@/types/supabase'
 
 interface FormData {
   company_name: string
@@ -35,7 +36,7 @@ const CareerUpdateClient = ({ id }: { id: string }) => {
   })
 
   useEffect(() => {
-    const experience = workExperiences.find((exp) => exp.id === Number(id))
+    const experience = workExperiences.find((exp: Tables<'account_work_experiences'>) => exp.id === Number(id))
 
     if (!experience) {
       setError('해당 경력 정보를 찾을 수 없습니다.')
