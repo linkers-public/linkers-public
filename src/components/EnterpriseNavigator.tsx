@@ -34,12 +34,12 @@ const ClientNavigator: React.FC = () => {
             placeholder="search"
             className="w-[200px] p-2 border border-gray-300 rounded-md text-sm"
           />
-          <Link href="/login">
+          <Link href="/auth?role=manager">
             <span className="text-sm font-bold text-gray-600 hover:text-gray-900">
               로그인
             </span>
           </Link>
-          <Link href="/signup">
+          <Link href="/auth?role=manager">
             <button
               className="px-4 py-2 text-sm font-bold text-white bg-blue-600 rounded-full hover:bg-blue-700"
             >

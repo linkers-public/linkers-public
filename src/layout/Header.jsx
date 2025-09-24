@@ -51,8 +51,8 @@ const Header = () => {
             </div>
           ) : (
             <div className="flex items-center gap-4">
-              <Button onClick={() => router.push('/auth')}>회원 가입</Button>
-              <Button onClick={() => router.push('/auth')}>로그인</Button>
+              <Button onClick={() => router.push('/auth?role=maker')}>회원 가입</Button>
+              <Button onClick={() => router.push('/auth?role=maker')}>로그인</Button>
             </div>
           )}
         </div>
