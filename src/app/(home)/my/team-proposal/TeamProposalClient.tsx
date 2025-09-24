@@ -11,6 +11,7 @@ import {
 import { toast } from '@/hooks/use-toast'
 import { useMakerFilter } from '@/hooks/use-maker-filter'
 import { ManageableMakerCard } from '@/components/ManageableMakerCard'
+import { fetchBookmarkList, unbookmark } from '@/apis/proposal.service'
 
 //TODO - ZOD 반영
 interface Maker {
@@ -24,16 +25,17 @@ interface Maker {
   deleted_at: string | null
   role: 'MAKER' | 'MANAGER' | 'NONE'
   account_work_experiences: any[]
+  account_license: any[]
 }
 
 //TODO - ZOD 반영
-interface Proposal {
+interface Bookmark {
   id: number
   maker_id: string
   maker: Maker
   created_at: string
   manager_id: string
-  status: 'PENDING' | 'ACCEPTED' | 'REJECTED' | null
+  proposal_status: boolean
 }
 
 type ProposalStatusFilter = 'PENDING' | 'ACCEPTED' | 'REJECTED'
@@ -42,7 +44,7 @@ const TeamProposalClient = () => {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<PostgrestError | null>(null)
-  const [proposals, setProposals] = useState<Proposal[]>([])
+  const [bookmarks, setBookmarks] = useState<Bookmark[]>([])
   const { filters, handleFilterChange } = useMakerFilter()
   const [selectedStatuses, setSelectedStatuses] = useState<
     ProposalStatusFilter[]
@@ -51,14 +53,18 @@ const TeamProposalClient = () => {
   useEffect(() => {
     const getBookmarkList = async () => {
       try {
-        const { data, error } = await fetchTeamPropsalList({})
+        const { data, error } = await fetchBookmarkList({
+          isProposed: false, // 찜한 메이커 목록
+          experience: filters.experience,
+          job: filters.job,
+          specialization: filters.specialization,
+        })
         if (error) {
           setError(error)
           return
         }
         if (data) {
-          //@ts-ignore
-          setBookmarkList(data)
+          setBookmarks(data as unknown as Bookmark[])
         }
       } catch (err) {
         setError(err as PostgrestError)
@@ -69,15 +75,15 @@ const TeamProposalClient = () => {
     getBookmarkList()
   }, [filters]) // TODO 필터 연동
 
-  const cancelPropose = useCallback(async (makerId: string) => {
+  const handleUnbookmark = useCallback(async (makerId: string) => {
     try {
-      //await unbookmark(makerId)
+      await unbookmark(makerId)
 
-      setProposals((prev) =>
-        prev.filter((proposal) => proposal.maker_id !== makerId),
+      setBookmarks((prev) =>
+        prev.filter((bookmark) => bookmark.maker_id !== makerId),
       )
       toast({
-        title: '제안 취소 완료',
+        title: '찜 취소 완료',
         description: '메이커 찜이 취소되었습니다.',
       })
     } catch (error) {
@@ -175,8 +181,8 @@ const TeamProposalClient = () => {
       </div>
 
       <div className="flex flex-col gap-4">
-        {proposals.length > 0 ? (
-          proposals.map((proposal) => {
+        {bookmarks.length > 0 ? (
+          bookmarks.map((bookmark) => {
             return (
               <ManageableMakerCard
                 key={bookmark.id}

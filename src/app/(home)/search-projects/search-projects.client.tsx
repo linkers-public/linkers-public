@@ -4,6 +4,23 @@ import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation'; // App Router의 useRouter
 import { fetchAllCounsel } from '@/apis/counsel.service';
 
+type Counsel = {
+  counsel_id: number;
+  title: string | null;
+  cost: string;
+  counsel_status: 'pending' | 'recruiting' | 'end';
+  start_date: string;
+  due_date: string;
+  skill: string[] | null;
+  feild: string | null;
+  period: string;
+  client_id: string;
+  counsel_date: string | null;
+  counsel_type: string | null;
+  outline: string | null;
+  output: string | null;
+};
+
 type Project = {
   id: number;
   title: string;
@@ -24,6 +41,21 @@ const calculateDurationInMonths = (startDate: string, dueDate: string) => {
   return months > 0 ? months : 0;
 };
 
+const transformCounselToProject = (counsel: Counsel): Project => {
+  return {
+    id: counsel.counsel_id,
+    title: counsel.title || '제목 없음',
+    cost: counsel.cost,
+    status: counsel.counsel_status,
+    startDate: counsel.start_date,
+    dueDate: counsel.due_date,
+    skills: counsel.skill || [],
+    field: counsel.feild || '분야 미지정',
+    isRemote: false, // 기본값
+    period: counsel.period,
+  };
+};
+
 const SearchProjectsClient: React.FC = () => {
   const router = useRouter();
   const [projects, setProjects] = useState<Project[]>([]);
@@ -31,8 +63,9 @@ const SearchProjectsClient: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const data: Project[] = await fetchAllCounsel(); // 모든 counsel 데이터 가져오기
-        setProjects(data);
+        const counselData: Counsel[] = await fetchAllCounsel(); // 모든 counsel 데이터 가져오기
+        const transformedData = counselData.map(transformCounselToProject);
+        setProjects(transformedData);
       } catch (error) {
         console.error('Error fetching projects:', error);
       }

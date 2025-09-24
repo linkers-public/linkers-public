@@ -97,7 +97,7 @@ const ConsultationForm: React.FC = () => {
     console.log("milestone: " + rows)
     const estimateData = {
       clientId,
-      counselId,
+      counselId: Number(counselId),
       projectStartDate,
       projectEndDate,
       budget,

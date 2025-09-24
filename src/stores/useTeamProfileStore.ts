@@ -13,7 +13,7 @@ interface TeamMember {
 }
 
 interface TeamProfile {
-  id: string
+  id: number
   name: string
   bio: string
   specialty: string[]
@@ -43,7 +43,7 @@ export const useTeamProfileStore = create<TeamProfileState>((set) => ({
     try {
       const { data, error } = await fetchTeamProfileByTeamManager()
       if (error) throw error
-      set({ teamProfile: data })
+      set({ teamProfile: data as unknown as TeamProfile })
     } catch (err) {
       throw err
     }

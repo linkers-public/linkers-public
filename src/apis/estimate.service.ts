@@ -184,6 +184,7 @@ export const insertEstimate = async (estimateData: {
 
         if (estimateError || !estimate) {
             handleError('Estimate 생성 실패', estimateError);
+            return; // 명시적으로 return 추가
         }
 
         // 2. estimate_version 테이블에 상세 정보 삽입
@@ -202,6 +203,7 @@ export const insertEstimate = async (estimateData: {
 
         if (versionError || !estimateVersion) {
             handleError('Estimate version 생성 실패', versionError);
+            return; // 명시적으로 return 추가
         }
 
         // 3. milestone 테이블에 마일스톤 정보 삽입
@@ -216,7 +218,7 @@ export const insertEstimate = async (estimateData: {
                 progress: milestone.progress ? parseInt(milestone.progress) : 0,
                 milestone_start_date: estimateData.projectStartDate,
                 milestone_due_date: estimateData.projectEndDate,
-                milestone_status: 'pending'
+                milestone_status: 'pending' as const
             }));
 
             const { error: milestoneError } = await supabase

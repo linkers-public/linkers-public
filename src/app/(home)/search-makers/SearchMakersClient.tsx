@@ -9,7 +9,7 @@ import {
   JobFilter,
   SpecializationFilter,
 } from '@/components/CommonMakerFilter'
-import { searchMakers } from '@/apis/serarch-maker.service'
+import { searchMakers } from '@/apis/search-maker.service'
 import { PostgrestError } from '@supabase/supabase-js'
 import { SearchMakerCard } from '@/components/SearchMakerCard'
 import Link from 'next/link'
