@@ -150,3 +150,91 @@ export const acceptEstimateVersion = async (estimateVersionId: number) => {
         handleError('Estimate status 업데이트 중 오류 발생', error);
     }
 };
+
+// ✅ 새로운 estimate 생성 함수
+export const insertEstimate = async (estimateData: {
+    clientId: string;
+    counselId: number;
+    projectStartDate: string;
+    projectEndDate: string;
+    budget: number;
+    detailEstimate: string;
+    milestones: any[];
+}) => {
+    try {
+        const managerId = await checkSession(); // 세션 체크
+        
+        console.log('Creating new estimate:', estimateData);
+
+        // 1. estimate 테이블에 기본 정보 삽입
+        const { data: estimate, error: estimateError } = await supabase
+            .from('estimate')
+            .insert({
+                client_id: estimateData.clientId,
+                counsel_id: estimateData.counselId,
+                manager_id: managerId,
+                team_id: 1, // 임시로 1 설정 (실제로는 선택된 팀 ID 사용)
+                estimate_status: 'pending',
+                estimate_start_date: estimateData.projectStartDate,
+                estimate_due_date: estimateData.projectEndDate,
+                estimate_date: new Date().toISOString().split('T')[0]
+            })
+            .select('*')
+            .single();
+
+        if (estimateError) {
+            handleError('Estimate 생성 실패', estimateError);
+        }
+
+        // 2. estimate_version 테이블에 상세 정보 삽입
+        const { data: estimateVersion, error: versionError } = await supabase
+            .from('estimate_version')
+            .insert({
+                estimate_id: estimate.estimate_id,
+                total_amount: estimateData.budget,
+                detail: estimateData.detailEstimate,
+                start_date: estimateData.projectStartDate,
+                end_date: estimateData.projectEndDate,
+                version_date: new Date().toISOString().split('T')[0]
+            })
+            .select('*')
+            .single();
+
+        if (versionError) {
+            handleError('Estimate version 생성 실패', versionError);
+        }
+
+        // 3. milestone 테이블에 마일스톤 정보 삽입
+        if (estimateData.milestones && estimateData.milestones.length > 0) {
+            const milestoneData = estimateData.milestones.map((milestone, index) => ({
+                estimate_id: estimate.estimate_id,
+                estimate_version_id: estimateVersion.estimate_version_id,
+                title: milestone.title || `마일스톤 ${index + 1}`,
+                detail: milestone.detail || '',
+                output: milestone.output || '',
+                payment_amount: milestone.cost ? parseFloat(milestone.cost) : 0,
+                progress: milestone.progress ? parseInt(milestone.progress) : 0,
+                milestone_start_date: estimateData.projectStartDate,
+                milestone_due_date: estimateData.projectEndDate,
+                milestone_status: 'pending'
+            }));
+
+            const { error: milestoneError } = await supabase
+                .from('milestone')
+                .insert(milestoneData);
+
+            if (milestoneError) {
+                handleError('Milestone 생성 실패', milestoneError);
+            }
+        }
+
+        return { 
+            success: true, 
+            message: 'Estimate가 성공적으로 생성되었습니다.',
+            estimate,
+            estimateVersion
+        };
+    } catch (error) {
+        handleError('Estimate 생성 중 오류 발생', error);
+    }
+};

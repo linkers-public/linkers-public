@@ -6,7 +6,7 @@ import { useTeamProfileStore } from '@/stores/useTeamProfileStore'
 
 const TeamProfileClient = () => {
   const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState(null)
+  const [error, setError] = useState<string | null>(null)
   const { teamProfile, fetchTeamProfile } = useTeamProfileStore()
   const account = useAccountStore(selectAccount)
 
@@ -16,7 +16,7 @@ const TeamProfileClient = () => {
       try {
         await fetchTeamProfile()
       } catch (err) {
-        setError(err)
+        setError(err instanceof Error ? err.message : '알 수 없는 오류가 발생했습니다.')
       } finally {
         setIsLoading(false)
       }
