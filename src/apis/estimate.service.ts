@@ -182,7 +182,7 @@ export const insertEstimate = async (estimateData: {
             .select('*')
             .single();
 
-        if (estimateError) {
+        if (estimateError || !estimate) {
             handleError('Estimate 생성 실패', estimateError);
         }
 
@@ -200,7 +200,7 @@ export const insertEstimate = async (estimateData: {
             .select('*')
             .single();
 
-        if (versionError) {
+        if (versionError || !estimateVersion) {
             handleError('Estimate version 생성 실패', versionError);
         }
 
