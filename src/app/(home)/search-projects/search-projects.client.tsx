@@ -8,7 +8,7 @@ type Counsel = {
   counsel_id: number;
   title: string | null;
   cost: string;
-  counsel_status: 'pending' | 'recruiting' | 'end';
+  counsel_status: string;
   start_date: string;
   due_date: string;
   skill: string[] | null;
@@ -25,7 +25,7 @@ type Project = {
   id: number;
   title: string;
   cost: string;
-  status: 'pending' | 'recruiting' | 'end';
+  status: string;
   startDate: string;
   dueDate: string;
   skills: string[];
@@ -75,7 +75,7 @@ const SearchProjectsClient: React.FC = () => {
   }, []);
 
   const handleProjectClick = (id: number) => {
-    router.push(`/counsel-detail/${id}`); // 상세 페이지로 이동
+    router.push(`/project-detail/${id}`); // 메이커용 상세 페이지로 이동
   };
 
   return (

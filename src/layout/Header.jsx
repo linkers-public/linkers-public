@@ -6,7 +6,7 @@ import { UserCircleIcon, Bell } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { createSupabaseBrowserClient } from '@/supabase/supabase-client'
 import Navigator from '@/components/Navigator'
-import Logo from '@/components/Logo'
+import Logo from '@/components/common/Logo'
 
 const Header = () => {
   const router = useRouter()

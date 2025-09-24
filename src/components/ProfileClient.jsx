@@ -6,6 +6,7 @@ import { formatDate } from '@/lib/dateFormat'
 import { useRouter } from 'next/navigation'
 import { useProfileStore } from '@/stores/useProfileStore'
 import { selectAccount, useAccountStore } from '@/stores/useAccoutStore'
+import { updateAvailabilityStatus } from '@/apis/availability.service'
 
 export const ProfileClient = ({ username, isOwner = false }) => {
   const router = useRouter()
@@ -38,6 +39,7 @@ export const ProfileClient = ({ username, isOwner = false }) => {
     username: profileUsername,
     main_job,
     expertise,
+    availability_status,
     account_work_experiences,
     account_educations,
     account_license,
@@ -45,6 +47,23 @@ export const ProfileClient = ({ username, isOwner = false }) => {
 
   const onclickBookmark = () => {}
   const onclickProposal = () => {}
+
+  const handleToggleAvailability = async () => {
+    try {
+      const newStatus = availability_status === 'available' ? 'busy' : 'available'
+      await updateAvailabilityStatus(newStatus)
+      
+      // 프로필 데이터 새로고침
+      if (isOwner) {
+        await fetchMyProfileData()
+      } else {
+        await fetchUserProfileData(username)
+      }
+    } catch (error) {
+      console.error('Failed to update availability status:', error)
+      alert('연락 가능 여부 업데이트에 실패했습니다.')
+    }
+  }
 
   const navigateToEditProfile = () => {
     router.push(isOwner ? '/my/update' : `/profile/${username}/update`)
@@ -116,9 +135,11 @@ export const ProfileClient = ({ username, isOwner = false }) => {
           mainJob={main_job}
           expertise={expertise}
           bio={bio}
+          availabilityStatus={availability_status || 'available'}
           onClickBookmark={onclickBookmark}
           onClickProposal={onclickProposal}
           onEditProfile={navigateToEditProfile}
+          onToggleAvailability={handleToggleAvailability}
           isOwner={isOwner}
         />
 
@@ -161,9 +182,11 @@ const ProfileMeta = ({
   mainJob,
   expertise,
   bio,
+  availabilityStatus,
   onClickBookmark,
   onClickProposal,
   onEditProfile,
+  onToggleAvailability,
   isOwner,
 }) => {
   return (
@@ -171,10 +194,28 @@ const ProfileMeta = ({
       <div className="flex gap-2">
         <div className="flex flex-col items-center justify-between gap-2">
           <div className="w-14 h-14 rounded-full bg-palette-coolNeutral-90"></div>
+          {/* 연락 가능 여부 표시 */}
+          <div className={`w-3 h-3 rounded-full ${
+            availabilityStatus === 'available' ? 'bg-green-500' : 'bg-gray-400'
+          }`} title={availabilityStatus === 'available' ? '연락 가능' : '연락 불가'}></div>
         </div>
         <div className="flex flex-1 flex-col gap-2">
           <div className="flex flex-col ">
-            <p className="text-subtitle2">{username}</p>
+            <div className="flex items-center gap-2">
+              <p className="text-subtitle2">{username}</p>
+              {isOwner && (
+                <button
+                  onClick={onToggleAvailability}
+                  className={`px-2 py-1 text-xs rounded-full transition-colors ${
+                    availabilityStatus === 'available'
+                      ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {availabilityStatus === 'available' ? '연락 가능' : '연락 불가'}
+                </button>
+              )}
+            </div>
             <div className="flex items-center gap-1">
               <p className="text-p3">{mainJob[0]}</p>
             </div>

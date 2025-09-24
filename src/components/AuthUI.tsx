@@ -3,12 +3,13 @@
 import React, { useState } from 'react'
 import { createSupabaseBrowserClient } from '@/supabase/supabase-client'
 import useHydration from '@/hooks/use-hydrate'
-import MakersLogo from './MakersLogo'
+import MakersLogo from './common/MakersLogo'
 
 const AuthUI = ({ role }: { role: string }) => {
   const isMounted = useHydration()
   const [user, setUser] = useState()
-  const [selectedRole, setSelectedRole] = useState(role || 'maker')
+  const [accountType, setAccountType] = useState<'personal' | 'client'>('personal')
+  const [selectedRole, setSelectedRole] = useState<'MAKER' | 'MANAGER'>('MAKER')
   const supabaseClient = createSupabaseBrowserClient()
 
   if (!isMounted) return null
@@ -24,36 +25,38 @@ const AuthUI = ({ role }: { role: string }) => {
     window.location.reload()
   }
 
-  const handleGoogleLogin = async () => {
+  const signInWithProvider = async (provider: 'google' | 'kakao') => {
+    // sessionStorage에 계정 타입과 역할 저장
+    sessionStorage.setItem('accountType', accountType)
+    if (accountType === 'personal') {
+      sessionStorage.setItem('role', selectedRole)
+    }
+
     await supabaseClient.auth.signInWithOAuth({
-      provider: 'google',
+      provider,
       options: {
-        redirectTo: `${window.location.origin}/auth/callback?next=/&role=${selectedRole}`,
-        
+        redirectTo: `${window.location.origin}/auth/callback?type=${accountType}&role=${selectedRole}&next=/`,
       },
     })
+  }
+
+  const handleGoogleLogin = async () => {
+    await signInWithProvider('google')
   }
 
   const handleKakaoLogin = async () => {
-    await supabaseClient.auth.signInWithOAuth({
-      provider: 'kakao',
-      options: {
-        // role은 redirectTo에만 실어 보내면 충분합니다.
-        redirectTo: `${window.location.origin}/auth/callback?next=/&role=${selectedRole}`,
-        // ✅ 스코프는 여기!
-      },
-    })
+    await signInWithProvider('kakao')
   }
 
-  const getRoleInfo = (role: string) => {
-    switch (role) {
-      case 'maker':
+  const getAccountTypeInfo = (type: 'personal' | 'client') => {
+    switch (type) {
+      case 'personal':
         return {
-          title: '메이커로 시작하기',
-          description: 'AI 코더와 함께 프로젝트를 진행하고 수익을 창출하세요',
-          subtitle: '메이커/매니저'
+          title: '개인으로 시작하기',
+          description: '메이커나 매니저로 활동하며 프로젝트에 참여하세요',
+          subtitle: '개인 (메이커/매니저)'
         }
-      case 'manager':
+      case 'client':
         return {
           title: '기업으로 시작하기',
           description: 'AI와 메이커를 활용해 빠르고 저렴하게 MVP를 제작하세요',
@@ -68,7 +71,7 @@ const AuthUI = ({ role }: { role: string }) => {
     }
   }
 
-  const roleInfo = getRoleInfo(selectedRole)
+  const accountTypeInfo = getAccountTypeInfo(accountType)
 
   return (
     <section className="w-full min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
@@ -86,16 +89,16 @@ const AuthUI = ({ role }: { role: string }) => {
           </p>
         </div>
 
-        {/* 역할 선택 섹션 */}
+        {/* 계정 타입 선택 섹션 */}
         <div className="mb-8">
           <h2 className="text-lg font-semibold text-gray-900 mb-4 text-center">
-            어떤 역할로 시작하시나요?
+            어떤 계정으로 시작하시나요?
           </h2>
           <div className="grid grid-cols-2 gap-3">
             <button
-              onClick={() => setSelectedRole('maker')}
+              onClick={() => setAccountType('personal')}
               className={`p-4 rounded-lg border-2 transition-all ${
-                selectedRole === 'maker'
+                accountType === 'personal'
                   ? 'border-green-500 bg-green-50 text-green-700'
                   : 'border-gray-200 bg-white text-gray-700 hover:border-green-300'
               }`}
@@ -106,15 +109,15 @@ const AuthUI = ({ role }: { role: string }) => {
                     <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
                   </svg>
                 </div>
-                <div className="font-semibold text-sm">메이커</div>
+                <div className="font-semibold text-sm">개인</div>
                 <div className="text-xs text-gray-500 mt-1">메이커/매니저</div>
               </div>
             </button>
             
             <button
-              onClick={() => setSelectedRole('manager')}
+              onClick={() => setAccountType('client')}
               className={`p-4 rounded-lg border-2 transition-all ${
-                selectedRole === 'manager'
+                accountType === 'client'
                   ? 'border-blue-500 bg-blue-50 text-blue-700'
                   : 'border-gray-200 bg-white text-gray-700 hover:border-blue-300'
               }`}
@@ -126,19 +129,57 @@ const AuthUI = ({ role }: { role: string }) => {
                   </svg>
                 </div>
                 <div className="font-semibold text-sm">기업</div>
-                <div className="text-xs text-gray-500 mt-1">프로젝트 매니저</div>
+                <div className="text-xs text-gray-500 mt-1">프로젝트 의뢰</div>
               </div>
             </button>
           </div>
         </div>
 
-        {/* 선택된 역할 정보 */}
+        {/* 개인 계정인 경우 역할 선택 */}
+        {accountType === 'personal' && (
+          <div className="mb-6">
+            <h3 className="text-md font-medium text-gray-900 mb-3 text-center">
+              역할을 선택해주세요
+            </h3>
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => setSelectedRole('MAKER')}
+                className={`p-3 rounded-lg border-2 transition-all ${
+                  selectedRole === 'MAKER'
+                    ? 'border-green-500 bg-green-50 text-green-700'
+                    : 'border-gray-200 bg-white text-gray-700 hover:border-green-300'
+                }`}
+              >
+                <div className="text-center">
+                  <div className="font-semibold text-sm">메이커</div>
+                  <div className="text-xs text-gray-500 mt-1">프로젝트 수행</div>
+                </div>
+              </button>
+              
+              <button
+                onClick={() => setSelectedRole('MANAGER')}
+                className={`p-3 rounded-lg border-2 transition-all ${
+                  selectedRole === 'MANAGER'
+                    ? 'border-blue-500 bg-blue-50 text-blue-700'
+                    : 'border-gray-200 bg-white text-gray-700 hover:border-blue-300'
+                }`}
+              >
+                <div className="text-center">
+                  <div className="font-semibold text-sm">매니저</div>
+                  <div className="text-xs text-gray-500 mt-1">팀 관리</div>
+                </div>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* 선택된 계정 타입 정보 */}
         <div className="text-center mb-6">
           <span className="inline-block px-4 py-2 bg-gray-100 text-gray-700 text-sm rounded-full">
-            {roleInfo.subtitle}
+            {accountTypeInfo.subtitle}
           </span>
           <p className="text-sm text-gray-600 mt-2">
-            {roleInfo.description}
+            {accountTypeInfo.description}
           </p>
         </div>
 

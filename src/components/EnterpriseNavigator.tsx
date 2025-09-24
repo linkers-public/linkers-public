@@ -1,55 +1,93 @@
-import React from "react";
-import Link from "next/link";
-import Logo from './Logo';  
+'use client'
 
-const ClientNavigator: React.FC = () => {
+import React, { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { UserCircleIcon, Bell } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { createSupabaseBrowserClient } from '@/supabase/supabase-client'
+import Logo from './common/Logo'
+
+const EnterpriseNavigator: React.FC = () => {
+  const router = useRouter()
+  const [user, setUser] = useState<any>()
+  const supabase = createSupabaseBrowserClient()
+
+  useEffect(() => {
+    const getUserInfo = async () => {
+      const result = await supabase.auth.getUser()
+      if (result?.data?.user) setUser(result?.data?.user)
+    }
+
+    getUserInfo()
+  }, [supabase])
+
   return (
-    <section className="w-full flex items-center h-[60px] border-b-[1px] border-solid border-[rgba(0,0,0,0.08)] px-4">
-      <div className="flex justify-between items-center w-full mx-auto max-w-[1024px]">
-        
-      <Logo /> 
-        {/* 중앙: 네비게이션 링크 */}
-        <div className="flex items-center gap-6">
-          <Link href="/enterprise">
-            <span className="text-sm font-bold text-gray-600 hover:text-gray-900">
-              기업 홈
-            </span>
-          </Link>
-          <Link href="/enterprise/counsel-form">
-            <span className="text-sm font-bold text-gray-600 hover:text-gray-900">
-              상담서 작성
-            </span>
-          </Link>
-          <Link href="/enterprise/my-counsel">
-            <span className="text-sm font-bold text-gray-600 hover:text-gray-900">
-              보낸 프로젝트
-            </span>
-          </Link>
-        </div>
-
-        {/* 오른쪽: 검색 및 로그인/회원가입 버튼 */}
-        <div className="flex items-center gap-4">
-          <input
-            type="text"
-            placeholder="search"
-            className="w-[200px] p-2 border border-gray-300 rounded-md text-sm"
-          />
-          <Link href="/auth?role=manager">
-            <span className="text-sm font-bold text-gray-600 hover:text-gray-900">
-              로그인
-            </span>
-          </Link>
-          <Link href="/auth?role=manager">
-            <button
-              className="px-4 py-2 text-sm font-bold text-white bg-blue-600 rounded-full hover:bg-blue-700"
+    <div className="z-800 w-full h-[64px] items-center border-b-[1px] border-solid border-[rgba(0,0,0,0.08)] px-3">
+      <div className="absolute inset-0 z-[-1] bg-white/88 backdrop-saturate-[1.5] backdrop-blur-[32px]"></div>
+      
+      <header className="flex max-w-[1024px] h-full items-center mx-auto">
+        <nav className="flex items-center h-full gap-8">
+          <Logo />
+          
+          {/* 기업 전용 네비게이션 */}
+          <div className="flex space-x-8">
+            <Link 
+              href="/enterprise" 
+              className="text-subtitle4 text-palette-coolNeutral-70 hover:text-palette-coolNeutral-20 transition-colors duration-200"
             >
-              회원가입
-            </button>
-          </Link>
+              홈
+            </Link>
+            <Link 
+              href="/enterprise/counsel-form" 
+              className="text-subtitle4 text-palette-coolNeutral-70 hover:text-palette-coolNeutral-20 transition-colors duration-200"
+            >
+              상담 신청
+            </Link>
+            <Link 
+              href="/enterprise/search-makers" 
+              className="text-subtitle4 text-palette-coolNeutral-70 hover:text-palette-coolNeutral-20 transition-colors duration-200"
+            >
+              메이커 검색
+            </Link>
+            <Link 
+              href="/enterprise/my-counsel" 
+              className="text-subtitle4 text-palette-coolNeutral-70 hover:text-palette-coolNeutral-20 transition-colors duration-200"
+            >
+              내 프로젝트
+            </Link>
+          </div>
+        </nav>
+        
+        <div className="ml-auto">
+          {user ? (
+            <div className="flex items-center gap-4">
+              <div className="relative">
+                <Bell
+                  size={24}
+                  color="#4a4a4a"
+                  strokeWidth={1.5}
+                />
+                <div className="absolute top-0 right-0 w-[10px] h-[10px] bg-palette-blue-50 rounded-full border-2 border-white"></div>
+              </div>
+              <UserCircleIcon
+                size={28}
+                color="#4a4a4a"
+                strokeWidth={1.5}
+                onClick={() => router.push('/enterprise/my-counsel')}
+                className="cursor-pointer"
+              />
+            </div>
+          ) : (
+            <div className="flex items-center gap-4">
+              <Button onClick={() => router.push('/auth?role=client')}>회원 가입</Button>
+              <Button onClick={() => router.push('/auth?role=client')}>로그인</Button>
+            </div>
+          )}
         </div>
-      </div>
-    </section>
-  );
-};
+      </header>
+    </div>
+  )
+}
 
-export default ClientNavigator;
+export default EnterpriseNavigator;

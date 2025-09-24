@@ -1,13 +1,14 @@
 import { NextResponse } from 'next/server'
 import { createServerSideClient } from '@/supabase/supabase-server'
 
-type Role = 'MAKER' | 'MANAGER' | 'NONE'
-type UserRole = 'maker' | 'manager'
+type AccountType = 'personal' | 'client'
+type Role = 'MAKER' | 'MANAGER'
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
-  const role = searchParams.get('role') as UserRole
+  const accountType = searchParams.get('type') as AccountType
+  const role = searchParams.get('role') as Role
   let next = searchParams.get('next') ?? '/'
   
   // 보안을 위해 next가 /로 시작하는지 확인
@@ -23,58 +24,48 @@ export async function GET(request: Request) {
       return NextResponse.redirect(`${origin}/auth/auth-code-error`)
     }
 
-    // 사용자 정보를 역할에 따라 적절한 테이블에 저장
+    // 사용자 정보를 계정 타입에 따라 적절한 테이블에 저장
     if (session.user) {
       const userId = session.user.id
       const userEmail = session.user.email || ''
-      const userName = session.user.email?.split('@')[0] || `user_${userId.slice(0, 8)}`
+      const userName = session.user.user_metadata?.name || 
+                      session.user.email?.split('@')[0] || 
+                      `user_${userId.slice(0, 8)}`
 
-      if (role === 'manager') {
-        // 기업 사용자 → client 테이블에 저장
-        const { data: existingClient } = await supabase
+      if (accountType === 'client') {
+        // 기업 사용자 → client 테이블에 upsert
+        const { error: upsertError } = await supabase
           .from('client')
-          .select('user_id')
-          .eq('user_id', userId)
-          .single()
+          .upsert({
+            user_id: userId,
+            email: userEmail,
+            company_name: null, // 온보딩에서 수집
+            contact_info: null,
+            client_status: 'active'
+          }, { 
+            onConflict: 'user_id' 
+          })
 
-        if (!existingClient) {
-          const { error: insertError } = await supabase
-            .from('client')
-            .insert({
-              user_id: userId,
-              company_name: null,
-              email: userEmail,
-              contact_info: null,
-              client_status: 'active'
-            })
-
-          if (insertError) {
-            console.error('Failed to create client account:', insertError)
-          }
+        if (upsertError) {
+          console.error('Failed to upsert client account:', upsertError)
         }
       } else {
-        // 메이커/매니저 사용자 → accounts 테이블에 저장
-        const { data: existingAccount } = await supabase
+        // 개인 사용자 → accounts 테이블에 upsert
+        const { error: upsertError } = await supabase
           .from('accounts')
-          .select('user_id')
-          .eq('user_id', userId)
-          .single()
+          .upsert({
+            user_id: userId,
+            username: userName,
+            bio: '',
+            role: role || 'MAKER', // 기본값은 MAKER
+            main_job: [],
+            expertise: []
+          }, { 
+            onConflict: 'user_id' 
+          })
 
-        if (!existingAccount) {
-          const { error: insertError } = await supabase
-            .from('accounts')
-            .insert({
-              user_id: userId,
-              username: userName,
-              bio: '',
-              role: role === 'maker' ? 'MAKER' : 'MANAGER',
-              main_job: [],
-              expertise: []
-            })
-
-          if (insertError) {
-            console.error('Failed to create account:', insertError)
-          }
+        if (upsertError) {
+          console.error('Failed to upsert account:', upsertError)
         }
       }
     }

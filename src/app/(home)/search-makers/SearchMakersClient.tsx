@@ -34,13 +34,20 @@ const SearchMakersClient = () => {
   const [error, setError] = useState<PostgrestError | null>(null)
   const { filters, handleFilterChange } = useMakerFilter()
   const [makerList, setMakerList] = useState<Maker[]>([])
+  const [isMounted, setIsMounted] = useState(true)
 
   console.log('makerList', makerList)
 
   useEffect(() => {
+    let isCancelled = false
+
     const getMakers = async () => {
       try {
         const { data, error } = await searchMakers({})
+        
+        // 컴포넌트가 언마운트되었거나 요청이 취소된 경우 상태 업데이트 중단
+        if (isCancelled || !isMounted) return
+        
         if (error) {
           setError(error)
           return
@@ -50,13 +57,35 @@ const SearchMakersClient = () => {
           setMakerList(data)
         }
       } catch (err) {
-        setError(err as PostgrestError)
+        if (!isCancelled && isMounted) {
+          setError(err as PostgrestError)
+        }
       } finally {
-        setIsLoading(false)
+        if (!isCancelled && isMounted) {
+          setIsLoading(false)
+        }
       }
     }
+    
     getMakers()
-  }, [filters])
+
+    // cleanup 함수
+    return () => {
+      isCancelled = true
+    }
+  }, [filters, isMounted])
+
+  // 컴포넌트 언마운트 시 상태 업데이트 방지
+  useEffect(() => {
+    return () => {
+      setIsMounted(false)
+    }
+  }, [])
+
+  // 컴포넌트가 언마운트된 경우 렌더링하지 않음
+  if (!isMounted) {
+    return null
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -82,19 +111,45 @@ const SearchMakersClient = () => {
         </div>
       </section>
 
-      <ul className="flex flex-wrap gap-6 justify-between mt-6">
-        {makerList.map((maker) => (
-          <Link
-            href={`/profile/${maker.username}`}
-            key={maker.user_id}
-          >
-            <SearchMakerCard
+      {/* 로딩 상태 */}
+      {isLoading && (
+        <div className="flex justify-center items-center py-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          <span className="ml-2 text-gray-600">메이커를 불러오는 중...</span>
+        </div>
+      )}
+
+      {/* 에러 상태 */}
+      {error && (
+        <div className="text-center py-8">
+          <div className="text-red-600 mb-2">오류가 발생했습니다</div>
+          <div className="text-sm text-gray-600">{error.message}</div>
+        </div>
+      )}
+
+      {/* 메이커 목록 */}
+      {!isLoading && !error && (
+        <ul className="flex flex-wrap gap-6 justify-between mt-6">
+          {makerList.map((maker) => (
+            <Link
+              href={`/profile/${maker.username}`}
               key={maker.user_id}
-              maker={maker}
-            />
-          </Link>
-        ))}
-      </ul>
+            >
+              <SearchMakerCard
+                key={maker.user_id}
+                maker={maker}
+              />
+            </Link>
+          ))}
+        </ul>
+      )}
+
+      {/* 메이커가 없는 경우 */}
+      {!isLoading && !error && makerList.length === 0 && (
+        <div className="text-center py-8">
+          <div className="text-gray-600">등록된 메이커가 없습니다</div>
+        </div>
+      )}
     </div>
   )
 }

@@ -170,6 +170,7 @@ export type Database = {
           updated_at: string
           user_id: string
           username: string
+          availability_status: 'available' | 'busy'
         }
         Insert: {
           bio: string
@@ -181,6 +182,7 @@ export type Database = {
           updated_at?: string
           user_id?: string
           username?: string
+          availability_status?: 'available' | 'busy'
         }
         Update: {
           bio?: string
@@ -192,6 +194,7 @@ export type Database = {
           updated_at?: string
           user_id?: string
           username?: string
+          availability_status?: 'available' | 'busy'
         }
         Relationships: []
       }
@@ -305,49 +308,49 @@ export type Database = {
       counsel: {
         Row: {
           client_id: string
-          cost: Database["public"]["Enums"]["counsel_cost"]
+          cost: string
           counsel_date: string | null
           counsel_id: number
-          counsel_status: Database["public"]["Enums"]["counsel_status"]
+          counsel_status: string
           counsel_type: string | null
           due_date: string
-          feild: Database["public"]["Enums"]["project_feild"] | null
+          feild: string | null
           outline: string | null
           output: string | null
-          period: Database["public"]["Enums"]["counsel_period"]
-          skill: Database["public"]["Enums"]["skill"][] | null
+          period: string
+          skill: string[] | null
           start_date: string
           title: string | null
         }
         Insert: {
           client_id?: string
-          cost?: Database["public"]["Enums"]["counsel_cost"]
+          cost?: string
           counsel_date?: string | null
           counsel_id?: number
-          counsel_status?: Database["public"]["Enums"]["counsel_status"]
+          counsel_status?: string
           counsel_type?: string | null
           due_date?: string
-          feild?: Database["public"]["Enums"]["project_feild"] | null
+          feild?: string | null
           outline?: string | null
           output?: string | null
-          period?: Database["public"]["Enums"]["counsel_period"]
-          skill?: Database["public"]["Enums"]["skill"][] | null
+          period?: string
+          skill?: string[] | null
           start_date?: string
           title?: string | null
         }
         Update: {
           client_id?: string
-          cost?: Database["public"]["Enums"]["counsel_cost"]
+          cost?: string
           counsel_date?: string | null
           counsel_id?: number
-          counsel_status?: Database["public"]["Enums"]["counsel_status"]
+          counsel_status?: string
           counsel_type?: string | null
           due_date?: string
-          feild?: Database["public"]["Enums"]["project_feild"] | null
+          feild?: string | null
           outline?: string | null
           output?: string | null
-          period?: Database["public"]["Enums"]["counsel_period"]
-          skill?: Database["public"]["Enums"]["skill"][] | null
+          period?: string
+          skill?: string[] | null
           start_date?: string
           title?: string | null
         }
@@ -794,6 +797,151 @@ export type Database = {
           {
             foreignKeyName: "maker-proposal_manager_id_fkey"
             columns: ["manager_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
+      project_assignments: {
+        Row: {
+          id: number
+          counsel_id: number
+          maker_id: string
+          assigned_by: string
+          assignment_status: 'pending' | 'accepted' | 'declined'
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: number
+          counsel_id: number
+          maker_id: string
+          assigned_by: string
+          assignment_status?: 'pending' | 'accepted' | 'declined'
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: number
+          counsel_id?: number
+          maker_id?: string
+          assigned_by?: string
+          assignment_status?: 'pending' | 'accepted' | 'declined'
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_assignments_counsel_id_fkey"
+            columns: ["counsel_id"]
+            isOneToOne: false
+            referencedRelation: "counsel"
+            referencedColumns: ["counsel_id"]
+          },
+          {
+            foreignKeyName: "project_assignments_maker_id_fkey"
+            columns: ["maker_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["user_id"]
+          },
+          {
+            foreignKeyName: "project_assignments_assigned_by_fkey"
+            columns: ["assigned_by"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
+      project_participation: {
+        Row: {
+          id: number
+          counsel_id: number
+          maker_id: string
+          participation_status: 'pending' | 'interested' | 'not_interested'
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: number
+          counsel_id: number
+          maker_id: string
+          participation_status?: 'pending' | 'interested' | 'not_interested'
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: number
+          counsel_id?: number
+          maker_id?: string
+          participation_status?: 'pending' | 'interested' | 'not_interested'
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_participation_counsel_id_fkey"
+            columns: ["counsel_id"]
+            isOneToOne: false
+            referencedRelation: "counsel"
+            referencedColumns: ["counsel_id"]
+          },
+          {
+            foreignKeyName: "project_participation_maker_id_fkey"
+            columns: ["maker_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
+      maker_estimates: {
+        Row: {
+          id: number
+          counsel_id: number
+          maker_id: string
+          estimate_amount: number
+          estimate_period: string
+          estimate_details: string
+          estimate_status: 'pending' | 'accepted' | 'rejected'
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: number
+          counsel_id: number
+          maker_id: string
+          estimate_amount: number
+          estimate_period: string
+          estimate_details: string
+          estimate_status?: 'pending' | 'accepted' | 'rejected'
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: number
+          counsel_id?: number
+          maker_id?: string
+          estimate_amount?: number
+          estimate_period?: string
+          estimate_details?: string
+          estimate_status?: 'pending' | 'accepted' | 'rejected'
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "maker_estimates_counsel_id_fkey"
+            columns: ["counsel_id"]
+            isOneToOne: false
+            referencedRelation: "counsel"
+            referencedColumns: ["counsel_id"]
+          },
+          {
+            foreignKeyName: "maker_estimates_maker_id_fkey"
+            columns: ["maker_id"]
             isOneToOne: false
             referencedRelation: "accounts"
             referencedColumns: ["user_id"]

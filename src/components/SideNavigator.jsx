@@ -20,6 +20,13 @@ const SideNavigator = () => {
         },
         {
           icon: '',
+          label: '할당된 프로젝트',
+          type: 'my',
+          isActive: pathname === '/my/assigned-projects',
+          href: '/my/assigned-projects',
+        },
+        {
+          icon: '',
           label: '제안 현황',
           type: 'my',
           isActive: pathname === '/my/proposal',
