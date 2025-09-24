@@ -85,13 +85,13 @@ export const fetchTeamAndRecentChats = async (clientId: string, counselId: numbe
   )
 
   // 팀 데이터와 최근 메시지를 결합하여 반환
-  const result = teamData.map(team => {
+  const result = teamData?.map(team => {
     const teamChat = teamChats.find(chat => chat.teamId === team.id)
     return {
       team: team,
       recentChat: teamChat ? teamChat.recentChat : null, // 가장 최근 채팅 메시지
     }
-  })
+  }) || []
 
   console.log('결과 ::', result)  // 최종 결과 확인
   return result
