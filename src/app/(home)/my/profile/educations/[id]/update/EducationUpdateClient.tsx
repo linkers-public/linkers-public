@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { useRouter } from 'next/navigation'
 import { selectEducations, useProfileStore } from '@/stores/useProfileStore'
 import { updateEducation } from '@/apis/profile.service'
+import { Tables } from '@/types/supabase'
 
 interface FormData {
   name: string
@@ -30,7 +31,7 @@ const EducationUpdateClient = ({ id }: { id: string }) => {
   })
 
   useEffect(() => {
-    const education = educations.find((edu) => edu.id === Number(id))
+    const education = educations.find((edu: Tables<'account_educations'>) => edu.id === Number(id))
 
     if (!education) {
       setError('해당 학력 정보를 찾을 수 없습니다.')
