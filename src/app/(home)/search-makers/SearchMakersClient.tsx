@@ -34,64 +34,52 @@ const SearchMakersClient = () => {
   const [error, setError] = useState<PostgrestError | null>(null)
   const { filters, handleFilterChange } = useMakerFilter()
   const [makerList, setMakerList] = useState<Maker[]>([])
-  const [isMounted, setIsMounted] = useState(true)
 
-  console.log('makerList', makerList)
 
   useEffect(() => {
-    let isCancelled = false
-
-    const getMakers = async () => {
+    const fetchData = async () => {
+      setIsLoading(true)
+      setError(null)
+      
       try {
-        const { data, error } = await searchMakers({})
-        
-        // 컴포넌트가 언마운트되었거나 요청이 취소된 경우 상태 업데이트 중단
-        if (isCancelled || !isMounted) return
+        const { data, error } = await searchMakers({
+          job: filters.job.length > 0 ? filters.job : undefined,
+          specialization: filters.specialization.length > 0 ? filters.specialization : undefined,
+          experience: filters.experience,
+        })
         
         if (error) {
+          console.error('메이커 조회 에러:', error)
           setError(error)
+          setMakerList([])
           return
         }
-        if (data) {
-          //@ts-ignore
+        
+        if (data && Array.isArray(data)) {
+          console.log('✅ 메이커 리스트 설정:', data.length, '개')
           setMakerList(data)
+        } else {
+          setMakerList([])
         }
       } catch (err) {
-        if (!isCancelled && isMounted) {
-          setError(err as PostgrestError)
-        }
+        console.error('메이커 조회 예외:', err)
+        setError(err as PostgrestError)
+        setMakerList([])
       } finally {
-        if (!isCancelled && isMounted) {
-          setIsLoading(false)
-        }
+        setIsLoading(false)
       }
     }
     
-    getMakers()
-
-    // cleanup 함수
-    return () => {
-      isCancelled = true
-    }
-  }, [filters, isMounted])
-
-  // 컴포넌트 언마운트 시 상태 업데이트 방지
-  useEffect(() => {
-    return () => {
-      setIsMounted(false)
-    }
-  }, [])
-
-  // 컴포넌트가 언마운트된 경우 렌더링하지 않음
-  if (!isMounted) {
-    return null
-  }
+    fetchData()
+  }, [filters])
 
   return (
-    <div className="flex flex-col gap-4">
-      <h3 className="text-h3">메이커 찾기</h3>
-      <section className="flex gap-4">
-        <div className="flex gap-2 relative">
+    <div className="w-full">
+      <h2 className="text-h3 ml-1 mb-4">메이커 찾기</h2>
+      
+      {/* 필터 섹션 */}
+      <section className="flex gap-4 mb-4">
+        <div className="flex gap-2 relative flex-wrap">
           <ExperienceFilter
             value={filters.experience}
             onChange={(value) => handleFilterChange('experience', value)}
@@ -105,9 +93,9 @@ const SearchMakersClient = () => {
             onChange={(value) => handleFilterChange('specialization', value)}
           />
         </div>
-        <div className="flex-1 flex gap-4 shadow-normal py-2 px-4 rounded-[12px] hover:shadow-emphasize">
-          <SearchIcon />
-          <span className="text-palette-coolNeutral-40">검색</span>
+        <div className="flex-1 flex gap-4 shadow-md py-2 px-4 rounded-[12px] hover:shadow-lg border border-gray-200">
+          <SearchIcon className="w-5 h-5 text-gray-400" />
+          <span className="text-gray-500">검색</span>
         </div>
       </section>
 
@@ -127,29 +115,21 @@ const SearchMakersClient = () => {
         </div>
       )}
 
-      {/* 메이커 목록 */}
-      {!isLoading && !error && (
-        <ul className="flex flex-wrap gap-6 justify-between mt-6">
-          {makerList.map((maker) => (
-            <Link
-              href={`/profile/${maker.username}`}
+      {/* 메이커 목록 - search-projects처럼 항상 렌더링 */}
+      <section className="flex flex-col gap-4 w-full">
+        {makerList.map((maker) => (
+          <Link
+            href={`/profile/${maker.username}`}
+            key={maker.user_id}
+            className="block"
+          >
+            <SearchMakerCard
               key={maker.user_id}
-            >
-              <SearchMakerCard
-                key={maker.user_id}
-                maker={maker}
-              />
-            </Link>
-          ))}
-        </ul>
-      )}
-
-      {/* 메이커가 없는 경우 */}
-      {!isLoading && !error && makerList.length === 0 && (
-        <div className="text-center py-8">
-          <div className="text-gray-600">등록된 메이커가 없습니다</div>
-        </div>
-      )}
+              maker={maker}
+            />
+          </Link>
+        ))}
+      </section>
     </div>
   )
 }

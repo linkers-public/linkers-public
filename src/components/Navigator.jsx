@@ -20,12 +20,6 @@ const Navigator = () => {
         isActive: pathname === '/search-projects',
         href: '/search-projects',
       },
-      {
-        icon: '',
-        label: '멘토링',
-        isActive: pathname === '/',
-        href: '/',
-      },
     ]
   }, [pathname])
 
