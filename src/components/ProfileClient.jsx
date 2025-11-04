@@ -18,6 +18,9 @@ export const ProfileClient = ({ username, isOwner = false }) => {
   const account = useAccountStore(selectAccount)
 
   useEffect(() => {
+    // 페이지 진입 시 스크롤을 맨 위로 이동
+    window.scrollTo(0, 0)
+    
     const getProfile = async () => {
       setIsLoading(true)
       try {

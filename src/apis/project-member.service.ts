@@ -125,26 +125,32 @@ export const updateProjectMember = async (
 export const getProjectMembers = async (counselId: number) => {
   const supabase = createSupabaseBrowserClient()
 
-  const { data, error } = await supabase
+  // project_members에서 profile_id와 join하여 accounts 정보 가져오기
+  const { data: members, error: membersError } = await supabase
     .from('project_members')
-    .select(
-      `
-      *,
-      profile:profile_id (
-        username,
-        profile_type,
-        main_job,
-        expertise,
-        badges,
-        availability_status
-      )
-    `
-    )
+    .select('*')
     .eq('counsel_id', counselId)
     .order('created_at', { ascending: true })
 
-  if (error) throw error
-  return data
+  if (membersError) throw membersError
+
+  // 각 member에 대해 accounts 정보 수동으로 조인
+  const membersWithProfile = await Promise.all(
+    (members || []).map(async (member) => {
+      const { data: account } = await supabase
+        .from('accounts')
+        .select('profile_id, username, profile_type, main_job, expertise, badges, availability_status')
+        .eq('profile_id', member.profile_id)
+        .maybeSingle()
+
+      return {
+        ...member,
+        profile: account || null,
+      }
+    })
+  )
+
+  return membersWithProfile
 }
 
 /**

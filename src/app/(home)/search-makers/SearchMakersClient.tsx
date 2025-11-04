@@ -20,6 +20,9 @@ interface Maker {
   expertise: string[] | null
   bio: string
   user_id: string
+  profile_id: string // 새로운 프로필 시스템
+  profile_type: 'FREELANCER' | 'COMPANY' | null
+  is_active: boolean | null
   created_at: string
   updated_at: string
   deleted_at: string | null
@@ -121,7 +124,7 @@ const SearchMakersClient = () => {
             makerList.map((maker) => (
               <Link
                 href={`/profile/${maker.username}`}
-                key={maker.user_id}
+                key={maker.profile_id || maker.user_id}
                 className="block"
               >
                 <SearchMakerCard maker={maker} />

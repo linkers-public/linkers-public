@@ -96,7 +96,7 @@ export default function ProfileSwitchButton() {
       </Button>
 
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="max-w-md bg-white">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>프로필 전환</DialogTitle>
           </DialogHeader>

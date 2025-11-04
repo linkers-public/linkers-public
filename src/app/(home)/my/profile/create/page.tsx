@@ -9,30 +9,9 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from '@/hooks/use-toast'
 import { ArrowLeft } from 'lucide-react'
+import { JOB_OPTIONS, EXPERTISE_OPTIONS } from '@/constants/job-options'
 
 type ProfileType = Database['public']['Enums']['profile_type']
-
-const JOB_OPTIONS = [
-  '웹 개발',
-  '앱 개발',
-  '백엔드 개발',
-  '프론트엔드 개발',
-  '풀스택 개발',
-  '데이터 엔지니어링',
-  '데이터 분석',
-  'AI/ML',
-  'DevOps',
-  'UI/UX 디자인',
-  '프로젝트 매니저',
-  'QA/테스팅',
-]
-
-const EXPERTISE_OPTIONS = [
-  'React', 'Vue.js', 'Next.js', 'Node.js', 'Python', 'Java',
-  'Spring Boot', 'TypeScript', 'Docker', 'Kubernetes',
-  'AWS', 'Azure', 'GCP', 'PostgreSQL', 'MongoDB',
-  'GraphQL', 'REST API', 'Microservices',
-]
 
 export default function CreateProfilePage() {
   const router = useRouter()

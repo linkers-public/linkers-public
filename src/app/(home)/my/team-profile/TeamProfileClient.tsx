@@ -1,10 +1,13 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { selectAccount, useAccountStore } from '@/stores/useAccoutStore'
 import { useTeamProfileStore } from '@/stores/useTeamProfileStore'
 
 const TeamProfileClient = () => {
+  const router = useRouter()
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const { teamProfile, fetchTeamProfile } = useTeamProfileStore()
@@ -36,6 +39,7 @@ const TeamProfileClient = () => {
     created_at,
     updated_at,
     team_members,
+    manager,
   } = teamProfile || {}
 
   const editIntroduction = () => {}
@@ -49,7 +53,10 @@ const TeamProfileClient = () => {
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-64">
-        <p className="text-lg text-palette-coolNeutral-60">로딩중...</p>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-lg text-gray-600">팀 프로필을 불러오는 중...</p>
+        </div>
       </div>
     )
   }
@@ -57,58 +64,236 @@ const TeamProfileClient = () => {
   if (error) {
     return (
       <div className="flex justify-center items-center h-64">
-        <p className="text-lg text-palette-coolNeutral-60">
-          에러가 발생했습니다: {error}
-        </p>
+        <div className="text-center bg-red-50 border border-red-200 rounded-lg p-6 max-w-md">
+          <div className="text-4xl mb-4">❌</div>
+          <p className="text-lg font-semibold text-red-900 mb-2">에러가 발생했습니다</p>
+          <p className="text-sm text-red-700">{error}</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!teamProfile) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="text-center">
+          <p className="text-lg text-gray-600">팀 프로필이 없습니다.</p>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="flex flex-col items-center  h-full w-full">
-      <div className="p-4 flex flex-col gap-4">
-        <span>이름 : {name}</span>
-        <span>소개 : {bio}</span>
-        <span>
-          전문분야 :
-          {specialty?.map((sep) => (
-            <div>{sep}</div>
-          ))}
-        </span>
-        <span>
-          부분야 :{' '}
-          {sub_specialty?.map((ssep) => (
-            <div>{ssep}</div>
-          ))}
-        </span>
-        <span>
-          선호 유형:{' '}
-          {prefered?.map((perfer) => (
-            <div>{perfer}</div>
-          ))}
-        </span>
-      </div>
+    <div className="flex flex-col gap-6 w-full pb-8">
+      {/* 팀 기본 정보 */}
+      <section className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
+        <div className="flex items-start justify-between mb-4">
+          <div className="flex items-center gap-4">
+            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white text-2xl font-bold">
+              {name?.[0] || '팀'}
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 mb-2">{name || '팀 이름 없음'}</h1>
+              <p className="text-gray-600 text-lg">{bio || '소개가 없습니다.'}</p>
+            </div>
+          </div>
+          {isManager && (
+            <button
+              onClick={editProfile}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+            >
+              프로필 수정
+            </button>
+          )}
+        </div>
 
-      <div className="p-4 flex gap-4">
-        {team_members?.map((member) => (
-          <div>{member.name}</div>
-        ))}
-      </div>
+        {/* 전문분야 */}
+        {specialty && specialty.length > 0 && (
+          <div className="mb-4">
+            <h3 className="text-sm font-semibold text-gray-700 mb-2">전문분야</h3>
+            <div className="flex flex-wrap gap-2">
+              {specialty.map((sep, idx) => (
+                <span
+                  key={idx}
+                  className="px-3 py-1 text-sm rounded-full bg-blue-100 text-blue-700 font-medium"
+                >
+                  {sep}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
 
-      <div className="p-4 flex gap-4">
-        <div>팀목록</div>
-        {team_members?.map((member) => {
-          console.log(member)
-          return (
-            <>
-              <div>{member.account.username}</div>
-              <div>{member.account.role}</div>
-            </>
-          )
-        })}
-      </div>
-      <div className="p-4 flex gap-4">진행중인 프로젝트</div>
-      <div className="p-4 flex gap-4">팀 경력</div>
+        {/* 세부 전문분야 */}
+        {sub_specialty && sub_specialty.length > 0 && (
+          <div className="mb-4">
+            <h3 className="text-sm font-semibold text-gray-700 mb-2">세부 전문분야</h3>
+            <div className="flex flex-wrap gap-2">
+              {sub_specialty.map((ssep, idx) => (
+                <span
+                  key={idx}
+                  className="px-3 py-1 text-sm rounded-full bg-purple-100 text-purple-700 font-medium"
+                >
+                  {ssep}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 선호 유형 */}
+        {prefered && prefered.length > 0 && (
+          <div>
+            <h3 className="text-sm font-semibold text-gray-700 mb-2">선호 프로젝트 유형</h3>
+            <div className="flex flex-wrap gap-2">
+              {prefered.map((pref, idx) => (
+                <span
+                  key={idx}
+                  className="px-3 py-1 text-sm rounded-full bg-green-100 text-green-700 font-medium"
+                >
+                  {pref}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+      </section>
+
+      {/* 팀 매니저 */}
+      {manager && (
+        <section className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-bold text-gray-900">팀 매니저</h2>
+          </div>
+          <Link
+            href={`/profile/${encodeURIComponent(manager.username)}`}
+            className="block border border-blue-200 rounded-lg p-4 bg-blue-50 hover:bg-blue-100 transition-colors cursor-pointer"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-xl font-bold">
+                {manager.username?.[0] || '?'}
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <h3 className="font-semibold text-gray-900 text-lg">{manager.username}</h3>
+                  <span className="px-2 py-1 text-xs rounded-full bg-blue-200 text-blue-800 font-medium">
+                    매니저
+                  </span>
+                </div>
+                {manager.bio && (
+                  <p className="text-sm text-gray-600 line-clamp-2">{manager.bio}</p>
+                )}
+              </div>
+            </div>
+          </Link>
+        </section>
+      )}
+
+      {/* 팀 멤버 */}
+      <section className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold text-gray-900">팀 멤버</h2>
+          {isManager && (
+            <button
+              onClick={editTeam}
+              className="px-3 py-1 text-sm text-blue-600 hover:text-blue-700 font-medium"
+            >
+              멤버 관리
+            </button>
+          )}
+        </div>
+        
+        {team_members && team_members.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {team_members.map((member) => (
+              <Link
+                key={member.id}
+                href={`/profile/${encodeURIComponent(member.account?.username || '')}`}
+                className="block border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer"
+              >
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-indigo-400 to-pink-500 flex items-center justify-center text-white font-bold">
+                    {member.account?.username?.[0] || '?'}
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-gray-900">
+                      {member.account?.username || '이름 없음'}
+                    </h3>
+                    <p className="text-xs text-gray-500">
+                      {member.account?.role === 'MAKER' && '메이커'}
+                      {member.account?.role === 'MANAGER' && '매니저'}
+                      {member.account?.role === 'NONE' && '역할 없음'}
+                      {!member.account?.role && '역할 없음'}
+                    </p>
+                  </div>
+                </div>
+                {member.account?.bio && (
+                  <p className="text-sm text-gray-600 line-clamp-2">{member.account.bio}</p>
+                )}
+                {member.status && (
+                  <div className="mt-2">
+                    <span className={`px-2 py-1 text-xs rounded ${
+                      member.status === 'active' 
+                        ? 'bg-green-100 text-green-700' 
+                        : 'bg-gray-100 text-gray-700'
+                    }`}>
+                      {member.status}
+                    </span>
+                  </div>
+                )}
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-8 text-gray-500">
+            <p>팀 멤버가 없습니다.</p>
+            {isManager && (
+              <button
+                onClick={editTeam}
+                className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+              >
+                멤버 추가하기
+              </button>
+            )}
+          </div>
+        )}
+      </section>
+
+      {/* 진행중인 프로젝트 */}
+      <section className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold text-gray-900">진행중인 프로젝트</h2>
+          {isManager && (
+            <button
+              onClick={editProject}
+              className="px-3 py-1 text-sm text-blue-600 hover:text-blue-700 font-medium"
+            >
+              프로젝트 관리
+            </button>
+          )}
+        </div>
+        <div className="text-center py-8 text-gray-500">
+          <p>진행중인 프로젝트가 없습니다.</p>
+        </div>
+      </section>
+
+      {/* 팀 경력 */}
+      <section className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold text-gray-900">팀 경력</h2>
+          {isManager && (
+            <button
+              onClick={editCareer}
+              className="px-3 py-1 text-sm text-blue-600 hover:text-blue-700 font-medium"
+            >
+              경력 관리
+            </button>
+          )}
+        </div>
+        <div className="text-center py-8 text-gray-500">
+          <p>팀 경력 정보가 없습니다.</p>
+        </div>
+      </section>
     </div>
   )
 }

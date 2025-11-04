@@ -5,12 +5,14 @@ import { useRouter, useParams } from 'next/navigation'
 import { fetchCounselWithClient } from '@/apis/counsel.service'
 import { submitMakerEstimate, getMakerEstimate } from '@/apis/maker-estimate.service'
 import { getProjectMembers } from '@/apis/project-member.service'
+import { submitTeamEstimate, getTeamEstimate, TeamEstimate } from '@/apis/team-estimate.service'
+import { createSupabaseBrowserClient } from '@/supabase/supabase-client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from '@/hooks/use-toast'
 import { formatDate } from '@/lib/dateFormat'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Plus, X } from 'lucide-react'
 import ProjectJoinModal from '@/components/ProjectJoinModal'
 
 interface Counsel {
@@ -39,18 +41,37 @@ const ProjectDetailClient: React.FC = () => {
   const [client, setClient] = useState<Client | null>(null)
   const [projectMembers, setProjectMembers] = useState<any[]>([])
   const [existingEstimate, setExistingEstimate] = useState<any>(null)
+  const [teamEstimate, setTeamEstimate] = useState<TeamEstimate | null>(null)
+  const [isManager, setIsManager] = useState(false)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [showEstimateForm, setShowEstimateForm] = useState(false)
+  const [showTeamEstimateForm, setShowTeamEstimateForm] = useState(false)
   const [showJoinModal, setShowJoinModal] = useState(false)
   const [estimateForm, setEstimateForm] = useState({
     estimateAmount: '',
     estimatePeriod: '',
     estimateDetails: ''
   })
+  const [teamEstimateForm, setTeamEstimateForm] = useState({
+    totalAmount: '',
+    startDate: '',
+    endDate: '',
+    teamCapability: '',
+    additionalSuggestions: '',
+    detail: '',
+    milestones: [] as Array<{
+      title: string
+      detail: string
+      paymentAmount: string
+      startDate: string
+      endDate: string
+    }>
+  })
   const router = useRouter()
   const params = useParams()
   const counselId = params?.id
+  const supabase = createSupabaseBrowserClient()
 
   useEffect(() => {
     const fetchData = async () => {
@@ -72,6 +93,37 @@ const ProjectDetailClient: React.FC = () => {
         setCounsel(result.counsel)
         setClient(result.client || null)
 
+        // 매니저 여부 확인
+        try {
+          const { data: { user } } = await supabase.auth.getUser()
+          if (user) {
+            const { data: teamData } = await supabase
+              .from('teams')
+              .select('id')
+              .eq('manager_id', user.id)
+              .maybeSingle()
+            
+            setIsManager(!!teamData)
+
+            // 매니저인 경우 팀 견적서 조회
+            if (teamData) {
+              const estimate = await getTeamEstimate(Number(counselId))
+              setTeamEstimate(estimate)
+              if (estimate?.estimate_version) {
+                setTeamEstimateForm(prev => ({
+                  ...prev,
+                  totalAmount: estimate.estimate_version?.total_amount?.toString() || '',
+                  startDate: estimate.estimate_version?.start_date || '',
+                  endDate: estimate.estimate_version?.end_date || '',
+                  detail: estimate.estimate_version?.detail || '',
+                }))
+              }
+            }
+          }
+        } catch (error) {
+          console.warn('매니저 확인 실패 (무시):', error)
+        }
+
         // 프로젝트 멤버 조회 (선택적 - 실패해도 계속 진행)
         try {
           const members = await getProjectMembers(Number(counselId))
@@ -82,19 +134,24 @@ const ProjectDetailClient: React.FC = () => {
         }
 
         // 현재 사용자의 견적 조회 (선택적 - 실패해도 계속 진행)
+        // maker_estimates 테이블이 없을 수 있으므로 에러 무시
         try {
-          const estimate = await getMakerEstimate(Number(counselId))
-          setExistingEstimate(estimate)
-          if (estimate) {
+          const estimate = await getMakerEstimate(Number(counselId)) as any
+          if (estimate && estimate.estimate_amount) {
+            setExistingEstimate(estimate)
             setEstimateForm({
               estimateAmount: estimate.estimate_amount.toString(),
-              estimatePeriod: estimate.estimate_period,
-              estimateDetails: estimate.estimate_details
+              estimatePeriod: estimate.estimate_period || '',
+              estimateDetails: estimate.estimate_details || ''
             })
           }
-        } catch (error) {
-          console.warn('견적 조회 실패 (무시):', error)
-          // 로그인하지 않은 사용자거나 에러가 발생해도 무시하고 계속 진행
+        } catch (error: any) {
+          // maker_estimates 테이블이 없는 경우 등 에러 무시
+          if (error?.message?.includes('Could not find the table')) {
+            console.log('maker_estimates 테이블이 없습니다. 메이커 견적 기능을 사용할 수 없습니다.')
+          } else {
+            console.warn('견적 조회 실패 (무시):', error)
+          }
         }
       } catch (error) {
         console.error('Error fetching project details:', error)
@@ -169,6 +226,93 @@ const ProjectDetailClient: React.FC = () => {
     }
   }
 
+  const handleTeamEstimateSubmit = async () => {
+    if (!counselId || !client) return
+
+    if (!teamEstimateForm.totalAmount || !teamEstimateForm.startDate || !teamEstimateForm.endDate || !teamEstimateForm.detail) {
+      toast({
+        variant: 'destructive',
+        title: '입력 오류',
+        description: '필수 항목(금액, 시작일, 종료일, 상세 설명)을 모두 입력해주세요.',
+      })
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      await submitTeamEstimate(
+        Number(counselId),
+        client.id,
+        {
+          totalAmount: Number(teamEstimateForm.totalAmount),
+          startDate: teamEstimateForm.startDate,
+          endDate: teamEstimateForm.endDate,
+          detail: teamEstimateForm.detail,
+          teamCapability: teamEstimateForm.teamCapability,
+          additionalSuggestions: teamEstimateForm.additionalSuggestions,
+          milestones: teamEstimateForm.milestones.map(m => ({
+            title: m.title,
+            detail: m.detail,
+            paymentAmount: Number(m.paymentAmount),
+            startDate: m.startDate,
+            endDate: m.endDate,
+          })),
+        }
+      )
+
+      setShowTeamEstimateForm(false)
+      toast({
+        title: '팀 견적서 제출 완료',
+        description: '견적서가 성공적으로 기업에게 전송되었습니다.',
+      })
+
+      // 견적서 정보 새로고침
+      const estimate = await getTeamEstimate(Number(counselId))
+      setTeamEstimate(estimate)
+    } catch (error: any) {
+      console.error('Error submitting team estimate:', error)
+      toast({
+        variant: 'destructive',
+        title: '에러 발생',
+        description: error.message || '견적서 제출에 실패했습니다.',
+      })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const addMilestone = () => {
+    setTeamEstimateForm(prev => ({
+      ...prev,
+      milestones: [
+        ...prev.milestones,
+        {
+          title: '',
+          detail: '',
+          paymentAmount: '',
+          startDate: '',
+          endDate: '',
+        }
+      ]
+    }))
+  }
+
+  const removeMilestone = (index: number) => {
+    setTeamEstimateForm(prev => ({
+      ...prev,
+      milestones: prev.milestones.filter((_, i) => i !== index)
+    }))
+  }
+
+  const updateMilestone = (index: number, field: string, value: string) => {
+    setTeamEstimateForm(prev => ({
+      ...prev,
+      milestones: prev.milestones.map((m, i) => 
+        i === index ? { ...m, [field]: value } : m
+      )
+    }))
+  }
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -198,7 +342,6 @@ const ProjectDetailClient: React.FC = () => {
 
   return (
     <div className="w-full max-w-[1024px] mx-auto py-6">
-
       {/* 프로젝트 헤더 */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
         <div className="flex justify-between items-start mb-4">
@@ -271,9 +414,272 @@ const ProjectDetailClient: React.FC = () => {
         </div>
       </div>
 
-      {/* 견적 제출 섹션 */}
-      <div className="bg-white rounded-lg shadow-sm border p-6 mb-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">견적 제출</h3>
+      {/* 팀 견적서 섹션 (매니저용) */}
+      {isManager && (
+        <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-6 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">팀 견적서 작성</h3>
+              <p className="text-sm text-gray-600 mt-1">팀의 수행 가능 범위와 제안사항을 포함한 상세 견적서를 기업에게 제출하세요</p>
+            </div>
+          </div>
+
+          {teamEstimate ? (
+            <div className="bg-blue-50 rounded-lg p-4 mb-4">
+              <h4 className="font-medium text-gray-900 mb-3">제출된 팀 견적서</h4>
+              {teamEstimate.estimate_version && (
+                <>
+                  <div className="grid grid-cols-2 gap-4 mb-3">
+                    <div>
+                      <span className="text-sm text-gray-500">최종 금액:</span>
+                      <p className="font-semibold text-lg">
+                        {teamEstimate.estimate_version.total_amount?.toLocaleString()}원
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-sm text-gray-500">프로젝트 기간:</span>
+                      <p className="font-semibold">
+                        {teamEstimate.estimate_version.start_date && formatDate(teamEstimate.estimate_version.start_date)} ~{' '}
+                        {teamEstimate.estimate_version.end_date && formatDate(teamEstimate.estimate_version.end_date)}
+                      </p>
+                    </div>
+                  </div>
+                  {teamEstimate.milestones && teamEstimate.milestones.length > 0 && (
+                    <div className="mb-3">
+                      <span className="text-sm text-gray-500 block mb-2">마일스톤:</span>
+                      <div className="space-y-2">
+                        {teamEstimate.milestones.map((milestone, idx) => (
+                          <div key={milestone.milestone_id} className="bg-white rounded p-2 text-sm">
+                            <span className="font-medium">{milestone.title}</span>
+                            {milestone.payment_amount && (
+                              <span className="text-gray-600 ml-2">
+                                ({milestone.payment_amount.toLocaleString()}원)
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div className="mb-3">
+                    <span className="text-sm text-gray-500 block mb-1">상세 내용:</span>
+                    <p className="text-gray-700 text-sm whitespace-pre-wrap">{teamEstimate.estimate_version.detail}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <span className={`px-2 py-1 rounded text-xs font-medium ${
+                      teamEstimate.estimate_status === 'pending' 
+                        ? 'bg-yellow-100 text-yellow-800'
+                        : teamEstimate.estimate_status === 'accept'
+                        ? 'bg-green-100 text-green-800'
+                        : 'bg-red-100 text-red-800'
+                    }`}>
+                      {teamEstimate.estimate_status === 'pending' && '검토중'}
+                      {teamEstimate.estimate_status === 'accept' && '수락됨'}
+                      {teamEstimate.estimate_status === 'reject' && '거절됨'}
+                    </span>
+                    <Button
+                      onClick={() => setShowTeamEstimateForm(true)}
+                      variant="outline"
+                      size="sm"
+                    >
+                      견적서 수정
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
+          ) : (
+            <div className="text-center py-8">
+              <p className="text-gray-600 mb-4">아직 팀 견적서를 제출하지 않았습니다.</p>
+              <Button
+                onClick={() => setShowTeamEstimateForm(true)}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                팀 견적서 작성하기
+              </Button>
+            </div>
+          )}
+
+          {showTeamEstimateForm && (
+            <div className="border-t pt-6 mt-6">
+              <h4 className="font-medium text-gray-900 mb-4">
+                {teamEstimate ? '팀 견적서 수정' : '팀 견적서 작성'}
+              </h4>
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      최종 금액 (원) <span className="text-red-500">*</span>
+                    </label>
+                    <Input
+                      type="number"
+                      value={teamEstimateForm.totalAmount}
+                      onChange={(e) => setTeamEstimateForm(prev => ({ ...prev, totalAmount: e.target.value }))}
+                      placeholder="예: 5000000"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      프로젝트 시작일 <span className="text-red-500">*</span>
+                    </label>
+                    <Input
+                      type="date"
+                      value={teamEstimateForm.startDate}
+                      onChange={(e) => setTeamEstimateForm(prev => ({ ...prev, startDate: e.target.value }))}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    프로젝트 종료일 <span className="text-red-500">*</span>
+                  </label>
+                  <Input
+                    type="date"
+                    value={teamEstimateForm.endDate}
+                    onChange={(e) => setTeamEstimateForm(prev => ({ ...prev, endDate: e.target.value }))}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    팀 수행 가능 범위
+                  </label>
+                  <Textarea
+                    value={teamEstimateForm.teamCapability}
+                    onChange={(e) => setTeamEstimateForm(prev => ({ ...prev, teamCapability: e.target.value }))}
+                    rows={3}
+                    placeholder="팀이 수행할 수 있는 작업 범위, 보유 기술 스택, 팀원 구성 등을 설명해주세요."
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    추가 제안
+                  </label>
+                  <Textarea
+                    value={teamEstimateForm.additionalSuggestions}
+                    onChange={(e) => setTeamEstimateForm(prev => ({ ...prev, additionalSuggestions: e.target.value }))}
+                    rows={3}
+                    placeholder="프로젝트 개선을 위한 추가 제안사항을 작성해주세요."
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    상세 설명 <span className="text-red-500">*</span>
+                  </label>
+                  <Textarea
+                    value={teamEstimateForm.detail}
+                    onChange={(e) => setTeamEstimateForm(prev => ({ ...prev, detail: e.target.value }))}
+                    rows={6}
+                    placeholder="프로젝트 수행 계획, 작업 방식, 납품 내용 등을 상세히 작성해주세요."
+                  />
+                </div>
+
+                {/* 마일스톤 섹션 */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-sm font-medium text-gray-700">마일스톤 (선택)</label>
+                    <Button
+                      type="button"
+                      onClick={addMilestone}
+                      variant="outline"
+                      size="sm"
+                      className="flex items-center gap-1"
+                    >
+                      <Plus className="w-4 h-4" />
+                      마일스톤 추가
+                    </Button>
+                  </div>
+                  {teamEstimateForm.milestones.map((milestone, index) => (
+                    <div key={index} className="border rounded-lg p-4 mb-3 bg-gray-50">
+                      <div className="flex items-start justify-between mb-3">
+                        <h5 className="font-medium text-gray-900">마일스톤 {index + 1}</h5>
+                        <Button
+                          type="button"
+                          onClick={() => removeMilestone(index)}
+                          variant="ghost"
+                          size="sm"
+                          className="text-red-600 hover:text-red-700"
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
+                      <div className="space-y-3">
+                        <Input
+                          placeholder="마일스톤 제목"
+                          value={milestone.title}
+                          onChange={(e) => updateMilestone(index, 'title', e.target.value)}
+                        />
+                        <Textarea
+                          placeholder="마일스톤 상세 설명"
+                          value={milestone.detail}
+                          onChange={(e) => updateMilestone(index, 'detail', e.target.value)}
+                          rows={2}
+                        />
+                        <div className="grid grid-cols-3 gap-3">
+                          <Input
+                            type="number"
+                            placeholder="지급 금액 (원)"
+                            value={milestone.paymentAmount}
+                            onChange={(e) => updateMilestone(index, 'paymentAmount', e.target.value)}
+                          />
+                          <Input
+                            type="date"
+                            placeholder="시작일"
+                            value={milestone.startDate}
+                            onChange={(e) => updateMilestone(index, 'startDate', e.target.value)}
+                          />
+                          <Input
+                            type="date"
+                            placeholder="종료일"
+                            value={milestone.endDate}
+                            onChange={(e) => updateMilestone(index, 'endDate', e.target.value)}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex gap-3 pt-4">
+                  <Button
+                    onClick={handleTeamEstimateSubmit}
+                    disabled={submitting}
+                    className="flex-1 bg-blue-600 hover:bg-blue-700"
+                  >
+                    {submitting ? '제출중...' : (teamEstimate ? '견적서 수정' : '견적서 제출')}
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      setShowTeamEstimateForm(false)
+                      // 폼 초기화
+                      setTeamEstimateForm({
+                        totalAmount: '',
+                        startDate: '',
+                        endDate: '',
+                        teamCapability: '',
+                        additionalSuggestions: '',
+                        detail: '',
+                        milestones: [],
+                      })
+                    }}
+                    variant="outline"
+                    className="flex-1"
+                  >
+                    취소
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 견적 제출 섹션 (메이커용) */}
+      {!isManager && (
+        <div className="bg-white rounded-lg shadow-sm border p-6 mb-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">견적 제출</h3>
         
         {existingEstimate ? (
           <div className="bg-gray-50 rounded-lg p-4 mb-4">
@@ -394,6 +800,7 @@ const ProjectDetailClient: React.FC = () => {
           </div>
         )}
       </div>
+      )}
 
       {/* 프로젝트 상세 정보 */}
       <div className="bg-white rounded-lg shadow-sm border p-6 mb-6">

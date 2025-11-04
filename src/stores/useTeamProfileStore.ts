@@ -4,25 +4,33 @@ import { fetchTeamProfileByTeamManager } from '@/apis/team.service'
 import { create } from 'zustand'
 
 interface TeamMember {
-  id: string
-  name: string
-  user_id: string
-  role: string
+  id: number
+  maker_id: string | null
+  team_id: number | null
+  status: string | null
   created_at: string
-  account: any
+  updated_at: string | null
+  account: {
+    profile_id: string
+    user_id: string
+    username: string
+    role: 'MAKER' | 'MANAGER' | 'NONE'
+    bio?: string | null
+  } | null
 }
 
 interface TeamProfile {
   id: number
   name: string
-  bio: string
-  specialty: string[]
-  sub_specialty: string[]
-  prefered: string[]
+  bio: string | null
+  specialty: string[] | null
+  sub_specialty: string[] | null
+  prefered: string[] | null
   manager_id: string
   created_at: string
   updated_at: string
-  team_members: TeamMember[]
+  deleted_at: string | null
+  team_members: TeamMember[] | null
 
   teamHistory?: {
     id: string

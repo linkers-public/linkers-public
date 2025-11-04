@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useMemo } from 'react'
+import React, { useMemo, useEffect, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { useProfileStore } from '@/stores/useProfileStore'
 import Link from 'next/link'
@@ -8,7 +8,48 @@ import Link from 'next/link'
 const SideNavigator = () => {
   const pathname = usePathname()
   const account = useProfileStore((state) => state.profile)
+  const { fetchMyProfileData } = useProfileStore()
+  const [isLoading, setIsLoading] = useState(true)
+
+  // 레이아웃 레벨에서 프로필 미리 로드
+  useEffect(() => {
+    const loadProfile = async () => {
+      try {
+        // 프로필이 없거나 초기 상태인 경우에만 로드
+        if (!account || !account.role) {
+          await fetchMyProfileData()
+        }
+      } catch (error) {
+        console.error('프로필 로드 실패:', error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    loadProfile()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const routes = useMemo(() => {
+    // 프로필이 로드되지 않았거나 없는 경우 기본 메뉴 표시
+    if (!account || !account.role) {
+      return [
+        {
+          icon: '',
+          label: '내 프로필',
+          type: 'my',
+          isActive: pathname === '/my/profile',
+          href: '/my/profile',
+        },
+        {
+          icon: '',
+          label: '프로필 관리',
+          type: 'my',
+          isActive: pathname === '/my/profile/manage',
+          href: '/my/profile/manage',
+        },
+      ]
+    }
+
     // 프리랜서 프로필인지 확인
     const isFreelancer = account?.profile_type === 'FREELANCER'
     
@@ -142,21 +183,35 @@ const SideNavigator = () => {
         },
       ]
     }
-    return []
-  }, [pathname, account?.role])
+    return [
+      {
+        icon: '',
+        label: '내 프로필',
+        type: 'my',
+        isActive: pathname === '/my/profile',
+        href: '/my/profile',
+      },
+      {
+        icon: '',
+        label: '프로필 관리',
+        type: 'my',
+        isActive: pathname === '/my/profile/manage',
+        href: '/my/profile/manage',
+      },
+    ]
+  }, [pathname, account?.role, account?.profile_type])
 
-  if (routes.length === 0) {
-    return null
-  }
+  // 로딩 중이거나 라우트가 없어도 최소한 기본 메뉴는 표시
+  const myRoutes = routes.filter((route) => route.type === 'my')
+  const teamRoutes = routes.filter((route) => route.type === 'team')
 
   return (
     <>
-      <div className="flex flex-col gap-4">
-        <span className="text-p1 text-black80">마이</span>
+      {myRoutes.length > 0 && (
         <div className="flex flex-col gap-4">
-          {routes
-            .filter((route) => route.type === 'my')
-            .map((route, index) => (
+          <span className="text-p1 text-black80">마이</span>
+          <div className="flex flex-col gap-4">
+            {myRoutes.map((route, index) => (
               <div
                 key={index}
                 className={`px-2 py-1 rounded-[14px] text-subtitle2 ${
@@ -173,14 +228,14 @@ const SideNavigator = () => {
                 </Link>
               </div>
             ))}
+          </div>
         </div>
-      </div>
-      <div className="flex flex-col gap-4 mt-4">
-        <span className="text-p1 text-black80">팀</span>
-        <div className="flex flex-col gap-4">
-          {routes
-            .filter((route) => route.type === 'team')
-            .map((route, index) => (
+      )}
+      {teamRoutes.length > 0 && (
+        <div className="flex flex-col gap-4 mt-4">
+          <span className="text-p1 text-black80">팀</span>
+          <div className="flex flex-col gap-4">
+            {teamRoutes.map((route, index) => (
               <div
                 key={index}
                 className={`px-2 py-1 rounded-[14px] text-subtitle2 ${
@@ -197,8 +252,9 @@ const SideNavigator = () => {
                 </Link>
               </div>
             ))}
+          </div>
         </div>
-      </div>
+      )}
     </>
   )
 }
