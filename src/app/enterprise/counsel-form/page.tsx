@@ -8,8 +8,10 @@ interface FormData {
   // 1단계: 기본 정보
   projectTitle: string;
   requirements: string;
-  expectedPeriod: string;
-  expectedBudget: string;
+  expectedPeriod: number | '';  // int (개월)
+  expectedBudget: number | '';  // int (만원)
+  contactPhone: string;
+  contactEmail: string;
   
   // 2단계: 기술 및 분야
   requiredSkills: string[];
@@ -33,6 +35,8 @@ const ProjectCounselForm: React.FC = () => {
     requirements: '',
     expectedPeriod: '',
     expectedBudget: '',
+    contactPhone: '',
+    contactEmail: '',
     requiredSkills: [],
     projectField: '',
     referenceLinks: '',
@@ -146,8 +150,12 @@ const ProjectCounselForm: React.FC = () => {
           client_id: clientData.user_id,
           title: formData.projectTitle,
           outline: formData.requirements,
-          period: formData.expectedPeriod as any,
-          cost: formData.expectedBudget as any,
+          period: formData.expectedPeriod ? `${formData.expectedPeriod}개월` as any : '1개월 이하' as any,  // 기존 ENUM 유지
+          cost: formData.expectedBudget ? `${formData.expectedBudget}만원` as any : '500만원 이하' as any,  // 기존 ENUM 유지
+          expected_period: typeof formData.expectedPeriod === 'number' ? formData.expectedPeriod : null,
+          expected_cost: typeof formData.expectedBudget === 'number' ? formData.expectedBudget : null,
+          contact_phone: formData.contactPhone || null,
+          contact_email: formData.contactEmail || null,
           feild: formData.projectField as any,
           skill: formData.requiredSkills as any,
           output: formData.additionalRequirements,
@@ -205,46 +213,62 @@ const ProjectCounselForm: React.FC = () => {
 
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
-          언제까지 완성되면 좋을까요? *
+          희망 기간 (개월) *
         </label>
-        <div className="grid grid-cols-2 gap-3">
-          {periodOptions.map((option) => (
-            <button
-              key={option}
-              type="button"
-              onClick={() => handleInputChange('expectedPeriod', option)}
-              className={`p-3 rounded-lg border-2 transition-all ${
-                formData.expectedPeriod === option
-                  ? 'border-blue-500 bg-blue-50 text-blue-700'
-                  : 'border-gray-200 bg-white text-gray-700 hover:border-blue-300'
-              }`}
-            >
-              {option}
-            </button>
-          ))}
-        </div>
+        <input
+          type="number"
+          value={formData.expectedPeriod}
+          onChange={(e) => handleInputChange('expectedPeriod', e.target.value ? parseInt(e.target.value) : '')}
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          placeholder="예: 3"
+          min="1"
+          required
+        />
+        <p className="text-sm text-gray-500 mt-1">개월 단위로 숫자만 입력해주세요</p>
       </div>
 
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
-          예상 예산은 얼마 정도인가요? *
+          희망 비용 (만원) *
         </label>
-        <div className="grid grid-cols-2 gap-3">
-          {budgetOptions.map((option) => (
-            <button
-              key={option}
-              type="button"
-              onClick={() => handleInputChange('expectedBudget', option)}
-              className={`p-3 rounded-lg border-2 transition-all ${
-                formData.expectedBudget === option
-                  ? 'border-blue-500 bg-blue-50 text-blue-700'
-                  : 'border-gray-200 bg-white text-gray-700 hover:border-blue-300'
-              }`}
-            >
-              {option}
-            </button>
-          ))}
-        </div>
+        <input
+          type="number"
+          value={formData.expectedBudget}
+          onChange={(e) => handleInputChange('expectedBudget', e.target.value ? parseInt(e.target.value) : '')}
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          placeholder="예: 500"
+          min="0"
+          required
+        />
+        <p className="text-sm text-gray-500 mt-1">만원 단위로 숫자만 입력해주세요</p>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          연락처 (전화번호) *
+        </label>
+        <input
+          type="tel"
+          value={formData.contactPhone}
+          onChange={(e) => handleInputChange('contactPhone', e.target.value)}
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          placeholder="010-1234-5678"
+          required
+        />
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          연락처 (이메일) *
+        </label>
+        <input
+          type="email"
+          value={formData.contactEmail}
+          onChange={(e) => handleInputChange('contactEmail', e.target.value)}
+          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+          placeholder="contact@example.com"
+          required
+        />
       </div>
     </div>
   );

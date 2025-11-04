@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation'
 import { useProfileStore } from '@/stores/useProfileStore'
 import { selectAccount, useAccountStore } from '@/stores/useAccoutStore'
 import { updateAvailabilityStatus } from '@/apis/availability.service'
+import { ProposalDialog } from '@/components/ProposalDialog'
 
 export const ProfileClient = ({ username, isOwner = false }) => {
   const router = useRouter()
@@ -40,13 +41,19 @@ export const ProfileClient = ({ username, isOwner = false }) => {
     main_job = [],
     expertise = [],
     availability_status,
+    profile_type,
+    badges = [],
     account_work_experiences = [],
     account_educations = [],
     account_license = [],
   } = profile || {}
 
+  const [showProposalDialog, setShowProposalDialog] = useState(false)
+
   const onclickBookmark = () => {}
-  const onclickProposal = () => {}
+  const onclickProposal = () => {
+    setShowProposalDialog(true)
+  }
 
   const handleToggleAvailability = async () => {
     try {
@@ -140,6 +147,8 @@ export const ProfileClient = ({ username, isOwner = false }) => {
         mainJob={main_job}
         expertise={expertise}
         bio={bio}
+        profileType={profile_type}
+        badges={badges}
         availabilityStatus={availability_status || 'available'}
         onClickBookmark={onclickBookmark}
         onClickProposal={onclickProposal}
@@ -147,6 +156,16 @@ export const ProfileClient = ({ username, isOwner = false }) => {
         onToggleAvailability={handleToggleAvailability}
         isOwner={isOwner}
       />
+
+      {/* 제안하기 다이얼로그 */}
+      {!isOwner && profile?.user_id && (
+        <ProposalDialog
+          open={showProposalDialog}
+          onOpenChange={setShowProposalDialog}
+          makerUsername={profileUsername}
+          makerId={profile.user_id}
+        />
+      )}
 
       {!alreadyOnboarding ? (
         <>
@@ -166,6 +185,12 @@ export const ProfileClient = ({ username, isOwner = false }) => {
             account_license={account_license}
             isOwner={isOwner}
           />
+          {profile_type === 'FREELANCER' && (
+            <PortfolioMeta
+              profileId={profile?.profile_id}
+              isOwner={isOwner}
+            />
+          )}
         </>
       ) : (
         <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-12 text-center">
@@ -192,6 +217,8 @@ const ProfileMeta = ({
   mainJob,
   expertise,
   bio,
+  profileType,
+  badges = [],
   availabilityStatus,
   onClickBookmark,
   onClickProposal,
@@ -199,6 +226,10 @@ const ProfileMeta = ({
   onToggleAvailability,
   isOwner,
 }) => {
+  const getProfileTypeLabel = (type) => {
+    if (!type) return null
+    return type === 'FREELANCER' ? '프리랜서' : '기업'
+  }
   return (
     <section className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 mb-6">
       <div className="flex gap-4">
@@ -219,8 +250,13 @@ const ProfileMeta = ({
         <div className="flex-1 flex flex-col gap-3">
           <div className="flex items-start justify-between">
             <div className="flex flex-col gap-2">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 flex-wrap">
                 <h1 className="text-2xl font-bold text-gray-900">{username || '사용자'}</h1>
+                {profileType && (
+                  <span className="px-3 py-1 text-sm rounded-full bg-blue-100 text-blue-700 font-medium">
+                    {getProfileTypeLabel(profileType)}
+                  </span>
+                )}
                 {isOwner && (
                   <button
                     onClick={onToggleAvailability}
@@ -234,6 +270,20 @@ const ProfileMeta = ({
                   </button>
                 )}
               </div>
+              
+              {/* 경력 인증 배지 */}
+              {badges && Array.isArray(badges) && badges.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {badges.map((badge, idx) => (
+                    <span
+                      key={idx}
+                      className="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-700 font-medium"
+                    >
+                      🏆 {badge}
+                    </span>
+                  ))}
+                </div>
+              )}
               
               {/* 주직무 */}
               {mainJob && mainJob.length > 0 && (
@@ -509,3 +559,98 @@ const LicenseMeta = ({ account_license, isOwner }) => {
     </div>
   )
 }
+
+const PortfolioMeta = ({ profileId, isOwner }) => {
+  const router = useRouter()
+  const [portfolios, setPortfolios] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!profileId) return
+    loadPortfolios()
+  }, [profileId])
+
+  const loadPortfolios = async () => {
+    try {
+      setLoading(true)
+      const supabase = createSupabaseBrowserClient()
+      const { data, error } = await supabase
+        .from('account_portfolios')
+        .select('*')
+        .eq('profile_id', profileId)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false })
+        .limit(6) // 최대 6개만 표시
+
+      if (error) throw error
+      setPortfolios(data || [])
+    } catch (error) {
+      console.error('포트폴리오 로드 실패:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (loading) {
+    return null
+  }
+
+  if (!portfolios || portfolios.length === 0) {
+    return null
+  }
+
+  return (
+    <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 mb-6">
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-xl font-bold text-gray-900">📁 포트폴리오</h2>
+        {isOwner && (
+          <Button
+            onClick={() => router.push('/my/profile/portfolio')}
+            variant="outline"
+            size="sm"
+          >
+            전체 보기
+          </Button>
+        )}
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {portfolios.map((portfolio) => (
+          <div
+            key={portfolio.id}
+            className="border rounded-lg p-4 hover:shadow-md transition-shadow"
+          >
+            {portfolio.image_url && (
+              <img
+                src={portfolio.image_url}
+                alt={portfolio.title}
+                className="w-full h-32 object-cover rounded-lg mb-3"
+              />
+            )}
+            <h3 className="font-semibold text-gray-900 mb-2 line-clamp-1">
+              {portfolio.title}
+            </h3>
+            {portfolio.description && (
+              <p className="text-sm text-gray-600 mb-2 line-clamp-2">
+                {portfolio.description}
+              </p>
+            )}
+            {portfolio.role && (
+              <p className="text-xs text-gray-500 mb-2">
+                역할: {portfolio.role}
+              </p>
+            )}
+            <a
+              href={portfolio.link_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-blue-600 hover:underline"
+            >
+              링크 보기 →
+            </a>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+

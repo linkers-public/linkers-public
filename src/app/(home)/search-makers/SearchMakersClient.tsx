@@ -1,7 +1,6 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
-import { SearchIcon } from 'lucide-react'
 import { useMakerFilter } from '@/hooks/use-maker-filter'
 import { useRouter } from 'next/navigation'
 import {
@@ -75,11 +74,11 @@ const SearchMakersClient = () => {
 
   return (
     <div className="w-full">
-      <h2 className="text-h3 ml-1 mb-4">메이커 찾기</h2>
+      <h2 className="text-xl font-bold mb-6">메이커 찾기</h2>
       
       {/* 필터 섹션 */}
-      <section className="flex gap-4 mb-4">
-        <div className="flex gap-2 relative flex-wrap">
+      <section className="flex gap-3 mb-6">
+        <div className="flex gap-2 flex-wrap">
           <ExperienceFilter
             value={filters.experience}
             onChange={(value) => handleFilterChange('experience', value)}
@@ -93,43 +92,44 @@ const SearchMakersClient = () => {
             onChange={(value) => handleFilterChange('specialization', value)}
           />
         </div>
-        <div className="flex-1 flex gap-4 shadow-md py-2 px-4 rounded-[12px] hover:shadow-lg border border-gray-200">
-          <SearchIcon className="w-5 h-5 text-gray-400" />
-          <span className="text-gray-500">검색</span>
-        </div>
       </section>
 
       {/* 로딩 상태 */}
       {isLoading && (
-        <div className="flex justify-center items-center py-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+        <div className="flex justify-center items-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-400"></div>
           <span className="ml-2 text-gray-600">메이커를 불러오는 중...</span>
         </div>
       )}
 
       {/* 에러 상태 */}
       {error && (
-        <div className="text-center py-8">
+        <div className="text-center py-12">
           <div className="text-red-600 mb-2">오류가 발생했습니다</div>
           <div className="text-sm text-gray-600">{error.message}</div>
         </div>
       )}
 
-      {/* 메이커 목록 - search-projects처럼 항상 렌더링 */}
-      <section className="flex flex-col gap-4 w-full">
-        {makerList.map((maker) => (
-          <Link
-            href={`/profile/${maker.username}`}
-            key={maker.user_id}
-            className="block"
-          >
-            <SearchMakerCard
-              key={maker.user_id}
-              maker={maker}
-            />
-          </Link>
-        ))}
-      </section>
+      {/* 메이커 목록 */}
+      {!isLoading && !error && (
+        <section className="flex flex-col gap-3 w-full">
+          {makerList.length === 0 ? (
+            <div className="text-center py-12 text-gray-500">
+              검색 조건에 맞는 메이커가 없습니다.
+            </div>
+          ) : (
+            makerList.map((maker) => (
+              <Link
+                href={`/profile/${maker.username}`}
+                key={maker.user_id}
+                className="block"
+              >
+                <SearchMakerCard maker={maker} />
+              </Link>
+            ))
+          )}
+        </section>
+      )}
     </div>
   )
 }

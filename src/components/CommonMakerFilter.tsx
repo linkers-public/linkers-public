@@ -25,7 +25,7 @@ export const ExperienceFilter = ({
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button className="flex items-center justify-center px-4 py-2 rounded-[12px] shadow-normal min-w-[120px]">
+        <Button variant="outline" className="px-4 py-2">
           경력 : {value[0]}년 ~ {value[1]}년
         </Button>
       </DialogTrigger>
@@ -93,14 +93,11 @@ export const JobFilter = ({ value, onChange }: JobFilterProps) => {
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <Button>
-          {selectedCategory ? (
-            <>
-              {selectedCategory} · {value[0]}
-              {value.length > 1 && ` 외 ${value.length - 1}개`}
-            </>
+        <Button variant="outline">
+          {value.length > 0 ? (
+            `직무 (${value.length})`
           ) : (
-            `직무를 선택하세요 (${value.length})`
+            '직무 선택'
           )}
         </Button>
       </DialogTrigger>

@@ -29,7 +29,7 @@ export const ManageableMakerCard = ({
   onPropose,
 }: BookmarkCardProps) => {
   return (
-    <div className="flex shadow-normal justify-between py-4 px-6 rounded-[12px] gap-2">
+    <div className="flex shadow-sm border border-gray-200 bg-white justify-between py-4 px-6 rounded-lg gap-2">
       <div className="flex gap-4 items-center">
         <div className="w-12 h-12 rounded-full bg-palette-coolNeutral-90" />
         <div>

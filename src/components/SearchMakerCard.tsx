@@ -20,48 +20,30 @@ interface SearchMakerCardProps {
 }
 
 export const SearchMakerCard = ({ maker }: SearchMakerCardProps) => {
+  const totalExp = maker.account_work_experiences.length > 0
+    ? calculateTotalExperience(maker.account_work_experiences)
+    : null
+
   return (
-    <div className="flex shadow-normal justify-between py-4 px-6 rounded-[12px] gap-2">
-      <div className="flex gap-4 items-center">
-        <div className="w-12 h-12 rounded-full bg-palette-coolNeutral-90" />
-        <div>
-          <h3 className="text-subtitle2">{maker.username}</h3>
-          <div className="flex flex-col gap-2 text-p3 text-palette-coolNeutral-60">
-            <span>
-              총 경력 :
-              {maker.account_work_experiences.length > 0 ? (
-                <span>
-                  {
-                    calculateTotalExperience(maker.account_work_experiences)
-                      .years
-                  }
-                  년{' '}
-                  {
-                    calculateTotalExperience(maker.account_work_experiences)
-                      .months
-                  }
-                  개월
-                </span>
-              ) : (
-                <span>신입</span>
-              )}
-              <span className="text-palette-coolNeutral-40 ml">
-                {'  '}(
-                {maker.account_work_experiences.length > 0 &&
-                  maker.account_work_experiences.map((exp) => exp.company_name)}
-                )
+    <div className="flex justify-between py-4 px-6 border border-gray-200 rounded-lg hover:border-gray-300 transition-colors bg-white">
+      <div className="flex gap-4 items-start w-full">
+        <div className="w-12 h-12 rounded-full bg-gray-200 flex-shrink-0" />
+        <div className="flex-1 min-w-0">
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">{maker.username}</h3>
+          <div className="flex flex-col gap-1.5 text-sm text-gray-600">
+            {totalExp ? (
+              <span>
+                경력: {totalExp.years}년 {totalExp.months}개월
               </span>
-            </span>
-            <span>주직무 : {maker.main_job?.join(', ')}</span>
-            <span>전문분야 : {maker.expertise?.join(', ')}</span>
-            <div className="flex gap-2">
-              <span className="rounded-full px-2 py-1 border-solid border border-palette-coolNeutral-90 text-palette-coolNeutral-40 text-xs">
-                주요 스킬1
-              </span>
-              <span className="rounded-full px-2 py-1 border-solid border border-palette-coolNeutral-90 text-palette-coolNeutral-40 text-xs">
-                주요 스킬2
-              </span>
-            </div>
+            ) : (
+              <span>경력: 신입</span>
+            )}
+            {maker.main_job && maker.main_job.length > 0 && (
+              <span>주직무: {maker.main_job.join(', ')}</span>
+            )}
+            {maker.expertise && maker.expertise.length > 0 && (
+              <span>전문분야: {maker.expertise.join(', ')}</span>
+            )}
           </div>
         </div>
       </div>

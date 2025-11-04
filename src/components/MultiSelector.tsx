@@ -50,31 +50,23 @@ const MultiSelector = ({
       {/* Trigger */}
       <button
         onClick={() => setIsOpen((prev) => !prev)}
-        className={`flex items-center justify-between px-4 py-2 rounded-[12px] shadow-normal min-w-[160px] ${
-          values.length > 0
-            ? 'border-2 border-solid border-palette-label-normal'
-            : ''
-        }`}
+        className="flex items-center justify-between px-4 py-2 rounded-md border border-gray-300 bg-white hover:bg-gray-50 min-w-[140px] text-sm"
       >
-        <span className="text-p2 text-palette-coolNeutral-40">
+        <span className="text-gray-700">
           {values.length > 0
-            ? values.length === 1
-              ? options.find((o) => o.value === values[0])?.label
-              : `${options.find((o) => o.value === values[0])?.label} 외 ${
-                  values.length - 1
-                }개`
-            : placeholder}
+            ? `${values.length}개 선택됨`
+            : placeholder || '선택'}
         </span>
-        <ChevronDown />
+        <ChevronDown className="w-4 h-4 text-gray-500" />
       </button>
 
       {/* Dropdown Select */}
       {isOpen && (
-        <ul className="absolute z-10 w-full bg-white rounded-[12px] shadow-normal mt-2">
+        <ul className="absolute z-10 w-full bg-white rounded-md border border-gray-200 shadow-lg mt-1 max-h-60 overflow-auto">
           {options.map((option) => (
             <li
               key={option.value}
-              className="flex items-center px-4 py-2 cursor-pointer hover:bg-palette-coolNeutral-98"
+              className="flex items-center px-4 py-2 cursor-pointer hover:bg-gray-50 text-sm"
               onClick={() => handleSelectChange(option.value)}
             >
               <input
@@ -83,7 +75,7 @@ const MultiSelector = ({
                 readOnly
                 className="mr-2"
               />
-              <p className="text-p2">{option.label}</p>
+              <span className="text-gray-700">{option.label}</span>
             </li>
           ))}
         </ul>

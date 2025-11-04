@@ -9,8 +9,11 @@ const SideNavigator = () => {
   const pathname = usePathname()
   const account = useProfileStore((state) => state.profile)
   const routes = useMemo(() => {
-    if (account?.role === 'MAKER') {
-      return [
+    // 프리랜서 프로필인지 확인
+    const isFreelancer = account?.profile_type === 'FREELANCER'
+    
+    if (account?.role === 'MAKER' || (isFreelancer && account?.role === 'MANAGER')) {
+      const baseRoutes = [
         {
           icon: '',
           label: '내 프로필',
@@ -18,6 +21,43 @@ const SideNavigator = () => {
           isActive: pathname === '/my/profile',
           href: '/my/profile',
         },
+        {
+          icon: '',
+          label: '프로필 관리',
+          type: 'my',
+          isActive: pathname === '/my/profile/manage',
+          href: '/my/profile/manage',
+        },
+      ]
+
+      // 프리랜서만 보이는 메뉴들
+      if (isFreelancer) {
+        baseRoutes.push(
+          {
+            icon: '',
+            label: '포트폴리오',
+            type: 'my',
+            isActive: pathname === '/my/profile/portfolio',
+            href: '/my/profile/portfolio',
+          },
+          {
+            icon: '',
+            label: '경력 인증 배지',
+            type: 'my',
+            isActive: pathname === '/my/profile/badges',
+            href: '/my/profile/badges',
+          },
+          {
+            icon: '',
+            label: '쪽지함',
+            type: 'my',
+            isActive: pathname === '/my/messages',
+            href: '/my/messages',
+          }
+        )
+      }
+
+      baseRoutes.push(
         {
           icon: '',
           label: '할당된 프로젝트',
@@ -45,8 +85,10 @@ const SideNavigator = () => {
           type: 'team',
           isActive: pathname === '/my/projects',
           href: '/my/projects',
-        },
-      ]
+        }
+      )
+
+      return baseRoutes
     } else if (account?.role === 'MANAGER') {
       return [
         {
@@ -55,6 +97,13 @@ const SideNavigator = () => {
           type: 'my',
           isActive: pathname === '/my/profile',
           href: '/my/profile',
+        },
+        {
+          icon: '',
+          label: '프로필 관리',
+          type: 'my',
+          isActive: pathname === '/my/profile/manage',
+          href: '/my/profile/manage',
         },
         {
           icon: '',

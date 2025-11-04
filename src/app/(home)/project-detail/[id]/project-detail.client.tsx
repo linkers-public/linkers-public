@@ -3,10 +3,15 @@
 import React, { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { fetchCounselWithClient } from '@/apis/counsel.service'
-import { submitParticipationInterest, getParticipationStatus } from '@/apis/participation.service'
 import { submitMakerEstimate, getMakerEstimate } from '@/apis/maker-estimate.service'
+import { getProjectMembers } from '@/apis/project-member.service'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { toast } from '@/hooks/use-toast'
+import { formatDate } from '@/lib/dateFormat'
+import { ArrowLeft } from 'lucide-react'
+import ProjectJoinModal from '@/components/ProjectJoinModal'
 
 interface Counsel {
   counsel_id: number
@@ -32,11 +37,12 @@ interface Client {
 const ProjectDetailClient: React.FC = () => {
   const [counsel, setCounsel] = useState<Counsel | null>(null)
   const [client, setClient] = useState<Client | null>(null)
-  const [participationStatus, setParticipationStatus] = useState<string | null>(null)
+  const [projectMembers, setProjectMembers] = useState<any[]>([])
   const [existingEstimate, setExistingEstimate] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [showEstimateForm, setShowEstimateForm] = useState(false)
+  const [showJoinModal, setShowJoinModal] = useState(false)
   const [estimateForm, setEstimateForm] = useState({
     estimateAmount: '',
     estimatePeriod: '',
@@ -55,24 +61,40 @@ const ProjectDetailClient: React.FC = () => {
       }
 
       try {
-        // 프로젝트 상세 정보 조회
+        // 프로젝트 상세 정보 조회 (필수)
         const result = await fetchCounselWithClient(Number(counselId))   
-        setCounsel(result?.counsel || null)
-        setClient(result?.client || null)
+        if (!result || !result.counsel) {
+          console.error('프로젝트를 찾을 수 없습니다.')
+          setLoading(false)
+          return
+        }
+        
+        setCounsel(result.counsel)
+        setClient(result.client || null)
 
-        // 현재 사용자의 참여 의향 상태 조회
-        const participation = await getParticipationStatus(Number(counselId))
-        setParticipationStatus(participation?.participation_status || null)
+        // 프로젝트 멤버 조회 (선택적 - 실패해도 계속 진행)
+        try {
+          const members = await getProjectMembers(Number(counselId))
+          setProjectMembers(members || [])
+        } catch (error) {
+          console.warn('프로젝트 멤버 조회 실패 (무시):', error)
+          // 로그인하지 않은 사용자거나 에러가 발생해도 무시하고 계속 진행
+        }
 
-        // 현재 사용자의 견적 조회
-        const estimate = await getMakerEstimate(Number(counselId))
-        setExistingEstimate(estimate)
-        if (estimate) {
-          setEstimateForm({
-            estimateAmount: estimate.estimate_amount.toString(),
-            estimatePeriod: estimate.estimate_period,
-            estimateDetails: estimate.estimate_details
-          })
+        // 현재 사용자의 견적 조회 (선택적 - 실패해도 계속 진행)
+        try {
+          const estimate = await getMakerEstimate(Number(counselId))
+          setExistingEstimate(estimate)
+          if (estimate) {
+            setEstimateForm({
+              estimateAmount: estimate.estimate_amount.toString(),
+              estimatePeriod: estimate.estimate_period,
+              estimateDetails: estimate.estimate_details
+            })
+          }
+        } catch (error) {
+          console.warn('견적 조회 실패 (무시):', error)
+          // 로그인하지 않은 사용자거나 에러가 발생해도 무시하고 계속 진행
         }
       } catch (error) {
         console.error('Error fetching project details:', error)
@@ -89,29 +111,19 @@ const ProjectDetailClient: React.FC = () => {
     fetchData()
   }, [counselId])
 
-  const handleParticipationInterest = async (status: 'interested' | 'not_interested') => {
-    if (!counselId) return
-
-    setSubmitting(true)
-    try {
-      await submitParticipationInterest(Number(counselId), status)
-      setParticipationStatus(status)
-      
-      toast({
-        title: '참여 의향 제출 완료',
-        description: status === 'interested' 
-          ? '프로젝트에 참여 의향을 표시했습니다.' 
-          : '프로젝트 참여 의향이 없음을 표시했습니다.',
-      })
-    } catch (error) {
-      console.error('Error submitting participation interest:', error)
-      toast({
-        variant: 'destructive',
-        title: '에러 발생',
-        description: '참여 의향 제출에 실패했습니다.',
-      })
-    } finally {
-      setSubmitting(false)
+  const handleJoinSuccess = async () => {
+    toast({
+      title: '참여 신청 완료',
+      description: '프로젝트 참여 신청이 완료되었습니다.',
+    })
+    // 프로젝트 멤버 목록 새로고침
+    if (counselId) {
+      try {
+        const members = await getProjectMembers(Number(counselId))
+        setProjectMembers(members || [])
+      } catch (error) {
+        console.warn('프로젝트 멤버 조회 실패:', error)
+      }
     }
   }
 
@@ -160,7 +172,10 @@ const ProjectDetailClient: React.FC = () => {
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
-        <p className="text-lg text-gray-600">로딩중...</p>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-lg text-gray-600">프로젝트 정보를 불러오는 중...</p>
+        </div>
       </div>
     )
   }
@@ -168,25 +183,36 @@ const ProjectDetailClient: React.FC = () => {
   if (!counsel) {
     return (
       <div className="flex justify-center items-center h-64">
-        <p className="text-lg text-gray-600">프로젝트를 불러올 수 없습니다.</p>
+        <div className="text-center bg-red-50 border border-red-200 rounded-lg p-6 max-w-md">
+          <div className="text-4xl mb-4">❌</div>
+          <p className="text-lg font-semibold text-red-900 mb-2">프로젝트를 불러올 수 없습니다</p>
+          <p className="text-sm text-red-700 mb-4">프로젝트가 존재하지 않거나 접근 권한이 없습니다.</p>
+          <Button onClick={() => router.back()} variant="outline">
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            돌아가기
+          </Button>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-6">
+    <div className="w-full max-w-[1024px] mx-auto py-6">
+
       {/* 프로젝트 헤더 */}
-      <div className="bg-white rounded-lg shadow-sm border p-6 mb-6">
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
         <div className="flex justify-between items-start mb-4">
-          <h1 className="text-3xl font-bold text-gray-900">{counsel.title}</h1>
-          <div className="flex gap-2">
-            <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-              counsel.counsel_status === 'recruiting' 
-                ? 'bg-green-100 text-green-800' 
-                : 'bg-gray-100 text-gray-800'
-            }`}>
-              {counsel.counsel_status === 'recruiting' ? '모집중' : '대기중'}
-            </span>
+          <div className="flex-1">
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">{counsel.title || '제목 없음'}</h1>
+            <div className="flex items-center gap-2">
+              <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                counsel.counsel_status === 'recruiting' 
+                  ? 'bg-green-100 text-green-700' 
+                  : 'bg-gray-100 text-gray-700'
+              }`}>
+                {counsel.counsel_status === 'recruiting' ? '모집중' : '대기중'}
+              </span>
+            </div>
           </div>
         </div>
 
@@ -194,56 +220,53 @@ const ProjectDetailClient: React.FC = () => {
         <div className="grid grid-cols-2 gap-4 mb-6">
           <div>
             <h3 className="text-sm font-medium text-gray-500 mb-1">예상 예산</h3>
-            <p className="text-lg font-semibold text-gray-900">{counsel.cost}</p>
+            <p className="text-lg font-semibold text-gray-900">{counsel.cost || '협의'}</p>
           </div>
           <div>
             <h3 className="text-sm font-medium text-gray-500 mb-1">예상 기간</h3>
-            <p className="text-lg font-semibold text-gray-900">{counsel.period}</p>
+            <p className="text-lg font-semibold text-gray-900">{counsel.period || '협의'}</p>
           </div>
           <div>
             <h3 className="text-sm font-medium text-gray-500 mb-1">프로젝트 분야</h3>
-            <p className="text-lg font-semibold text-gray-900">{counsel.feild}</p>
+            <p className="text-lg font-semibold text-gray-900">{counsel.feild || '미지정'}</p>
           </div>
           <div>
             <h3 className="text-sm font-medium text-gray-500 mb-1">시작 예정일</h3>
             <p className="text-lg font-semibold text-gray-900">
-              {new Date(counsel.start_date).toLocaleDateString('ko-KR')}
+              {counsel.start_date ? formatDate(counsel.start_date) : '미정'}
             </p>
           </div>
         </div>
 
-        {/* 참여 의향 버튼 */}
-        <div className="border-t pt-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">프로젝트 참여 의향</h3>
-          <div className="flex gap-4">
-            <Button
-              onClick={() => handleParticipationInterest('interested')}
-              disabled={submitting || participationStatus === 'interested'}
-              className={`px-6 py-3 ${
-                participationStatus === 'interested'
-                  ? 'bg-green-600 hover:bg-green-700'
-                  : 'bg-blue-600 hover:bg-blue-700'
-              } text-white`}
-            >
-              {participationStatus === 'interested' ? '참여 의향 있음 ✓' : '참여 의향 있음'}
-            </Button>
-            <Button
-              onClick={() => handleParticipationInterest('not_interested')}
-              disabled={submitting || participationStatus === 'not_interested'}
-              variant="outline"
-              className={`px-6 py-3 ${
-                participationStatus === 'not_interested'
-                  ? 'border-red-500 text-red-600 bg-red-50'
-                  : 'border-gray-300 text-gray-700'
-              }`}
-            >
-              {participationStatus === 'not_interested' ? '참여 의향 없음 ✓' : '참여 의향 없음'}
-            </Button>
-          </div>
-          {participationStatus && (
-            <p className="text-sm text-gray-600 mt-2">
-              현재 상태: {participationStatus === 'interested' ? '참여 의향 있음' : '참여 의향 없음'}
-            </p>
+        {/* 프로젝트 참여 버튼 */}
+        <div className="border-t border-gray-200 pt-6">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">프로젝트 참여하기</h3>
+          <Button
+            onClick={() => setShowJoinModal(true)}
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+            size="lg"
+          >
+            프로젝트 참여 신청
+          </Button>
+          {projectMembers.length > 0 && (
+            <div className="mt-4">
+              <p className="text-sm text-gray-600 mb-2">참여 중인 멤버 ({projectMembers.length}명)</p>
+              <div className="flex flex-wrap gap-2">
+                {projectMembers.slice(0, 5).map((member) => (
+                  <span
+                    key={member.id}
+                    className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm"
+                  >
+                    {member.profile?.username || '알 수 없음'} ({member.role === 'MAKER' ? '메이커' : '매니저'})
+                  </span>
+                ))}
+                {projectMembers.length > 5 && (
+                  <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm">
+                    +{projectMembers.length - 5}명 더
+                  </span>
+                )}
+              </div>
+            </div>
           )}
         </div>
       </div>
@@ -312,11 +335,10 @@ const ProjectDetailClient: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   견적 금액 (원)
                 </label>
-                <input
+                <Input
                   type="number"
                   value={estimateForm.estimateAmount}
                   onChange={(e) => setEstimateForm(prev => ({ ...prev, estimateAmount: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="예: 5000000"
                 />
               </div>
@@ -328,7 +350,7 @@ const ProjectDetailClient: React.FC = () => {
                 <select
                   value={estimateForm.estimatePeriod}
                   onChange={(e) => setEstimateForm(prev => ({ ...prev, estimatePeriod: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 >
                   <option value="">기간을 선택하세요</option>
                   <option value="1주일">1주일</option>
@@ -344,11 +366,10 @@ const ProjectDetailClient: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   견적 상세 설명
                 </label>
-                <textarea
+                <Textarea
                   value={estimateForm.estimateDetails}
                   onChange={(e) => setEstimateForm(prev => ({ ...prev, estimateDetails: e.target.value }))}
                   rows={4}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   placeholder="프로젝트 수행 계획, 사용할 기술 스택, 추가 비용 등에 대해 설명해주세요."
                 />
               </div>
@@ -430,16 +451,14 @@ const ProjectDetailClient: React.FC = () => {
         </div>
       )}
 
-      {/* 뒤로가기 버튼 */}
-      <div className="mt-6">
-        <Button
-          onClick={() => router.back()}
-          variant="outline"
-          className="px-6 py-2"
-        >
-          뒤로가기
-        </Button>
-      </div>
+      {/* 프로젝트 참여 모달 */}
+      <ProjectJoinModal
+        open={showJoinModal}
+        onClose={() => setShowJoinModal(false)}
+        counselId={Number(counselId)}
+        onSuccess={handleJoinSuccess}
+      />
+
     </div>
   )
 }
