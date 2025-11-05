@@ -114,7 +114,7 @@ export const updateProjectMember = async (
       updateData.joined_at = new Date().toISOString()
     }
     // COMPLETED나 LEFT로 변경되면 left_at 설정
-    if (data.status === 'completed' || data.status === 'declined') {
+    if (data.status === 'COMPLETED' || data.status === 'LEFT') {
       updateData.left_at = new Date().toISOString()
     }
   }

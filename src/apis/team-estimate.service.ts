@@ -92,7 +92,7 @@ export const submitTeamEstimate = async (
     .eq('counsel_id', counselId)
     .maybeSingle()
 
-  if (counselError || !counselData?.company_profile_id) {
+  if (counselError || !counselData || !(counselData as any).company_profile_id) {
     throw new Error('프로젝트 정보를 찾을 수 없습니다.')
   }
 
@@ -129,7 +129,7 @@ export const submitTeamEstimate = async (
       .insert({
         team_id: teamData.id,
         manager_profile_id: managerProfile.profile_id,
-        company_profile_id: companyProfileId || counselData.company_profile_id,
+        company_profile_id: companyProfileId || (counselData as any).company_profile_id,
         counsel_id: counselId,
         estimate_status: 'pending',
         estimate_start_date: formData.startDate || null,
@@ -182,7 +182,7 @@ export const submitTeamEstimate = async (
       payment_amount: milestone.paymentAmount,
       milestone_start_date: milestone.startDate || null,
       milestone_due_date: milestone.endDate || null,
-      progress: '0',
+      progress: 0,
     }))
 
     const { error: milestoneError } = await supabase
@@ -265,7 +265,7 @@ export const getTeamEstimate = async (counselId: number): Promise<TeamEstimate |
 
   return {
     ...estimate,
-    estimate_version: estimateVersion || undefined,
+    estimate_version: estimateVersion && estimateVersion.estimate_id !== null ? estimateVersion : undefined,
     milestones: milestones || undefined,
   }
 }
