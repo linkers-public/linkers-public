@@ -9,7 +9,7 @@ interface Maker {
   expertise: string[] | null;
   main_job: string[] | null;
   role: string;
-  availability_status: string;
+  availability_status: string | null;
 }
 
 const SearchMakersPage: React.FC = () => {

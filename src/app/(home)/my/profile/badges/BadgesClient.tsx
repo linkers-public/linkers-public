@@ -22,8 +22,11 @@ interface VerificationRequest {
   description: string | null
   status: 'PENDING' | 'APPROVED' | 'REJECTED'
   rejection_reason: string | null
-  created_at: string
+  created_at: string | null
   reviewed_at: string | null
+  updated_at?: string | null
+  reviewed_by?: string | null
+  profile_id?: string
 }
 
 export default function BadgesClient() {
@@ -321,9 +324,11 @@ export default function BadgesClient() {
                       </p>
                     )}
                     <div className="flex items-center gap-4 text-xs text-gray-500">
-                      <span>
-                        요청일: {new Date(request.created_at).toLocaleDateString('ko-KR')}
-                      </span>
+                      {request.created_at && (
+                        <span>
+                          요청일: {new Date(request.created_at).toLocaleDateString('ko-KR')}
+                        </span>
+                      )}
                       {request.reviewed_at && (
                         <span>
                           검토일: {new Date(request.reviewed_at).toLocaleDateString('ko-KR')}

@@ -78,7 +78,8 @@ export default function PortfolioClient() {
       }
 
       // 포트폴리오 가져오기
-      const { data, error } = await supabase
+      // TODO: account_portfolios 테이블을 타입 정의에 추가 필요
+      const { data, error } = await (supabase as any)
         .from('account_portfolios')
         .select('*')
         .eq('profile_id', profile.profile_id)
@@ -135,7 +136,7 @@ export default function PortfolioClient() {
 
       if (editingPortfolio) {
         // 업데이트
-        const { error } = await supabase
+        const { error } = await (supabase as any)
           .from('account_portfolios')
           .update({
             title: formData.title,
@@ -153,7 +154,7 @@ export default function PortfolioClient() {
         })
       } else {
         // 생성
-        const { error } = await supabase
+        const { error } = await (supabase as any)
           .from('account_portfolios')
           .insert({
             profile_id: profile.profile_id,
@@ -210,7 +211,7 @@ export default function PortfolioClient() {
 
     try {
       const supabase = createSupabaseBrowserClient()
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from('account_portfolios')
         .update({ deleted_at: new Date().toISOString() })
         .eq('id', id)

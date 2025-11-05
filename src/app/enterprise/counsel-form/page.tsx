@@ -91,7 +91,7 @@ const ProjectCounselForm: React.FC = () => {
     '엔터프라이즈급 보안'
   ];
 
-  const handleInputChange = (field: keyof FormData, value: string | string[]) => {
+  const handleInputChange = (field: keyof FormData, value: string | string[] | number) => {
     setFormData(prev => ({
       ...prev,
       [field]: value
@@ -218,7 +218,7 @@ const ProjectCounselForm: React.FC = () => {
         <input
           type="number"
           value={formData.expectedPeriod}
-          onChange={(e) => handleInputChange('expectedPeriod', e.target.value ? parseInt(e.target.value) : '')}
+          onChange={(e) => handleInputChange('expectedPeriod', e.target.value ? parseInt(e.target.value) : '' as number | '')}
           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
           placeholder="예: 3"
           min="1"
@@ -234,7 +234,7 @@ const ProjectCounselForm: React.FC = () => {
         <input
           type="number"
           value={formData.expectedBudget}
-          onChange={(e) => handleInputChange('expectedBudget', e.target.value ? parseInt(e.target.value) : '')}
+          onChange={(e) => handleInputChange('expectedBudget', e.target.value ? parseInt(e.target.value) : '' as number | '')}
           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
           placeholder="예: 500"
           min="0"

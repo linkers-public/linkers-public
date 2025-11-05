@@ -127,23 +127,23 @@ export default function EstimateRequestsClient() {
           const { data: teamData } = await supabase
             .from('teams')
             .select('id')
-            .eq('manager_profile_id', managerProfile.profile_id)
+            .eq('manager_profile_id', profile.profile_id)
             .limit(1)
             .maybeSingle()
 
           if (!teamData) {
-            return { ...req, estimate: null }
+            return { ...(req as any), estimate: null }
           }
 
           // 해당 팀이 이미 견적서를 제출했는지 확인
           const { data: estimateData } = await supabase
             .from('estimate')
             .select('estimate_id, estimate_status')
-            .eq('counsel_id', req.counsel_id)
+            .eq('counsel_id', (req as any).counsel_id)
             .eq('team_id', teamData.id)
             .maybeSingle()
 
-          return { ...req, estimate: estimateData || null }
+          return { ...(req as any), estimate: estimateData || null }
         })
       )
 
@@ -262,7 +262,7 @@ export default function EstimateRequestsClient() {
         .eq('counsel_id', selectedRequest.counsel_id)
         .maybeSingle()
 
-      if (counselError || !counselData?.company_profile_id) {
+      if (counselError || !counselData || !(counselData as any).company_profile_id) {
         throw new Error('프로젝트 정보를 찾을 수 없습니다.')
       }
 
@@ -272,7 +272,7 @@ export default function EstimateRequestsClient() {
         .insert({
           team_id: teamData.id,
           manager_profile_id: managerProfile.profile_id,
-          company_profile_id: counselData.company_profile_id,
+          company_profile_id: (counselData as any).company_profile_id,
           counsel_id: selectedRequest.counsel_id,
           estimate_status: 'pending',
           estimate_start_date: estimateForm.start_date || null,

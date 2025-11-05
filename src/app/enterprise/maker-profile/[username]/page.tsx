@@ -12,7 +12,7 @@ interface MakerProfile {
   main_job: string[] | null;
   role: string;
   created_at: string;
-  availability_status: string;
+  availability_status: string | null;
   // 추가 프로필 정보
   portfolio_url?: string;
   github_url?: string;

@@ -31,6 +31,14 @@ interface TeamProfile {
   updated_at: string
   deleted_at: string | null
   team_members: TeamMember[] | null
+  manager?: {
+    profile_id: string
+    user_id: string
+    username: string
+    role: 'MAKER' | 'MANAGER' | 'NONE'
+    bio?: string | null
+    profile_image_url?: string | null
+  } | null
 
   teamHistory?: {
     id: string

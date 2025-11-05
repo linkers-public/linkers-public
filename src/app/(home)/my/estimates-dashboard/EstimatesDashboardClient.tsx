@@ -134,8 +134,7 @@ export default function EstimatesDashboardClient() {
           team:team_id (
             id,
             name,
-            bio,
-            specialty
+            bio
           ),
           counsel:counsel_id (
             counsel_id,
@@ -174,7 +173,7 @@ export default function EstimatesDashboardClient() {
                 profile_type
               )
             `)
-            .eq('team_id', est.team?.id)
+            .eq('team_id', (est.team as any)?.id)
 
           return {
             ...est,
@@ -185,7 +184,7 @@ export default function EstimatesDashboardClient() {
         })
       )
 
-      setEstimates(estimatesWithDetails)
+      setEstimates(estimatesWithDetails as any)
     } catch (error: any) {
       console.error('견적서 로드 실패:', error)
       toast({
@@ -263,31 +262,16 @@ export default function EstimatesDashboardClient() {
         return
       }
 
-      const { data: counselData, error: counselError } = await supabase
-        .from('counsel')
-        .select('contact_phone, contact_email')
-        .eq('counsel_id', estimate.counsel_id)
-        .single()
-
-      if (counselError) throw counselError
-
-      if (!counselData?.contact_phone && !counselData?.contact_email) {
-        toast({
-          variant: 'destructive',
-          title: '연락처 정보가 없습니다',
-        })
-        return
-      }
-
       // MVP: 소액 과금 처리 (여기서는 간단히 토스트만 표시, 실제 결제는 향후 구현)
       toast({
         title: '💳 연락처 열람',
         description: '소액 결제가 적용됩니다. (향후 결제 시스템 연동 예정)',
       })
 
+      // TODO: counsel 테이블에 contact_phone, contact_email 컬럼이 추가되면 연동 필요
       setContactInfo({
-        phone: counselData.contact_phone || '',
-        email: counselData.contact_email || '',
+        phone: '',
+        email: '',
       })
       setShowContactDialog(true)
     } catch (error: any) {

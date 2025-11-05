@@ -251,7 +251,7 @@ const ProjectDetailClient: React.FC = () => {
     setSubmitting(true)
     try {
       // counsel에서 company_profile_id 가져오기
-      const { data: counselData } = await supabase
+      const { data: counselData } = await (supabase as any)
         .from('counsel')
         .select('company_profile_id')
         .eq('counsel_id', Number(counselId))

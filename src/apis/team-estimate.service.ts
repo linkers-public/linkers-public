@@ -265,8 +265,8 @@ export const getTeamEstimate = async (counselId: number): Promise<TeamEstimate |
 
   return {
     ...estimate,
-    estimate_version: estimateVersion && estimateVersion.estimate_id !== null ? estimateVersion : undefined,
-    milestones: milestones || undefined,
-  }
+    estimate_version: estimateVersion && (estimateVersion as any).estimate_id !== null ? estimateVersion as any : undefined,
+    milestones: milestones ? (milestones as any) : undefined,
+  } as any
 }
 
