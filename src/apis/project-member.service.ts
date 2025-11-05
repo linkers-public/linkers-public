@@ -21,12 +21,12 @@ export const joinProject = async (data: {
   if (authError) throw authError
   if (!user) throw new Error('Not authenticated')
 
-  // 본인의 프로필인지 확인
+  // 본인의 프로필인지 확인 (profile_id 기준)
   const { data: profile } = await supabase
     .from('accounts')
-    .select('user_id')
+    .select('profile_id, user_id')
+    .eq('profile_id', data.profile_id)
     .eq('user_id', user.id)
-    .eq('user_id', data.profile_id)
     .single()
 
   if (!profile) {
@@ -52,7 +52,7 @@ export const joinProject = async (data: {
       counsel_id: data.counsel_id,
       profile_id: data.profile_id,
       role: data.role,
-      status: 'pending',
+      status: 'INVITED',
     })
     .select()
     .single()
@@ -80,14 +80,26 @@ export const updateProjectMember = async (
   if (authError) throw authError
   if (!user) throw new Error('Not authenticated')
 
-  // 본인의 멤버십인지 확인
+  // 본인의 멤버십인지 확인 (profile_id 기준)
   const { data: member } = await supabase
     .from('project_members')
     .select('profile_id')
     .eq('id', memberId)
     .single()
 
-  if (!member || member.profile_id !== user.id) {
+  if (!member) {
+    throw new Error('권한이 없습니다.')
+  }
+
+  // profile_id가 본인의 프로필인지 확인
+  const { data: profile } = await supabase
+    .from('accounts')
+    .select('user_id')
+    .eq('profile_id', member.profile_id)
+    .eq('user_id', user.id)
+    .maybeSingle()
+
+  if (!profile) {
     throw new Error('권한이 없습니다.')
   }
 
@@ -97,11 +109,11 @@ export const updateProjectMember = async (
 
   if (data.status !== undefined) {
     updateData.status = data.status
-    // active로 변경되면 joined_at 설정
-    if (data.status === 'active') {
+    // ACTIVE로 변경되면 joined_at 설정
+    if (data.status === 'ACTIVE') {
       updateData.joined_at = new Date().toISOString()
     }
-    // completed나 declined로 변경되면 left_at 설정
+    // COMPLETED나 LEFT로 변경되면 left_at 설정
     if (data.status === 'completed' || data.status === 'declined') {
       updateData.left_at = new Date().toISOString()
     }
@@ -166,12 +178,12 @@ export const getProfileProjects = async (profileId: string) => {
   if (authError) throw authError
   if (!user) throw new Error('Not authenticated')
 
-  // 본인의 프로필인지 확인
+  // 본인의 프로필인지 확인 (profile_id 기준)
   const { data: profile } = await supabase
     .from('accounts')
-    .select('user_id')
+    .select('profile_id, user_id')
+    .eq('profile_id', profileId)
     .eq('user_id', user.id)
-    .eq('user_id', profileId)
     .single()
 
   if (!profile) {
@@ -217,8 +229,15 @@ export const changeProjectRole = async (
   if (authError) throw authError
   if (!user) throw new Error('Not authenticated')
 
-  // 본인의 프로필인지 확인
-  if (profileId !== user.id) {
+  // 본인의 프로필인지 확인 (profile_id 기준)
+  const { data: profile } = await supabase
+    .from('accounts')
+    .select('profile_id, user_id')
+    .eq('profile_id', profileId)
+    .eq('user_id', user.id)
+    .maybeSingle()
+
+  if (!profile) {
     throw new Error('권한이 없습니다.')
   }
 

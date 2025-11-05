@@ -52,7 +52,7 @@ export interface TeamEstimateFormData {
  */
 export const submitTeamEstimate = async (
   counselId: number,
-  clientId: string,
+  companyProfileId: string,
   formData: TeamEstimateFormData
 ) => {
   const supabase = createSupabaseBrowserClient()
@@ -62,15 +62,38 @@ export const submitTeamEstimate = async (
     throw new Error('로그인이 필요합니다.')
   }
 
-  // 팀 정보 가져오기
+  // 현재 사용자의 FREELANCER 프로필 조회
+  const { data: managerProfile, error: profileError } = await supabase
+    .from('accounts')
+    .select('profile_id')
+    .eq('user_id', user.id)
+    .eq('profile_type', 'FREELANCER')
+    .maybeSingle()
+
+  if (profileError || !managerProfile) {
+    throw new Error('프리랜서 프로필을 찾을 수 없습니다.')
+  }
+
+  // 팀 정보 가져오기 (manager_profile_id로 조회)
   const { data: teamData, error: teamError } = await supabase
     .from('teams')
     .select('id')
-    .eq('manager_id', user.id)
+    .eq('manager_profile_id', managerProfile.profile_id)
     .maybeSingle()
 
   if (teamError || !teamData) {
     throw new Error('팀 정보를 찾을 수 없습니다. 먼저 팀을 생성해주세요.')
+  }
+
+  // counsel에서 company_profile_id 확인
+  const { data: counselData, error: counselError } = await supabase
+    .from('counsel')
+    .select('company_profile_id')
+    .eq('counsel_id', counselId)
+    .maybeSingle()
+
+  if (counselError || !counselData?.company_profile_id) {
+    throw new Error('프로젝트 정보를 찾을 수 없습니다.')
   }
 
   // 기존 견적서 확인
@@ -105,9 +128,9 @@ export const submitTeamEstimate = async (
       .from('estimate')
       .insert({
         team_id: teamData.id,
-        manager_id: user.id,
+        manager_profile_id: managerProfile.profile_id,
+        company_profile_id: companyProfileId || counselData.company_profile_id,
         counsel_id: counselId,
-        client_id: clientId,
         estimate_status: 'pending',
         estimate_start_date: formData.startDate || null,
         estimate_due_date: formData.endDate || null,
@@ -189,11 +212,23 @@ export const getTeamEstimate = async (counselId: number): Promise<TeamEstimate |
     return null
   }
 
-  // 팀 정보 가져오기
+  // 현재 사용자의 FREELANCER 프로필 조회
+  const { data: managerProfile } = await supabase
+    .from('accounts')
+    .select('profile_id')
+    .eq('user_id', user.id)
+    .eq('profile_type', 'FREELANCER')
+    .maybeSingle()
+
+  if (!managerProfile) {
+    return null
+  }
+
+  // 팀 정보 가져오기 (manager_profile_id로 조회)
   const { data: teamData } = await supabase
     .from('teams')
     .select('id')
-    .eq('manager_id', user.id)
+    .eq('manager_profile_id', managerProfile.profile_id)
     .maybeSingle()
 
   if (!teamData) {

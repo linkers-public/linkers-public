@@ -22,7 +22,7 @@ export const submitParticipationInterest = async (
 
   // 기존 참여 의향이 있는지 확인
   const { data: existingParticipation } = await supabase
-    .from('project_participation')
+    .from('project_participation' as any)
     .select('*')
     .eq('counsel_id', counselId)
     .eq('maker_id', user.id)
@@ -31,7 +31,7 @@ export const submitParticipationInterest = async (
   if (existingParticipation) {
     // 기존 참여 의향 업데이트
     const { data, error } = await supabase
-      .from('project_participation')
+      .from('project_participation' as any)
       .update({ 
         participation_status: status,
         updated_at: new Date().toISOString()
@@ -48,7 +48,7 @@ export const submitParticipationInterest = async (
   } else {
     // 새로운 참여 의향 생성
     const { data, error } = await supabase
-      .from('project_participation')
+      .from('project_participation' as any)
       .insert({
         counsel_id: counselId,
         maker_id: user.id,
@@ -74,7 +74,7 @@ export const getParticipationStatus = async (counselId: number) => {
   }
 
   const { data, error } = await supabase
-    .from('project_participation')
+    .from('project_participation' as any)
     .select('*')
     .eq('counsel_id', counselId)
     .eq('maker_id', user.id)
@@ -91,7 +91,7 @@ export const getProjectParticipations = async (counselId: number) => {
   const supabase = createSupabaseBrowserClient()
 
   const { data, error } = await supabase
-    .from('project_participation')
+    .from('project_participation' as any)
     .select(`
       *,
       maker:maker_id (

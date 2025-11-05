@@ -97,26 +97,36 @@ const ProjectDetailClient: React.FC = () => {
         try {
           const { data: { user } } = await supabase.auth.getUser()
           if (user) {
-            const { data: teamData } = await supabase
-              .from('teams')
-              .select('id')
-              .eq('manager_id', user.id)
+            // 현재 사용자의 FREELANCER 프로필 조회
+            const { data: managerProfile } = await supabase
+              .from('accounts')
+              .select('profile_id')
+              .eq('user_id', user.id)
+              .eq('profile_type', 'FREELANCER')
               .maybeSingle()
-            
-            setIsManager(!!teamData)
 
-            // 매니저인 경우 팀 견적서 조회
-            if (teamData) {
-              const estimate = await getTeamEstimate(Number(counselId))
-              setTeamEstimate(estimate)
-              if (estimate?.estimate_version) {
-                setTeamEstimateForm(prev => ({
-                  ...prev,
-                  totalAmount: estimate.estimate_version?.total_amount?.toString() || '',
-                  startDate: estimate.estimate_version?.start_date || '',
-                  endDate: estimate.estimate_version?.end_date || '',
-                  detail: estimate.estimate_version?.detail || '',
-                }))
+            if (managerProfile) {
+              const { data: teamData } = await supabase
+                .from('teams')
+                .select('id')
+                .eq('manager_profile_id', managerProfile.profile_id)
+                .maybeSingle()
+              
+              setIsManager(!!teamData)
+
+              // 매니저인 경우 팀 견적서 조회
+              if (teamData) {
+                const estimate = await getTeamEstimate(Number(counselId))
+                setTeamEstimate(estimate)
+                if (estimate?.estimate_version) {
+                  setTeamEstimateForm(prev => ({
+                    ...prev,
+                    totalAmount: estimate.estimate_version?.total_amount?.toString() || '',
+                    startDate: estimate.estimate_version?.start_date || '',
+                    endDate: estimate.estimate_version?.end_date || '',
+                    detail: estimate.estimate_version?.detail || '',
+                  }))
+                }
               }
             }
           }
@@ -240,9 +250,20 @@ const ProjectDetailClient: React.FC = () => {
 
     setSubmitting(true)
     try {
+      // counsel에서 company_profile_id 가져오기
+      const { data: counselData } = await supabase
+        .from('counsel')
+        .select('company_profile_id')
+        .eq('counsel_id', Number(counselId))
+        .maybeSingle()
+
+      if (!counselData?.company_profile_id) {
+        throw new Error('프로젝트 정보를 찾을 수 없습니다.')
+      }
+
       await submitTeamEstimate(
         Number(counselId),
-        client.id,
+        counselData.company_profile_id,
         {
           totalAmount: Number(teamEstimateForm.totalAmount),
           startDate: teamEstimateForm.startDate,

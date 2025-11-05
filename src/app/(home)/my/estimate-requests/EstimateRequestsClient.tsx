@@ -109,7 +109,7 @@ export default function EstimateRequestsClient() {
           start_date,
           counsel_status,
           skill,
-          client:client_id (
+          company:company_profile_id (
             user_id,
             company_name,
             email
@@ -127,7 +127,7 @@ export default function EstimateRequestsClient() {
           const { data: teamData } = await supabase
             .from('teams')
             .select('id')
-            .eq('manager_id', user.id)
+            .eq('manager_profile_id', managerProfile.profile_id)
             .limit(1)
             .maybeSingle()
 
@@ -231,11 +231,23 @@ export default function EstimateRequestsClient() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) throw new Error('인증되지 않은 사용자입니다.')
 
-      // 팀 정보 가져오기
+      // 현재 사용자의 FREELANCER 프로필 조회
+      const { data: managerProfile, error: profileError } = await supabase
+        .from('accounts')
+        .select('profile_id')
+        .eq('user_id', user.id)
+        .eq('profile_type', 'FREELANCER')
+        .maybeSingle()
+
+      if (profileError || !managerProfile) {
+        throw new Error('프리랜서 프로필을 찾을 수 없습니다.')
+      }
+
+      // 팀 정보 가져오기 (manager_profile_id로 조회)
       const { data: teamData, error: teamError } = await supabase
         .from('teams')
         .select('id')
-        .eq('manager_id', user.id)
+        .eq('manager_profile_id', managerProfile.profile_id)
         .limit(1)
         .maybeSingle()
 
@@ -243,14 +255,25 @@ export default function EstimateRequestsClient() {
         throw new Error('팀 정보를 찾을 수 없습니다. 먼저 팀을 생성해주세요.')
       }
 
+      // counsel에서 company_profile_id 확인
+      const { data: counselData, error: counselError } = await supabase
+        .from('counsel')
+        .select('company_profile_id')
+        .eq('counsel_id', selectedRequest.counsel_id)
+        .maybeSingle()
+
+      if (counselError || !counselData?.company_profile_id) {
+        throw new Error('프로젝트 정보를 찾을 수 없습니다.')
+      }
+
       // 견적서 생성
       const { data: estimateData, error: estimateError } = await supabase
         .from('estimate')
         .insert({
           team_id: teamData.id,
-          manager_id: user.id,
+          manager_profile_id: managerProfile.profile_id,
+          company_profile_id: counselData.company_profile_id,
           counsel_id: selectedRequest.counsel_id,
-          client_id: selectedRequest.client?.user_id,
           estimate_status: 'pending',
           estimate_start_date: estimateForm.start_date || null,
           estimate_due_date: estimateForm.end_date || null,

@@ -23,7 +23,7 @@ export const assignProjectToMaker = async (
 
   // 기존 할당이 있는지 확인
   const { data: existingAssignment } = await supabase
-    .from('project_assignments')
+    .from('project_assignments' as any)
     .select('*')
     .eq('counsel_id', counselId)
     .eq('maker_id', makerId)
@@ -34,7 +34,7 @@ export const assignProjectToMaker = async (
   }
 
   const { data, error } = await supabase
-    .from('project_assignments')
+    .from('project_assignments' as any)
     .insert({
       counsel_id: counselId,
       maker_id: makerId,
@@ -64,7 +64,7 @@ export const getAssignedProjects = async (makerId?: string) => {
   }
 
   const { data, error } = await supabase
-    .from('project_assignments')
+    .from('project_assignments' as any)
     .select('*')
     .eq('maker_id', targetMakerId)
     .order('created_at', { ascending: false })
@@ -83,7 +83,7 @@ export const updateAssignmentStatus = async (
   const supabase = createSupabaseBrowserClient()
 
   const { data, error } = await supabase
-    .from('project_assignments')
+    .from('project_assignments' as any)
     .update({ 
       assignment_status: status,
       updated_at: new Date().toISOString()
@@ -103,7 +103,7 @@ export const getProjectAssignments = async (counselId: number) => {
   const supabase = createSupabaseBrowserClient()
 
   const { data, error } = await supabase
-    .from('project_assignments')
+    .from('project_assignments' as any)
     .select(`
       *,
       maker:maker_id (

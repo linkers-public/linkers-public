@@ -27,7 +27,7 @@ export const submitMakerEstimate = async (estimateData: {
 
   // 기존 견적이 있는지 확인
   const { data: existingEstimate } = await supabase
-    .from('maker_estimates')
+    .from('maker_estimates' as any)
     .select('*')
     .eq('counsel_id', estimateData.counselId)
     .eq('maker_id', user.id)
@@ -36,7 +36,7 @@ export const submitMakerEstimate = async (estimateData: {
   if (existingEstimate) {
     // 기존 견적 업데이트
     const { data, error } = await supabase
-      .from('maker_estimates')
+      .from('maker_estimates' as any)
       .update({
         estimate_amount: estimateData.estimateAmount,
         estimate_period: estimateData.estimatePeriod,
@@ -56,7 +56,7 @@ export const submitMakerEstimate = async (estimateData: {
   } else {
     // 새로운 견적 생성
     const { data, error } = await supabase
-      .from('maker_estimates')
+      .from('maker_estimates' as any)
       .insert({
         counsel_id: estimateData.counselId,
         maker_id: user.id,
@@ -85,7 +85,7 @@ export const getMakerEstimate = async (counselId: number) => {
   }
 
   const { data, error } = await supabase
-    .from('maker_estimates')
+    .from('maker_estimates' as any)
     .select('*')
     .eq('counsel_id', counselId)
     .eq('maker_id', user.id)
@@ -111,7 +111,7 @@ export const getMakerEstimates = async (makerId?: string) => {
   }
 
   const { data, error } = await supabase
-    .from('maker_estimates')
+    .from('maker_estimates' as any)
     .select(`
       *,
       counsel:counsel_id (
@@ -140,7 +140,7 @@ export const getProjectMakerEstimates = async (counselId: number) => {
   const supabase = createSupabaseBrowserClient()
 
   const { data, error } = await supabase
-    .from('maker_estimates')
+    .from('maker_estimates' as any)
     .select(`
       *,
       maker:maker_id (
