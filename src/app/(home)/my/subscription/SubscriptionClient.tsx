@@ -53,10 +53,19 @@ export default function SubscriptionClient() {
         .from('subscriptions' as any)
         .select('*')
         .eq('user_id', user.id)
-        .single()
+        .maybeSingle() // .single() 대신 .maybeSingle() 사용 (데이터 없을 때 null 반환)
 
-      if (error && error.code !== 'PGRST116') {
-        // PGRST116은 데이터 없음 에러
+      if (error) {
+        console.error('구독 정보 조회 에러:', {
+          code: error.code,
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+        })
+        // 406 에러는 RLS 정책 문제일 수 있음
+        if (error.code === 'PGRST301' || error.message?.includes('406')) {
+          throw new Error('구독 정보에 접근할 수 없습니다. 권한을 확인해주세요.')
+        }
         throw error
       }
 

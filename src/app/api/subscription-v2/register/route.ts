@@ -6,10 +6,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSideClient } from '@/supabase/supabase-server'
 import {
-  generateBillingKeyId,
   scheduleMonthlyPayment,
   getNextBillingDateISO,
 } from '@/apis/subscription-v2.service'
+import { generateBillingKeyId } from '@/utils/billing-key'
 
 export async function POST(request: NextRequest) {
   try {

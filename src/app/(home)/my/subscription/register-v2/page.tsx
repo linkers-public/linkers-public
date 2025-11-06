@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { CreditCard, CheckCircle, Gift } from 'lucide-react'
 import { toast } from '@/hooks/use-toast'
 import PortOne from '@portone/browser-sdk/v2'
-import { generateBillingKeyId } from '@/apis/subscription-v2.service'
+import { generateBillingKeyId } from '@/utils/billing-key'
 
 export default function SubscriptionRegisterV2Page() {
   const router = useRouter()

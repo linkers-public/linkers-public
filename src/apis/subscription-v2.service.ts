@@ -1,24 +1,56 @@
 /**
  * 포트원 V2 정기 결제 서비스
  * 첫 달 무료 + 월 정기 결제 구현
+ * 
+ * ⚠️ 서버 사이드 전용 - 클라이언트에서 import하지 마세요!
  */
 
+import 'server-only' // 서버 사이드에서만 실행되도록 보호
 import { PortOneClient, PaymentClient, BillingKeyClient } from '@portone/server-sdk'
 import { Webhook } from '@portone/server-sdk'
 
 // 포트원 V2 클라이언트 생성
-const PORTONE_API_SECRET = process.env.PORTONE_V2_API_SECRET || ''
+// 서버 사이드에서만 실행되도록 함수로 래핑
+function getPortOneClients() {
+  const PORTONE_API_SECRET = process.env.PORTONE_V2_API_SECRET || ''
 
-if (!PORTONE_API_SECRET) {
-  console.warn('PORTONE_V2_API_SECRET이 설정되지 않았습니다.')
+  if (!PORTONE_API_SECRET) {
+    // 서버 사이드에서만 실행되므로 에러를 throw
+    if (typeof window === 'undefined') {
+      throw new Error('PORTONE_V2_API_SECRET이 설정되지 않았습니다.')
+    }
+    // 클라이언트 사이드에서는 경고만 출력 (이 코드는 실행되지 않아야 함)
+    console.warn('PORTONE_V2_API_SECRET이 설정되지 않았습니다.')
+  }
+
+  return {
+    portoneClient: PortOneClient({ secret: PORTONE_API_SECRET }),
+    paymentClient: PaymentClient({ secret: PORTONE_API_SECRET }),
+    billingKeyClient: BillingKeyClient({ secret: PORTONE_API_SECRET }),
+  }
 }
 
-const portoneClient = PortOneClient({ secret: PORTONE_API_SECRET })
-const paymentClient = PaymentClient({ secret: PORTONE_API_SECRET })
-const billingKeyClient = BillingKeyClient({ secret: PORTONE_API_SECRET })
+// 클라이언트를 지연 초기화 (서버 사이드에서만 사용)
+// 클라이언트 사이드에서 이 파일이 import되면 에러 발생 방지
+function getPaymentClient() {
+  if (typeof window !== 'undefined') {
+    throw new Error('이 함수는 서버 사이드에서만 사용할 수 있습니다.')
+  }
+  return getPortOneClients().paymentClient
+}
+
+function getBillingKeyClient() {
+  if (typeof window !== 'undefined') {
+    throw new Error('이 함수는 서버 사이드에서만 사용할 수 있습니다.')
+  }
+  return getPortOneClients().billingKeyClient
+}
 
 /**
  * 빌링키 ID 생성
+ * @deprecated 이 함수는 src/utils/billing-key.ts로 이동했습니다.
+ * 서버 사이드에서만 사용하는 경우 이 함수를 사용해도 되지만,
+ * 클라이언트 사이드에서 사용하는 경우 src/utils/billing-key.ts를 사용하세요.
  */
 export function generateBillingKeyId(userId: string): string {
   return `linkers_${userId}_${Date.now()}`
@@ -38,6 +70,11 @@ export async function requestPaymentWithBillingKey(
     phoneNumber?: string
   }
 ) {
+  if (typeof window !== 'undefined') {
+    throw new Error('이 함수는 서버 사이드에서만 사용할 수 있습니다.')
+  }
+  
+  const paymentClient = getPaymentClient()
   try {
     const payment = await paymentClient.payWithBillingKey({
       paymentId,
@@ -80,6 +117,12 @@ export async function scheduleMonthlyPayment(
   retryCount: number = 3,
   retryDelay: number = 1000
 ) {
+  // 서버 사이드에서만 실행
+  if (typeof window !== 'undefined') {
+    throw new Error('이 함수는 서버 사이드에서만 사용할 수 있습니다.')
+  }
+  
+  const paymentClient = getPaymentClient()
   let lastError: any = null
   
   for (let attempt = 1; attempt <= retryCount; attempt++) {
@@ -173,6 +216,12 @@ export async function scheduleMonthlyPayment(
  * 결제 예약 취소
  */
 export async function unschedulePayment(paymentId: string): Promise<void> {
+  // 서버 사이드에서만 실행
+  if (typeof window !== 'undefined') {
+    throw new Error('이 함수는 서버 사이드에서만 사용할 수 있습니다.')
+  }
+  
+  const paymentClient = getPaymentClient()
   try {
     // paymentId로 예약된 결제를 찾아서 취소
     // 실제로는 scheduleId를 사용해야 하므로, paymentId로 조회 후 scheduleId를 찾아야 함
@@ -189,6 +238,12 @@ export async function unschedulePayment(paymentId: string): Promise<void> {
  * 결제 정보 조회
  */
 export async function getPayment(paymentId: string) {
+  // 서버 사이드에서만 실행
+  if (typeof window !== 'undefined') {
+    throw new Error('이 함수는 서버 사이드에서만 사용할 수 있습니다.')
+  }
+  
+  const paymentClient = getPaymentClient()
   try {
     const payment = await paymentClient.getPayment({ paymentId })
     return payment
@@ -201,6 +256,12 @@ export async function getPayment(paymentId: string) {
  * 빌링키 정보 조회
  */
 export async function getBillingKey(billingKey: string) {
+  // 서버 사이드에서만 실행
+  if (typeof window !== 'undefined') {
+    throw new Error('이 함수는 서버 사이드에서만 사용할 수 있습니다.')
+  }
+  
+  const billingKeyClient = getBillingKeyClient()
   try {
     const billingKeyInfo = await billingKeyClient.getBillingKeyInfo({ billingKey })
     return billingKeyInfo
