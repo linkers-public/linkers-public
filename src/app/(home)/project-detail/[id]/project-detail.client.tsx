@@ -387,7 +387,7 @@ const ProjectDetailClient: React.FC = () => {
   }
 
   return (
-    <div className="w-full max-w-[1024px] mx-auto py-8 px-4 md:px-6">
+    <div className="w-full py-8 px-4 md:px-6">
       {/* 프로젝트 헤더 */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 mb-6">
         <div className="flex justify-between items-start mb-6">

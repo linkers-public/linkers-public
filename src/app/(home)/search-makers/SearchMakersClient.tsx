@@ -98,7 +98,7 @@ const SearchMakersClient = () => {
   return (
     <div className="w-full min-h-screen bg-white">
       <div className="py-8">
-        <div className="max-w-7xl mx-auto px-4 md:px-6">
+        <div className="w-full px-4 md:px-6">
           {/* 헤더 */}
           <div className="mb-8">
             <h1 className="text-3xl font-bold text-gray-900 mb-2">메이커 검색</h1>

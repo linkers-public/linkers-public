@@ -315,7 +315,7 @@ export default function EstimatesDashboardClient() {
   }
 
   return (
-    <div className="w-full max-w-7xl mx-auto py-8 px-4">
+    <div className="w-full py-8 px-4">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900 mb-2">받은 견적서 대시보드</h1>
         <p className="text-gray-600">제안받은 견적서를 검토하고 비교하세요</p>

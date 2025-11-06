@@ -115,7 +115,7 @@ const EnterpriseHomePage: React.FC = () => {
   return (
     <div className="w-full min-h-screen bg-gray-100">
       <div className="py-6">
-        <div className="max-w-6xl mx-auto px-4 md:px-6">
+        <div className="w-full px-4 md:px-6">
           {/* 환영 메시지 */}
           <div className="mb-8">
             <h1 className="text-3xl font-bold text-gray-900 mb-2">

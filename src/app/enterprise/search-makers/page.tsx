@@ -131,7 +131,7 @@ const SearchMakersPage: React.FC = () => {
   return (
     <div className="w-full min-h-screen bg-gray-100">
       <div className="p-6">
-        <div className="max-w-6xl mx-auto">
+        <div className="w-full">
           <div className="mb-6">
             <h1 className="text-2xl font-bold text-gray-900 mb-2">메이커 검색</h1>
             <p className="text-gray-600">프로젝트에 적합한 메이커를 찾아보세요</p>
