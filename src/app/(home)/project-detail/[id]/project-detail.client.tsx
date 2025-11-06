@@ -14,7 +14,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from '@/hooks/use-toast'
 import { formatDate } from '@/lib/dateFormat'
-import { ArrowLeft, Plus, X } from 'lucide-react'
+import { ArrowLeft, Plus, X, AlertCircle, DollarSign, Calendar, Clock, Briefcase, Users, FileText, CheckCircle, XCircle, Clock3 } from 'lucide-react'
 import ProjectJoinModal from '@/components/ProjectJoinModal'
 
 interface Counsel {
@@ -368,12 +368,16 @@ const ProjectDetailClient: React.FC = () => {
 
   if (!counsel) {
     return (
-      <div className="flex justify-center items-center h-64">
-        <div className="text-center bg-red-50 border border-red-200 rounded-lg p-6 max-w-md">
-          <div className="text-4xl mb-4">❌</div>
-          <p className="text-lg font-semibold text-red-900 mb-2">프로젝트를 불러올 수 없습니다</p>
-          <p className="text-sm text-red-700 mb-4">프로젝트가 존재하지 않거나 접근 권한이 없습니다.</p>
-          <Button onClick={() => router.back()} variant="outline">
+      <div className="flex justify-center items-center min-h-[60vh] px-4">
+        <div className="text-center bg-white border border-gray-200 rounded-xl shadow-sm p-8 max-w-md w-full">
+          <div className="flex justify-center mb-4">
+            <div className="rounded-full bg-red-100 p-3">
+              <AlertCircle className="w-6 h-6 text-red-600" />
+            </div>
+          </div>
+          <h2 className="text-lg font-semibold text-gray-900 mb-2">프로젝트를 불러올 수 없습니다</h2>
+          <p className="text-sm text-gray-600 mb-6">프로젝트가 존재하지 않거나 접근 권한이 없습니다.</p>
+          <Button onClick={() => router.back()} variant="outline" className="w-full">
             <ArrowLeft className="w-4 h-4 mr-2" />
             돌아가기
           </Button>
@@ -383,17 +387,17 @@ const ProjectDetailClient: React.FC = () => {
   }
 
   return (
-    <div className="w-full max-w-[1024px] mx-auto py-6 px-4 md:px-6">
+    <div className="w-full max-w-[1024px] mx-auto py-8 px-4 md:px-6">
       {/* 프로젝트 헤더 */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-        <div className="flex justify-between items-start mb-4">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8 mb-6">
+        <div className="flex justify-between items-start mb-6">
           <div className="flex-1">
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">{counsel.title || '제목 없음'}</h1>
+            <h1 className="text-3xl font-bold text-gray-900 mb-3">{counsel.title || '제목 없음'}</h1>
             <div className="flex items-center gap-2">
-              <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+              <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
                 counsel.counsel_status === 'recruiting' 
-                  ? 'bg-green-100 text-green-700' 
-                  : 'bg-gray-100 text-gray-700'
+                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
+                  : 'bg-gray-50 text-gray-700 border border-gray-200'
               }`}>
                 {counsel.counsel_status === 'recruiting' ? '모집중' : '대기중'}
               </span>
@@ -402,51 +406,80 @@ const ProjectDetailClient: React.FC = () => {
         </div>
 
         {/* 프로젝트 기본 정보 */}
-        <div className="grid grid-cols-2 gap-4 mb-6">
-          <div>
-            <h3 className="text-sm font-medium text-gray-500 mb-1">예상 예산</h3>
-            <p className="text-lg font-semibold text-gray-900">{counsel.cost || '협의'}</p>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-8">
+          <div className="flex items-start gap-3">
+            <div className="rounded-lg bg-blue-50 p-2.5">
+              <DollarSign className="w-5 h-5 text-blue-600" />
+            </div>
+            <div>
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">예상 예산</p>
+              <p className="text-lg font-semibold text-gray-900">{counsel.cost || '협의'}</p>
+            </div>
           </div>
-          <div>
-            <h3 className="text-sm font-medium text-gray-500 mb-1">예상 기간</h3>
-            <p className="text-lg font-semibold text-gray-900">{counsel.period || '협의'}</p>
+          <div className="flex items-start gap-3">
+            <div className="rounded-lg bg-purple-50 p-2.5">
+              <Clock className="w-5 h-5 text-purple-600" />
+            </div>
+            <div>
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">예상 기간</p>
+              <p className="text-lg font-semibold text-gray-900">{counsel.period || '협의'}</p>
+            </div>
           </div>
-          <div>
-            <h3 className="text-sm font-medium text-gray-500 mb-1">프로젝트 분야</h3>
-            <p className="text-lg font-semibold text-gray-900">{counsel.feild || '미지정'}</p>
+          <div className="flex items-start gap-3">
+            <div className="rounded-lg bg-indigo-50 p-2.5">
+              <Briefcase className="w-5 h-5 text-indigo-600" />
+            </div>
+            <div>
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">프로젝트 분야</p>
+              <p className="text-lg font-semibold text-gray-900">{counsel.feild || '미지정'}</p>
+            </div>
           </div>
-          <div>
-            <h3 className="text-sm font-medium text-gray-500 mb-1">시작 예정일</h3>
-            <p className="text-lg font-semibold text-gray-900">
-              {counsel.start_date ? formatDate(counsel.start_date) : '미정'}
-            </p>
+          <div className="flex items-start gap-3">
+            <div className="rounded-lg bg-amber-50 p-2.5">
+              <Calendar className="w-5 h-5 text-amber-600" />
+            </div>
+            <div>
+              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">시작 예정일</p>
+              <p className="text-lg font-semibold text-gray-900">
+                {counsel.start_date ? formatDate(counsel.start_date) : '미정'}
+              </p>
+            </div>
           </div>
         </div>
 
         {/* 프로젝트 참여 버튼 */}
         <div className="border-t border-gray-200 pt-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">프로젝트 참여하기</h3>
+          <div className="flex items-center gap-2 mb-4">
+            <Users className="w-5 h-5 text-gray-600" />
+            <h3 className="text-lg font-semibold text-gray-900">프로젝트 참여하기</h3>
+          </div>
           <Button
             onClick={() => setShowJoinModal(true)}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
             size="lg"
           >
             프로젝트 참여 신청
           </Button>
           {projectMembers.length > 0 && (
-            <div className="mt-4">
-              <p className="text-sm text-gray-600 mb-2">참여 중인 멤버 ({projectMembers.length}명)</p>
+            <div className="mt-6">
+              <div className="flex items-center gap-2 mb-3">
+                <Users className="w-4 h-4 text-gray-500" />
+                <p className="text-sm font-medium text-gray-700">참여 중인 멤버</p>
+                <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full text-xs font-medium">
+                  {projectMembers.length}명
+                </span>
+              </div>
               <div className="flex flex-wrap gap-2">
                 {projectMembers.slice(0, 5).map((member) => (
                   <span
                     key={member.id}
-                    className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm"
+                    className="px-3 py-1.5 bg-gray-50 text-gray-700 rounded-lg text-sm border border-gray-200"
                   >
-                    {member.profile?.username || '알 수 없음'} ({member.role === 'MAKER' ? '메이커' : '매니저'})
+                    {member.profile?.username || '알 수 없음'} <span className="text-gray-500">({member.role === 'MAKER' ? '메이커' : '매니저'})</span>
                   </span>
                 ))}
                 {projectMembers.length > 5 && (
-                  <span className="px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm">
+                  <span className="px-3 py-1.5 bg-gray-50 text-gray-700 rounded-lg text-sm border border-gray-200">
                     +{projectMembers.length - 5}명 더
                   </span>
                 )}
@@ -458,17 +491,23 @@ const ProjectDetailClient: React.FC = () => {
 
       {/* 팀 견적서 섹션 (매니저용) */}
       {isManager && (
-        <div className="bg-white rounded-lg shadow-sm border border-blue-200 p-6 mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="text-lg font-semibold text-gray-900">팀 견적서 작성</h3>
-              <p className="text-sm text-gray-600 mt-1">팀의 수행 가능 범위와 제안사항을 포함한 상세 견적서를 기업에게 제출하세요</p>
+        <div className="bg-white rounded-xl shadow-sm border border-blue-100 p-6 mb-6">
+          <div className="flex items-start gap-3 mb-6">
+            <div className="rounded-lg bg-blue-50 p-2">
+              <FileText className="w-5 h-5 text-blue-600" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-lg font-semibold text-gray-900 mb-1">팀 견적서 작성</h3>
+              <p className="text-sm text-gray-600">팀의 수행 가능 범위와 제안사항을 포함한 상세 견적서를 기업에게 제출하세요</p>
             </div>
           </div>
 
           {teamEstimate ? (
-            <div className="bg-blue-50 rounded-lg p-4 mb-4">
-              <h4 className="font-medium text-gray-900 mb-3">제출된 팀 견적서</h4>
+            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6 mb-4 border border-blue-100">
+              <div className="flex items-center gap-2 mb-4">
+                <CheckCircle className="w-5 h-5 text-blue-600" />
+                <h4 className="font-semibold text-gray-900">제출된 팀 견적서</h4>
+              </div>
               {teamEstimate.estimate_version && (
                 <>
                   <div className="grid grid-cols-2 gap-4 mb-3">
@@ -507,22 +546,38 @@ const ProjectDetailClient: React.FC = () => {
                     <span className="text-sm text-gray-500 block mb-1">상세 내용:</span>
                     <p className="text-gray-700 text-sm whitespace-pre-wrap">{teamEstimate.estimate_version.detail}</p>
                   </div>
-                  <div className="flex gap-2">
-                    <span className={`px-2 py-1 rounded text-xs font-medium ${
+                  <div className="flex items-center gap-3 pt-4 border-t border-blue-200">
+                    <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${
                       teamEstimate.estimate_status === 'pending' 
-                        ? 'bg-yellow-100 text-yellow-800'
+                        ? 'bg-amber-100 text-amber-800 border border-amber-200'
                         : teamEstimate.estimate_status === 'accept'
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-red-100 text-red-800'
+                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                        : 'bg-red-100 text-red-800 border border-red-200'
                     }`}>
-                      {teamEstimate.estimate_status === 'pending' && '검토중'}
-                      {teamEstimate.estimate_status === 'accept' && '수락됨'}
-                      {teamEstimate.estimate_status === 'reject' && '거절됨'}
+                      {teamEstimate.estimate_status === 'pending' && (
+                        <>
+                          <Clock3 className="w-3.5 h-3.5" />
+                          검토중
+                        </>
+                      )}
+                      {teamEstimate.estimate_status === 'accept' && (
+                        <>
+                          <CheckCircle className="w-3.5 h-3.5" />
+                          수락됨
+                        </>
+                      )}
+                      {teamEstimate.estimate_status === 'reject' && (
+                        <>
+                          <XCircle className="w-3.5 h-3.5" />
+                          거절됨
+                        </>
+                      )}
                     </span>
                     <Button
                       onClick={() => setShowTeamEstimateForm(true)}
                       variant="outline"
                       size="sm"
+                      className="ml-auto"
                     >
                       견적서 수정
                     </Button>
@@ -531,11 +586,14 @@ const ProjectDetailClient: React.FC = () => {
               )}
             </div>
           ) : (
-            <div className="text-center py-8">
-              <p className="text-gray-600 mb-4">아직 팀 견적서를 제출하지 않았습니다.</p>
+            <div className="text-center py-12">
+              <div className="rounded-full bg-gray-100 p-4 w-16 h-16 mx-auto mb-4 flex items-center justify-center">
+                <FileText className="w-8 h-8 text-gray-400" />
+              </div>
+              <p className="text-gray-600 mb-6">아직 팀 견적서를 제출하지 않았습니다.</p>
               <Button
                 onClick={() => setShowTeamEstimateForm(true)}
-                className="bg-blue-600 hover:bg-blue-700"
+                className="bg-blue-600 hover:bg-blue-700 shadow-sm"
               >
                 팀 견적서 작성하기
               </Button>
@@ -769,12 +827,20 @@ const ProjectDetailClient: React.FC = () => {
 
       {/* 견적 제출 섹션 (메이커용) */}
       {!isManager && (
-        <div className="bg-white rounded-lg shadow-sm border p-6 mb-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">견적 제출</h3>
+        <div className="bg-white rounded-xl shadow-sm border p-6 mb-6">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="rounded-lg bg-indigo-50 p-2">
+              <FileText className="w-5 h-5 text-indigo-600" />
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900">견적 제출</h3>
+          </div>
         
         {existingEstimate ? (
-          <div className="bg-gray-50 rounded-lg p-4 mb-4">
-            <h4 className="font-medium text-gray-900 mb-2">제출된 견적</h4>
+          <div className="bg-gradient-to-br from-gray-50 to-slate-50 rounded-xl p-6 mb-4 border border-gray-200">
+            <div className="flex items-center gap-2 mb-4">
+              <CheckCircle className="w-5 h-5 text-indigo-600" />
+              <h4 className="font-semibold text-gray-900">제출된 견적</h4>
+            </div>
             <div className="grid grid-cols-2 gap-4 mb-3">
               <div>
                 <span className="text-sm text-gray-500">견적 금액:</span>
@@ -789,33 +855,52 @@ const ProjectDetailClient: React.FC = () => {
               <span className="text-sm text-gray-500">견적 상세:</span>
               <p className="text-gray-700 text-sm mt-1">{existingEstimate.estimate_details}</p>
             </div>
-            <div className="flex gap-2">
-              <span className={`px-2 py-1 rounded text-xs font-medium ${
+            <div className="flex items-center gap-3 pt-4 border-t border-gray-200">
+              <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${
                 existingEstimate.estimate_status === 'pending' 
-                  ? 'bg-yellow-100 text-yellow-800'
+                  ? 'bg-amber-100 text-amber-800 border border-amber-200'
                   : existingEstimate.estimate_status === 'accepted'
-                  ? 'bg-green-100 text-green-800'
-                  : 'bg-red-100 text-red-800'
+                  ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                  : 'bg-red-100 text-red-800 border border-red-200'
               }`}>
-                {existingEstimate.estimate_status === 'pending' && '검토중'}
-                {existingEstimate.estimate_status === 'accepted' && '수락됨'}
-                {existingEstimate.estimate_status === 'rejected' && '거절됨'}
+                {existingEstimate.estimate_status === 'pending' && (
+                  <>
+                    <Clock3 className="w-3.5 h-3.5" />
+                    검토중
+                  </>
+                )}
+                {existingEstimate.estimate_status === 'accepted' && (
+                  <>
+                    <CheckCircle className="w-3.5 h-3.5" />
+                    수락됨
+                  </>
+                )}
+                {existingEstimate.estimate_status === 'rejected' && (
+                  <>
+                    <XCircle className="w-3.5 h-3.5" />
+                    거절됨
+                  </>
+                )}
               </span>
               <Button
                 onClick={() => setShowEstimateForm(true)}
                 variant="outline"
                 size="sm"
+                className="ml-auto"
               >
                 견적 수정
               </Button>
             </div>
           </div>
         ) : (
-          <div className="text-center py-8">
-            <p className="text-gray-600 mb-4">아직 견적을 제출하지 않았습니다.</p>
+          <div className="text-center py-12">
+            <div className="rounded-full bg-gray-100 p-4 w-16 h-16 mx-auto mb-4 flex items-center justify-center">
+              <FileText className="w-8 h-8 text-gray-400" />
+            </div>
+            <p className="text-gray-600 mb-6">아직 견적을 제출하지 않았습니다.</p>
             <Button
               onClick={() => setShowEstimateForm(true)}
-              className="bg-blue-600 hover:bg-blue-700"
+              className="bg-blue-600 hover:bg-blue-700 shadow-sm"
             >
               견적 제출하기
             </Button>
@@ -894,8 +979,11 @@ const ProjectDetailClient: React.FC = () => {
       )}
 
       {/* 프로젝트 상세 정보 */}
-      <div className="bg-white rounded-lg shadow-sm border p-6 mb-6">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">프로젝트 개요</h2>
+      <div className="bg-white rounded-xl shadow-sm border p-6 mb-6">
+        <div className="flex items-center gap-3 mb-6">
+          <FileText className="w-5 h-5 text-gray-600" />
+          <h2 className="text-xl font-semibold text-gray-900">프로젝트 개요</h2>
+        </div>
         <div className="prose max-w-none">
           <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">
             {counsel.outline}
@@ -905,8 +993,11 @@ const ProjectDetailClient: React.FC = () => {
 
       {/* 요구 기술 스택 */}
       {counsel.skill && counsel.skill.length > 0 && (
-        <div className="bg-white rounded-lg shadow-sm border p-6 mb-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">요구 기술 스택</h2>
+        <div className="bg-white rounded-xl shadow-sm border p-6 mb-6">
+          <div className="flex items-center gap-3 mb-6">
+            <Briefcase className="w-5 h-5 text-gray-600" />
+            <h2 className="text-xl font-semibold text-gray-900">요구 기술 스택</h2>
+          </div>
           <div className="flex flex-wrap gap-2">
             {counsel.skill.map((skill, index) => (
               <span
@@ -922,8 +1013,11 @@ const ProjectDetailClient: React.FC = () => {
 
       {/* 기대 산출물 */}
       {counsel.output && (
-        <div className="bg-white rounded-lg shadow-sm border p-6 mb-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">기대 산출물</h2>
+        <div className="bg-white rounded-xl shadow-sm border p-6 mb-6">
+          <div className="flex items-center gap-3 mb-6">
+            <FileText className="w-5 h-5 text-gray-600" />
+            <h2 className="text-xl font-semibold text-gray-900">기대 산출물</h2>
+          </div>
           <div className="prose max-w-none">
             <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">
               {counsel.output}
@@ -934,8 +1028,11 @@ const ProjectDetailClient: React.FC = () => {
 
       {/* 클라이언트 정보 */}
       {client && (
-        <div className="bg-white rounded-lg shadow-sm border p-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">클라이언트 정보</h2>
+        <div className="bg-white rounded-xl shadow-sm border p-6">
+          <div className="flex items-center gap-3 mb-6">
+            <Users className="w-5 h-5 text-gray-600" />
+            <h2 className="text-xl font-semibold text-gray-900">클라이언트 정보</h2>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <h3 className="text-sm font-medium text-gray-500 mb-1">회사명</h3>

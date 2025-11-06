@@ -377,7 +377,6 @@ const ProjectCounselForm: React.FC = () => {
           </form>
         </div>
       </div>
-    </div>
   );
 };
 
