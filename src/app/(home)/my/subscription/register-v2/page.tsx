@@ -67,9 +67,10 @@ export default function SubscriptionRegisterV2Page() {
       const billingKey = billingKeyResponse.billingKey
       
       // 빌링키 발급 응답에서 사용자 정보 추출
-      // 포트원 V2 빌링키 발급 UI에서 사용자가 입력한 정보가 응답에 포함됨
-      // billingKeyResponse에는 billingKey와 함께 customer 정보가 포함될 수 있음
-      const customerInfo = billingKeyResponse.customer || billingKeyResponse.billingKeyInfo?.customer || {}
+      // 포트원 V2 빌링키 발급 UI에서 사용자가 입력한 정보가 응답에 포함될 수 있음
+      // 타입 단언을 사용하여 응답 구조 확인
+      const responseAny = billingKeyResponse as any
+      const customerInfo = responseAny.customer || responseAny.billingKeyInfo?.customer || {}
       
       // 빌링키 발급 UI에서 사용자가 입력한 전화번호 추출
       const buyerInfo = {
@@ -82,6 +83,7 @@ export default function SubscriptionRegisterV2Page() {
         billingKey: billingKey.substring(0, 20) + '...',
         customerInfo,
         buyerInfo,
+        fullResponse: responseAny, // 디버깅용 전체 응답
       })
 
       // 서버에 구독 등록 요청
