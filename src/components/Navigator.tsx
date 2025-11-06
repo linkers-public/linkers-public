@@ -62,7 +62,7 @@ const Navigator = ({ profileType, role }: NavigatorProps) => {
     }
     
     // 프리랜서 프로필이거나 프로필 타입이 없을 때 (기본값)
-    const freelancerRoutes = [
+    const freelancerRoutes: Route[] = [
       {
         icon: '',
         label: '프로젝트 찾기',
