@@ -2,64 +2,42 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createSupabaseBrowserClient } from '@/supabase/supabase-client';
-import EnterpriseSidebar from '@/components/EnterpriseSidebar';
+import { Briefcase, Zap, Calendar, DollarSign, Phone, Mail, Tag, Link2, FileText, Palette, MessageSquare } from 'lucide-react';
 
 interface FormData {
-  // 1단계: 기본 정보
-  projectTitle: string;
-  requirements: string;
-  expectedPeriod: number | '';  // int (개월)
-  expectedBudget: number | '';  // int (만원)
-  contactPhone: string;
-  contactEmail: string;
-  
-  // 2단계: 기술 및 분야
-  requiredSkills: string[];
-  projectField: string;
-  
-  // 3단계: 추가 정보
-  referenceLinks: string;
-  additionalRequirements: string;
-  uiUxLevel: string;
-  securityRequirements: string;
+  projectServiceName: string;  // 프로젝트 서비스 이름
+  functionality: string;  // 기능
+  period: string;  // 기간
+  cost: string;  // 비용
+  contactPhone: string;  // 전화번호
+  contactEmail: string;  // 이메일
+  serviceType: string;  // 서비스 유형
+  referenceService: string;  // 참고서비스
+  materials: string;  // 자료
+  designLevel: string;  // 디자인 수준
+  otherRequirements: string;  // 기타 요구사항
 }
 
 const ProjectCounselForm: React.FC = () => {
   const router = useRouter();
   const supabase = createSupabaseBrowserClient();
   
-  const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState<FormData>({
-    projectTitle: '',
-    requirements: '',
-    expectedPeriod: '',
-    expectedBudget: '',
+    projectServiceName: '',
+    functionality: '',
+    period: '',
+    cost: '',
     contactPhone: '',
     contactEmail: '',
-    requiredSkills: [],
-    projectField: '',
-    referenceLinks: '',
-    additionalRequirements: '',
-    uiUxLevel: '',
-    securityRequirements: ''
+    serviceType: '',
+    referenceService: '',
+    materials: '',
+    designLevel: '',
+    otherRequirements: ''
   });
 
-  const budgetOptions = [
-    '500만원 이하',
-    '500만원 ~ 1000만원',
-    '1000만원 ~ 5000만원',
-    '5000만원 ~ 1억원',
-  ];
-
-  const periodOptions = [
-    '1개월 이하',
-    '1개월 ~ 3개월',
-    '3개월 ~ 6개월',
-    '6개월 ~ 1년',
-  ];
-
-  const fieldOptions = [
+  const serviceTypeOptions = [
     '웹 개발',
     '앱 개발',
     '인공지능',
@@ -71,52 +49,18 @@ const ProjectCounselForm: React.FC = () => {
     '보안',
   ];
 
-  const skillOptions = [
-    'React', 'Vue.js', 'Angular', 'Node.js', 'Python', 'Java', 'Spring',
-    'AWS', 'Azure', 'GCP', 'Docker', 'Kubernetes', 'MySQL', 'PostgreSQL',
-    'MongoDB', 'Redis', 'GraphQL', 'REST API', 'TypeScript', 'JavaScript'
-  ];
-
-  const uiUxOptions = [
+  const designLevelOptions = [
     '기본적인 UI/UX',
     '중간 수준의 UI/UX',
     '고급 UI/UX 디자인',
     '프리미엄 UI/UX'
   ];
 
-  const securityOptions = [
-    '기본 보안',
-    '중간 수준 보안',
-    '고급 보안',
-    '엔터프라이즈급 보안'
-  ];
-
-  const handleInputChange = (field: keyof FormData, value: string | string[] | number) => {
+  const handleInputChange = (field: keyof FormData, value: string) => {
     setFormData(prev => ({
       ...prev,
       [field]: value
     }));
-  };
-
-  const handleSkillToggle = (skill: string) => {
-    setFormData(prev => ({
-      ...prev,
-      requiredSkills: prev.requiredSkills.includes(skill)
-        ? prev.requiredSkills.filter(s => s !== skill)
-        : [...prev.requiredSkills, skill]
-    }));
-  };
-
-  const nextStep = () => {
-    if (currentStep < 3) {
-      setCurrentStep(currentStep + 1);
-    }
-  };
-
-  const prevStep = () => {
-    if (currentStep > 1) {
-      setCurrentStep(currentStep - 1);
-    }
   };
 
   const handleSubmit = async () => {
@@ -148,17 +92,14 @@ const ProjectCounselForm: React.FC = () => {
         .from('counsel')
         .insert({
           client_id: clientData.user_id,
-          title: formData.projectTitle,
-          outline: formData.requirements,
-          period: formData.expectedPeriod ? `${formData.expectedPeriod}개월` as any : '1개월 이하' as any,  // 기존 ENUM 유지
-          cost: formData.expectedBudget ? `${formData.expectedBudget}만원` as any : '500만원 이하' as any,  // 기존 ENUM 유지
-          expected_period: typeof formData.expectedPeriod === 'number' ? formData.expectedPeriod : null,
-          expected_cost: typeof formData.expectedBudget === 'number' ? formData.expectedBudget : null,
+          title: formData.projectServiceName,
+          outline: formData.functionality,
+          period: formData.period as any,
+          cost: formData.cost as any,
           contact_phone: formData.contactPhone || null,
           contact_email: formData.contactEmail || null,
-          feild: formData.projectField as any,
-          skill: formData.requiredSkills as any,
-          output: formData.additionalRequirements,
+          feild: formData.serviceType as any,
+          output: `${formData.referenceService ? `참고서비스: ${formData.referenceService}\n` : ''}${formData.materials ? `자료: ${formData.materials}\n` : ''}${formData.designLevel ? `디자인 수준: ${formData.designLevel}\n` : ''}${formData.otherRequirements ? `기타 요구사항: ${formData.otherRequirements}` : ''}`,
           start_date: new Date().toISOString().split('T')[0],
           due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 30일 후
           counsel_status: 'pending'
@@ -179,293 +120,262 @@ const ProjectCounselForm: React.FC = () => {
     }
   };
 
-  const renderStep1 = () => (
-    <div className="space-y-6">
-      <h3 className="text-lg font-semibold text-gray-900 mb-4">프로젝트에 대해 알려주세요</h3>
-      
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          어떤 서비스를 만들고 싶으신가요? *
-        </label>
-        <input
-          type="text"
-          value={formData.projectTitle}
-          onChange={(e) => handleInputChange('projectTitle', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="예: 온라인 쇼핑몰, 모바일 앱, 회사 홈페이지 등"
-          required
-        />
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          어떤 기능이 필요하신가요? *
-        </label>
-        <textarea
-          value={formData.requirements}
-          onChange={(e) => handleInputChange('requirements', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          rows={4}
-          placeholder="예: 회원가입, 결제 기능, 관리자 페이지, 모바일 앱 등"
-          required
-        />
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          희망 기간 (개월) *
-        </label>
-        <input
-          type="number"
-          value={formData.expectedPeriod}
-          onChange={(e) => handleInputChange('expectedPeriod', e.target.value ? parseInt(e.target.value) : '' as number | '')}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="예: 3"
-          min="1"
-          required
-        />
-        <p className="text-sm text-gray-500 mt-1">개월 단위로 숫자만 입력해주세요</p>
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          희망 비용 (만원) *
-        </label>
-        <input
-          type="number"
-          value={formData.expectedBudget}
-          onChange={(e) => handleInputChange('expectedBudget', e.target.value ? parseInt(e.target.value) : '' as number | '')}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="예: 500"
-          min="0"
-          required
-        />
-        <p className="text-sm text-gray-500 mt-1">만원 단위로 숫자만 입력해주세요</p>
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          연락처 (전화번호) *
-        </label>
-        <input
-          type="tel"
-          value={formData.contactPhone}
-          onChange={(e) => handleInputChange('contactPhone', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="010-1234-5678"
-          required
-        />
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          연락처 (이메일) *
-        </label>
-        <input
-          type="email"
-          value={formData.contactEmail}
-          onChange={(e) => handleInputChange('contactEmail', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="contact@example.com"
-          required
-        />
-      </div>
-    </div>
-  );
-
-  const renderStep2 = () => (
-    <div className="space-y-6">
-      <h3 className="text-lg font-semibold text-gray-900 mb-4">어떤 종류의 서비스인가요?</h3>
-      
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          서비스 유형을 선택해주세요 *
-        </label>
-        <div className="grid grid-cols-2 gap-3">
-          {fieldOptions.map((field) => (
-            <button
-              key={field}
-              type="button"
-              onClick={() => handleInputChange('projectField', field)}
-              className={`p-4 rounded-lg border-2 transition-all text-center ${
-                formData.projectField === field
-                  ? 'border-blue-500 bg-blue-50 text-blue-700'
-                  : 'border-gray-200 bg-white text-gray-700 hover:border-blue-300'
-              }`}
-            >
-              {field}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          참고할 만한 서비스가 있나요? (선택사항)
-        </label>
-        <input
-          type="text"
-          value={formData.referenceLinks}
-          onChange={(e) => handleInputChange('referenceLinks', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="예: 네이버, 카카오톡, 쿠팡 등"
-        />
-        <p className="text-sm text-gray-500 mt-1">
-          비슷한 서비스를 참고하면 더 정확한 견적을 받을 수 있어요
-        </p>
-      </div>
-    </div>
-  );
-
-  const renderStep3 = () => (
-    <div className="space-y-6">
-      <h3 className="text-lg font-semibold text-gray-900 mb-4">마지막으로 추가로 알려주세요</h3>
-      
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          디자인이나 참고할 만한 자료가 있나요? (선택사항)
-        </label>
-        <input
-          type="text"
-          value={formData.referenceLinks}
-          onChange={(e) => handleInputChange('referenceLinks', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          placeholder="예: 디자인 시안, 참고 사이트, 브랜드 가이드 등"
-        />
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          디자인 수준은 어느 정도를 원하시나요? (선택사항)
-        </label>
-        <div className="grid grid-cols-2 gap-3">
-          {uiUxOptions.map((option) => (
-            <button
-              key={option}
-              type="button"
-              onClick={() => handleInputChange('uiUxLevel', option)}
-              className={`p-3 rounded-lg border-2 transition-all text-center ${
-                formData.uiUxLevel === option
-                  ? 'border-blue-500 bg-blue-50 text-blue-700'
-                  : 'border-gray-200 bg-white text-gray-700 hover:border-blue-300'
-              }`}
-            >
-              {option}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          기타 특별한 요구사항이 있나요? (선택사항)
-        </label>
-        <textarea
-          value={formData.additionalRequirements}
-          onChange={(e) => handleInputChange('additionalRequirements', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-          rows={3}
-          placeholder="예: 특별한 기능, 보안 요구사항, 운영 환경 등"
-        />
-      </div>
-    </div>
-  );
-
-  const isStepValid = () => {
-    switch (currentStep) {
-      case 1:
-        return formData.projectTitle && formData.requirements && formData.expectedPeriod && formData.expectedBudget;
-      case 2:
-        return formData.projectField;
-      case 3:
-        return true;
-      default:
-        return false;
-    }
+  const isFormValid = () => {
+    return formData.projectServiceName && 
+           formData.functionality && 
+           formData.period && 
+           formData.cost && 
+           formData.contactPhone && 
+           formData.contactEmail;
   };
 
   return (
-    <div className="flex w-full h-screen bg-gray-100">
-      <EnterpriseSidebar />
-      
-      <div className="flex-1 p-6">
-        <div className="max-w-4xl mx-auto">
-          <div className="bg-white rounded-lg shadow-lg p-8">
-            <div className="mb-8">
-              <h1 className="text-2xl font-bold text-gray-900 mb-2">프로젝트 상담 신청</h1>
-              <p className="text-gray-600">간단한 질문에 답해주시면 맞춤 견적을 받아보실 수 있어요</p>
-            </div>
+    <div className="w-full -mx-4 md:-mx-6 px-4 md:px-6">
+      <div className="w-full">
+        {/* 헤더 */}
+        <div className="text-center mb-10">
+          <h1 className="text-4xl font-bold text-gray-900 mb-3">프로젝트 상담 신청</h1>
+          <p className="text-lg text-gray-600">프로젝트 정보를 입력해주시면 맞춤 견적을 받아보실 수 있어요</p>
+        </div>
 
-            {/* 진행 단계 표시 */}
-            <div className="mb-8">
-              <div className="flex items-center justify-between">
-                {[1, 2, 3].map((step) => (
-                  <div key={step} className="flex items-center">
-                    <div
-                      className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                        step <= currentStep
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-gray-200 text-gray-600'
-                      }`}
-                    >
-                      {step}
-                    </div>
-                    {step < 3 && (
-                      <div
-                        className={`w-16 h-1 mx-2 ${
-                          step < currentStep ? 'bg-blue-600' : 'bg-gray-200'
-                        }`}
-                      />
-                    )}
+        <div className="bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden">
+          <form onSubmit={(e) => e.preventDefault()} className="p-8 md:p-10">
+            <div className="space-y-8">
+              {/* 기본 정보 섹션 */}
+              <section className="space-y-6 pb-8 border-b border-gray-200">
+                <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                  <Briefcase className="w-6 h-6 text-blue-600" />
+                  기본 정보
+                </h2>
+                
+                {/* 프로젝트 서비스 이름 */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                    <Briefcase className="w-4 h-4 text-gray-500" />
+                    프로젝트 서비스 이름 *
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.projectServiceName}
+                    onChange={(e) => handleInputChange('projectServiceName', e.target.value)}
+                    className="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all bg-gray-50 focus:bg-white"
+                    placeholder="예: 온라인 쇼핑몰, 모바일 앱, 회사 홈페이지 등"
+                    required
+                  />
+                </div>
+
+                {/* 기능 */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-gray-500" />
+                    기능 *
+                  </label>
+                  <textarea
+                    value={formData.functionality}
+                    onChange={(e) => handleInputChange('functionality', e.target.value)}
+                    className="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all bg-gray-50 focus:bg-white resize-none"
+                    rows={5}
+                    placeholder="예: 회원가입, 결제 기능, 관리자 페이지, 모바일 앱 등"
+                    required
+                  />
+                </div>
+
+                {/* 기간 및 비용 */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-gray-500" />
+                      기간 *
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.period}
+                      onChange={(e) => handleInputChange('period', e.target.value)}
+                      className="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all bg-gray-50 focus:bg-white"
+                      placeholder="예: 3개월, 6개월, 1년 등"
+                      required
+                    />
                   </div>
-                ))}
-              </div>
-              <div className="flex justify-between mt-2 text-sm text-gray-600">
-                <span>프로젝트 정보</span>
-                <span>서비스 유형</span>
-                <span>추가 요구사항</span>
-              </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                      <DollarSign className="w-4 h-4 text-gray-500" />
+                      비용 *
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.cost}
+                      onChange={(e) => handleInputChange('cost', e.target.value)}
+                      className="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all bg-gray-50 focus:bg-white"
+                      placeholder="예: 500만원, 1000만원 ~ 5000만원 등"
+                      required
+                    />
+                  </div>
+                </div>
+
+                {/* 연락처 */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                      <Phone className="w-4 h-4 text-gray-500" />
+                      전화번호 *
+                    </label>
+                    <input
+                      type="tel"
+                      value={formData.contactPhone}
+                      onChange={(e) => handleInputChange('contactPhone', e.target.value)}
+                      className="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all bg-gray-50 focus:bg-white"
+                      placeholder="010-1234-5678"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                      <Mail className="w-4 h-4 text-gray-500" />
+                      이메일 *
+                    </label>
+                    <input
+                      type="email"
+                      value={formData.contactEmail}
+                      onChange={(e) => handleInputChange('contactEmail', e.target.value)}
+                      className="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all bg-gray-50 focus:bg-white"
+                      placeholder="contact@example.com"
+                      required
+                    />
+                  </div>
+                </div>
+              </section>
+
+              {/* 추가 정보 섹션 */}
+              <section className="space-y-6 pb-8 border-b border-gray-200">
+                <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                  <Tag className="w-6 h-6 text-blue-600" />
+                  추가 정보
+                </h2>
+
+                {/* 서비스 유형 */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-3">
+                    서비스 유형
+                  </label>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    {serviceTypeOptions.map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        onClick={() => handleInputChange('serviceType', option)}
+                        className={`p-4 rounded-xl border-2 transition-all text-center font-medium ${
+                          formData.serviceType === option
+                            ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-md scale-105'
+                            : 'border-gray-200 bg-white text-gray-700 hover:border-blue-300 hover:bg-blue-50/50'
+                        }`}
+                      >
+                        {option}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 참고서비스 */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                    <Link2 className="w-4 h-4 text-gray-500" />
+                    참고서비스
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.referenceService}
+                    onChange={(e) => handleInputChange('referenceService', e.target.value)}
+                    className="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all bg-gray-50 focus:bg-white"
+                    placeholder="예: 네이버, 카카오톡, 쿠팡 등"
+                  />
+                </div>
+
+                {/* 자료 */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-gray-500" />
+                    자료
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.materials}
+                    onChange={(e) => handleInputChange('materials', e.target.value)}
+                    className="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all bg-gray-50 focus:bg-white"
+                    placeholder="예: 디자인 시안, 참고 사이트, 브랜드 가이드 등"
+                  />
+                </div>
+
+                {/* 디자인 수준 */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                    <Palette className="w-4 h-4 text-gray-500" />
+                    디자인 수준
+                  </label>
+                  <div className="grid grid-cols-2 gap-3">
+                    {designLevelOptions.map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        onClick={() => handleInputChange('designLevel', option)}
+                        className={`p-4 rounded-xl border-2 transition-all text-center font-medium ${
+                          formData.designLevel === option
+                            ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-md scale-105'
+                            : 'border-gray-200 bg-white text-gray-700 hover:border-blue-300 hover:bg-blue-50/50'
+                        }`}
+                      >
+                        {option}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </section>
+
+              {/* 기타 요구사항 섹션 */}
+              <section className="space-y-6">
+                <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                  <MessageSquare className="w-6 h-6 text-blue-600" />
+                  기타 요구사항
+                </h2>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-3">
+                    추가 요구사항이 있으시면 입력해주세요
+                  </label>
+                  <textarea
+                    value={formData.otherRequirements}
+                    onChange={(e) => handleInputChange('otherRequirements', e.target.value)}
+                    className="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all bg-gray-50 focus:bg-white resize-none"
+                    rows={5}
+                    placeholder="예: 특별한 기능, 보안 요구사항, 운영 환경 등"
+                  />
+                </div>
+              </section>
+
             </div>
 
-            {/* 폼 내용 */}
-            <form onSubmit={(e) => e.preventDefault()}>
-              {currentStep === 1 && renderStep1()}
-              {currentStep === 2 && renderStep2()}
-              {currentStep === 3 && renderStep3()}
-
-              {/* 버튼 */}
-              <div className="flex justify-between mt-8">
-                <button
-                  type="button"
-                  onClick={prevStep}
-                  disabled={currentStep === 1}
-                  className="px-6 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  이전
-                </button>
-
-                {currentStep < 3 ? (
-                  <button
-                    type="button"
-                    onClick={nextStep}
-                    disabled={!isStepValid()}
-                    className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    다음
-                  </button>
+            {/* 제출 버튼 */}
+            <div className="flex justify-end pt-8 mt-8 border-t-2 border-gray-200">
+              <button
+                type="button"
+                onClick={handleSubmit}
+                disabled={!isFormValid() || loading}
+                className="px-10 py-4 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 disabled:cursor-not-allowed font-bold text-lg shadow-lg hover:shadow-xl transition-all transform hover:scale-105 disabled:transform-none flex items-center gap-2"
+              >
+                {loading ? (
+                  <>
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                    <span>제출 중...</span>
+                  </>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={handleSubmit}
-                    disabled={!isStepValid() || loading}
-                    className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {loading ? '제출 중...' : '상담 신청하기'}
-                  </button>
+                  <>
+                    <span>상담 신청하기</span>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                    </svg>
+                  </>
                 )}
-              </div>
-            </form>
-          </div>
+              </button>
+            </div>
+          </form>
         </div>
       </div>
     </div>
