@@ -129,17 +129,17 @@ const SideNavigator = () => {
         },
         {
           icon: '',
-          label: '팀 프로필',
+          label: '팀 프로필 조회',
           type: 'team',
-          isActive: pathname === '/my/team-profile',
-          href: '/my/team-profile',
+          isActive: pathname === '/team-profile',
+          href: '/team-profile',
         },
         {
           icon: '',
-          label: '프로젝트',
+          label: '팀 프로젝트 확인',
           type: 'team',
-          isActive: pathname === '/my/projects',
-          href: '/my/projects',
+          isActive: pathname === '/team-projects',
+          href: '/team-projects',
         }
       )
 
@@ -183,17 +183,17 @@ const SideNavigator = () => {
         },
         {
           icon: '',
-          label: '팀 프로필',
+          label: '팀 프로필 조회',
           type: 'team',
-          isActive: pathname === '/my/team-profile',
-          href: '/my/team-profile',
+          isActive: pathname === '/team-profile',
+          href: '/team-profile',
         },
         {
           icon: '',
-          label: '프로젝트',
+          label: '팀 프로젝트 확인',
           type: 'team',
-          isActive: pathname === '/my/projects',
-          href: '/my/projects',
+          isActive: pathname === '/team-projects',
+          href: '/team-projects',
         },
       ]
     }
