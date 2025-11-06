@@ -28,7 +28,15 @@ export default function SubscriptionRegisterV2Page() {
       router.push('/auth')
       return
     }
-    setUser(user)
+    
+    // 사용자 계정 정보 조회 (전화번호 포함)
+    const { data: accountData } = await supabase
+      .from('accounts')
+      .select('username, contact_phone, contact_email')
+      .eq('user_id', user.id)
+      .single()
+    
+    setUser({ ...user, accountData })
   }
 
   const handleRegister = async () => {
@@ -40,6 +48,9 @@ export default function SubscriptionRegisterV2Page() {
       // 빌링키 ID 생성
       const billingKeyId = generateBillingKeyId(user.id)
 
+      // 사용자 전화번호 조회 (빌링키 발급 시 전달)
+      const userPhoneNumber = (user as any).accountData?.contact_phone || ''
+      
       // 포트원 V2 빌링키 발급 요청
       const billingKeyResponse = await PortOne.requestIssueBillingKey({
         storeId: process.env.NEXT_PUBLIC_PORTONE_V2_STORE_ID || '',
@@ -49,6 +60,8 @@ export default function SubscriptionRegisterV2Page() {
         customer: {
           fullName: user.email?.split('@')[0] || '사용자',
           email: user.email || '',
+          // 전화번호가 있으면 전달 (빌링키 발급 UI에서 입력 가능하지만 미리 채워줌)
+          ...(userPhoneNumber && { phoneNumber: userPhoneNumber }),
         },
       })
 

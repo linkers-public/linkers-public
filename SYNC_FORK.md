@@ -6,15 +6,29 @@ fork한 저장소(`makers-for-free/linkers`)를 원본 저장소(`suhyeon10/link
 
 GitHub Actions 워크플로우가 자동으로 동기화를 수행합니다.
 
-### 실행 시점
+### ⚠️ 중요: Fork → Upstream 방향 동기화
 
-1. **수동 실행**: GitHub Actions 탭에서 "Sync Fork with Upstream" 워크플로우를 수동으로 실행
-2. **자동 실행**: 매일 자정 (UTC)에 자동 실행
-3. **Push 이벤트**: `main` 브랜치에 push될 때마다 실행
+**Fork 저장소에서 원본 저장소로 직접 푸시는 불가능합니다.**
 
-### 워크플로우 파일
+원본 저장소(`suhyeon10/linkers`)에 변경사항을 반영하려면:
+1. **Pull Request 생성** (권장)
+2. 수동으로 원본 저장소에 푸시 (원본 저장소에 직접 접근 권한이 있는 경우)
 
-`.github/workflows/sync-fork.yml` 파일이 자동 동기화를 담당합니다.
+### 워크플로우 종류
+
+#### 1. Upstream → Fork 동기화 (`sync-fork.yml`)
+- 원본 저장소의 변경사항을 fork 저장소로 가져옴
+- 실행 시점:
+  - 수동 실행
+  - 매일 자정 (UTC) 자동 실행
+  - `main` 브랜치에 push될 때마다 실행
+
+#### 2. Fork → Upstream PR 생성 (`create-pr-to-upstream.yml`)
+- Fork 저장소의 변경사항을 원본 저장소에 PR로 제출
+- 실행 시점:
+  - 수동 실행
+  - `main` 브랜치에 push될 때마다 실행
+- **주의**: Upstream 저장소에 접근 권한이 있어야 함
 
 ## 🔧 수동 동기화 방법
 
