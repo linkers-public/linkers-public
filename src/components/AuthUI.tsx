@@ -4,6 +4,7 @@ import React, { useState } from 'react'
 import { createSupabaseBrowserClient } from '@/supabase/supabase-client'
 import useHydration from '@/hooks/use-hydrate'
 import { Database } from '@/types/supabase'
+import { getSiteUrl } from '@/lib/utils'
 
 type ProfileType = Database['public']['Enums']['profile_type']
 
@@ -36,7 +37,7 @@ const AuthUI = ({ role }: { role: string }) => {
     sessionStorage.setItem('profileType', profileType)
 
     // 환경에 따른 site URL 설정
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || window.location.origin
+    const siteUrl = getSiteUrl()
 
     await supabaseClient.auth.signInWithOAuth({
       provider,
