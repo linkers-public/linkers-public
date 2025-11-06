@@ -100,7 +100,7 @@ const EducationUpdateClient = ({ id }: { id: string }) => {
   }
 
   return (
-    <div className="max-w-2xl mx-auto p-6">
+    <div className="w-full p-4 md:p-6">
       <h1 className="text-2xl font-bold mb-6">학력 수정</h1>
 
       {error && (
@@ -124,7 +124,7 @@ const EducationUpdateClient = ({ id }: { id: string }) => {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium mb-1">시작일</label>
               <Input

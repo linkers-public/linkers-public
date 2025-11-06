@@ -239,7 +239,7 @@ export default function BadgesClient() {
   }
 
   return (
-    <div className="w-full max-w-4xl mx-auto py-8 px-4">
+    <div className="w-full py-8 px-4">
       <div className="mb-6 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Button

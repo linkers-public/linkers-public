@@ -196,9 +196,9 @@ export const ProfileClient = ({ username, isOwner = false }) => {
           )}
         </>
       ) : (
-        <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-12 text-center">
+          <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 md:p-12 text-center">
           <div className="text-4xl mb-4">📝</div>
-          <h3 className="text-xl font-semibold text-gray-900 mb-2">
+          <h3 className="text-lg md:text-xl font-semibold text-gray-900 mb-2">
             아직 정보를 입력하지 않았습니다
           </h3>
           <p className="text-gray-600 mb-6">
@@ -234,8 +234,8 @@ const ProfileMeta = ({
     return type === 'FREELANCER' ? '프리랜서' : '기업'
   }
   return (
-    <section className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 mb-6">
-      <div className="flex gap-4">
+    <section className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 md:p-6 mb-6">
+      <div className="flex flex-col sm:flex-row gap-4">
         {/* 프로필 이미지 */}
         <div className="flex flex-col items-center gap-2">
           <div className="relative">
@@ -251,10 +251,10 @@ const ProfileMeta = ({
 
         {/* 프로필 정보 */}
         <div className="flex-1 flex flex-col gap-3">
-          <div className="flex items-start justify-between">
-            <div className="flex flex-col gap-2">
+          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+            <div className="flex flex-col gap-2 flex-1">
               <div className="flex items-center gap-3 flex-wrap">
-                <h1 className="text-2xl font-bold text-gray-900">{username || '사용자'}</h1>
+                <h1 className="text-xl md:text-2xl font-bold text-gray-900">{username || '사용자'}</h1>
                 {profileType && (
                   <span className="px-3 py-1 text-sm rounded-full bg-blue-100 text-blue-700 font-medium">
                     {getProfileTypeLabel(profileType)}
@@ -321,7 +321,7 @@ const ProfileMeta = ({
             </div>
 
             {/* 액션 버튼 */}
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2 mt-4 sm:mt-0">
               {isOwner ? (
                 <Button onClick={onEditProfile} variant="outline">
                   ✏️ 편집하기
@@ -362,9 +362,9 @@ const WorkExperienceMeta = ({
   }
 
   return (
-    <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 mb-6">
+    <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 md:p-6 mb-6">
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-bold text-gray-900">💼 이력</h2>
+        <h2 className="text-lg md:text-xl font-bold text-gray-900">💼 이력</h2>
         {isOwner && (
           <Button
             onClick={onCreateExperience}
@@ -459,9 +459,9 @@ const EduCationMeta = ({
     return null
   }
   return (
-    <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 mb-6">
+    <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 md:p-6 mb-6">
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-bold text-gray-900">🎓 학력</h2>
+        <h2 className="text-lg md:text-xl font-bold text-gray-900">🎓 학력</h2>
         {isOwner && (
           <Button
             onClick={onCreateEducation}
@@ -516,9 +516,9 @@ const LicenseMeta = ({ account_license, isOwner }) => {
     return null
   }
   return (
-    <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 mb-6">
+    <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 md:p-6 mb-6">
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-bold text-gray-900">🏆 자격증</h2>
+        <h2 className="text-lg md:text-xl font-bold text-gray-900">🏆 자격증</h2>
         {isOwner && (
           <Button
             variant="outline"
@@ -603,9 +603,9 @@ const PortfolioMeta = ({ profileId, isOwner }) => {
   }
 
   return (
-    <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 mb-6">
+    <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 md:p-6 mb-6">
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-bold text-gray-900">📁 포트폴리오</h2>
+        <h2 className="text-lg md:text-xl font-bold text-gray-900">📁 포트폴리오</h2>
         {isOwner && (
           <Button
             onClick={() => router.push('/my/profile/portfolio')}

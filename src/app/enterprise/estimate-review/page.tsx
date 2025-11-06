@@ -178,12 +178,12 @@ const EstimateReviewPage: React.FC = () => {
             <ArrowLeft className="w-5 h-5" />
             <span className="font-medium">목록으로 돌아가기</span>
           </button>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">견적서 검토</h1>
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">견적서 검토</h1>
           <p className="text-gray-600 text-lg">메이커 팀의 견적서를 검토하고 선택해주세요</p>
           
           {estimates.length > 0 && (
             <div className="mt-6 p-4 bg-blue-50 rounded-xl border border-blue-200">
-              <div className="flex items-center gap-6 text-sm">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-6 text-sm">
                 <span className="text-blue-800 font-semibold">
                   📋 총 <strong className="text-lg">{estimates.length}</strong>개의 견적서가 도착했습니다
                 </span>
@@ -210,23 +210,23 @@ const EstimateReviewPage: React.FC = () => {
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-8">
             {/* 견적서 목록 */}
             <div className="space-y-4">
-              <h2 className="text-xl font-bold text-gray-900 mb-4">견적서 목록</h2>
+              <h2 className="text-lg md:text-xl font-bold text-gray-900 mb-4">견적서 목록</h2>
               {estimates.map((estimate) => (
                 <div
                   key={estimate.estimate_id}
-                  className={`p-5 rounded-xl border-2 cursor-pointer transition-all ${
+                  className={`p-4 md:p-5 rounded-xl border-2 cursor-pointer transition-all ${
                     selectedEstimate?.estimate_id === estimate.estimate_id
                       ? 'border-blue-500 bg-blue-50 shadow-md'
                       : 'border-gray-200 bg-white hover:border-blue-300 hover:shadow-sm'
                   }`}
                   onClick={() => setSelectedEstimate(estimate)}
                 >
-                  <div className="flex justify-between items-start mb-3">
+                  <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3 mb-3">
                     <div className="flex-1">
-                      <h3 className="font-bold text-lg text-gray-900 mb-1">
+                      <h3 className="font-bold text-base md:text-lg text-gray-900 mb-1">
                         {estimate.team?.name || `견적서 #${estimate.estimate_id}`}
                       </h3>
                       {estimate.team?.bio && (
@@ -246,7 +246,7 @@ const EstimateReviewPage: React.FC = () => {
                   </div>
                   
                   {estimate.estimate_version && (
-                    <div className="flex items-center gap-4 text-sm text-gray-600 mb-2">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-sm text-gray-600 mb-2">
                       {estimate.estimate_version.total_amount && (
                         <span className="flex items-center gap-1">
                           <DollarSign className="w-4 h-4" />
@@ -271,14 +271,14 @@ const EstimateReviewPage: React.FC = () => {
 
             {/* 견적서 상세 */}
             <div className="space-y-4">
-              <h2 className="text-xl font-bold text-gray-900 mb-4">견적서 상세</h2>
+              <h2 className="text-lg md:text-xl font-bold text-gray-900 mb-4">견적서 상세</h2>
               
               {selectedEstimate ? (
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 md:p-8">
                   {/* 팀 정보 */}
                   {selectedEstimate.team && (
                     <section className="mb-8 pb-8 border-b border-gray-200">
-                      <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                      <h3 className="text-base md:text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
                         <Users className="w-5 h-5 text-blue-600" />
                         팀 정보
                       </h3>
@@ -318,7 +318,7 @@ const EstimateReviewPage: React.FC = () => {
                   {/* 견적서 정보 */}
                   {selectedEstimate.estimate_version && (
                     <section className="mb-8 pb-8 border-b border-gray-200">
-                      <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                      <h3 className="text-base md:text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
                         <FileText className="w-5 h-5 text-blue-600" />
                         견적서 정보
                       </h3>
@@ -354,7 +354,7 @@ const EstimateReviewPage: React.FC = () => {
                   {/* 마일스톤 */}
                   {selectedEstimate.milestones && selectedEstimate.milestones.length > 0 && (
                     <section className="mb-8 pb-8 border-b border-gray-200">
-                      <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+                      <h3 className="text-base md:text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
                         <Calendar className="w-5 h-5 text-blue-600" />
                         마일스톤
                       </h3>
@@ -386,7 +386,7 @@ const EstimateReviewPage: React.FC = () => {
                   {/* 선택 버튼 */}
                   <div className="pt-6 border-t border-gray-200">
                     <h4 className="font-semibold text-gray-900 mb-4">이 견적서에 대해 어떻게 생각하시나요?</h4>
-                    <div className="flex gap-4">
+                    <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                       <button
                         onClick={() => handleDecision(selectedEstimate.estimate_id, 'interested')}
                         disabled={decisions[selectedEstimate.estimate_id] === 'interested'}
@@ -418,7 +418,7 @@ const EstimateReviewPage: React.FC = () => {
                   </div>
                 </div>
               ) : (
-                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
+                <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 md:p-12 text-center">
                   <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
                     <FileText className="w-10 h-10 text-gray-400" />
                   </div>

@@ -73,7 +73,7 @@ const SearchProjectsClient: React.FC = () => {
         <div className="w-full px-4 md:px-6">
           {/* 헤더 */}
           <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">내 프로젝트 목록</h1>
+            <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">내 프로젝트 목록</h1>
             <p className="text-gray-600 text-lg">제출한 상담 신청서의 진행 상황을 확인하실 수 있습니다</p>
           </div>
 
@@ -234,12 +234,12 @@ const ProjectMeta = ({
       className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-lg transition-all duration-300 cursor-pointer overflow-hidden"
       onClick={onClick}
     >
-      <div className="p-6">
+      <div className="p-4 md:p-6">
         <div className="flex flex-col gap-5">
           {/* 프로젝트 제목과 상태 */}
-          <div className="flex justify-between items-start gap-4">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
             <div className="flex-1">
-              <h3 className="font-bold text-xl text-gray-900 leading-tight mb-2">
+              <h3 className="font-bold text-lg md:text-xl text-gray-900 leading-tight mb-2">
                 {project.title}
               </h3>
               {/* 견적서 개수 표시 */}
@@ -259,7 +259,7 @@ const ProjectMeta = ({
                 </button>
               )}
             </div>
-            <div className={`px-4 py-1.5 text-sm font-medium rounded-lg border ${statusInfo.color} whitespace-nowrap`}>
+            <div className={`px-3 md:px-4 py-1.5 text-xs md:text-sm font-medium rounded-lg border ${statusInfo.color} whitespace-nowrap self-start`}>
               {statusInfo.text}
             </div>
           </div>
@@ -310,7 +310,7 @@ const ProjectMeta = ({
           )}
 
           {/* 하단 정보 및 액션 */}
-          <div className="flex justify-between items-center pt-4 border-t border-gray-100">
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 pt-4 border-t border-gray-100">
             <span className="text-sm text-gray-500">
               신청일: {project.start_date ? new Date(project.start_date).toLocaleDateString('ko-KR', {
                 year: 'numeric',
@@ -318,7 +318,7 @@ const ProjectMeta = ({
                 day: 'numeric'
               }) : '날짜 없음'}
             </span>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
               {/* 매칭중 상태일 때 프로젝트 수정 버튼 */}
               {(project.counsel_status || project.status) === 'recruiting' && (
                 <button

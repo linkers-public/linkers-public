@@ -40,10 +40,10 @@ export default function Page() {
 
   if (!hasProfile) {
     return (
-      <div className="w-full max-w-4xl mx-auto py-8 px-4">
-        <div className="bg-white rounded-lg shadow-sm border p-12 text-center">
+      <div className="w-full py-8 px-4">
+        <div className="bg-white rounded-lg shadow-sm border p-6 md:p-12 text-center">
           <div className="text-6xl mb-6">👤</div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">
+          <h2 className="text-xl md:text-2xl font-bold text-gray-900 mb-4">
             프로필이 없습니다
           </h2>
           <p className="text-gray-600 mb-8 max-w-md mx-auto">
