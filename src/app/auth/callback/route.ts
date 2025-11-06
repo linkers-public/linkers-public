@@ -7,11 +7,17 @@ type ProfileType = Database['public']['Enums']['profile_type']
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url)
   const code = searchParams.get('code')
-  const profileType = searchParams.get('profile_type') as ProfileType
-  let next = searchParams.get('next') ?? '/'
   
-  // 보안을 위해 next가 /로 시작하는지 확인
-  if (!next.startsWith('/')) next = '/'
+  // profile_type 신뢰성 검증 (화이트리스트)
+  const allowedProfileTypes = new Set(['FREELANCER', 'COMPANY'])
+  const profileTypeParam = searchParams.get('profile_type')
+  const profileType = profileTypeParam && allowedProfileTypes.has(profileTypeParam) 
+    ? (profileTypeParam as ProfileType) 
+    : null
+  
+  // OAuth 콜백의 next 파라미터 정규화 (오픈 리다이렉트 방지)
+  const nextParam = searchParams.get('next') ?? '/'
+  const safeNext = nextParam.startsWith('/') ? nextParam : '/'
 
   if (code) {
     const supabase = await createServerSideClient()
@@ -20,7 +26,7 @@ export async function GET(request: Request) {
       await supabase.auth.exchangeCodeForSession(code)
     
     if (sessionError || !session) {
-      return NextResponse.redirect(`${origin}/auth/auth-code-error`)
+      return NextResponse.redirect(new URL('/auth/auth-code-error', origin))
     }
 
     // 사용자 정보를 프로필 타입에 따라 accounts 테이블에 저장
@@ -58,12 +64,16 @@ export async function GET(request: Request) {
               availability_status: 'available',
               profile_created_at: new Date().toISOString()
             }, { 
-              onConflict: 'user_id',
+              // UNIQUE (user_id, profile_type) 제약조건에 맞춰 onConflict 수정
+              onConflict: 'user_id,profile_type',
               ignoreDuplicates: false
             })
 
           if (upsertError) {
             console.error('Failed to upsert account:', upsertError)
+          } else {
+            // 프로필이 새로 생성된 경우, 프로필 완성 유도를 위해 온보딩 페이지로 리다이렉트
+            return NextResponse.redirect(new URL('/my/update?from=onboarding', origin))
           }
         }
       } else {
@@ -77,13 +87,13 @@ export async function GET(request: Request) {
 
         // 프로필이 없으면 프로필 생성 페이지로 리다이렉트
         if (!existingAccount) {
-          return NextResponse.redirect(`${origin}/my/profile/create`)
+          return NextResponse.redirect(new URL('/my/profile/create', origin))
         }
       }
     }
 
-    return NextResponse.redirect(`${origin}${next}`)
+    return NextResponse.redirect(new URL(safeNext, origin))
   }
 
-  return NextResponse.redirect(`${origin}/auth/auth-code-error`)
+  return NextResponse.redirect(new URL('/auth/auth-code-error', origin))
 }

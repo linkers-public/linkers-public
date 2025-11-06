@@ -4,12 +4,13 @@ import React, { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useProfileStore } from '@/stores/useProfileStore'
 import { updateProfile, fetchMyProfile } from '@/apis/profile.service'
 import { createSupabaseBrowserClient } from '@/supabase/supabase-client'
 import { X } from 'lucide-react'
 import { JOB_OPTIONS, EXPERTISE_OPTIONS } from '@/constants/job-options'
+import { toast } from '@/hooks/use-toast'
 
 interface FormData {
   bio: string
@@ -24,11 +25,13 @@ interface FormData {
 
 const ProfileUpdateClient = () => {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { profile, fetchMyProfileData } = useProfileStore()
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [skillInput, setSkillInput] = useState('')
+  const [isNewProfile, setIsNewProfile] = useState(false)
 
   const [formData, setFormData] = useState<FormData>({
     bio: '',
@@ -44,6 +47,19 @@ const ProfileUpdateClient = () => {
   useEffect(() => {
     const loadProfile = async () => {
       try {
+        // 온보딩 플로우 확인 (from=onboarding 또는 new_profile=true)
+        const fromParam = searchParams.get('from')
+        const newProfileParam = searchParams.get('new_profile')
+        const isOnboarding = fromParam === 'onboarding' || newProfileParam === 'true'
+        
+        if (isOnboarding) {
+          setIsNewProfile(true)
+          toast({
+            title: '프로필 생성 완료!',
+            description: '프로필을 완성하기 위해 추가 정보를 입력해주세요.',
+          })
+        }
+
         await fetchMyProfileData()
         
         // 사용자 이메일 가져오기
@@ -69,7 +85,7 @@ const ProfileUpdateClient = () => {
     }
 
     loadProfile()
-  }, [])
+  }, [searchParams])
 
   const handleInputChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
@@ -159,6 +175,27 @@ const ProfileUpdateClient = () => {
   return (
     <div className="max-w-4xl mx-auto p-6">
       <h1 className="text-2xl font-bold mb-6">프로필 수정</h1>
+
+      {/* 새 프로필 완성 유도 메시지 */}
+      {isNewProfile && (
+        <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded mb-6">
+          <div className="flex items-start">
+            <div className="flex-1">
+              <h3 className="font-semibold mb-1">프로필을 완성해주세요!</h3>
+              <p className="text-sm">
+                프로필이 생성되었습니다. 더 나은 서비스 이용을 위해 자기소개, 직무, 전문 분야 등의 정보를 입력해주세요.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsNewProfile(false)}
+              className="text-blue-600 hover:text-blue-800 ml-4"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-6">

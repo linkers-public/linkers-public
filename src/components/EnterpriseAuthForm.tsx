@@ -79,6 +79,37 @@ const EnterpriseAuthForm: React.FC<EnterpriseAuthFormProps> = ({ onSuccess }) =>
 
           if (clientError) throw clientError
 
+          // accounts 테이블에 COMPANY 프로필 자동 생성 (OAuth 콜백과 동일한 로직 사용)
+          const userName = formData.companyName || 
+                          formData.email?.split('@')[0] || 
+                          `company_${authData.user.id.slice(0, 8)}`
+
+          // upsert를 사용하여 중복 방지 및 일관성 유지
+          const { error: profileError } = await supabase
+            .from('accounts')
+            .upsert({
+              user_id: authData.user.id,
+              username: userName,
+              profile_type: 'COMPANY',
+              bio: '',
+              role: 'MANAGER',
+              main_job: [],
+              expertise: [],
+              badges: [],
+              is_active: true,
+              availability_status: 'available',
+              profile_created_at: new Date().toISOString()
+            }, { 
+              // UNIQUE (user_id, profile_type) 제약조건에 맞춰 onConflict 수정
+              onConflict: 'user_id,profile_type',
+              ignoreDuplicates: false
+            })
+
+          if (profileError) {
+            console.error('프로필 생성 실패:', profileError)
+            // 프로필 생성 실패해도 가입은 성공으로 처리
+          }
+
           alert('회원가입이 완료되었습니다. 이메일을 확인해주세요.')
           setIsLogin(true)
         }
