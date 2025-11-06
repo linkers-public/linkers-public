@@ -9,6 +9,7 @@ type ProfileType = 'FREELANCER' | 'COMPANY' | null
 
 interface NavigatorProps {
   profileType?: ProfileType
+  role?: 'MAKER' | 'MANAGER' | 'NONE'
 }
 
 interface Route {
@@ -19,7 +20,7 @@ interface Route {
   isDropdown?: boolean
 }
 
-const Navigator = ({ profileType }: NavigatorProps) => {
+const Navigator = ({ profileType, role }: NavigatorProps) => {
   const pathname = usePathname()
   const [showTeamMenu, setShowTeamMenu] = useState(false)
   const teamMenuRef = useRef<HTMLDivElement>(null)
@@ -61,7 +62,7 @@ const Navigator = ({ profileType }: NavigatorProps) => {
     }
     
     // 프리랜서 프로필이거나 프로필 타입이 없을 때 (기본값)
-    return [
+    const freelancerRoutes = [
       {
         icon: '',
         label: '프로젝트 찾기',
@@ -74,9 +75,21 @@ const Navigator = ({ profileType }: NavigatorProps) => {
         isActive: pathname === '/search-makers',
         href: '/search-makers',
       },
-      // 프리랜서 프로필일 경우 팀 메뉴 제외
     ]
-  }, [pathname, profileType])
+
+    // 매니저 역할인 경우 팀 메뉴 추가
+    if (profileType === 'FREELANCER' && role === 'MANAGER') {
+      freelancerRoutes.push({
+        icon: '',
+        label: '팀',
+        isActive: pathname === '/team-profile' || pathname === '/team-projects',
+        href: null,
+        isDropdown: true,
+      })
+    }
+
+    return freelancerRoutes
+  }, [pathname, profileType, role])
 
   return (
     <nav className="flex space-x-10">

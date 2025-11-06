@@ -23,6 +23,7 @@ const Header = () => {
   const [showMobileMenu, setShowMobileMenu] = useState(false)
   const [showNotificationMenu, setShowNotificationMenu] = useState(false)
   const [activeProfileType, setActiveProfileType] = useState<ProfileType | null>(null)
+  const [activeRole, setActiveRole] = useState<'MAKER' | 'MANAGER' | 'NONE' | null>(null)
   const [unreadCount, setUnreadCount] = useState(0)
   const menuRef = useRef<HTMLDivElement>(null)
   const mobileMenuRef = useRef<HTMLDivElement>(null)
@@ -39,8 +40,10 @@ const Header = () => {
       const active = validProfiles.find((p: any) => p.is_active)
       if (active) {
         setActiveProfileType(active.profile_type)
+        setActiveRole(active.role || null)
       } else {
         setActiveProfileType(null)
+        setActiveRole(null)
       }
     } catch (error) {
       console.error('프로필 로드 실패:', error)
@@ -180,7 +183,10 @@ const Header = () => {
             <Logo />
             {/* 데스크톱 네비게이터 - 모바일에서 숨김 */}
             <div className="hidden md:block">
-              <Navigator profileType={activeProfileType || undefined} />
+              <Navigator 
+                profileType={activeProfileType || undefined} 
+                role={activeRole || undefined}
+              />
             </div>
           </div>
           <div className="ml-auto flex items-center gap-4">
@@ -203,7 +209,7 @@ const Header = () => {
                     }}
                   />
                   {unreadCount > 0 && (
-                    <div className="absolute top-0 right-0 w-[10px] h-[10px] bg-palette-blue-50 rounded-full border-2 border-white"></div>
+                  <div className="absolute top-0 right-0 w-[10px] h-[10px] bg-palette-blue-50 rounded-full border-2 border-white"></div>
                   )}
                   {showNotificationMenu && (
                     <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50 max-h-96 overflow-y-auto">

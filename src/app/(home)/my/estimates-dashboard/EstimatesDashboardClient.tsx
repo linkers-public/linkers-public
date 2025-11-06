@@ -68,6 +68,7 @@ export default function EstimatesDashboardClient() {
   const [fieldFilter, setFieldFilter] = useState<FilterField>('all')
   const [sortBy, setSortBy] = useState<SortBy>('newest')
   const [deadlineFilter, setDeadlineFilter] = useState(false)
+  const [profileType, setProfileType] = useState<'COMPANY' | 'FREELANCER' | null>(null)
 
   useEffect(() => {
     loadEstimates()
@@ -86,65 +87,110 @@ export default function EstimatesDashboardClient() {
         return
       }
 
-      // 기업 프로필 확인
-      const { data: companyProfile } = await supabase
+      // 활성 프로필 확인
+      const { data: activeProfile } = await supabase
         .from('accounts')
         .select('profile_id, profile_type')
         .eq('user_id', user.id)
-        .eq('profile_type', 'COMPANY')
         .eq('is_active', true)
         .is('deleted_at', null)
         .maybeSingle()
 
-      if (!companyProfile) {
+      if (!activeProfile) {
         toast({
           variant: 'destructive',
-          title: '기업 프로필이 필요합니다',
-          description: '기업 프로필을 생성해주세요.',
+          title: '프로필이 필요합니다',
+          description: '프로필을 생성해주세요.',
         })
         router.push('/my/profile/manage')
         return
       }
 
-      // client 테이블에서 client_id 가져오기
-      const { data: clientData } = await supabase
-        .from('client')
-        .select('user_id')
-        .eq('user_id', user.id)
-        .maybeSingle()
+      setProfileType(activeProfile.profile_type as 'COMPANY' | 'FREELANCER')
 
-      if (!clientData) {
+      let data, error
+
+      // 기업 프로필인 경우: 받은 견적서 조회
+      if (activeProfile.profile_type === 'COMPANY') {
+        // client 테이블에서 client_id 가져오기
+        const { data: clientData } = await supabase
+          .from('client')
+          .select('user_id')
+          .eq('user_id', user.id)
+          .maybeSingle()
+
+        if (!clientData) {
+          toast({
+            variant: 'destructive',
+            title: '기업 계정이 아닙니다',
+          })
+          return
+        }
+
+        // 견적서 조회 (counsel과 연결) - 받은 견적서
+        const result = await supabase
+          .from('estimate')
+          .select(`
+            estimate_id,
+            counsel_id,
+            estimate_status,
+            estimate_date,
+            estimate_start_date,
+            estimate_due_date,
+            team:team_id (
+              id,
+              name,
+              bio
+            ),
+            counsel:counsel_id (
+              counsel_id,
+              title,
+              feild,
+              due_date
+            )
+          `)
+          .eq('client_id', clientData.user_id)
+          .order('estimate_date', { ascending: false })
+        
+        data = result.data
+        error = result.error
+      } 
+      // 프리랜서 프로필인 경우: 작성한 견적서 조회
+      else if (activeProfile.profile_type === 'FREELANCER') {
+        // 견적서 조회 (manager_profile_id로 조회) - 작성한 견적서
+        const result = await supabase
+          .from('estimate')
+          .select(`
+            estimate_id,
+            counsel_id,
+            estimate_status,
+            estimate_date,
+            estimate_start_date,
+            estimate_due_date,
+            team:team_id (
+              id,
+              name,
+              bio
+            ),
+            counsel:counsel_id (
+              counsel_id,
+              title,
+              feild,
+              due_date
+            )
+          `)
+          .eq('manager_profile_id', activeProfile.profile_id)
+          .order('estimate_date', { ascending: false })
+        
+        data = result.data
+        error = result.error
+      } else {
         toast({
           variant: 'destructive',
-          title: '기업 계정이 아닙니다',
+          title: '지원하지 않는 프로필 타입입니다',
         })
         return
       }
-
-      // 견적서 조회 (counsel과 연결)
-      const { data, error } = await supabase
-        .from('estimate')
-        .select(`
-          estimate_id,
-          counsel_id,
-          estimate_status,
-          estimate_date,
-          estimate_start_date,
-          estimate_due_date,
-          team:team_id (
-            id,
-            name,
-            bio
-          ),
-          counsel:counsel_id (
-            counsel_id,
-            title,
-            feild,
-            due_date
-          )
-        `)
-        .eq('client_id', clientData.user_id)
-        .order('estimate_date', { ascending: false })
 
       if (error) throw error
 
@@ -317,8 +363,12 @@ export default function EstimatesDashboardClient() {
   return (
     <div className="w-full py-4 md:py-6 px-2 md:px-4">
       <div className="mb-6">
-        <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-2">받은 견적서 대시보드</h1>
-        <p className="text-gray-600">제안받은 견적서를 검토하고 비교하세요</p>
+        <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-2">견적서 대시보드</h1>
+        <p className="text-gray-600">
+          {profileType === 'COMPANY' 
+            ? '제안받은 견적서를 검토하고 비교하세요' 
+            : '작성한 견적서를 확인하고 관리하세요'}
+        </p>
       </div>
 
       {/* 필터 및 정렬 */}

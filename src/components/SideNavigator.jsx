@@ -55,46 +55,170 @@ const SideNavigator = () => {
 
     // 기업 프로필인 경우
     if (isCompany) {
+      const companyAccountRoutes = [
+        {
+          icon: '',
+          label: '내 정보 / 회사 정보 수정',
+          type: 'company_account',
+          isActive: pathname === '/my/company/info',
+          href: '/my/company/info',
+        },
+        {
+          icon: '',
+          label: '팀 멤버 관리',
+          type: 'company_account',
+          isActive: pathname === '/my/company/team-members',
+          href: '/my/company/team-members',
+        },
+      ]
+
+      const subscriptionRoutes = [
+        {
+          icon: '',
+          label: '구독 관리',
+          type: 'subscription',
+          isActive: pathname === '/my/subscription',
+          href: '/my/subscription',
+        },
+        {
+          icon: '',
+          label: '결제 내역 / 영수증',
+          type: 'subscription',
+          isActive: pathname === '/my/payments',
+          href: '/my/payments',
+        },
+        {
+          icon: '',
+          label: '연락처 열람 기록',
+          type: 'subscription',
+          isActive: pathname === '/my/contact-history',
+          href: '/my/contact-history',
+        },
+      ]
+
+      const projectHistoryRoutes = [
+        {
+          icon: '',
+          label: '진행 이력',
+          type: 'project_history',
+          isActive: pathname === '/my/project-history',
+          href: '/my/project-history',
+        },
+        {
+          icon: '',
+          label: '완료 프로젝트 저장함',
+          type: 'project_history',
+          isActive: pathname === '/my/completed-projects',
+          href: '/my/completed-projects',
+        },
+      ]
+
+      const settingsRoutes = [
+        {
+          icon: '',
+          label: '알림 설정',
+          type: 'settings',
+          isActive: pathname === '/my/account/notifications',
+          href: '/my/account/notifications',
+        },
+        {
+          icon: '',
+          label: '계정 보안',
+          type: 'settings',
+          isActive: pathname === '/my/account/security',
+          href: '/my/account/security',
+        },
+        {
+          icon: '',
+          label: '회원 탈퇴',
+          type: 'settings',
+          isActive: pathname === '/my/account/delete',
+          href: '/my/account/delete',
+        },
+      ]
+
       return [
-        {
-          icon: '',
-          label: '내 프로젝트 목록',
-          type: 'my',
-          isActive: pathname === '/enterprise/my-counsel',
-          href: '/enterprise/my-counsel',
-        },
-        {
-          icon: '',
-          label: '관심 메이커',
-          type: 'my',
-          isActive: pathname === '/my/bookmarked-makers',
-          href: '/my/bookmarked-makers',
-        },
+        ...companyAccountRoutes,
+        ...subscriptionRoutes,
+        ...projectHistoryRoutes,
+        ...settingsRoutes,
       ]
     }
 
     // 프리랜서 프로필인 경우
     if (isFreelancer) {
-      const baseRoutes = [
+      const profileRoutes = [
         {
           icon: '',
-          label: '쪽지함',
-          type: 'my',
-          isActive: pathname === '/my/messages',
-          href: '/my/messages',
+          label: '프로필 보기/수정',
+          type: 'profile',
+          isActive: pathname === '/my/profile' || pathname === '/my/update',
+          href: '/my/profile',
         },
         {
           icon: '',
-          label: '할당된 프로젝트',
-          type: 'my',
-          isActive: pathname === '/my/assigned-projects',
-          href: '/my/assigned-projects',
+          label: '받은 팀 초대',
+          type: 'profile',
+          isActive: pathname === '/my/team-invites',
+          href: '/my/team-invites',
+        },
+      ]
+
+      const proposalRoutes = [
+        {
+          icon: '',
+          label: '받은 프로젝트 제안',
+          type: 'proposal',
+          isActive: pathname === '/my/project-proposals',
+          href: '/my/project-proposals',
+        },
+        {
+          icon: '',
+          label: '보낸 견적서 (매니저)',
+          type: 'proposal',
+          isActive: pathname === '/my/estimates-dashboard',
+          href: '/my/estimates-dashboard',
+        },
+      ]
+
+      const interestRoutes = [
+        {
+          icon: '',
+          label: '관심 프로젝트',
+          type: 'interest',
+          isActive: pathname === '/my/bookmarked-projects',
+          href: '/my/bookmarked-projects',
+        },
+        {
+          icon: '',
+          label: '관심 기업',
+          type: 'interest',
+          isActive: pathname === '/my/bookmarked-companies',
+          href: '/my/bookmarked-companies',
+        },
+      ]
+
+      const accountRoutes = [
+        {
+          icon: '',
+          label: '로그인/보안',
+          type: 'account',
+          isActive: pathname === '/my/account/security',
+          href: '/my/account/security',
+        },
+        {
+          icon: '',
+          label: '알림 설정',
+          type: 'account',
+          isActive: pathname === '/my/account/notifications',
+          href: '/my/account/notifications',
         },
       ]
 
       // 매니저 역할인 경우 팀 관련 메뉴 추가
+      const teamRoutes = []
       if (account?.role === 'MANAGER') {
-        baseRoutes.push(
+        teamRoutes.push(
           {
             icon: '',
             label: '팀 프로필 조회',
@@ -112,7 +236,13 @@ const SideNavigator = () => {
         )
       }
 
-      return baseRoutes
+      return [
+        ...profileRoutes,
+        ...proposalRoutes,
+        ...interestRoutes,
+        ...accountRoutes,
+        ...teamRoutes,
+      ]
     }
 
     // 기본 메뉴 (프로필 타입이 없는 경우)
@@ -120,61 +250,60 @@ const SideNavigator = () => {
   }, [pathname, account?.role, account?.profile_type])
 
   // 로딩 중이거나 라우트가 없어도 최소한 기본 메뉴는 표시
-  const myRoutes = routes.filter((route) => route.type === 'my')
+  const profileRoutes = routes.filter((route) => route.type === 'profile')
+  const proposalRoutes = routes.filter((route) => route.type === 'proposal')
+  const interestRoutes = routes.filter((route) => route.type === 'interest')
+  const accountRoutes = routes.filter((route) => route.type === 'account')
   const teamRoutes = routes.filter((route) => route.type === 'team')
+  const myRoutes = routes.filter((route) => route.type === 'my') // 기업용 (레거시)
+  const companyAccountRoutes = routes.filter((route) => route.type === 'company_account')
+  const subscriptionRoutes = routes.filter((route) => route.type === 'subscription')
+  const projectHistoryRoutes = routes.filter((route) => route.type === 'project_history')
+  const settingsRoutes = routes.filter((route) => route.type === 'settings')
+
+  const renderRouteGroup = (groupRoutes, groupTitle) => {
+    if (groupRoutes.length === 0) return null
+    return (
+      <div className="flex flex-col gap-4 mt-4">
+        <span className="text-p1 text-black80">{groupTitle}</span>
+        <div className="flex flex-col gap-4">
+          {groupRoutes.map((route, index) => (
+            <div
+              key={index}
+              className={`px-2 py-1 rounded-[14px] text-subtitle2 ${
+                route.isActive
+                  ? 'text-palette-coolNeutral-10'
+                  : 'text-palette-coolNeutral-80'
+              }`}
+            >
+              <Link
+                href={route.href}
+                className="w-full h-full px-2"
+              >
+                {route.label}
+              </Link>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <>
-      {myRoutes.length > 0 && (
-        <div className="flex flex-col gap-4">
-          <span className="text-p1 text-black80">마이</span>
-          <div className="flex flex-col gap-4">
-            {myRoutes.map((route, index) => (
-              <div
-                key={index}
-                className={`px-2 py-1 rounded-[14px] text-subtitle2 ${
-                  route.isActive
-                    ? 'text-palette-coolNeutral-10'
-                    : 'text-palette-coolNeutral-80'
-                }`}
-              >
-                <Link
-                  href={route.href}
-                  className="w-full h-full px-2"
-                >
-                  {route.label}
-                </Link>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-      {teamRoutes.length > 0 && (
-        <div className="flex flex-col gap-4 mt-4">
-          <span className="text-p1 text-black80">팀</span>
-          <div className="flex flex-col gap-4">
-            {teamRoutes.map((route, index) => (
-              <div
-                key={index}
-                className={`px-2 py-1 rounded-[14px] text-subtitle2 ${
-                  route.isActive
-                    ? 'text-palette-coolNeutral-10'
-                    : 'text-palette-coolNeutral-80'
-                }`}
-              >
-                <Link
-                  href={route.href}
-                  className="w-full h-full px-2"
-                >
-                  {route.label}
-                </Link>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {profileRoutes.length > 0 && renderRouteGroup(profileRoutes, '내 프로필')}
+      {proposalRoutes.length > 0 && renderRouteGroup(proposalRoutes, '제안 & 메시지')}
+      {interestRoutes.length > 0 && renderRouteGroup(interestRoutes, '관심항목')}
+      {accountRoutes.length > 0 && renderRouteGroup(accountRoutes, '계정관리')}
+      {teamRoutes.length > 0 && renderRouteGroup(teamRoutes, '팀')}
+      {companyAccountRoutes.length > 0 && renderRouteGroup(companyAccountRoutes, '회사 계정')}
+      {subscriptionRoutes.length > 0 && renderRouteGroup(subscriptionRoutes, '결제 / 구독')}
+      {projectHistoryRoutes.length > 0 && renderRouteGroup(projectHistoryRoutes, '프로젝트 기록')}
+      {settingsRoutes.length > 0 && renderRouteGroup(settingsRoutes, '설정')}
+      {myRoutes.length > 0 && renderRouteGroup(myRoutes, '마이')}
     </>
   )
 }
 
 export default SideNavigator
+

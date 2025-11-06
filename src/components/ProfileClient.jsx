@@ -146,7 +146,7 @@ export const ProfileClient = ({ username, isOwner = false }) => {
   }
 
   return (
-    <div className="flex flex-col gap-6 w-full pb-8 -mt-4 md:-mt-8">
+    <div className="flex flex-col gap-6 w-full pb-8 pt-16 md:pt-20">
       <ProfileMeta
         username={profileUsername}
         mainJob={main_job}
@@ -174,30 +174,32 @@ export const ProfileClient = ({ username, isOwner = false }) => {
 
       {!alreadyOnboarding ? (
         <>
-          <WorkExperienceMeta
-            account_work_experiences={account_work_experiences}
-            onEditExperience={navigateToEditExperience}
-            onCreateExperience={navigateToCreateExperience}
-            isOwner={isOwner}
-            profileId={profile?.profile_id}
-          />
-          <EduCationMeta
-            account_educations={account_educations}
-            onEditEducation={navigateToEditEducation}
-            onCreateEducation={navigateToCreateEducation}
-            isOwner={isOwner}
-            profileId={profile?.profile_id}
-          />
-          <LicenseMeta
-            account_license={account_license}
-            isOwner={isOwner}
-            profileId={profile?.profile_id}
-          />
           {profile_type === 'FREELANCER' && (
-            <PortfolioMeta
-              profileId={profile?.profile_id}
-              isOwner={isOwner}
-            />
+            <>
+              <WorkExperienceMeta
+                account_work_experiences={account_work_experiences}
+                onEditExperience={navigateToEditExperience}
+                onCreateExperience={navigateToCreateExperience}
+                isOwner={isOwner}
+                profileId={profile?.profile_id}
+              />
+              <EduCationMeta
+                account_educations={account_educations}
+                onEditEducation={navigateToEditEducation}
+                onCreateEducation={navigateToCreateEducation}
+                isOwner={isOwner}
+                profileId={profile?.profile_id}
+              />
+              <LicenseMeta
+                account_license={account_license}
+                isOwner={isOwner}
+                profileId={profile?.profile_id}
+              />
+              <PortfolioMeta
+                profileId={profile?.profile_id}
+                isOwner={isOwner}
+              />
+            </>
           )}
         </>
       ) : (
@@ -332,14 +334,16 @@ const ProfileMeta = ({
                   ✏️ 편집하기
                 </Button>
               ) : (
-                <>
-                  <Button onClick={onClickBookmark} variant="outline">
-                    ⭐ 북마크
-                  </Button>
-                  <Button onClick={onClickProposal}>
-                    💬 제안하기
-                  </Button>
-                </>
+                profileType !== 'COMPANY' && (
+                  <>
+                    <Button onClick={onClickBookmark} variant="outline">
+                      ⭐ 북마크
+                    </Button>
+                    <Button onClick={onClickProposal}>
+                      💬 제안하기
+                    </Button>
+                  </>
+                )
               )}
             </div>
           </div>
