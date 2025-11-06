@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { fetchCounselWithClient } from '@/apis/counsel.service';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, XCircle } from 'lucide-react';
 
 const ClientEstimateDetailPage: React.FC = () => {
   const [counsel, setCounsel] = useState<any>(null);
@@ -55,7 +55,7 @@ const ClientEstimateDetailPage: React.FC = () => {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center bg-white rounded-xl shadow-sm border border-gray-200 p-8 max-w-md">
-          <div className="text-4xl mb-4">❌</div>
+          <XCircle className="w-16 h-16 text-red-600 mx-auto mb-4" />
           <h3 className="text-xl font-semibold text-gray-900 mb-2">상담서를 불러올 수 없습니다</h3>
           <p className="text-gray-600 mb-6">상담서 정보를 가져오는 중 오류가 발생했습니다.</p>
           <button

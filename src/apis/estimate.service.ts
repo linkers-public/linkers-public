@@ -29,7 +29,7 @@ const fetchEstimate = async (clientId: string, counselId: number, status: string
         .eq('client_id', clientId)
         .eq('counsel_id', counselId)
         .in('estimate_status', status)
-        .maybeSingle(); // ✅ null 허용
+        .maybeSingle(); // null 허용
 
     if (error) handleError('견적 데이터 조회 실패', error);
     return data;
@@ -37,7 +37,7 @@ const fetchEstimate = async (clientId: string, counselId: number, status: string
 
 // 가장 최신의 Estimate Version 가져오기
 const fetchLatestEstimateVersion = async (estimateId: number | null) => {
-    if (!estimateId) return null; // ✅ `null`인 경우 null 반환
+    if (!estimateId) return null; // `null`인 경우 null 반환
 
     const { data, error } = await supabase
         .from('estimate_version')
@@ -53,12 +53,12 @@ const fetchLatestEstimateVersion = async (estimateId: number | null) => {
 
 // Team 데이터 조회
 const fetchTeam = async (teamId: number) => {
-    if (!teamId) return null; // ✅ 
+    if (!teamId) return null;
     const { data, error } = await supabase
         .from('teams')
         .select('*')
         .eq('id', teamId)
-        .maybeSingle(); // ✅ null 허용
+        .maybeSingle(); // null 허용
 
     if (error) handleError('팀 정보를 찾을 수 없습니다.', error);
     return data;
@@ -66,7 +66,7 @@ const fetchTeam = async (teamId: number) => {
 
 // Milestone 데이터 조회
 const fetchMilestones = async (estimateId: number | null) => {
-    if (!estimateId) return []; // ✅ `null`인 경우 빈 배열 반환
+    if (!estimateId) return []; // `null`인 경우 빈 배열 반환
     const { data, error } = await supabase
         .from('milestone')
         .select('*')
@@ -76,7 +76,7 @@ const fetchMilestones = async (estimateId: number | null) => {
     return data ;
 };
 
-// ✅ ClientId & CounselId로 Team, Milestone, 최신 Estimate Version 정보 가져오기
+// ClientId & CounselId로 Team, Milestone, 최신 Estimate Version 정보 가져오기
 export const getClientTeamAndMilestones = async (clientId: string, counselId: number, estimateStatus: string[]) => {
     try {
         const managerId = await checkSession(); // 세션 체크
@@ -128,7 +128,7 @@ const updateEstimateStatus = async (estimateId: number) => {
     }
 };
 
-// ✅ estimate_version_id를 받아 estimate의 status를 'accept'로 변경하는 API
+// estimate_version_id를 받아 estimate의 status를 'accept'로 변경하는 API
 export const acceptEstimateVersion = async (estimateVersionId: number) => {
     try {
         await checkSession(); // 인증 확인
@@ -151,7 +151,7 @@ export const acceptEstimateVersion = async (estimateVersionId: number) => {
     }
 };
 
-// ✅ 새로운 estimate 생성 함수
+// 새로운 estimate 생성 함수
 export const insertEstimate = async (estimateData: {
     clientId: string;
     counselId: number;

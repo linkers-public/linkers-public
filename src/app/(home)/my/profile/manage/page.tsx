@@ -6,7 +6,7 @@ import { getUserProfiles, switchActiveProfile } from '@/apis/profile-refactor.se
 import { Database } from '@/types/supabase'
 import { Button } from '@/components/ui/button'
 import { toast } from '@/hooks/use-toast'
-import { ArrowLeft, Plus, RefreshCw } from 'lucide-react'
+import { ArrowLeft, Plus, RefreshCw, CheckCircle, Trophy } from 'lucide-react'
 
 type ProfileType = Database['public']['Enums']['profile_type']
 type Profile = {
@@ -164,9 +164,10 @@ export default function ProfileManagePage() {
                                {profile.badges.map((badge: string, idx: number) => (
                                  <span
                                    key={idx}
-                                   className="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-700 font-medium"
+                                   className="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-700 font-medium flex items-center gap-1"
                                  >
-                                   🏆 {badge}
+                                   <Trophy className="w-3 h-3" />
+                                   {badge}
                                  </span>
                                ))}
                              </div>
@@ -287,9 +288,10 @@ export default function ProfileManagePage() {
                 </div>
               )}
               {hasFreelancer && hasCompany && (
-                <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                <div className="p-4 bg-green-50 rounded-lg border border-green-200 flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5 text-green-800 flex-shrink-0" />
                   <p className="text-sm text-green-800 font-medium">
-                    ✅ 모든 프로필이 생성되었습니다. 프로필 전환을 통해 다른 프로필을 활성화할 수 있습니다.
+                    모든 프로필이 생성되었습니다. 프로필 전환을 통해 다른 프로필을 활성화할 수 있습니다.
                   </p>
                 </div>
               )}

@@ -8,6 +8,7 @@ import Sidebar from '../../../../../components/DashboardSidebar' // Sidebar 컴�
 import EnterpriseSidebar from '../../../../../components/EnterpriseSidebar';
 
 import { uploadFile } from '@/apis/storage'
+import { Paperclip } from 'lucide-react'
 
 // 팀 정보와 최근 메시지의 타입 정의
 interface CounselItem {
@@ -737,7 +738,7 @@ const CounselStatus: React.FC = () => {
         width: '100%',
       }}
     />
-    📎 {/* 아이콘 */}
+    <Paperclip className="w-5 h-5" />
   </label>
 
   {/* 메시지 입력과 전송 버튼 */}

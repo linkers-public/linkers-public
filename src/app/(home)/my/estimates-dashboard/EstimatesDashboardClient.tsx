@@ -310,7 +310,7 @@ export default function EstimatesDashboardClient() {
 
       // MVP: 소액 과금 처리 (여기서는 간단히 토스트만 표시, 실제 결제는 향후 구현)
       toast({
-        title: '💳 연락처 열람',
+        title: '연락처 열람',
         description: '소액 결제가 적용됩니다. (향후 결제 시스템 연동 예정)',
       })
 
@@ -690,9 +690,10 @@ export default function EstimatesDashboardClient() {
           </DialogHeader>
           {contactInfo && (
             <div className="space-y-4">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4 flex items-center gap-2">
+                <CreditCard className="w-4 h-4 text-blue-800" />
                 <p className="text-sm text-blue-800">
-                  💳 소액 결제가 적용되었습니다. (향후 결제 시스템과 연동 예정)
+                  소액 결제가 적용되었습니다. (향후 결제 시스템과 연동 예정)
                 </p>
               </div>
               {contactInfo.phone && (

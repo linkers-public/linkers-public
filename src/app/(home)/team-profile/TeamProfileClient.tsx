@@ -10,7 +10,7 @@ import { searchMakers } from '@/apis/search-maker.service'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { SearchMakerCard } from '@/components/SearchMakerCard'
-import { Plus, Trash2, Users } from 'lucide-react'
+import { Plus, Trash2, Users, XCircle } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 
 const TeamProfileClient = () => {
@@ -169,7 +169,7 @@ const TeamProfileClient = () => {
     return (
       <div className="flex justify-center items-center h-64">
         <div className="text-center bg-red-50 border border-red-200 rounded-lg p-6 max-w-md">
-          <div className="text-4xl mb-4">❌</div>
+          <XCircle className="w-16 h-16 text-red-600 mx-auto mb-4" />
           <p className="text-lg font-semibold text-red-900 mb-2">에러가 발생했습니다</p>
           <p className="text-sm text-red-700">{error}</p>
         </div>

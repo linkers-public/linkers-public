@@ -54,7 +54,7 @@ export function getSiteUrl(): string {
   const explicitUrl = typeof process !== 'undefined' ? process.env.NEXT_PUBLIC_SITE_URL : null
   if (explicitUrl) {
     if (typeof window !== 'undefined' && process.env.NODE_ENV !== 'production') {
-      console.log('✅ 명시적 SITE_URL 사용:', explicitUrl)
+      console.log('명시적 SITE_URL 사용:', explicitUrl)
     }
     return explicitUrl
   }
@@ -64,7 +64,7 @@ export function getSiteUrl(): string {
   if (isProd) {
     const prodUrl = 'https://makers-b2b.vercel.app'
     if (typeof window !== 'undefined') {
-      console.log('🚀 프로덕션 환경 감지, URL:', prodUrl)
+      console.log('프로덕션 환경 감지, URL:', prodUrl)
     }
     return prodUrl
   }

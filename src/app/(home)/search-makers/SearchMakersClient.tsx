@@ -78,7 +78,7 @@ const SearchMakersClient = () => {
         }
         
         if (data && Array.isArray(data)) {
-          console.log('✅ 메이커 리스트 설정:', data.length, '개')
+          console.log('메이커 리스트 설정:', data.length, '개')
           setMakerList(data)
         } else {
           setMakerList([])

@@ -10,6 +10,7 @@ import { updateAvailabilityStatus } from '@/apis/availability.service'
 import { ProposalDialog } from '@/components/ProposalDialog'
 import { createSupabaseBrowserClient } from '@/supabase/supabase-client'
 import { submitCareerVerification } from '@/apis/career-verification.service'
+import { XCircle, FileText, CheckCircle, Pause, Star, Trophy, Briefcase, Calendar, Paperclip, Edit, GraduationCap, FolderOpen, MessageCircle } from 'lucide-react'
 
 export const ProfileClient = ({ username, isOwner = false }) => {
   const router = useRouter()
@@ -137,7 +138,7 @@ export const ProfileClient = ({ username, isOwner = false }) => {
     return (
       <div className="flex justify-center items-center h-64">
         <div className="text-center bg-red-50 border border-red-200 rounded-lg p-6 max-w-md">
-          <div className="text-4xl mb-4">❌</div>
+          <XCircle className="w-16 h-16 text-red-600 mx-auto mb-4" />
           <p className="text-lg font-semibold text-red-900 mb-2">에러가 발생했습니다</p>
           <p className="text-sm text-red-700">{error.message}</p>
         </div>
@@ -204,7 +205,7 @@ export const ProfileClient = ({ username, isOwner = false }) => {
         </>
       ) : (
           <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 md:p-12 text-center">
-          <div className="text-4xl mb-4">📝</div>
+          <FileText className="w-16 h-16 text-gray-400 mx-auto mb-4" />
           <h3 className="text-lg md:text-xl font-semibold text-gray-900 mb-2">
             아직 정보를 입력하지 않았습니다
           </h3>
@@ -276,7 +277,19 @@ const ProfileMeta = ({
                         : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                     }`}
                   >
-                    {availabilityStatus === 'available' ? '✅ 연락 가능' : '⏸️ 연락 불가'}
+                    <span className="flex items-center gap-1">
+                      {availabilityStatus === 'available' ? (
+                        <>
+                          <CheckCircle className="w-4 h-4" />
+                          연락 가능
+                        </>
+                      ) : (
+                        <>
+                          <Pause className="w-4 h-4" />
+                          연락 불가
+                        </>
+                      )}
+                    </span>
                   </button>
                 )}
               </div>
@@ -287,9 +300,10 @@ const ProfileMeta = ({
                   {badges.map((badge, idx) => (
                     <span
                       key={idx}
-                      className="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-700 font-medium"
+                      className="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-700 font-medium flex items-center gap-1"
                     >
-                      🏆 {badge}
+                      <Trophy className="w-3 h-3" />
+                      {badge}
                     </span>
                   ))}
                 </div>
@@ -330,17 +344,20 @@ const ProfileMeta = ({
             {/* 액션 버튼 */}
             <div className="flex flex-col sm:flex-row gap-2 mt-4 sm:mt-0">
               {isOwner ? (
-                <Button onClick={onEditProfile} variant="outline">
-                  ✏️ 편집하기
+                <Button onClick={onEditProfile} variant="outline" className="flex items-center gap-2">
+                  <Edit className="w-4 h-4" />
+                  편집하기
                 </Button>
               ) : (
                 profileType !== 'COMPANY' && (
                   <>
-                    <Button onClick={onClickBookmark} variant="outline">
-                      ⭐ 북마크
+                    <Button onClick={onClickBookmark} variant="outline" className="flex items-center gap-2">
+                      <Star className="w-4 h-4" />
+                      북마크
                     </Button>
-                    <Button onClick={onClickProposal}>
-                      💬 제안하기
+                    <Button onClick={onClickProposal} className="flex items-center gap-2">
+                      <MessageCircle className="w-4 h-4" />
+                      제안하기
                     </Button>
                   </>
                 )
@@ -429,7 +446,10 @@ const WorkExperienceMeta = ({
     <>
       <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 md:p-6 mb-6">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg md:text-xl font-bold text-gray-900">💼 이력</h2>
+          <h2 className="text-lg md:text-xl font-bold text-gray-900 flex items-center gap-2">
+            <Briefcase className="w-5 h-5" />
+            이력
+          </h2>
           {isOwner && (
             <Button
               onClick={onCreateExperience}
@@ -456,8 +476,9 @@ const WorkExperienceMeta = ({
                     {exp.position && (
                       <p className="text-sm text-gray-600 mt-1">{exp.position}</p>
                     )}
-                    <p className="text-sm text-gray-500 mt-1">
-                      📅 {formatDate(exp.start_date)} ~ {exp.end_date ? formatDate(exp.end_date) : '현재'}
+                    <p className="text-sm text-gray-500 mt-1 flex items-center gap-1">
+                      <Calendar className="w-4 h-4" />
+                      {formatDate(exp.start_date)} ~ {exp.end_date ? formatDate(exp.end_date) : '현재'}
                     </p>
                   </div>
                   {isOwner && (
@@ -469,9 +490,10 @@ const WorkExperienceMeta = ({
                         }}
                         size="sm"
                         variant="outline"
-                        className="text-xs"
+                        className="text-xs flex items-center gap-1"
                       >
-                        📎 파일
+                        <Paperclip className="w-3 h-3" />
+                        파일
                       </Button>
                       <Button
                         onClick={() => onEditExperience(exp.id)}
@@ -479,7 +501,7 @@ const WorkExperienceMeta = ({
                         variant="ghost"
                         className="flex-shrink-0"
                       >
-                        ✏️
+                        <Edit className="w-4 h-4" />
                       </Button>
                     </div>
                   )}
@@ -636,7 +658,10 @@ const EduCationMeta = ({
     <>
       <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 md:p-6 mb-6">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg md:text-xl font-bold text-gray-900">🎓 학력</h2>
+          <h2 className="text-lg md:text-xl font-bold text-gray-900 flex items-center gap-2">
+            <GraduationCap className="w-5 h-5" />
+            학력
+          </h2>
           {isOwner && (
             <Button
               onClick={onCreateEducation}
@@ -654,14 +679,15 @@ const EduCationMeta = ({
               key={edu.id || index}
             >
               <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center text-white font-bold flex-shrink-0">
-                🎓
+                <GraduationCap className="w-6 h-6" />
               </div>
               <div className="flex flex-1 flex-col gap-2">
                 <div className="flex items-start justify-between">
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900">{edu.name || '학교명 없음'}</h3>
-                    <p className="text-sm text-gray-500 mt-1">
-                      📅 {formatDate(edu.start_date)} ~ {edu.end_date ? formatDate(edu.end_date) : '현재'}
+                    <p className="text-sm text-gray-500 mt-1 flex items-center gap-1">
+                      <Calendar className="w-4 h-4" />
+                      {formatDate(edu.start_date)} ~ {edu.end_date ? formatDate(edu.end_date) : '현재'}
                     </p>
                     {edu.content && (
                       <p className="text-sm text-gray-700 mt-2">{edu.content}</p>
@@ -676,9 +702,10 @@ const EduCationMeta = ({
                         }}
                         size="sm"
                         variant="outline"
-                        className="text-xs"
+                        className="text-xs flex items-center gap-1"
                       >
-                        📎 파일
+                        <Paperclip className="w-3 h-3" />
+                        파일
                       </Button>
                       <Button
                         onClick={() => onEditEducation(edu.id)}
@@ -686,7 +713,7 @@ const EduCationMeta = ({
                         variant="ghost"
                         className="flex-shrink-0"
                       >
-                        ✏️
+                        <Edit className="w-4 h-4" />
                       </Button>
                     </div>
                   )}
@@ -811,7 +838,10 @@ const LicenseMeta = ({ account_license, isOwner, profileId }) => {
     return (
       <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 md:p-6 mb-6">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg md:text-xl font-bold text-gray-900">🏆 자격증</h2>
+          <h2 className="text-lg md:text-xl font-bold text-gray-900 flex items-center gap-2">
+            <Trophy className="w-5 h-5" />
+            자격증
+          </h2>
           {isOwner && (
             <Button
               variant="outline"
@@ -832,7 +862,10 @@ const LicenseMeta = ({ account_license, isOwner, profileId }) => {
     <>
       <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 md:p-6 mb-6">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg md:text-xl font-bold text-gray-900">🏆 자격증</h2>
+          <h2 className="text-lg md:text-xl font-bold text-gray-900 flex items-center gap-2">
+            <Trophy className="w-5 h-5" />
+            자격증
+          </h2>
           {isOwner && (
             <Button
               variant="outline"
@@ -851,7 +884,7 @@ const LicenseMeta = ({ account_license, isOwner, profileId }) => {
             >
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center text-white font-bold">
-                  🏆
+                  <Trophy className="w-5 h-5" />
                 </div>
                 <div>
                   <p className="font-medium text-gray-900">{license.name}</p>
@@ -871,9 +904,10 @@ const LicenseMeta = ({ account_license, isOwner, profileId }) => {
                     }}
                     size="sm"
                     variant="outline"
-                    className="text-xs"
+                    className="text-xs flex items-center gap-1"
                   >
-                    📎 파일
+                    <Paperclip className="w-3 h-3" />
+                    파일
                   </Button>
                   <Button
                     size="icon"
@@ -881,7 +915,7 @@ const LicenseMeta = ({ account_license, isOwner, profileId }) => {
                     className="flex-shrink-0"
                     onClick={() => navigateToEditLicense(license.id)}
                   >
-                    ✏️
+                    <Edit className="w-4 h-4" />
                   </Button>
                 </div>
               )}
@@ -1020,9 +1054,12 @@ const PortfolioMeta = ({ profileId, isOwner }) => {
   }
 
   return (
-    <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 md:p-6 mb-6">
+      <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 md:p-6 mb-6">
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-lg md:text-xl font-bold text-gray-900">📁 포트폴리오</h2>
+        <h2 className="text-lg md:text-xl font-bold text-gray-900 flex items-center gap-2">
+          <FolderOpen className="w-5 h-5" />
+          포트폴리오
+        </h2>
         {isOwner && (
           <div className="flex gap-2">
             <Button

@@ -6,7 +6,7 @@ import { createSupabaseBrowserClient } from '@/supabase/supabase-client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { Plus, ExternalLink, Edit2, Trash2, ArrowLeft } from 'lucide-react'
+import { Plus, ExternalLink, Edit2, Trash2, ArrowLeft, FolderOpen } from 'lucide-react'
 import { toast } from '@/hooks/use-toast'
 import {
   Dialog,
@@ -278,7 +278,7 @@ export default function PortfolioClient() {
 
       {portfolios.length === 0 ? (
         <div className="bg-white rounded-lg shadow-sm border p-6 md:p-12 text-center">
-          <div className="text-6xl mb-6">📁</div>
+          <FolderOpen className="w-16 h-16 text-gray-400 mx-auto mb-6" />
           <h2 className="text-lg md:text-xl font-semibold text-gray-900 mb-2">
             포트폴리오가 없습니다
           </h2>
