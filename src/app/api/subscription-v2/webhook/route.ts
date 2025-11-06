@@ -173,13 +173,17 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // 사용자 정보 조회
-      const { data: userData } = await supabase.auth.admin.getUserById(subscription.user_id)
-      const { data: accountData } = await supabase
-        .from('accounts')
-        .select('username, contact_phone, contact_email')
-        .eq('user_id', subscription.user_id)
-        .single() as any
+            // 사용자 정보 조회
+            // 기업(COMPANY) 프로필만 구독 결제 가능
+            const { data: userData } = await supabase.auth.admin.getUserById(subscription.user_id)
+            const { data: accountData } = await supabase
+              .from('accounts')
+              .select('username, contact_phone, contact_email')
+              .eq('user_id', subscription.user_id)
+              .eq('profile_type', 'COMPANY')
+              .eq('is_active', true)
+              .is('deleted_at', null)
+              .maybeSingle() as any
 
       // 다음 달 결제 예약 (현재 결제일 기준으로 다음 달)
       const currentDate = new Date()

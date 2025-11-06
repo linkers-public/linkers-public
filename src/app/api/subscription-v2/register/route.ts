@@ -44,11 +44,15 @@ export async function POST(request: NextRequest) {
     }
 
     // 사용자 계정 정보 조회 (전화번호 포함)
+    // 기업(COMPANY) 프로필만 구독 결제 가능
     const { data: accountData } = await supabase
       .from('accounts')
       .select('username, contact_phone, contact_email')
       .eq('user_id', user.id)
-      .single() as any
+      .eq('profile_type', 'COMPANY')
+      .eq('is_active', true)
+      .is('deleted_at', null)
+      .maybeSingle() as any
 
     // 구독 정보 생성 (첫 달 무료)
     const subscriptionDate = new Date()

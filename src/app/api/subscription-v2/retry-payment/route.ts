@@ -47,11 +47,15 @@ export async function POST(request: NextRequest) {
     }
 
     // 사용자 정보 조회
+    // 기업(COMPANY) 프로필만 구독 결제 가능
     const { data: accountData } = await supabase
       .from('accounts')
       .select('username, contact_phone, contact_email')
       .eq('user_id', user.id)
-      .single() as any
+      .eq('profile_type', 'COMPANY')
+      .eq('is_active', true)
+      .is('deleted_at', null)
+      .maybeSingle() as any
 
     const paymentId = `linkers_sub_${user.id}_${Date.now()}`
 

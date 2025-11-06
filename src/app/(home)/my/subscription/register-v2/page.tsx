@@ -30,10 +30,14 @@ export default function SubscriptionRegisterV2Page() {
     }
     
     // 사용자 계정 정보 조회 (전화번호 포함)
+    // 기업(COMPANY) 프로필만 구독 결제 가능
     const { data: accountData, error: accountError } = await supabase
       .from('accounts')
       .select('username, contact_phone, contact_email')
       .eq('user_id', user.id)
+      .eq('profile_type', 'COMPANY')
+      .eq('is_active', true)
+      .is('deleted_at', null)
       .maybeSingle()
     
     if (accountError) {
