@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation'; // App Router의 useRouter
+import { useRouter } from 'next/navigation';
 import { fetchAllCounsel } from '@/apis/counsel.service';
+import { Search, Briefcase, DollarSign, Calendar, Tag, MapPin, CheckCircle } from 'lucide-react';
 
 type Counsel = {
   counsel_id: number;
@@ -59,37 +60,168 @@ const transformCounselToProject = (counsel: Counsel): Project => {
 const SearchProjectsClient: React.FC = () => {
   const router = useRouter();
   const [projects, setProjects] = useState<Project[]>([]);
+  const [filteredProjects, setFilteredProjects] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const counselData: Counsel[] = await fetchAllCounsel(); // 모든 counsel 데이터 가져오기
+        setLoading(true);
+        const counselData: Counsel[] = await fetchAllCounsel();
         const transformedData = counselData.map(transformCounselToProject);
         setProjects(transformedData);
+        setFilteredProjects(transformedData);
       } catch (error) {
         console.error('Error fetching projects:', error);
+      } finally {
+        setLoading(false);
       }
     };
 
     fetchData();
   }, []);
 
+  // 검색어 및 상태 필터링
+  useEffect(() => {
+    let filtered = projects;
+
+    // 검색어 필터링
+    if (searchTerm.trim()) {
+      const searchLower = searchTerm.toLowerCase();
+      filtered = filtered.filter((project) => {
+        return (
+          project.title?.toLowerCase().includes(searchLower) ||
+          project.field?.toLowerCase().includes(searchLower) ||
+          project.skills?.some((skill) => skill.toLowerCase().includes(searchLower))
+        );
+      });
+    }
+
+    // 상태 필터링
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter((project) => project.status === statusFilter);
+    }
+
+    setFilteredProjects(filtered);
+  }, [searchTerm, statusFilter, projects]);
+
   const handleProjectClick = (id: number) => {
-    router.push(`/project-detail/${id}`); // 메이커용 상세 페이지로 이동
+    router.push(`/project-detail/${id}`);
   };
 
+  const statusOptions = [
+    { value: 'all', label: '전체', count: projects.length },
+    { value: 'recruiting', label: '모집중', count: projects.filter((p) => p.status === 'recruiting').length },
+    { value: 'pending', label: '대기중', count: projects.filter((p) => p.status === 'pending').length },
+    { value: 'end', label: '종료', count: projects.filter((p) => p.status === 'end').length },
+  ];
+
   return (
-    <div className="w-full">
-      <h2 className="text-h3 ml-1 mb-4">프로젝트 찾기</h2>
-      <section className="flex flex-col gap-4 w-full">
-        {projects.map((project) => (
-          <ProjectMeta
-            key={project.id}
-            project={project}
-            onClick={() => handleProjectClick(project.id)}
-          />
-        ))}
-      </section>
+    <div className="w-full min-h-screen bg-white">
+      <div className="py-8 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto">
+          {/* 헤더 */}
+          <div className="mb-8">
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">프로젝트 찾기</h1>
+            <p className="text-gray-600 text-lg">원하는 프로젝트를 찾아 지원해보세요</p>
+          </div>
+
+          {/* 검색 및 필터 섹션 */}
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
+            {/* 검색창 */}
+            <div className="mb-6">
+              <div className="relative">
+                <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="프로젝트 제목, 분야, 기술 스택으로 검색..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100 transition-all bg-gray-50 focus:bg-white"
+                />
+              </div>
+            </div>
+
+            {/* 상태 필터 */}
+            <div className="border-t border-gray-200 pt-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <Tag className="w-5 h-5 text-gray-600" />
+                프로젝트 상태
+              </h3>
+              <div className="flex flex-wrap gap-3">
+                {statusOptions.map((option) => (
+                  <button
+                    key={option.value}
+                    onClick={() => setStatusFilter(option.value)}
+                    className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 ${
+                      statusFilter === option.value
+                        ? 'bg-blue-600 text-white shadow-md'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    {option.label} ({option.count})
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* 결과 통계 */}
+          {!loading && (
+            <div className="mb-6 flex items-center gap-2 text-gray-600">
+              <Briefcase className="w-5 h-5" />
+              <span className="font-medium">
+                총 <strong className="text-gray-900">{filteredProjects.length}</strong>개의 프로젝트를 찾았습니다
+              </span>
+            </div>
+          )}
+
+          {/* 로딩 상태 */}
+          {loading && (
+            <div className="flex items-center justify-center py-20 bg-white rounded-xl shadow-sm border border-gray-200">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                <p className="text-gray-600 font-medium">프로젝트를 불러오는 중...</p>
+              </div>
+            </div>
+          )}
+
+          {/* 프로젝트 목록 */}
+          {!loading && (
+            <section className="grid grid-cols-1 gap-6">
+              {filteredProjects.length === 0 ? (
+                <div className="text-center py-20 bg-white rounded-xl shadow-sm border border-gray-200">
+                  <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <Briefcase className="w-10 h-10 text-gray-400" />
+                  </div>
+                  <h3 className="text-xl font-semibold text-gray-900 mb-2">검색 결과가 없습니다</h3>
+                  <p className="text-gray-600 mb-6 text-lg">
+                    {searchTerm ? '다른 검색어로 시도해보세요' : '필터 조건을 변경해보세요'}
+                  </p>
+                  {searchTerm && (
+                    <button
+                      onClick={() => setSearchTerm('')}
+                      className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold shadow-md hover:shadow-lg"
+                    >
+                      검색어 초기화
+                    </button>
+                  )}
+                </div>
+              ) : (
+                filteredProjects.map((project) => (
+                  <ProjectMeta
+                    key={project.id}
+                    project={project}
+                    onClick={() => handleProjectClick(project.id)}
+                  />
+                ))
+              )}
+            </section>
+          )}
+        </div>
+      </div>
     </div>
   );
 };
@@ -101,70 +233,116 @@ const ProjectMeta = ({
   project: Project;
   onClick: () => void;
 }) => {
+  // 상태 변환 및 색상 설정
+  const getStatusInfo = (status: string) => {
+    switch (status) {
+      case 'recruiting':
+        return { text: '모집중', color: 'bg-green-100 text-green-800', icon: '🔍' };
+      case 'pending':
+        return { text: '대기중', color: 'bg-blue-100 text-blue-800', icon: '⏳' };
+      case 'end':
+        return { text: '종료', color: 'bg-gray-100 text-gray-800', icon: '✅' };
+      default:
+        return { text: '대기중', color: 'bg-gray-100 text-gray-800', icon: '⏳' };
+    }
+  };
 
-
-  // 상태 변환: recruiting → 모집중
-  const formattedStatus =
-    project.status === 'recruiting'
-      ? '모집중'
-      : project.status === 'pending'
-      ? '대기중'
-      : '종료';
+  const statusInfo = getStatusInfo(project.status);
 
   return (
-    <li
-      className="flex py-5 px-6 shadow-lg w-full rounded-xl cursor-pointer bg-white hover:shadow-2xl transition-all duration-300 border border-gray-200"
+    <div
+      className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-lg hover:border-blue-300 transition-all duration-300 cursor-pointer overflow-hidden"
       onClick={onClick}
     >
-      <div className="flex flex-col gap-4 w-full">
-        {/* 프로젝트 제목 */}
-        <h3 className="font-semibold text-[22px] leading-snug tracking-tight text-gray-900">
-          {project.title}
-        </h3>
-
-        {/* 예상 금액 및 기간 */}
-        <div className="flex flex-wrap gap-4 text-gray-600 text-sm">
-          <div className="flex items-center gap-1">
-            <span className="font-medium">💰 예상 금액:</span>
-            <span>{project.cost}</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <span className="font-medium">⏳ 예상 기간:</span>
-            <span>{project.period}</span>
-          </div>
-        </div>
-
-        {/* 프로젝트 분야 */}
-        <div className="flex flex-wrap gap-2 mt-1">
-          {[project.field].map((skill, index) => (
-            <div
-              key={index}
-              className="px-3 py-1 text-gray-700 text-xs font-medium bg-gray-100 rounded-lg shadow-sm"
-            >
-              {skill}
+      <div className="p-6">
+        <div className="flex flex-col gap-5">
+          {/* 프로젝트 제목과 상태 */}
+          <div className="flex justify-between items-start gap-4">
+            <h3 className="font-bold text-xl text-gray-900 flex-1 leading-tight">
+              {project.title}
+            </h3>
+            <div className={`px-4 py-1.5 text-sm font-semibold rounded-lg shadow-sm ${statusInfo.color} flex items-center gap-2 whitespace-nowrap`}>
+              <span className="text-base">{statusInfo.icon}</span>
+              <span>{statusInfo.text}</span>
             </div>
-          ))}
-        </div>
-
-        {/* 상태 및 근무 방식 */}
-        <div className="flex flex-wrap gap-2 mt-3">
-          <div className="px-3 py-1 text-sm font-medium rounded-md shadow-sm bg-green-100 text-green-700">
-            {project.isRemote ? "🌍 원격" : "🏢 현장"}
           </div>
-          <div
-            className={`px-3 py-1 text-sm font-medium rounded-md shadow-sm ${
-              formattedStatus === "모집중"
-                ? "bg-purple-600 text-white"
-                : "bg-gray-400 text-gray-100"
-            }`}
-          >
-            {formattedStatus}
+
+          {/* 예상 금액 및 기간 */}
+          <div className="flex flex-wrap gap-6 text-gray-700">
+            <div className="flex items-center gap-2">
+              <DollarSign className="w-5 h-5 text-blue-600" />
+              <div>
+                <span className="text-sm font-medium text-gray-500">예상 금액</span>
+                <p className="text-base font-semibold">{project.cost || '미정'}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Calendar className="w-5 h-5 text-green-600" />
+              <div>
+                <span className="text-sm font-medium text-gray-500">예상 기간</span>
+                <p className="text-base font-semibold">{project.period || '미정'}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <MapPin className="w-5 h-5 text-purple-600" />
+              <div>
+                <span className="text-sm font-medium text-gray-500">근무 방식</span>
+                <p className="text-base font-semibold">{project.isRemote ? '원격' : '현장'}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* 프로젝트 분야 */}
+          {project.field && (
+            <div className="flex flex-wrap gap-2">
+              <span className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-blue-50 rounded-lg border border-blue-200">
+                {project.field}
+              </span>
+            </div>
+          )}
+
+          {/* 기술 스택 */}
+          {project.skills && project.skills.length > 0 && (
+            <div>
+              <span className="text-sm font-semibold text-gray-700 mb-2 block">기술 스택</span>
+              <div className="flex flex-wrap gap-2">
+                {project.skills.slice(0, 5).map((skill, idx) => (
+                  <span
+                    key={idx}
+                    className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg border border-gray-200"
+                  >
+                    {skill}
+                  </span>
+                ))}
+                {project.skills.length > 5 && (
+                  <span className="px-3 py-1.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg">
+                    +{project.skills.length - 5}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* 하단 정보 */}
+          <div className="flex justify-between items-center pt-4 border-t border-gray-100">
+            <span className="text-sm text-gray-500">
+              등록일: {project.startDate ? new Date(project.startDate).toLocaleDateString('ko-KR', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+              }) : '날짜 없음'}
+            </span>
+            <span className="text-sm text-blue-600 font-semibold hover:text-blue-700 flex items-center gap-1">
+              자세히 보기
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </span>
           </div>
         </div>
       </div>
-    </li>
+    </div>
   );
-     
 };
 
 export default SearchProjectsClient;

@@ -10,7 +10,7 @@ const Logo = () => {
       href="/"
       className="text-subtitle1 hover:cursor-pointer"
     >
-      MAKERS
+      LINKUS
     </Link>
   )
 }
