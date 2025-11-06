@@ -130,7 +130,7 @@ export default function SecurityClient() {
   }
 
   return (
-    <div className="w-full py-4 md:py-6 px-2 md:px-4">
+    <div className="w-full md:py-6 md:px-4">
       <div className="mb-6">
         <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-2">로그인/보안</h1>
         <p className="text-gray-600">OAuth 연결, 이메일 변경, 탈퇴 등을 관리하세요</p>

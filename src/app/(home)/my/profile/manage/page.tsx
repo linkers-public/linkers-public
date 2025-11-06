@@ -87,7 +87,7 @@ export default function ProfileManagePage() {
   }
 
   return (
-    <div className="w-full py-4 md:py-6 px-2 md:px-4">
+    <div className="w-full md:py-6 md:px-4">
       <Button
         variant="outline"
         onClick={() => router.back()}

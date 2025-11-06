@@ -147,7 +147,7 @@ export const ProfileClient = ({ username, isOwner = false }) => {
   }
 
   return (
-    <div className="flex flex-col gap-6 w-full py-4 md:py-6 px-2 md:px-4">
+    <div className="flex flex-col gap-6 w-full md:py-6 md:px-4">
       <ProfileMeta
         username={profileUsername}
         mainJob={main_job}

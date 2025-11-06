@@ -115,7 +115,7 @@ export default function ProjectHistoryClient() {
   }
 
   return (
-    <div className="w-full py-4 md:py-6 px-2 md:px-4">
+    <div className="w-full md:py-6 md:px-4">
       <div className="mb-6">
         <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-2">진행 이력</h1>
         <p className="text-gray-600">지난 프로젝트 타임라인을 확인하세요</p>

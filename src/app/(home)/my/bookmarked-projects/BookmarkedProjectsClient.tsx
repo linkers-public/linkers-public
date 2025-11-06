@@ -187,7 +187,7 @@ export default function BookmarkedProjectsClient() {
   }
 
   return (
-    <div className="w-full py-4 md:py-6 px-2 md:px-4">
+    <div className="w-full md:py-6 md:px-4">
       <div className="mb-6">
         <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-2">관심 프로젝트</h1>
         <p className="text-gray-600">스크랩한 프로젝트 리스트를 확인하세요</p>

@@ -64,7 +64,7 @@ export default function Page() {
 
   if (!hasProfile) {
     return (
-      <div className="w-full py-4 md:py-6 px-2 md:px-4">
+      <div className="w-full md:py-6 md:px-4">
         <div className="bg-white rounded-lg shadow-sm border p-6 md:p-12 text-center">
           <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
             <User className="w-8 h-8 text-gray-400" />

@@ -243,7 +243,7 @@ export default function PortfolioClient() {
   }
 
   return (
-    <div className="w-full py-4 md:py-6 px-2 md:px-4">
+    <div className="w-full md:py-6 md:px-4">
       <div className="mb-4 md:mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex items-center gap-4">
           <Button
