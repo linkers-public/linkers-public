@@ -235,7 +235,7 @@ export default function SubscriptionClient() {
       </div>
 
       {!subscription ? (
-        <div className="bg-white rounded-lg shadow-sm border p-6 text-center">
+        <div className="bg-white rounded-lg shadow-sm border p-4 md:p-6 text-center">
           <CreditCard className="w-12 h-12 text-gray-400 mx-auto mb-4" />
           <h3 className="text-lg font-semibold text-gray-900 mb-2">구독이 없습니다</h3>
           <p className="text-gray-600 mb-6">링커스 서비스를 구독하고 모든 기능을 이용하세요</p>
@@ -244,7 +244,7 @@ export default function SubscriptionClient() {
           </Button>
         </div>
       ) : (
-        <div className="bg-white rounded-lg shadow-sm border p-6">
+        <div className="bg-white rounded-lg shadow-sm border p-4 md:p-6">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
               <CreditCard className="w-6 h-6 text-blue-600" />

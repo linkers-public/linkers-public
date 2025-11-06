@@ -227,7 +227,7 @@ export default function CompanyInfoClient() {
         <p className="text-gray-600">회사명·담당자·연락처 등을 수정하세요</p>
       </div>
 
-      <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-sm border p-6">
+      <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-sm border p-4 md:p-6">
         <div className="space-y-6">
           <div>
             <Label htmlFor="company_name" className="flex items-center gap-2 mb-2">

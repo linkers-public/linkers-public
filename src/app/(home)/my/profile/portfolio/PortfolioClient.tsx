@@ -277,7 +277,7 @@ export default function PortfolioClient() {
       </div>
 
       {portfolios.length === 0 ? (
-        <div className="bg-white rounded-lg shadow-sm border p-6 md:p-12 text-center">
+        <div className="bg-white rounded-lg shadow-sm border p-4 md:p-12 text-center">
           <FolderOpen className="w-16 h-16 text-gray-400 mx-auto mb-6" />
           <h2 className="text-lg md:text-xl font-semibold text-gray-900 mb-2">
             포트폴리오가 없습니다

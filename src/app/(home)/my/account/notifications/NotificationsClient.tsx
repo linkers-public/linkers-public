@@ -138,7 +138,7 @@ export default function NotificationsClient() {
         <p className="text-gray-600">이메일/웹푸시/카카오톡 알림을 설정하세요</p>
       </div>
 
-      <div className="bg-white rounded-lg shadow-sm border p-6">
+      <div className="bg-white rounded-lg shadow-sm border p-4 md:p-6">
         <div className="space-y-6">
           {/* 이메일 알림 */}
           <div className="flex items-center justify-between">

@@ -119,7 +119,7 @@ const AssignedProjectsClient: React.FC = () => {
       ) : (
         <div className="space-y-6">
           {assignedProjects.map((project) => (
-            <div key={project.id} className="bg-white rounded-lg shadow-sm border p-6">
+            <div key={project.id} className="bg-white rounded-lg shadow-sm border p-4 md:p-6">
               <div className="flex justify-between items-start mb-4">
                 <div>
                   <h3 className="text-xl font-semibold text-gray-900 mb-2">

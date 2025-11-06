@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { ProfileClient } from '@/components/ProfileClient'
 import { getUserProfiles } from '@/apis/profile-refactor.service'
 import { Button } from '@/components/ui/button'
-import { Plus } from 'lucide-react'
+import { Plus, User } from 'lucide-react'
 import { createSupabaseBrowserClient } from '@/supabase/supabase-client'
 
 export default function Page() {
@@ -64,9 +64,11 @@ export default function Page() {
 
   if (!hasProfile) {
     return (
-      <div className="w-full py-8 px-4">
+      <div className="w-full py-4 md:py-6 px-2 md:px-4">
         <div className="bg-white rounded-lg shadow-sm border p-6 md:p-12 text-center">
-          <div className="text-6xl mb-6">👤</div>
+          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <User className="w-8 h-8 text-gray-400" />
+          </div>
           <h2 className="text-xl md:text-2xl font-bold text-gray-900 mb-4">
             프로필이 없습니다
           </h2>

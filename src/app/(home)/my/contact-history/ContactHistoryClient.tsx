@@ -140,7 +140,7 @@ export default function ContactHistoryClient() {
           contacts.map((contact) => (
             <div
               key={contact.id}
-              className="bg-white rounded-lg shadow-sm border p-6"
+              className="bg-white rounded-lg shadow-sm border p-4 md:p-6"
             >
               <div className="flex items-start justify-between">
                 <div className="flex items-start gap-4">

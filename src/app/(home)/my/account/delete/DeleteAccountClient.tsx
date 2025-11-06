@@ -84,7 +84,7 @@ export default function DeleteAccountClient() {
         <p className="text-gray-600">Soft delete or RLS 처리</p>
       </div>
 
-      <div className="bg-white rounded-lg shadow-sm border p-6 border-red-200">
+      <div className="bg-white rounded-lg shadow-sm border p-4 md:p-6 border-red-200">
         <div className="flex items-start gap-3 mb-6">
           <AlertTriangle className="w-6 h-6 text-red-600 flex-shrink-0 mt-1" />
           <div>

@@ -393,7 +393,7 @@ export default function EstimateRequestsClient() {
   }
 
   return (
-    <div className="w-full py-8 px-4">
+    <div className="w-full py-4 md:py-6 px-2 md:px-4">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900 mb-2">견적 요청 목록</h1>
         <p className="text-gray-600">기업이 등록한 프로젝트 견적 요청을 확인하고 견적서를 제출하세요</p>

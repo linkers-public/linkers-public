@@ -232,7 +232,7 @@ export default function TeamMembersClient() {
         <p className="text-gray-600">기업 계정 멀티 사용자를 관리하세요</p>
       </div>
 
-      <div className="bg-white rounded-lg shadow-sm border p-6 mb-6">
+      <div className="bg-white rounded-lg shadow-sm border p-4 md:p-6 mb-6">
         <div className="flex items-center gap-2 mb-4">
           <UserPlus className="w-5 h-5 text-gray-600" />
           <h2 className="text-lg font-semibold text-gray-900">멤버 추가</h2>
@@ -251,7 +251,7 @@ export default function TeamMembersClient() {
         </div>
       </div>
 
-      <div className="bg-white rounded-lg shadow-sm border p-6">
+      <div className="bg-white rounded-lg shadow-sm border p-4 md:p-6">
         <div className="flex items-center gap-2 mb-4">
           <Users className="w-5 h-5 text-gray-600" />
           <h2 className="text-lg font-semibold text-gray-900">팀 멤버 목록</h2>

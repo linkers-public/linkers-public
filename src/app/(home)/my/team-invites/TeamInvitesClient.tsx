@@ -263,7 +263,7 @@ export default function TeamInvitesClient() {
           teamInvites.map((invite) => (
             <div
               key={invite.id}
-              className="bg-white rounded-lg shadow-sm border p-6"
+              className="bg-white rounded-lg shadow-sm border p-4 md:p-6"
             >
               <div className="flex items-start justify-between mb-4">
                 <div>

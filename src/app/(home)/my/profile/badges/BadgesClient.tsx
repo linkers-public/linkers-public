@@ -282,7 +282,7 @@ export default function BadgesClient() {
       )}
 
       {/* 인증 요청 목록 */}
-      <div className="bg-white rounded-lg shadow-sm border p-6">
+      <div className="bg-white rounded-lg shadow-sm border p-4 md:p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">
           인증 요청 내역
         </h2>

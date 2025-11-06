@@ -257,7 +257,7 @@ const ProfileUpdateClient = () => {
   }
 
   return (
-    <div className="w-full p-3 md:p-6">
+    <div className="w-full py-4 md:py-6 px-2 md:px-4">
       <h1 className="text-xl md:text-2xl font-bold mb-4 md:mb-6">프로필 수정</h1>
 
       {/* 새 프로필 완성 유도 메시지 */}

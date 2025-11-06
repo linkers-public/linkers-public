@@ -146,7 +146,7 @@ export default function PaymentsClient() {
 
       <div className="space-y-4">
         {payments.length === 0 ? (
-          <div className="bg-white rounded-lg shadow-sm border p-6 md:p-12 text-center">
+          <div className="bg-white rounded-lg shadow-sm border p-4 md:p-12 text-center">
             <Receipt className="w-16 h-16 text-gray-400 mx-auto mb-4" />
             <p className="text-gray-600">결제 내역이 없습니다.</p>
           </div>
@@ -154,7 +154,7 @@ export default function PaymentsClient() {
           payments.map((payment) => (
             <div
               key={payment.id}
-              className="bg-white rounded-lg shadow-sm border p-6"
+              className="bg-white rounded-lg shadow-sm border p-4 md:p-6"
             >
               <div className="flex items-start justify-between mb-4">
                 <div className="flex-1">

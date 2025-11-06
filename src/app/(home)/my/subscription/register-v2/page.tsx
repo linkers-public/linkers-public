@@ -182,7 +182,7 @@ export default function SubscriptionRegisterV2Page() {
         <p className="text-gray-600">링커스 서비스를 구독하고 모든 기능을 이용하세요</p>
       </div>
 
-      <div className="bg-white rounded-lg shadow-sm border p-6 md:p-8">
+      <div className="bg-white rounded-lg shadow-sm border p-4 md:p-6 lg:p-8">
         {/* 첫 달 무료 안내 */}
         <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
           <div className="flex items-center gap-2 mb-2">
