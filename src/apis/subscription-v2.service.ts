@@ -45,8 +45,10 @@ export async function requestPaymentWithBillingKey(
       orderName,
       customer: {
         name: customer.name ? { full: customer.name } : undefined,
-        email: customer.email,
-        phoneNumber: customer.phoneNumber,
+        email: customer.email || undefined,
+        phoneNumber: customer.phoneNumber && customer.phoneNumber.trim() !== '' 
+          ? customer.phoneNumber 
+          : '010-0000-0000', // 필수 필드이므로 기본값 제공
       },
       amount: {
         total: amount,
@@ -76,6 +78,19 @@ export async function scheduleMonthlyPayment(
   }
 ) {
   try {
+    console.log('결제 예약 요청:', {
+      paymentId,
+      timeToPay: scheduledAt,
+      billingKey: billingKey.substring(0, 10) + '...',
+      amount,
+      orderName,
+      customer: {
+        name: customer.name,
+        email: customer.email,
+        phoneNumber: customer.phoneNumber,
+      },
+    })
+
     const scheduledPayment = await paymentClient.paymentSchedule.createPaymentSchedule({
       paymentId,
       timeToPay: scheduledAt,
@@ -84,8 +99,10 @@ export async function scheduleMonthlyPayment(
         orderName,
         customer: {
           name: customer.name ? { full: customer.name } : undefined,
-          email: customer.email,
-          phoneNumber: customer.phoneNumber,
+          email: customer.email || undefined,
+          phoneNumber: customer.phoneNumber && customer.phoneNumber.trim() !== '' 
+            ? customer.phoneNumber 
+            : '010-0000-0000', // 필수 필드이므로 기본값 제공
         },
         amount: {
           total: amount,
@@ -94,9 +111,19 @@ export async function scheduleMonthlyPayment(
       },
     })
 
+    console.log('결제 예약 성공:', scheduledPayment)
     return scheduledPayment
   } catch (error: any) {
-    throw new Error(`결제 예약 실패: ${error.message || '알 수 없는 오류'}`)
+    console.error('결제 예약 실패 상세:', {
+      message: error.message,
+      response: error.response?.data,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      error: error,
+    })
+    throw new Error(
+      `결제 예약 실패: ${error.response?.data?.message || error.message || JSON.stringify(error.response?.data) || '알 수 없는 오류'}`
+    )
   }
 }
 

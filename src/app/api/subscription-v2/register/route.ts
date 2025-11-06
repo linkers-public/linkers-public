@@ -43,6 +43,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // 사용자 계정 정보 조회 (전화번호 포함)
+    const { data: accountData } = await supabase
+      .from('accounts')
+      .select('username, contact_phone, contact_email')
+      .eq('user_id', user.id)
+      .single()
+
     // 구독 정보 생성 (첫 달 무료)
     const subscriptionDate = new Date()
     const nextBillingDate = new Date(subscriptionDate)
@@ -51,6 +58,12 @@ export async function POST(request: NextRequest) {
     // 첫 달은 무료이므로 30일 후 첫 결제 예약
     const scheduledAt = getNextBillingDateISO(subscriptionDate, true)
     const paymentId = `linkers_sub_${user.id}_${Date.now()}`
+
+    // 전화번호 설정 (필수 필드)
+    const phoneNumber = 
+      buyer_info?.tel || 
+      accountData?.contact_phone || 
+      '010-0000-0000' // 기본값
 
     try {
       // 첫 달은 무료이므로 30일 후 첫 결제 예약
@@ -61,9 +74,9 @@ export async function POST(request: NextRequest) {
         2000, // 월 구독료 2000원
         '링커스 월 구독료',
         {
-          name: buyer_info?.name || user.email?.split('@')[0] || '사용자',
-          email: buyer_info?.email || user.email || '',
-          phoneNumber: buyer_info?.tel || '',
+          name: buyer_info?.name || accountData?.username || user.email?.split('@')[0] || '사용자',
+          email: buyer_info?.email || accountData?.contact_email || user.email || '',
+          phoneNumber: phoneNumber,
         }
       )
 

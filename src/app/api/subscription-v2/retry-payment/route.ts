@@ -49,11 +49,14 @@ export async function POST(request: NextRequest) {
     // 사용자 정보 조회
     const { data: accountData } = await supabase
       .from('accounts')
-      .select('username, email')
+      .select('username, contact_phone, contact_email')
       .eq('user_id', user.id)
       .single() as any
 
     const paymentId = `linkers_sub_${user.id}_${Date.now()}`
+
+    // 전화번호 설정 (필수 필드)
+    const phoneNumber = accountData?.contact_phone || '010-0000-0000'
 
     try {
       // 결제 재시도
@@ -64,8 +67,8 @@ export async function POST(request: NextRequest) {
         '링커스 월 구독료',
         {
           name: accountData?.username || user.email?.split('@')[0] || '사용자',
-          email: user.email || accountData?.email || '',
-          phoneNumber: '',
+          email: user.email || accountData?.contact_email || '',
+          phoneNumber: phoneNumber,
         }
       )
 
@@ -98,8 +101,8 @@ export async function POST(request: NextRequest) {
         '링커스 월 구독료',
         {
           name: accountData?.username || user.email?.split('@')[0] || '사용자',
-          email: user.email || accountData?.email || '',
-          phoneNumber: '',
+          email: user.email || accountData?.contact_email || '',
+          phoneNumber: phoneNumber,
         }
       )
 

@@ -137,7 +137,7 @@ export default function SubscriptionClient() {
     try {
       setUpdating(true)
       
-      const response = await fetch('/api/subscription/cancel', {
+      const response = await fetch('/api/subscription-v2/cancel', {
         method: 'POST',
       })
 
@@ -174,15 +174,15 @@ export default function SubscriptionClient() {
     try {
       setRetrying(true)
 
-      const response = await fetch('/api/subscription/retry-payment', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          subscription_id: subscription.id,
-        }),
-      })
+        const response = await fetch('/api/subscription-v2/retry-payment', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            subscription_id: subscription.id,
+          }),
+        })
 
       const data = await response.json()
 
@@ -230,7 +230,7 @@ export default function SubscriptionClient() {
           <CreditCard className="w-12 h-12 text-gray-400 mx-auto mb-4" />
           <h3 className="text-lg font-semibold text-gray-900 mb-2">구독이 없습니다</h3>
           <p className="text-gray-600 mb-6">링커스 서비스를 구독하고 모든 기능을 이용하세요</p>
-          <Button onClick={() => router.push('/my/subscription/register')}>
+          <Button onClick={() => router.push('/my/subscription/register-v2')}>
             구독 등록하기
           </Button>
         </div>
