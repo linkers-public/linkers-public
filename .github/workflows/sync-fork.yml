@@ -62,18 +62,44 @@ jobs:
           git config user.email "actions@github.com"
           
           # upstream/main의 변경사항을 가져옴
-          git merge upstream/main --no-edit || {
-            echo "Merge conflict detected. Attempting to resolve..."
-            # 충돌 발생 시 현재 브랜치의 변경사항을 우선
-            git checkout --ours .
-            git add .
-            git commit -m "chore: sync with upstream (resolve conflicts)" || true
-          }
+          echo "🔄 Upstream/main과 origin/main 비교 중..."
+          git fetch origin main
           
-          # 변경사항이 있으면 푸시
-          if [ -n "$(git status --porcelain)" ]; then
-            git push origin main
+          # upstream과 origin의 차이 확인
+          LOCAL=$(git rev-parse main)
+          REMOTE=$(git rev-parse origin/main)
+          UPSTREAM=$(git rev-parse upstream/main 2>/dev/null || echo "")
+          
+          echo "Local main: $LOCAL"
+          echo "Origin main: $REMOTE"
+          echo "Upstream main: $UPSTREAM"
+          
+          if [ -z "$UPSTREAM" ]; then
+            echo "⚠️ Upstream/main을 찾을 수 없습니다. 동기화를 건너뜁니다."
+            exit 0
+          fi
+          
+          # upstream/main이 origin/main보다 앞서 있는지 확인
+          if git merge-base --is-ancestor origin/main upstream/main 2>/dev/null; then
+            echo "✅ Upstream에 새로운 커밋이 있습니다. 병합을 진행합니다."
+            
+            # upstream/main의 변경사항을 가져옴
+            git merge upstream/main --no-edit || {
+              echo "⚠️ Merge conflict detected. Attempting to resolve..."
+              # 충돌 발생 시 현재 브랜치의 변경사항을 우선
+              git checkout --ours .
+              git add .
+              git commit -m "chore: sync with upstream (resolve conflicts)" || true
+            }
+            
+            # 변경사항이 있으면 푸시
+            if [ "$(git rev-parse HEAD)" != "$REMOTE" ]; then
+              echo "📤 변경사항을 origin/main에 푸시합니다."
+              git push origin main
+            else
+              echo "ℹ️ 동기화할 변경사항이 없습니다."
+            fi
           else
-            echo "No changes to push"
+            echo "ℹ️ Upstream에 새로운 변경사항이 없습니다."
           fi
 
