@@ -184,7 +184,7 @@ export default function BookmarkedCompaniesClient() {
   }
 
   return (
-    <div className="w-full md:py-6 md:px-4">
+    <div className="w-full md:py-6">
       <div className="mb-6">
         <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-2">관심 기업</h1>
         <p className="text-gray-600">저장해둔 기업 리스트를 확인하세요</p>

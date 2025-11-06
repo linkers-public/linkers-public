@@ -138,7 +138,7 @@ export default function PaymentsClient() {
   }
 
   return (
-    <div className="w-full md:py-6 md:px-4">
+    <div className="w-full md:py-6">
       <div className="mb-6">
         <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-2">결제 내역 / 영수증</h1>
         <p className="text-gray-600">PG 영수증을 다운로드하세요</p>

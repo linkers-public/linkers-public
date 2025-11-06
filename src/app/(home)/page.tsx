@@ -5,9 +5,8 @@ import Link from 'next/link'
 const LandingPage = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 w-full">
-      <div className="max-w-7xl mx-auto">
       {/* Hero Section - 프리랜서 중심 */}
-      <section className="relative py-10 md:py-20 px-4 md:px-6 text-center">
+      <section className="relative py-10 md:py-20 text-center">
         <div className="w-full">
           <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 mb-4 md:mb-6 leading-tight">
             개발자 어디서 찾아야 할지<br />
@@ -39,7 +38,7 @@ const LandingPage = () => {
       </section>
 
       {/* 프리랜서 How it Works Section */}
-      <section className="py-10 md:py-20 px-4 md:px-6 bg-white">
+      <section className="py-10 md:py-20 bg-white">
         <div className="w-full">
           <h2 className="text-2xl md:text-4xl font-bold text-gray-900 mb-6 text-center">
             프리랜서는 이렇게 활동합니다
@@ -93,7 +92,7 @@ const LandingPage = () => {
       </section>
 
       {/* 프리랜서 혜택 Section */}
-      <section className="py-10 md:py-20 px-4 md:px-6 bg-gray-50">
+      <section className="py-10 md:py-20 bg-gray-50">
         <div className="w-full text-center">
           <h2 className="text-2xl md:text-4xl font-bold text-gray-900 mb-6">프리랜서가 선택하는 이유</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 md:gap-8">
@@ -123,7 +122,7 @@ const LandingPage = () => {
       </section>
 
       {/* 기업 Section - 아래쪽 배치 */}
-      <section className="py-10 md:py-20 px-4 md:px-6 bg-white">
+      <section className="py-10 md:py-20 bg-white">
         <div className="w-full">
           <h2 className="text-2xl md:text-4xl font-bold text-gray-900 mb-4 text-center">
             클라이언트는 이렇게 사용해요
@@ -166,7 +165,7 @@ const LandingPage = () => {
       </section>
 
       {/* 가격 정책 Section */}
-      <section className="py-10 md:py-20 px-4 md:px-6 bg-gray-50">
+      <section className="py-10 md:py-20 bg-gray-50">
         <div className="w-full">
           <h2 className="text-2xl md:text-4xl font-bold text-gray-900 mb-8 md:mb-12 text-center">가격 정책</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
@@ -225,7 +224,7 @@ const LandingPage = () => {
       </section>
 
       {/* 마지막 CTA Section */}
-      <section className="py-10 md:py-20 px-4 md:px-6 bg-white">
+      <section className="py-10 md:py-20 bg-white">
         <div className="w-full text-center">
           <h2 className="text-2xl md:text-4xl font-bold text-gray-900 mb-6">지금 바로 시작하세요</h2>
           <p className="text-base md:text-xl text-gray-600 mb-6 md:mb-8">
@@ -251,7 +250,7 @@ const LandingPage = () => {
       </section>
 
       {/* FAQ Section */}
-      <section className="py-10 md:py-20 px-4 md:px-6 bg-gray-50">
+      <section className="py-10 md:py-20 bg-gray-50">
         <div className="w-full">
           <h2 className="text-2xl md:text-4xl font-bold text-gray-900 mb-8 md:mb-12 text-center">
             자주 묻는 질문
@@ -275,7 +274,7 @@ const LandingPage = () => {
       </section>
 
       {/* Footer */}
-      <footer className="bg-gray-900 text-white py-12 px-4 md:px-6">
+      <footer className="bg-gray-900 text-white py-12">
         <div className="w-full">
           <div className="grid md:grid-cols-3 gap-8">
             <div>
@@ -304,7 +303,6 @@ const LandingPage = () => {
           </div>
         </div>
       </footer>
-      </div>
     </div>
   )
 }

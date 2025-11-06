@@ -221,7 +221,7 @@ export default function CompanyInfoClient() {
   }
 
   return (
-    <div className="w-full md:py-6 md:px-4">
+    <div className="w-full md:py-6">
       <div className="mb-6">
         <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-2">내 정보 / 회사 정보 수정</h1>
         <p className="text-gray-600">회사명·담당자·연락처 등을 수정하세요</p>

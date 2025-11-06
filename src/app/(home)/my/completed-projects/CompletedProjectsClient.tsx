@@ -93,7 +93,7 @@ export default function CompletedProjectsClient() {
   }
 
   return (
-    <div className="w-full md:py-6 md:px-4">
+    <div className="w-full md:py-6">
       <div className="mb-6">
         <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-2">완료 프로젝트 저장함</h1>
         <p className="text-gray-600">아카이브 성격의 완료된 프로젝트를 확인하세요</p>

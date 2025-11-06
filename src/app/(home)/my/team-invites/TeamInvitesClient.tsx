@@ -247,7 +247,7 @@ export default function TeamInvitesClient() {
   }
 
   return (
-    <div className="w-full md:py-6 md:px-4">
+    <div className="w-full md:py-6">
       <div className="mb-6">
         <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-2">받은 팀 초대</h1>
         <p className="text-gray-600">다른 매니저가 보낸 팀 합류 제안을 확인하세요</p>

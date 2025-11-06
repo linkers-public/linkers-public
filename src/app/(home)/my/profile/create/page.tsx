@@ -132,7 +132,7 @@ function CreateProfilePageContent() {
   }
 
   return (
-    <div className="w-full md:py-6 md:px-4">
+    <div className="w-full md:py-6">
       <Button
         variant="outline"
         onClick={() => router.back()}

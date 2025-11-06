@@ -255,7 +255,7 @@ export default function MessagesClient() {
   }
 
   return (
-    <div className="w-full md:py-6 md:px-4">
+    <div className="w-full md:py-6">
       <div className="mb-6">
         <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-4 md:mb-6">쪽지함</h1>
 

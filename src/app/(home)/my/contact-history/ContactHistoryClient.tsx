@@ -124,7 +124,7 @@ export default function ContactHistoryClient() {
   }
 
   return (
-    <div className="w-full md:py-6 md:px-4">
+    <div className="w-full md:py-6">
       <div className="mb-6">
         <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-2">연락처 열람 기록</h1>
         <p className="text-gray-600">어떤 프리랜서 연락처를 구매했는지 확인하세요</p>

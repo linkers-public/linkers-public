@@ -228,7 +228,7 @@ export default function SubscriptionClient() {
   }
 
   return (
-    <div className="w-full md:py-6 md:px-4">
+    <div className="w-full md:py-6">
       <div className="mb-6">
         <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-2">구독 관리</h1>
         <p className="text-gray-600">월 2,000원 상태 / 갱신 / 해지</p>

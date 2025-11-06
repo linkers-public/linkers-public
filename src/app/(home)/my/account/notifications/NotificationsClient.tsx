@@ -132,7 +132,7 @@ export default function NotificationsClient() {
   }
 
   return (
-    <div className="w-full md:py-6 md:px-4">
+    <div className="w-full md:py-6">
       <div className="mb-6">
         <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-2">알림 설정</h1>
         <p className="text-gray-600">이메일/웹푸시/카카오톡 알림을 설정하세요</p>

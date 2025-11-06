@@ -174,7 +174,7 @@ export default function SubscriptionRegisterV2Page() {
   }
 
   return (
-    <div className="w-full md:py-6 md:px-4 max-w-2xl mx-auto">
+    <div className="w-full md:py-6 max-w-2xl mx-auto">
       <div className="mb-6">
         <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-2">
           구독 등록
