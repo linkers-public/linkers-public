@@ -30,13 +30,26 @@ export default function SubscriptionRegisterV2Page() {
     }
     
     // 사용자 계정 정보 조회 (전화번호 포함)
-    const { data: accountData } = await supabase
+    const { data: accountData, error: accountError } = await supabase
       .from('accounts')
       .select('username, contact_phone, contact_email')
       .eq('user_id', user.id)
-      .single()
+      .maybeSingle()
     
-    setUser({ ...user, accountData })
+    if (accountError) {
+      console.error('계정 정보 조회 실패:', accountError)
+      // RLS 오류인 경우 상세 로그
+      if (accountError.code === 'PGRST301' || accountError.message?.includes('406')) {
+        console.error('RLS 정책 오류:', {
+          code: accountError.code,
+          message: accountError.message,
+          details: accountError.details,
+          hint: accountError.hint,
+        })
+      }
+    }
+    
+    setUser({ ...user, accountData: accountData || null })
   }
 
   const handleRegister = async () => {
