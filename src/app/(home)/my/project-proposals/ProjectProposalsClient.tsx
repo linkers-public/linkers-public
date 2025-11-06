@@ -58,27 +58,10 @@ export default function ProjectProposalsClient() {
       }
 
       // 기업 제안 조회 (project_members 테이블에서 본인이 초대된 경우)
+      // 중첩 조인을 피하고 별도로 조회하여 PostgREST 관계 충돌 방지
       const { data: proposals, error: proposalsError } = await supabase
         .from('project_members')
-        .select(
-          `
-            id,
-            counsel_id,
-            status,
-            created_at,
-            counsel:counsel_id (
-              counsel_id,
-              title,
-              client_id,
-              client:client_id (
-                user_id,
-                accounts:user_id (
-                  username
-                )
-              )
-            )
-          `
-        )
+        .select('id, counsel_id, status, created_at')
         .eq('profile_id', profile.profile_id)
         .order('created_at', { ascending: false })
 
@@ -89,19 +72,136 @@ export default function ProjectProposalsClient() {
           title: '프로젝트 제안을 불러오는데 실패했습니다',
           description: proposalsError.message,
         })
-      } else {
-        const formattedProposals: CompanyProposal[] =
-          proposals?.map((proposal: any) => ({
+        setCompanyProposals([])
+        return
+      }
+
+      if (!proposals || proposals.length === 0) {
+        setCompanyProposals([])
+        return
+      }
+
+      // counsel_id 목록 추출
+      const counselIds = proposals.map((p: any) => p.counsel_id).filter(Boolean)
+
+      // counsel 테이블에서 프로젝트 정보 조회
+      const { data: counselData, error: counselError } = await supabase
+        .from('counsel')
+        .select('counsel_id, title, client_id, company_profile_id')
+        .in('counsel_id', counselIds)
+
+      if (counselError) {
+        console.error('프로젝트 정보 조회 실패:', counselError)
+        toast({
+          variant: 'destructive',
+          title: '프로젝트 정보를 불러오는데 실패했습니다',
+          description: counselError.message,
+        })
+        setCompanyProposals([])
+        return
+      }
+
+      // 기업 정보 조회 (company_profile_id 우선, 없으면 client_id 사용)
+      const companyProfileIds = Array.from(new Set((counselData || [])
+        .map((c: any) => c.company_profile_id)
+        .filter(Boolean)))
+      
+      const clientIds = Array.from(new Set((counselData || [])
+        .map((c: any) => c.client_id)
+        .filter(Boolean)))
+
+      let clientNameMap: Record<string, string> = {}
+      
+      // company_profile_id로 조회 (우선)
+      if (companyProfileIds.length > 0) {
+        const { data: companyAccounts } = await supabase
+          .from('accounts')
+          .select('profile_id, username')
+          .in('profile_id', companyProfileIds)
+          .eq('profile_type', 'COMPANY')
+          .eq('is_active', true)
+          .is('deleted_at', null)
+
+        if (companyAccounts) {
+          companyAccounts.forEach((account: any) => {
+            clientNameMap[account.profile_id] = account.username
+          })
+        }
+      }
+      
+      // client_id로 조회 (fallback)
+      if (clientIds.length > 0) {
+        const { data: clientData } = await supabase
+          .from('client')
+          .select('user_id, company_name')
+          .in('user_id', clientIds)
+
+        if (clientData) {
+          const userIds = clientData.map((c: any) => c.user_id)
+          const { data: accountData } = await supabase
+            .from('accounts')
+            .select('user_id, username')
+            .in('user_id', userIds)
+            .eq('profile_type', 'COMPANY')
+            .eq('is_active', true)
+            .is('deleted_at', null)
+
+          if (accountData) {
+            accountData.forEach((account: any) => {
+              const clientInfo = clientData.find((c: any) => c.user_id === account.user_id)
+              clientNameMap[account.user_id] = account.username || clientInfo?.company_name || '알 수 없음'
+            })
+          } else {
+            // accountData가 없어도 clientData에서 company_name 사용
+            clientData.forEach((client: any) => {
+              if (!clientNameMap[client.user_id]) {
+                clientNameMap[client.user_id] = client.company_name || '알 수 없음'
+              }
+            })
+          }
+        }
+      }
+
+      // 데이터 매핑
+      const counselMap: Record<number, any> = {}
+      if (counselData) {
+        counselData.forEach((c: any) => {
+          counselMap[c.counsel_id] = c
+        })
+      }
+
+      const formattedProposals: CompanyProposal[] = proposals.map((proposal: any) => {
+        const counsel = counselMap[proposal.counsel_id]
+        if (!counsel) {
+          return {
             id: proposal.id,
             counsel_id: proposal.counsel_id,
-            counsel_title: proposal.counsel?.title || '제목 없음',
-            client_id: proposal.counsel?.client_id || '',
-            client_name: proposal.counsel?.client?.accounts?.username || '알 수 없음',
+            counsel_title: '제목 없음',
+            client_id: '',
+            client_name: '알 수 없음',
             status: proposal.status,
             created_at: proposal.created_at,
-          })) || []
-        setCompanyProposals(formattedProposals)
-      }
+          }
+        }
+
+        const companyProfileId = counsel.company_profile_id
+        const clientId = counsel.client_id || ''
+        const clientName = companyProfileId 
+          ? clientNameMap[companyProfileId]
+          : clientNameMap[clientId] || '알 수 없음'
+        
+        return {
+          id: proposal.id,
+          counsel_id: proposal.counsel_id,
+          counsel_title: counsel.title || '제목 없음',
+          client_id: clientId,
+          client_name: clientName,
+          status: proposal.status,
+          created_at: proposal.created_at,
+        }
+      })
+
+      setCompanyProposals(formattedProposals)
     } catch (error: any) {
       console.error('프로젝트 제안 로드 실패:', error)
       toast({

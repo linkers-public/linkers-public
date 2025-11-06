@@ -39,7 +39,27 @@ export default function TeamInvitesClient() {
         return
       }
 
+      // 활성 프로필 확인
+      const { data: profile } = await supabase
+        .from('accounts')
+        .select('profile_id')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .is('deleted_at', null)
+        .maybeSingle()
+
+      if (!profile) {
+        toast({
+          variant: 'destructive',
+          title: '프로필이 필요합니다',
+          description: '프로필을 생성해주세요.',
+        })
+        router.push('/my/profile/manage')
+        return
+      }
+
       // 팀 초대 조회 (team_members 테이블에서 본인이 초대된 경우)
+      // profile_id를 우선 사용하고, 없으면 maker_id 사용
       const { data: invites, error: invitesError } = await supabase
         .from('team_members')
         .select(`
@@ -50,10 +70,11 @@ export default function TeamInvitesClient() {
           teams:team_id (
             id,
             name,
-            manager_id
+            manager_id,
+            manager_profile_id
           )
         `)
-        .eq('maker_id', user.id)
+        .or(`profile_id.eq.${profile.profile_id},maker_id.eq.${user.id}`)
         .order('created_at', { ascending: false })
 
       if (invitesError) {
@@ -61,12 +82,35 @@ export default function TeamInvitesClient() {
         throw invitesError
       }
 
-      // 매니저 정보를 별도로 조회 (외래 키 관계가 없어서 자동 조인 불가)
+      // 매니저 정보 조회 (manager_profile_id 우선, 없으면 manager_id 사용)
+      const managerProfileIds = Array.from(new Set((invites || [])
+        .map((invite: any) => invite.teams?.manager_profile_id)
+        .filter(Boolean)))
+      
       const managerIds = Array.from(new Set((invites || [])
         .map((invite: any) => invite.teams?.manager_id)
         .filter(Boolean)))
 
       let managerMap: Record<string, string> = {}
+      
+      // manager_profile_id로 조회 (우선)
+      if (managerProfileIds.length > 0) {
+        const { data: managerAccounts } = await supabase
+          .from('accounts')
+          .select('profile_id, username')
+          .in('profile_id', managerProfileIds)
+          .eq('profile_type', 'FREELANCER')
+          .eq('is_active', true)
+          .is('deleted_at', null)
+
+        if (managerAccounts) {
+          managerAccounts.forEach((account: any) => {
+            managerMap[account.profile_id] = account.username
+          })
+        }
+      }
+      
+      // manager_id로 조회 (fallback)
       if (managerIds.length > 0) {
         const { data: managerAccounts } = await supabase
           .from('accounts')
@@ -85,13 +129,18 @@ export default function TeamInvitesClient() {
 
       // 초대 데이터 포맷팅
       const formattedInvites: TeamInvite[] = (invites || []).map((invite: any) => {
+        const managerProfileId = invite.teams?.manager_profile_id
         const managerId = invite.teams?.manager_id || ''
+        const managerName = managerProfileId 
+          ? managerMap[managerProfileId] 
+          : managerMap[managerId] || '알 수 없음'
+        
         return {
           id: invite.id,
           team_id: invite.team_id,
           team_name: invite.teams?.name || '알 수 없음',
-          manager_id: managerId,
-          manager_name: managerMap[managerId] || '알 수 없음',
+          manager_id: managerProfileId || managerId,
+          manager_name: managerName,
           status: invite.status,
           created_at: invite.created_at,
         }

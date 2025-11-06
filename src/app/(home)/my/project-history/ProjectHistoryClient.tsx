@@ -53,12 +53,13 @@ export default function ProjectHistoryClient() {
       }
 
       // 진행 중인 프로젝트 조회
-      // counsel 테이블에 created_at 컬럼이 없으므로 start_date 사용
+      // counsel 테이블의 counsel_status enum: 'pending', 'recruiting', 'end'
+      // 진행 중인 프로젝트는 'pending' 또는 'recruiting' 상태
       const { data: counselData, error } = await supabase
         .from('counsel')
         .select('counsel_id, title, counsel_status, start_date, due_date, counsel_date')
         .eq('client_id', clientData.user_id)
-        .in('counsel_status', ['recruiting', 'contract_progress', 'estimate_received'])
+        .in('counsel_status', ['pending', 'recruiting'])
         .order('start_date', { ascending: false })
 
       if (error) throw error
@@ -87,9 +88,9 @@ export default function ProjectHistoryClient() {
 
   const getStatusBadge = (status: string) => {
     const statusMap: Record<string, { label: string; className: string }> = {
+      pending: { label: '대기중', className: 'bg-gray-100 text-gray-800' },
       recruiting: { label: '매칭중', className: 'bg-yellow-100 text-yellow-800' },
-      estimate_received: { label: '견적 도착', className: 'bg-blue-100 text-blue-800' },
-      contract_progress: { label: '계약 진행', className: 'bg-green-100 text-green-800' },
+      end: { label: '완료', className: 'bg-green-100 text-green-800' },
     }
 
     const statusInfo = statusMap[status] || { label: status, className: 'bg-gray-100 text-gray-800' }

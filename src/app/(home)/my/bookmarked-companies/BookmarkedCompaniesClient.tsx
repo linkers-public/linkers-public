@@ -14,6 +14,7 @@ interface BookmarkedCompany {
   company_name: string
   email: string
   created_at: string
+  bookmark_id?: number
 }
 
 export default function BookmarkedCompaniesClient() {
@@ -36,15 +37,69 @@ export default function BookmarkedCompaniesClient() {
         return
       }
 
-      // TODO: company_bookmarks 테이블이 있다면 사용, 없다면 다른 방식으로 구현
-      // 현재는 client 테이블에서 북마크된 기업을 조회하는 로직이 필요합니다
-      // 임시로 빈 배열 반환
-      setCompanies([])
-      
-      toast({
-        title: '준비 중',
-        description: '관심 기업 기능은 곧 제공될 예정입니다.',
+      // 활성 프로필 확인
+      const { data: profile } = await supabase
+        .from('accounts')
+        .select('profile_id')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .is('deleted_at', null)
+        .maybeSingle()
+
+      if (!profile) {
+        toast({
+          variant: 'destructive',
+          title: '프로필이 필요합니다',
+          description: '프로필을 생성해주세요.',
+        })
+        router.push('/my/profile/manage')
+        return
+      }
+
+      // company_bookmarks 테이블에서 북마크 조회
+      const { data: bookmarks, error: bookmarksError } = await supabase
+        .from('company_bookmarks' as any)
+        .select('id, company_profile_id, created_at')
+        .eq('profile_id', profile.profile_id)
+        .order('created_at', { ascending: false })
+
+      if (bookmarksError) {
+        console.error('북마크 조회 실패:', bookmarksError)
+        throw bookmarksError
+      }
+
+      if (!bookmarks || bookmarks.length === 0) {
+        setCompanies([])
+        return
+      }
+
+      // accounts 테이블과 조인하여 기업 정보 가져오기
+      const companyProfileIds = bookmarks.map((b: any) => b.company_profile_id)
+      const { data: companyData, error: companyError } = await supabase
+        .from('accounts')
+        .select('profile_id, username, contact_email')
+        .in('profile_id', companyProfileIds)
+        .eq('profile_type', 'COMPANY')
+
+      if (companyError) {
+        console.error('기업 정보 조회 실패:', companyError)
+        throw companyError
+      }
+
+      // 북마크 데이터 포맷팅
+      const formattedCompanies: BookmarkedCompany[] = bookmarks.map((bookmark: any) => {
+        const company = companyData?.find((c: any) => c.profile_id === bookmark.company_profile_id)
+        return {
+          id: bookmark.id,
+          bookmark_id: bookmark.id,
+          company_id: bookmark.company_profile_id,
+          company_name: company?.username || '알 수 없음',
+          email: company?.contact_email || '',
+          created_at: bookmark.created_at,
+        }
       })
+
+      setCompanies(formattedCompanies)
     } catch (error: any) {
       console.error('관심 기업 로드 실패:', error)
       toast({
@@ -59,11 +114,46 @@ export default function BookmarkedCompaniesClient() {
 
   const handleUnbookmark = async (companyId: string) => {
     try {
-      // TODO: 북마크 해제 로직 구현
+      const { data: { user } } = await supabase.auth.getUser()
+
+      if (!user) {
+        router.push('/auth')
+        return
+      }
+
+      // 활성 프로필 확인
+      const { data: profile } = await supabase
+        .from('accounts')
+        .select('profile_id')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .is('deleted_at', null)
+        .maybeSingle()
+
+      if (!profile) {
+        toast({
+          variant: 'destructive',
+          title: '프로필이 필요합니다',
+        })
+        return
+      }
+
+      // 북마크 삭제
+      const { error } = await supabase
+        .from('company_bookmarks' as any)
+        .delete()
+        .eq('profile_id', profile.profile_id)
+        .eq('company_profile_id', companyId)
+
+      if (error) throw error
+
       toast({
-        title: '준비 중',
-        description: '북마크 해제 기능은 곧 제공될 예정입니다.',
+        title: '북마크 해제 완료',
+        description: '관심 기업에서 제거되었습니다.',
       })
+
+      // 목록 새로고침
+      loadBookmarkedCompanies()
     } catch (error: any) {
       console.error('북마크 해제 실패:', error)
       toast({
@@ -124,6 +214,7 @@ export default function BookmarkedCompaniesClient() {
                   variant="ghost"
                   size="icon"
                   className="text-red-500 hover:text-red-700"
+                  title="북마크 해제"
                 >
                   <Heart className="w-5 h-5 fill-current" />
                 </Button>

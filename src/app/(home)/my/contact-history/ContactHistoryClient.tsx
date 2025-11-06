@@ -36,14 +36,70 @@ export default function ContactHistoryClient() {
         return
       }
 
-      // TODO: 연락처 열람 기록 조회 (contact_purchases 테이블)
-      // 현재는 임시로 빈 배열
-      setContacts([])
-      
-      toast({
-        title: '준비 중',
-        description: '연락처 열람 기록 기능은 곧 제공될 예정입니다.',
+      // 활성 프로필 확인
+      const { data: profile } = await supabase
+        .from('accounts')
+        .select('profile_id')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .is('deleted_at', null)
+        .maybeSingle()
+
+      if (!profile) {
+        toast({
+          variant: 'destructive',
+          title: '프로필이 필요합니다',
+          description: '프로필을 생성해주세요.',
+        })
+        router.push('/my/profile/manage')
+        return
+      }
+
+      // contact_purchases 테이블에서 구매 기록 조회
+      const { data: purchases, error: purchasesError } = await supabase
+        .from('contact_purchases' as any)
+        .select('id, seller_profile_id, price, purchased_at')
+        .eq('buyer_user_id', user.id)
+        .eq('buyer_profile_id', profile.profile_id)
+        .order('purchased_at', { ascending: false })
+
+      if (purchasesError) {
+        console.error('구매 기록 조회 실패:', purchasesError)
+        throw purchasesError
+      }
+
+      if (!purchases || purchases.length === 0) {
+        setContacts([])
+        return
+      }
+
+      // accounts 테이블과 조인하여 프리랜서 정보 가져오기
+      const sellerProfileIds = purchases.map((p: any) => p.seller_profile_id)
+      const { data: sellerData, error: sellerError } = await supabase
+        .from('accounts')
+        .select('profile_id, username, contact_phone')
+        .in('profile_id', sellerProfileIds)
+        .eq('profile_type', 'FREELANCER')
+
+      if (sellerError) {
+        console.error('프리랜서 정보 조회 실패:', sellerError)
+        throw sellerError
+      }
+
+      // 구매 기록 데이터 포맷팅
+      const formattedContacts: ContactHistory[] = purchases.map((purchase: any) => {
+        const seller = sellerData?.find((s: any) => s.profile_id === purchase.seller_profile_id)
+        return {
+          id: purchase.id.toString(),
+          profile_id: purchase.seller_profile_id,
+          username: seller?.username || '알 수 없음',
+          contact_phone: seller?.contact_phone || '',
+          purchased_at: purchase.purchased_at,
+          price: purchase.price,
+        }
       })
+
+      setContacts(formattedContacts)
     } catch (error: any) {
       console.error('연락처 열람 기록 로드 실패:', error)
       toast({

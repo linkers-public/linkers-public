@@ -138,10 +138,14 @@ export default function CompanyInfoClient() {
         .maybeSingle()
 
       if (existingClient) {
-        // 스키마 캐시 문제로 address는 일시적으로 제외
+        // client 테이블 업데이트
         const clientUpdateData: any = {
           company_name: companyInfo.company_name,
           email: companyInfo.contact_email,
+          contact_person: companyInfo.contact_person,
+          contact_phone: companyInfo.contact_phone,
+          address: companyInfo.address,
+          website: companyInfo.website,
           updated_at: new Date().toISOString(),
         }
 
@@ -154,28 +158,16 @@ export default function CompanyInfoClient() {
           console.error('client 테이블 업데이트 실패:', clientError)
           throw clientError
         }
-
-        // address는 별도로 시도 (스키마 캐시가 업데이트되면 작동)
-        if (companyInfo.address) {
-          try {
-            const { error: addressError } = await supabase
-              .from('client')
-              .update({ address: companyInfo.address } as any)
-              .eq('user_id', user.id)
-            
-            if (addressError) {
-              console.warn('address 필드 업데이트 실패 (스키마 캐시 대기 중):', addressError.message)
-            }
-          } catch (err) {
-            console.warn('address 필드 업데이트 중 예외 발생:', err)
-          }
-        }
       } else {
         // 새 레코드 삽입
         const insertData: any = {
           user_id: user.id,
           company_name: companyInfo.company_name,
           email: user.email || '',
+          contact_person: companyInfo.contact_person,
+          contact_phone: companyInfo.contact_phone,
+          address: companyInfo.address,
+          website: companyInfo.website,
         }
 
         const { error: insertError } = await supabase
@@ -185,22 +177,6 @@ export default function CompanyInfoClient() {
         if (insertError) {
           console.error('client 테이블 삽입 실패:', insertError)
           throw insertError
-        }
-
-        // address는 별도로 업데이트 시도
-        if (companyInfo.address) {
-          try {
-            const { error: addressError } = await supabase
-              .from('client')
-              .update({ address: companyInfo.address } as any)
-              .eq('user_id', user.id)
-            
-            if (addressError) {
-              console.warn('address 필드 업데이트 실패 (스키마 캐시 대기 중):', addressError.message)
-            }
-          } catch (err) {
-            console.warn('address 필드 업데이트 중 예외 발생:', err)
-          }
         }
       }
 

@@ -77,8 +77,8 @@ const Navigator = ({ profileType, role }: NavigatorProps) => {
       },
     ]
 
-    // 매니저 역할인 경우 팀 메뉴 추가
-    if (profileType === 'FREELANCER' && role === 'MANAGER') {
+    // 프리랜서 프로필일 경우 팀 메뉴 추가
+    if (profileType === 'FREELANCER') {
       freelancerRoutes.push({
         icon: '',
         label: '팀',

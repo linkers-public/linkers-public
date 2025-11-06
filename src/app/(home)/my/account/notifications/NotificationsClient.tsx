@@ -40,13 +40,33 @@ export default function NotificationsClient() {
         return
       }
 
-      // TODO: user_settings 테이블에서 알림 설정 조회
-      // 현재는 기본값 사용
-      setSettings({
-        email_enabled: true,
-        web_push_enabled: true,
-        kakao_enabled: false,
-      })
+      // user_settings 테이블에서 알림 설정 조회
+      const { data: settingsData, error } = await supabase
+        .from('user_settings' as any)
+        .select('email_enabled, web_push_enabled, kakao_enabled')
+        .eq('user_id', user.id)
+        .maybeSingle()
+
+      if (error) {
+        console.error('알림 설정 조회 실패:', error)
+        throw error
+      }
+
+      // 설정이 있으면 사용, 없으면 기본값 사용
+      if (settingsData) {
+        setSettings({
+          email_enabled: settingsData.email_enabled ?? true,
+          web_push_enabled: settingsData.web_push_enabled ?? true,
+          kakao_enabled: settingsData.kakao_enabled ?? false,
+        })
+      } else {
+        // 기본값 사용
+        setSettings({
+          email_enabled: true,
+          web_push_enabled: true,
+          kakao_enabled: false,
+        })
+      }
     } catch (error: any) {
       console.error('알림 설정 로드 실패:', error)
       toast({
@@ -69,10 +89,24 @@ export default function NotificationsClient() {
         return
       }
 
-      // TODO: user_settings 테이블에 알림 설정 저장
+      // user_settings 테이블에 알림 설정 저장 (upsert)
+      const { error } = await supabase
+        .from('user_settings' as any)
+        .upsert({
+          user_id: user.id,
+          email_enabled: settings.email_enabled,
+          web_push_enabled: settings.web_push_enabled,
+          kakao_enabled: settings.kakao_enabled,
+          updated_at: new Date().toISOString(),
+        }, {
+          onConflict: 'user_id'
+        })
+
+      if (error) throw error
+
       toast({
-        title: '준비 중',
-        description: '알림 설정 저장 기능은 곧 제공될 예정입니다.',
+        title: '알림 설정 저장 완료',
+        description: '알림 설정이 성공적으로 저장되었습니다.',
       })
     } catch (error: any) {
       console.error('알림 설정 저장 실패:', error)

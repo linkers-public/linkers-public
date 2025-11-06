@@ -114,24 +114,8 @@ export default function SecurityClient() {
   }
 
   const handleDeleteAccount = async () => {
-    if (!confirm('정말로 계정을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) {
-      return
-    }
-
-    try {
-      // TODO: 계정 삭제 로직 구현
-      toast({
-        title: '준비 중',
-        description: '계정 삭제 기능은 곧 제공될 예정입니다.',
-      })
-    } catch (error: any) {
-      console.error('계정 삭제 실패:', error)
-      toast({
-        variant: 'destructive',
-        title: '계정 삭제 실패',
-        description: error.message,
-      })
-    }
+    // 회원 탈퇴 페이지로 리다이렉트
+    router.push('/my/account/delete')
   }
 
   if (loading) {

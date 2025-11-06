@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { UserCircleIcon, Bell, LogOut, User, Settings, Menu, X, Mail } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -12,6 +12,7 @@ import ProfileSwitchButton from '@/components/ProfileSwitchButton'
 import { getUserProfiles } from '@/apis/profile-refactor.service'
 import { Database } from '@/types/supabase'
 import Link from 'next/link'
+import { useProfileStore } from '@/stores/useProfileStore'
 
 type ProfileType = Database['public']['Enums']['profile_type']
 
@@ -29,9 +30,14 @@ const Header = () => {
   const mobileMenuRef = useRef<HTMLDivElement>(null)
   const notificationMenuRef = useRef<HTMLDivElement>(null)
   const supabase = createSupabaseBrowserClient()
+  const account = useProfileStore((state) => state.profile)
+  const { fetchMyProfileData } = useProfileStore()
   
   // 현재 경로가 auth 페이지인지 확인
   const isAuthPage = pathname?.startsWith('/auth')
+  
+  // 마이페이지 경로인지 확인
+  const isMyPage = pathname?.startsWith('/my')
 
   const loadActiveProfile = async () => {
     try {
@@ -102,6 +108,10 @@ const Header = () => {
         setUser(result?.data?.user)
         await loadActiveProfile()
         await loadNotifications()
+        // 마이페이지인 경우 프로필 데이터 로드
+        if (isMyPage && (!account || !account.role)) {
+          await fetchMyProfileData()
+        }
       }
     }
 
@@ -111,6 +121,9 @@ const Header = () => {
     const handleProfileSwitch = () => {
       loadActiveProfile()
       loadNotifications()
+      if (isMyPage) {
+        fetchMyProfileData()
+      }
     }
     window.addEventListener('profileSwitched', handleProfileSwitch)
 
@@ -123,7 +136,7 @@ const Header = () => {
       window.removeEventListener('profileSwitched', handleProfileSwitch)
       clearInterval(interval)
     }
-  }, [supabase, pathname]) // pathname도 의존성에 추가하여 프로필 전환 시 업데이트
+  }, [supabase, pathname, isMyPage]) // pathname도 의존성에 추가하여 프로필 전환 시 업데이트
 
   // 외부 클릭 시 메뉴 닫기
   useEffect(() => {
@@ -161,18 +174,96 @@ const Header = () => {
   }
 
   // 모바일 메뉴 라우트 생성
-  const getMobileRoutes = () => {
+  const getMobileRoutes = useMemo(() => {
+    // 마이페이지인 경우 SideNavigator의 메뉴 구조 사용
+    if (isMyPage && account && account.role) {
+      const isFreelancer = account?.profile_type === 'FREELANCER'
+      const isCompany = account?.profile_type === 'COMPANY'
+      
+      if (isCompany) {
+        const companyAccountRoutes = [
+          { label: '내 정보 / 회사 정보 수정', href: '/my/company/info', group: '회사 계정' },
+          { label: '팀 멤버 관리', href: '/my/company/team-members', group: '회사 계정' },
+        ]
+        const subscriptionRoutes = [
+          { label: '구독 관리', href: '/my/subscription', group: '결제 / 구독' },
+          { label: '결제 내역', href: '/my/payments', group: '결제 / 구독' },
+          { label: '연락처 열람 기록', href: '/my/contact-history', group: '결제 / 구독' },
+        ]
+        const projectHistoryRoutes = [
+          { label: '진행 이력', href: '/my/project-history', group: '프로젝트 기록' },
+          { label: '완료 프로젝트 저장함', href: '/my/completed-projects', group: '프로젝트 기록' },
+        ]
+        const settingsRoutes = [
+          { label: '알림 설정', href: '/my/account/notifications', group: '설정' },
+          { label: '계정 보안', href: '/my/account/security', group: '설정' },
+          { label: '회원 탈퇴', href: '/my/account/delete', group: '설정' },
+        ]
+        return [
+          ...companyAccountRoutes,
+          ...subscriptionRoutes,
+          ...projectHistoryRoutes,
+          ...settingsRoutes,
+        ]
+      }
+      
+      if (isFreelancer) {
+        const profileRoutes = [
+          { label: '프로필 보기/수정', href: '/my/profile', group: '내 프로필' },
+          { label: '받은 팀 초대', href: '/my/team-invites', group: '내 프로필' },
+        ]
+        const proposalRoutes = [
+          { label: '받은 프로젝트 제안', href: '/my/project-proposals', group: '제안 & 메시지' },
+          { label: '보낸 견적서 (매니저)', href: '/my/estimates-dashboard', group: '제안 & 메시지' },
+        ]
+        const interestRoutes = [
+          { label: '관심 프로젝트', href: '/my/bookmarked-projects', group: '관심항목' },
+          { label: '관심 기업', href: '/my/bookmarked-companies', group: '관심항목' },
+        ]
+        const accountRoutes = [
+          { label: '로그인/보안', href: '/my/account/security', group: '계정관리' },
+          { label: '알림 설정', href: '/my/account/notifications', group: '계정관리' },
+        ]
+        const teamRoutes = []
+        if (account?.role === 'MANAGER') {
+          teamRoutes.push(
+            { label: '팀 프로필 조회', href: '/team-profile', group: '팀' },
+            { label: '팀 프로젝트 확인', href: '/team-projects', group: '팀' }
+          )
+        }
+        return [
+          ...profileRoutes,
+          ...proposalRoutes,
+          ...interestRoutes,
+          ...accountRoutes,
+          ...teamRoutes,
+        ]
+      }
+    }
+    
+    // 마이페이지가 아닌 경우 기본 네비게이션 메뉴
     if (activeProfileType === 'COMPANY') {
       return [
         { label: '내 프로젝트 목록', href: '/enterprise/my-counsel' },
         { label: '프로젝트 상담 신청', href: '/enterprise/counsel-form' },
       ]
     }
-    return [
+    
+    // 프리랜서 프로필인 경우 팀 메뉴 추가
+    const freelancerRoutes = [
       { label: '프로젝트 찾기', href: '/search-projects' },
       { label: '메이커 검색', href: '/search-makers' },
     ]
-  }
+    
+    if (activeProfileType === 'FREELANCER' && activeRole === 'MANAGER') {
+      freelancerRoutes.push(
+        { label: '팀 프로필 조회', href: '/team-profile' },
+        { label: '팀 프로젝트 확인', href: '/team-projects' }
+      )
+    }
+    
+    return freelancerRoutes
+  }, [isMyPage, account, activeProfileType, activeRole])
 
   return (
     <>
@@ -335,27 +426,84 @@ const Header = () => {
                   <ProfileSwitchButton />
                 </div>
               )}
+              
+              {/* 알림 메뉴 (모바일에서도 표시) */}
+              {user && (
+                <div className="pb-4 border-b border-gray-200">
+                  <Link
+                    href="/my/messages"
+                    onClick={() => setShowMobileMenu(false)}
+                    className="flex items-center gap-3 px-4 py-3 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    <Bell className="w-5 h-5" />
+                    <span>알림</span>
+                    {unreadCount > 0 && (
+                      <span className="ml-auto bg-palette-blue-50 text-white text-xs font-semibold px-2 py-1 rounded-full min-w-[20px] text-center">
+                        {unreadCount}
+                      </span>
+                    )}
+                  </Link>
+                </div>
+              )}
 
               {/* 네비게이션 메뉴 */}
               <nav className="space-y-2">
-                {getMobileRoutes().map((route) => (
-                  <Link
-                    key={route.href}
-                    href={route.href}
-                    onClick={() => setShowMobileMenu(false)}
-                    className={`block px-4 py-3 rounded-lg transition-colors ${
-                      pathname === route.href
-                        ? 'bg-gray-100 text-palette-coolNeutral-20 font-semibold'
-                        : 'text-gray-700 hover:bg-gray-50'
-                    }`}
-                  >
-                    {route.label}
-                  </Link>
-                ))}
+                {isMyPage && account && account.role ? (
+                  // 마이페이지 메뉴 (그룹별로 표시)
+                  (() => {
+                    const routes = getMobileRoutes as Array<{ label: string; href: string; group?: string }>
+                    const groupedRoutes = routes.reduce((acc, route) => {
+                      const group = route.group || '기타'
+                      if (!acc[group]) {
+                        acc[group] = []
+                      }
+                      acc[group].push(route)
+                      return acc
+                    }, {} as Record<string, typeof routes>)
+                    
+                    return Object.entries(groupedRoutes).map(([groupName, groupRoutes]) => (
+                      <div key={groupName} className="mb-6">
+                        <h3 className="text-sm font-semibold text-gray-900 mb-2 px-4">{groupName}</h3>
+                        <div className="space-y-1">
+                          {groupRoutes.map((route) => (
+                            <Link
+                              key={route.href}
+                              href={route.href}
+                              onClick={() => setShowMobileMenu(false)}
+                              className={`block px-4 py-2.5 rounded-lg transition-colors ${
+                                pathname === route.href
+                                  ? 'bg-gray-100 text-palette-coolNeutral-20 font-semibold'
+                                  : 'text-gray-700 hover:bg-gray-50'
+                              }`}
+                            >
+                              {route.label}
+                            </Link>
+                          ))}
+                        </div>
+                      </div>
+                    ))
+                  })()
+                ) : (
+                  // 기본 네비게이션 메뉴
+                  (getMobileRoutes as Array<{ label: string; href: string }>).map((route) => (
+                    <Link
+                      key={route.href}
+                      href={route.href}
+                      onClick={() => setShowMobileMenu(false)}
+                      className={`block px-4 py-3 rounded-lg transition-colors ${
+                        pathname === route.href
+                          ? 'bg-gray-100 text-palette-coolNeutral-20 font-semibold'
+                          : 'text-gray-700 hover:bg-gray-50'
+                      }`}
+                    >
+                      {route.label}
+                    </Link>
+                  ))
+                )}
               </nav>
 
-              {/* 사용자 메뉴 (로그인한 경우) */}
-              {user && (
+              {/* 사용자 메뉴 (로그인한 경우, 마이페이지가 아닐 때만 표시) */}
+              {user && !isMyPage && (
                 <>
                   <div className="pt-4 border-t border-gray-200 space-y-2">
                     <Link
@@ -386,6 +534,22 @@ const Header = () => {
                     </button>
                   </div>
                 </>
+              )}
+              
+              {/* 로그아웃 버튼 (마이페이지에서만 표시) */}
+              {user && isMyPage && (
+                <div className="pt-4 border-t border-gray-200">
+                  <button
+                    onClick={() => {
+                      handleLogout()
+                      setShowMobileMenu(false)
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-red-600 hover:bg-red-50 transition-colors"
+                  >
+                    <LogOut className="w-5 h-5" />
+                    <span>로그아웃</span>
+                  </button>
+                </div>
               )}
             </div>
           </div>
