@@ -9,26 +9,59 @@ import { User as SupabaseUser } from '@supabase/supabase-js'
 import Navigator from '@/components/Navigator'
 import Logo from '@/components/common/Logo'
 import ProfileSwitchButton from '@/components/ProfileSwitchButton'
+import { getUserProfiles } from '@/apis/profile-refactor.service'
+import { Database } from '@/types/supabase'
+
+type ProfileType = Database['public']['Enums']['profile_type']
 
 const Header = () => {
   const router = useRouter()
   const pathname = usePathname()
   const [user, setUser] = useState<SupabaseUser | null>(null)
   const [showUserMenu, setShowUserMenu] = useState(false)
+  const [activeProfileType, setActiveProfileType] = useState<ProfileType | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const supabase = createSupabaseBrowserClient()
   
   // 현재 경로가 auth 페이지인지 확인
   const isAuthPage = pathname?.startsWith('/auth')
 
+  const loadActiveProfile = async () => {
+    try {
+      const profiles = await getUserProfiles()
+      const validProfiles = (profiles as any[]).filter((p: any) => p.profile_type !== null)
+      const active = validProfiles.find((p: any) => p.is_active)
+      if (active) {
+        setActiveProfileType(active.profile_type)
+      } else {
+        setActiveProfileType(null)
+      }
+    } catch (error) {
+      console.error('프로필 로드 실패:', error)
+    }
+  }
+
   useEffect(() => {
     const getUserInfo = async () => {
       const result = await supabase.auth.getUser()
-      if (result?.data?.user) setUser(result?.data?.user)
+      if (result?.data?.user) {
+        setUser(result?.data?.user)
+        await loadActiveProfile()
+      }
     }
 
     getUserInfo()
-  }, [supabase])
+
+    // 프로필 전환 이벤트 리스너
+    const handleProfileSwitch = () => {
+      loadActiveProfile()
+    }
+    window.addEventListener('profileSwitched', handleProfileSwitch)
+
+    return () => {
+      window.removeEventListener('profileSwitched', handleProfileSwitch)
+    }
+  }, [supabase, pathname]) // pathname도 의존성에 추가하여 프로필 전환 시 업데이트
 
   // 외부 클릭 시 메뉴 닫기
   useEffect(() => {
@@ -58,11 +91,11 @@ const Header = () => {
     <div className="relative z-[800] w-full h-[64px] flex items-center border-b-[1px] border-solid border-[rgba(0,0,0,0.08)] px-3">
       <div className="absolute inset-0 z-[-1] bg-white/88 backdrop-saturate-[1.5] backdrop-blur-[32px]"></div>
       {/* 3xl 이상 정의하고 반응형 여기다 집어넣기 */}
-      <header className="flex max-w-[1024px] h-full items-center mx-auto px-4">
-        <nav className="flex items-center h-full gap-8">
+      <header className="flex max-w-[1024px] h-full items-center mx-auto px-4 w-full">
+        <div className="flex items-center h-full gap-8 flex-1">
           <Logo />
-          <Navigator />
-        </nav>
+          <Navigator profileType={activeProfileType || undefined} />
+        </div>
         <div className="ml-auto">
           {user ? (
             <div className="flex items-center gap-4">

@@ -26,6 +26,20 @@ const SideNavigator = () => {
       }
     }
     loadProfile()
+    
+    // 프로필 전환 이벤트 리스너
+    const handleProfileSwitch = async () => {
+      try {
+        await fetchMyProfileData()
+      } catch (error) {
+        console.error('프로필 새로고침 실패:', error)
+      }
+    }
+    window.addEventListener('profileSwitched', handleProfileSwitch)
+    
+    return () => {
+      window.removeEventListener('profileSwitched', handleProfileSwitch)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

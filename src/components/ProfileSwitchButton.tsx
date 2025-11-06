@@ -1,12 +1,11 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { getUserProfiles, switchActiveProfile } from '@/apis/profile-refactor.service'
 import { Database } from '@/types/supabase'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
-import { ChevronDown, User, Building2, Plus } from 'lucide-react'
+import { User, Building2 } from 'lucide-react'
 
 type ProfileType = Database['public']['Enums']['profile_type']
 type Profile = {
@@ -20,13 +19,24 @@ type Profile = {
 
 export default function ProfileSwitchButton() {
   const router = useRouter()
+  const pathname = usePathname()
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [activeProfile, setActiveProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
-  const [showDialog, setShowDialog] = useState(false)
+  const [switching, setSwitching] = useState(false)
 
   useEffect(() => {
     loadProfiles()
+    
+    // 프로필 전환 이벤트 리스너
+    const handleProfileSwitch = () => {
+      loadProfiles()
+    }
+    window.addEventListener('profileSwitched', handleProfileSwitch)
+
+    return () => {
+      window.removeEventListener('profileSwitched', handleProfileSwitch)
+    }
   }, [])
 
   const loadProfiles = async () => {
@@ -44,16 +54,34 @@ export default function ProfileSwitchButton() {
     }
   }
 
-  const handleSwitch = async (profileId: string) => {
+  const handleToggle = async () => {
+    if (profiles.length < 2 || !activeProfile || switching) {
+      return
+    }
+
     try {
-      await switchActiveProfile(profileId)
+      setSwitching(true)
+      
+      // 다른 프로필 찾기
+      const otherProfile = profiles.find((p) => p.profile_id !== activeProfile.profile_id)
+      if (!otherProfile) {
+        return
+      }
+
+      // 프로필 타입으로 전환 (FREELANCER 또는 COMPANY)
+      await switchActiveProfile(otherProfile.profile_type as string)
       await loadProfiles()
+      
+      // 프로필 전환 이벤트 발생 (Header에서 수신)
+      window.dispatchEvent(new Event('profileSwitched'))
       
       // 프로필 페이지 새로고침
       router.refresh()
     } catch (error: any) {
-      console.error(' 실패:', error)
+      console.error('프로필 전환 실패:', error)
       alert(`프로필 전환에 실패했습니다: ${error.message || error}`)
+    } finally {
+      setSwitching(false)
     }
   }
 
@@ -69,8 +97,8 @@ export default function ProfileSwitchButton() {
     return null
   }
 
+  // 프로필이 1개만 있으면 프로필 관리로 이동
   if (profiles.length <= 1) {
-    // 프로필이 1개만 있으면 간단한 버튼
     return (
       <Button
         variant="outline"
@@ -83,88 +111,97 @@ export default function ProfileSwitchButton() {
     )
   }
 
-  return (
-    <>
-      <Button
-        variant="outline"
-        onClick={() => setShowDialog(true)}
-        className="flex items-center gap-2 text-sm"
-      >
-        {getProfileIcon(activeProfile.profile_type)}
-        <span>{activeProfile.username} ({getProfileLabel(activeProfile.profile_type)})</span>
-        <ChevronDown className="w-4 h-4" />
-      </Button>
+  // 프로필이 2개 이상이면 토글로 전환
+  const freelancerProfile = profiles.find((p) => p.profile_type === 'FREELANCER')
+  const companyProfile = profiles.find((p) => p.profile_type === 'COMPANY')
+  const isFreelancerActive = activeProfile?.profile_type === 'FREELANCER'
 
-      <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>프로필 전환</DialogTitle>
-          </DialogHeader>
-          <DialogDescription>
-            사용할 프로필을 선택하세요. 프리랜서는 프로젝트 수행, 기업은 프로젝트 의뢰 및 견적 요청을 담당합니다.
-          </DialogDescription>
-          
-          <div className="space-y-3 py-4">
-            
-            {profiles.map((profile) => (
-              <button
-                key={profile.profile_id}
-                onClick={() => {
-                  handleSwitch(profile.profile_id)
-                  setShowDialog(false)
-                }}
-                className={`w-full p-4 border-2 rounded-lg text-left transition-all ${
-                  profile.is_active
-                    ? 'border-blue-500 bg-blue-50'
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    {getProfileIcon(profile.profile_type)}
-                    <div>
-                      <div className="font-semibold text-gray-900">
-                        {profile.username}
-                      </div>
-                      <div className="text-sm text-gray-600">
-                        {getProfileLabel(profile.profile_type)}
-                      </div>
-                    </div>
-                  </div>
-                  {profile.is_active && (
-                    <span className="text-xs text-blue-600 font-medium">활성</span>
-                  )}
-                </div>
-              </button>
-            ))}
-            
-            <div className="border-t pt-4 mt-4 space-y-2">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  router.push('/my/profile/manage')
-                  setShowDialog(false)
-                }}
-                className="w-full"
-              >
-                프로필 관리
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  router.push('/my/profile/create')
-                  setShowDialog(false)
-                }}
-                className="w-full"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                새 프로필 생성
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </>
+  return (
+    <div className="flex items-center gap-2">
+      <div className="relative inline-flex items-center bg-gray-100 rounded-lg p-1 border border-gray-200">
+        <button
+          onClick={async () => {
+            if (freelancerProfile && !isFreelancerActive && !switching) {
+              try {
+                setSwitching(true)
+                await switchActiveProfile('FREELANCER')
+                await loadProfiles()
+                window.dispatchEvent(new Event('profileSwitched'))
+                
+                // my 페이지에 있으면 새로고침
+                if (pathname?.startsWith('/my')) {
+                  window.location.reload()
+                } else {
+                  router.refresh()
+                }
+              } catch (error: any) {
+                console.error('프로필 전환 실패:', error)
+                alert(`프로필 전환에 실패했습니다: ${error.message || error}`)
+              } finally {
+                setSwitching(false)
+              }
+            }
+          }}
+          disabled={switching || !freelancerProfile}
+          className={`
+            relative px-4 py-2 rounded-md text-sm font-medium transition-all duration-200
+            flex items-center gap-2 min-w-[100px] justify-center
+            ${isFreelancerActive
+              ? 'bg-white text-gray-900 shadow-sm'
+              : 'text-gray-600 hover:text-gray-900'
+            }
+            ${switching || !freelancerProfile ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+          `}
+        >
+          <User className="w-4 h-4" />
+          <span>프리랜서</span>
+        </button>
+        <button
+          onClick={async () => {
+            if (companyProfile && !isFreelancerActive && !switching) {
+              // 이미 기업 프로필이 활성화되어 있으면 전환하지 않음
+              return
+            }
+            if (companyProfile && isFreelancerActive && !switching) {
+              try {
+                setSwitching(true)
+                await switchActiveProfile('COMPANY')
+                await loadProfiles()
+                window.dispatchEvent(new Event('profileSwitched'))
+                
+                // my 페이지에 있으면 새로고침
+                if (pathname?.startsWith('/my')) {
+                  window.location.reload()
+                } else {
+                  router.refresh()
+                }
+              } catch (error: any) {
+                console.error('프로필 전환 실패:', error)
+                alert(`프로필 전환에 실패했습니다: ${error.message || error}`)
+              } finally {
+                setSwitching(false)
+              }
+            }
+          }}
+          disabled={switching || !companyProfile}
+          className={`
+            relative px-4 py-2 rounded-md text-sm font-medium transition-all duration-200
+            flex items-center gap-2 min-w-[100px] justify-center
+            ${!isFreelancerActive
+              ? 'bg-white text-gray-900 shadow-sm'
+              : 'text-gray-600 hover:text-gray-900'
+            }
+            ${switching || !companyProfile ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+          `}
+        >
+          <Building2 className="w-4 h-4" />
+          <span>기업</span>
+        </button>
+      </div>
+      {switching && (
+        <span className="text-xs text-gray-500">전환 중...</span>
+      )}
+    </div>
   )
 }
 
