@@ -24,7 +24,7 @@ const Navigator = ({ profileType }: NavigatorProps) => {
   const [showTeamMenu, setShowTeamMenu] = useState(false)
   const teamMenuRef = useRef<HTMLDivElement>(null)
 
-  // 외부 클릭 시 메뉴 닫기
+  // 외부 클릭 시 메뉴 닫기 (드롭다운 메뉴가 있을 때만)
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (teamMenuRef.current && !teamMenuRef.current.contains(event.target as Node)) {
@@ -74,22 +74,14 @@ const Navigator = ({ profileType }: NavigatorProps) => {
         isActive: pathname === '/search-makers',
         href: '/search-makers',
       },
-      {
-        icon: '',
-        label: '팀',
-        isActive: pathname?.startsWith('/team-profile') || pathname?.startsWith('/team-projects') || false,
-        href: null, // 드롭다운 메뉴이므로 href 없음
-        isDropdown: true,
-      },
+      // 프리랜서 프로필일 경우 팀 메뉴 제외
     ]
   }, [pathname, profileType])
-
-  const isTeamActive = pathname?.startsWith('/team-profile') || pathname?.startsWith('/team-projects')
 
   return (
     <nav className="flex space-x-10">
       {routes.map((route) => {
-        if (route.isDropdown) {
+        if ('isDropdown' in route && route.isDropdown) {
           return (
             <div
               key={route.label}
@@ -99,7 +91,7 @@ const Navigator = ({ profileType }: NavigatorProps) => {
               <button
                 onClick={() => setShowTeamMenu(!showTeamMenu)}
                 className={`text-subtitle4 transition-colors duration-200 flex items-center gap-1 ${
-                  isTeamActive
+                  route.isActive
                     ? 'text-palette-coolNeutral-20'
                     : 'text-palette-coolNeutral-70 hover:text-palette-coolNeutral-20'
                 }`}
