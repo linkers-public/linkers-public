@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
-import { UserCircleIcon, Bell, LogOut, User, Settings, Menu, X } from 'lucide-react'
+import { UserCircleIcon, Bell, LogOut, User, Settings, Menu, X, Mail } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { createSupabaseBrowserClient } from '@/supabase/supabase-client'
 import { User as SupabaseUser } from '@supabase/supabase-js'
@@ -21,9 +21,12 @@ const Header = () => {
   const [user, setUser] = useState<SupabaseUser | null>(null)
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [showMobileMenu, setShowMobileMenu] = useState(false)
+  const [showNotificationMenu, setShowNotificationMenu] = useState(false)
   const [activeProfileType, setActiveProfileType] = useState<ProfileType | null>(null)
+  const [unreadCount, setUnreadCount] = useState(0)
   const menuRef = useRef<HTMLDivElement>(null)
   const mobileMenuRef = useRef<HTMLDivElement>(null)
+  const notificationMenuRef = useRef<HTMLDivElement>(null)
   const supabase = createSupabaseBrowserClient()
   
   // 현재 경로가 auth 페이지인지 확인
@@ -44,12 +47,58 @@ const Header = () => {
     }
   }
 
+  const loadNotifications = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      let count = 0
+
+      // 팀 초대 조회 (읽지 않은 것만)
+      const { data: invites } = await supabase
+        .from('team_members')
+        .select('id, status')
+        .eq('maker_id', user.id)
+        .is('status', null)
+
+      if (invites) {
+        count += invites.length
+      }
+
+      // 기업 제안 조회 (읽지 않은 것만)
+      const { data: profile } = await supabase
+        .from('accounts')
+        .select('profile_id')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .is('deleted_at', null)
+        .single()
+
+      if (profile) {
+        const { data: proposals } = await supabase
+          .from('project_members')
+          .select('id, status')
+          .eq('profile_id', profile.profile_id)
+          .is('status', null)
+
+        if (proposals) {
+          count += proposals.length
+        }
+      }
+
+      setUnreadCount(count)
+    } catch (error) {
+      console.error('알람 로드 실패:', error)
+    }
+  }
+
   useEffect(() => {
     const getUserInfo = async () => {
       const result = await supabase.auth.getUser()
       if (result?.data?.user) {
         setUser(result?.data?.user)
         await loadActiveProfile()
+        await loadNotifications()
       }
     }
 
@@ -58,11 +107,18 @@ const Header = () => {
     // 프로필 전환 이벤트 리스너
     const handleProfileSwitch = () => {
       loadActiveProfile()
+      loadNotifications()
     }
     window.addEventListener('profileSwitched', handleProfileSwitch)
 
+    // 주기적으로 알람 확인 (30초마다)
+    const interval = setInterval(() => {
+      loadNotifications()
+    }, 30000)
+
     return () => {
       window.removeEventListener('profileSwitched', handleProfileSwitch)
+      clearInterval(interval)
     }
   }, [supabase, pathname]) // pathname도 의존성에 추가하여 프로필 전환 시 업데이트
 
@@ -75,16 +131,19 @@ const Header = () => {
       if (mobileMenuRef.current && !mobileMenuRef.current.contains(event.target as Node)) {
         setShowMobileMenu(false)
       }
+      if (notificationMenuRef.current && !notificationMenuRef.current.contains(event.target as Node)) {
+        setShowNotificationMenu(false)
+      }
     }
 
-    if (showUserMenu || showMobileMenu) {
+    if (showUserMenu || showMobileMenu || showNotificationMenu) {
       document.addEventListener('mousedown', handleClickOutside)
     }
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)
     }
-  }, [showUserMenu, showMobileMenu])
+  }, [showUserMenu, showMobileMenu, showNotificationMenu])
 
   // 모바일 메뉴 닫기 (경로 변경 시)
   useEffect(() => {
@@ -132,14 +191,47 @@ const Header = () => {
                   <ProfileSwitchButton />
                 </div>
                 {/* 알림 아이콘 - 모바일에서 숨김 */}
-                <div className="hidden md:block relative">
+                <div className="hidden md:block relative" ref={notificationMenuRef}>
                   <Bell
                     size={24}
                     color="#4a4a4a"
                     strokeWidth={1.5}
                     className="cursor-pointer"
+                    onClick={() => {
+                      setShowNotificationMenu(!showNotificationMenu)
+                      setShowUserMenu(false)
+                    }}
                   />
-                  <div className="absolute top-0 right-0 w-[10px] h-[10px] bg-palette-blue-50 rounded-full border-2 border-white"></div>
+                  {unreadCount > 0 && (
+                    <div className="absolute top-0 right-0 w-[10px] h-[10px] bg-palette-blue-50 rounded-full border-2 border-white"></div>
+                  )}
+                  {showNotificationMenu && (
+                    <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50 max-h-96 overflow-y-auto">
+                      <div className="px-4 py-2 border-b border-gray-200">
+                        <h3 className="text-sm font-semibold text-gray-900">알림</h3>
+                      </div>
+                      <div className="py-2">
+                        <button
+                          onClick={() => {
+                            router.push('/my/messages')
+                            setShowNotificationMenu(false)
+                          }}
+                          className="w-full px-4 py-3 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3"
+                        >
+                          <Mail className="w-4 h-4 text-gray-400" />
+                          <div className="flex-1">
+                            <p className="font-medium">모든 메시지 보기</p>
+                            <p className="text-xs text-gray-500 mt-1">팀 초대 및 기업 제안 확인</p>
+                          </div>
+                        </button>
+                      </div>
+                      {unreadCount === 0 && (
+                        <div className="px-4 py-8 text-center text-sm text-gray-500">
+                          새로운 알림이 없습니다
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
                 {/* 사용자 메뉴 */}
                 <div className="relative" ref={menuRef}>
