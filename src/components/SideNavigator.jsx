@@ -44,24 +44,9 @@ const SideNavigator = () => {
   }, [])
 
   const routes = useMemo(() => {
-    // 프로필이 로드되지 않았거나 없는 경우 기본 메뉴 표시
+    // 프로필이 로드되지 않았거나 없는 경우
     if (!account || !account.role) {
-      return [
-        {
-          icon: '',
-          label: '내 프로필',
-          type: 'my',
-          isActive: pathname === '/my/profile',
-          href: '/my/profile',
-        },
-        {
-          icon: '',
-          label: '프로필 관리',
-          type: 'my',
-          isActive: pathname === '/my/profile/manage',
-          href: '/my/profile/manage',
-        },
-      ]
+      return []
     }
 
     // 프로필 타입에 따라 분기
@@ -73,31 +58,10 @@ const SideNavigator = () => {
       return [
         {
           icon: '',
-          label: '내 프로필',
-          type: 'my',
-          isActive: pathname === '/my/profile',
-          href: '/my/profile',
-        },
-        {
-          icon: '',
-          label: '프로필 관리',
-          type: 'my',
-          isActive: pathname === '/my/profile/manage',
-          href: '/my/profile/manage',
-        },
-        {
-          icon: '',
           label: '내 프로젝트 목록',
           type: 'my',
           isActive: pathname === '/enterprise/my-counsel',
           href: '/enterprise/my-counsel',
-        },
-        {
-          icon: '',
-          label: '상담 현황',
-          type: 'my',
-          isActive: pathname === '/my/counsel',
-          href: '/my/counsel',
         },
         {
           icon: '',
@@ -114,34 +78,6 @@ const SideNavigator = () => {
       const baseRoutes = [
         {
           icon: '',
-          label: '내 프로필',
-          type: 'my',
-          isActive: pathname === '/my/profile',
-          href: '/my/profile',
-        },
-        {
-          icon: '',
-          label: '프로필 관리',
-          type: 'my',
-          isActive: pathname === '/my/profile/manage',
-          href: '/my/profile/manage',
-        },
-        {
-          icon: '',
-          label: '포트폴리오',
-          type: 'my',
-          isActive: pathname === '/my/profile/portfolio',
-          href: '/my/profile/portfolio',
-        },
-        {
-          icon: '',
-          label: '경력 인증 배지',
-          type: 'my',
-          isActive: pathname === '/my/profile/badges',
-          href: '/my/profile/badges',
-        },
-        {
-          icon: '',
           label: '쪽지함',
           type: 'my',
           isActive: pathname === '/my/messages',
@@ -153,13 +89,6 @@ const SideNavigator = () => {
           type: 'my',
           isActive: pathname === '/my/assigned-projects',
           href: '/my/assigned-projects',
-        },
-        {
-          icon: '',
-          label: '제안 현황',
-          type: 'my',
-          isActive: pathname === '/my/proposal',
-          href: '/my/proposal',
         },
       ]
 
@@ -187,22 +116,7 @@ const SideNavigator = () => {
     }
 
     // 기본 메뉴 (프로필 타입이 없는 경우)
-    return [
-      {
-        icon: '',
-        label: '내 프로필',
-        type: 'my',
-        isActive: pathname === '/my/profile',
-        href: '/my/profile',
-      },
-      {
-        icon: '',
-        label: '프로필 관리',
-        type: 'my',
-        isActive: pathname === '/my/profile/manage',
-        href: '/my/profile/manage',
-      },
-    ]
+    return []
   }, [pathname, account?.role, account?.profile_type])
 
   // 로딩 중이거나 라우트가 없어도 최소한 기본 메뉴는 표시

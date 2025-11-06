@@ -107,7 +107,7 @@ const CareerUpdateClient = ({ id }: { id: string }) => {
 
   return (
     <div className="w-full p-4 md:p-6 -mt-4 md:-mt-8">
-      <h1 className="text-2xl font-bold mb-6">경력 수정</h1>
+      <h1 className="text-xl md:text-2xl font-bold mb-4 md:mb-6">경력 수정</h1>
 
       <form
         onSubmit={handleSubmit}

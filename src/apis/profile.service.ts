@@ -128,7 +128,31 @@ export const createEducation = async (data: any) => {
 }
 export const deleteEducation = async (id: string) => {}
 
-export const updateLicense = async (data: any) => {}
+export const updateLicense = async (id: number, data: any) => {
+  const supabase = createSupabaseBrowserClient()
+
+  console.log('Update license data:', data)
+
+  const { data: sessionData, error: sessionError } =
+    await supabase.auth.getSession()
+  if (!sessionData.session) {
+    throw new Error('인증되지 않은 사용자입니다.')
+  }
+
+  const { data: license, error } = await supabase
+    .from('account_license')
+    .update(data)
+    .eq('id', id)
+    .select('*')
+    .single()
+
+  if (error) {
+    console.error('Update error:', error)
+  }
+
+  return { data: license, error }
+}
+
 export const createLicense = async (data: any) => {
   const supabase = createSupabaseBrowserClient()
 
@@ -169,7 +193,26 @@ export const createLicense = async (data: any) => {
 
   return { data: license, error }
 }
-export const deleteLicense = async (id: string) => {}
+export const deleteLicense = async (id: number) => {
+  const supabase = createSupabaseBrowserClient()
+
+  const { data: sessionData, error: sessionError } =
+    await supabase.auth.getSession()
+  if (!sessionData.session) {
+    throw new Error('인증되지 않은 사용자입니다.')
+  }
+
+  const { error } = await supabase
+    .from('account_license')
+    .delete()
+    .eq('id', id)
+
+  if (error) {
+    console.error('Delete error:', error)
+  }
+
+  return { error }
+}
 
 export const updateProfile = async (data: {
   bio?: string
@@ -178,6 +221,8 @@ export const updateProfile = async (data: {
   expertise?: string[]
   contact_phone?: string | null
   contact_website?: string | null
+  profile_image_url?: string | null
+  skills?: string[]
 }) => {
   const supabase = createSupabaseBrowserClient()
 
@@ -242,6 +287,8 @@ export const updateProfile = async (data: {
   if (data.expertise !== undefined) updateData.expertise = data.expertise
   if (data.contact_phone !== undefined) updateData.contact_phone = data.contact_phone
   if (data.contact_website !== undefined) updateData.contact_website = data.contact_website
+  if (data.profile_image_url !== undefined) updateData.profile_image_url = data.profile_image_url
+  if (data.skills !== undefined) updateData.skills = data.skills
 
   // profile_id로 업데이트 (배열 결과 사용)
   const { data: updatedProfiles, error } = await supabase

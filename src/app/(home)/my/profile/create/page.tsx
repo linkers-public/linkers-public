@@ -132,25 +132,25 @@ function CreateProfilePageContent() {
   }
 
   return (
-    <div className="w-full py-8 px-4">
+    <div className="w-full py-4 md:py-6 px-2 md:px-4">
       <Button
         variant="outline"
         onClick={() => router.back()}
-        className="mb-6"
+        className="mb-4 md:mb-6"
       >
         <ArrowLeft className="w-4 h-4 mr-2" />
         돌아가기
       </Button>
 
-      <div className="bg-white rounded-lg shadow-sm border p-6 md:p-8">
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">새 프로필 생성</h1>
-        <p className="text-gray-600 mb-8">
+      <div className="bg-white rounded-lg shadow-sm border p-4 md:p-6 lg:p-8">
+        <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-2">새 프로필 생성</h1>
+        <p className="text-gray-600 mb-6 md:mb-8">
           {profileType 
             ? `${profileType === 'FREELANCER' ? '프리랜서' : '기업'} 프로필을 생성하세요.`
             : '프리랜서 또는 기업 프로필을 생성하세요. 한 유저당 각각 최대 1개씩 생성할 수 있습니다.'}
         </p>
 
-        <form onSubmit={handleSubmit} className="space-y-8">
+        <form onSubmit={handleSubmit} className="space-y-6 md:space-y-8">
           {/* 프로필 타입 선택 */}
           {!profileType && (
             <div>
@@ -161,7 +161,7 @@ function CreateProfilePageContent() {
                 <button
                   type="button"
                   onClick={() => handleProfileTypeSelect('FREELANCER')}
-                  className={`p-6 border-2 rounded-lg text-left transition-all ${
+                  className={`p-4 md:p-6 border-2 rounded-lg text-left transition-all ${
                     profileType === 'FREELANCER'
                       ? 'border-blue-500 bg-blue-50'
                       : 'border-gray-200 hover:border-gray-300'
@@ -177,7 +177,7 @@ function CreateProfilePageContent() {
                 <button
                   type="button"
                   onClick={() => handleProfileTypeSelect('COMPANY')}
-                  className={`p-6 border-2 rounded-lg text-left transition-all ${
+                  className={`p-4 md:p-6 border-2 rounded-lg text-left transition-all ${
                     profileType === 'COMPANY'
                       ? 'border-blue-500 bg-blue-50'
                       : 'border-gray-200 hover:border-gray-300'

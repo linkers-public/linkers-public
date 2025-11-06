@@ -315,14 +315,14 @@ export default function EstimatesDashboardClient() {
   }
 
   return (
-    <div className="w-full py-8 px-4">
+    <div className="w-full py-4 md:py-6 px-2 md:px-4">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">받은 견적서 대시보드</h1>
+        <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-2">받은 견적서 대시보드</h1>
         <p className="text-gray-600">제안받은 견적서를 검토하고 비교하세요</p>
       </div>
 
       {/* 필터 및 정렬 */}
-      <div className="bg-white rounded-lg shadow-sm border p-4 mb-6">
+      <div className="bg-white rounded-lg shadow-sm border p-3 md:p-4 mb-4 md:mb-6">
         <div className="flex flex-wrap gap-4 items-center">
           {/* 분야 필터 */}
           <div className="flex items-center gap-2">
@@ -390,7 +390,7 @@ export default function EstimatesDashboardClient() {
           </Button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
           {filteredEstimates.map((estimate) => {
             const daysUntilDeadline = getDaysUntilDeadline(estimate.estimate_due_date || estimate.counsel?.due_date)
             const isUrgent = daysUntilDeadline !== null && daysUntilDeadline <= 3 && daysUntilDeadline >= 0
@@ -398,7 +398,7 @@ export default function EstimatesDashboardClient() {
             return (
               <div
                 key={estimate.estimate_id}
-                className="bg-white rounded-lg shadow-sm border p-5 hover:shadow-md transition-shadow cursor-pointer"
+                className="bg-white rounded-lg shadow-sm border p-4 md:p-5 hover:shadow-md transition-shadow cursor-pointer"
                 onClick={() => {
                   setSelectedEstimate(estimate)
                   setShowDetailDialog(true)

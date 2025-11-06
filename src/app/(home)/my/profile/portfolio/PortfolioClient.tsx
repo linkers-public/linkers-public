@@ -243,8 +243,8 @@ export default function PortfolioClient() {
   }
 
   return (
-    <div className="w-full py-8 px-4">
-      <div className="mb-6 flex items-center justify-between">
+    <div className="w-full py-4 md:py-6 px-2 md:px-4">
+      <div className="mb-4 md:mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex items-center gap-4">
           <Button
             variant="outline"
@@ -254,7 +254,7 @@ export default function PortfolioClient() {
             <ArrowLeft className="w-4 h-4" />
             돌아가기
           </Button>
-          <h1 className="text-2xl font-bold text-gray-900">포트폴리오</h1>
+          <h1 className="text-xl md:text-2xl font-bold text-gray-900">포트폴리오</h1>
         </div>
         <Button
           onClick={() => {
@@ -277,9 +277,9 @@ export default function PortfolioClient() {
       </div>
 
       {portfolios.length === 0 ? (
-        <div className="bg-white rounded-lg shadow-sm border p-12 text-center">
+        <div className="bg-white rounded-lg shadow-sm border p-6 md:p-12 text-center">
           <div className="text-6xl mb-6">📁</div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">
+          <h2 className="text-lg md:text-xl font-semibold text-gray-900 mb-2">
             포트폴리오가 없습니다
           </h2>
           <p className="text-gray-600 mb-6">
@@ -294,11 +294,11 @@ export default function PortfolioClient() {
           </Button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
           {portfolios.map((portfolio) => (
             <div
               key={portfolio.id}
-              className="bg-white rounded-lg shadow-sm border p-6 hover:shadow-md transition-shadow"
+              className="bg-white rounded-lg shadow-sm border p-4 md:p-6 hover:shadow-md transition-shadow"
             >
               {portfolio.image_url && (
                 <img

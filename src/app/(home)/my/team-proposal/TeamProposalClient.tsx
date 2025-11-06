@@ -11,7 +11,8 @@ import {
 import { toast } from '@/hooks/use-toast'
 import { useMakerFilter } from '@/hooks/use-maker-filter'
 import { ManageableMakerCard } from '@/components/ManageableMakerCard'
-import { fetchBookmarkList, unbookmark } from '@/apis/proposal.service'
+import { fetchBookmarkList, unbookmark, propose } from '@/apis/proposal.service'
+import { ProposalDialog } from '@/components/ProposalDialog'
 
 //TODO - ZOD 반영
 interface Maker {
@@ -38,17 +39,15 @@ interface Bookmark {
   proposal_status: boolean
 }
 
-type ProposalStatusFilter = 'PENDING' | 'ACCEPTED' | 'REJECTED'
-
 const TeamProposalClient = () => {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<PostgrestError | null>(null)
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([])
   const { filters, handleFilterChange } = useMakerFilter()
-  const [selectedStatuses, setSelectedStatuses] = useState<
-    ProposalStatusFilter[]
-  >(['PENDING', 'REJECTED'])
+  const [showProposalDialog, setShowProposalDialog] = useState(false)
+  const [selectedMakerId, setSelectedMakerId] = useState<string | null>(null)
+  const [selectedMakerUsername, setSelectedMakerUsername] = useState<string>('')
 
   useEffect(() => {
     const getBookmarkList = async () => {
@@ -95,7 +94,14 @@ const TeamProposalClient = () => {
     }
   }, [])
 
-  const handlePropose = async (makerId: string) => {}
+  const handlePropose = async (makerId: string) => {
+    const bookmark = bookmarks.find((b) => b.maker_id === makerId)
+    if (bookmark) {
+      setSelectedMakerId(makerId)
+      setSelectedMakerUsername(bookmark.maker.username)
+      setShowProposalDialog(true)
+    }
+  }
 
   if (isLoading)
     return (
@@ -113,57 +119,6 @@ const TeamProposalClient = () => {
       <h3 className="text-h3">내가 찜한 메이커</h3>
 
       <div className="flex flex-col gap-4">
-        <div className="flex gap-2">
-          <div
-            onClick={() => {
-              setSelectedStatuses((prev) =>
-                prev.includes('PENDING')
-                  ? prev.filter((status) => status !== 'PENDING')
-                  : [...prev, 'PENDING'],
-              )
-            }}
-            className={`flex justify-center items-center px-3 py-1 rounded-[12px] text-p3 cursor-pointer ${
-              selectedStatuses.includes('PENDING')
-                ? 'shadow-emphasize'
-                : 'shadow-normal'
-            }`}
-          >
-            대기중
-          </div>
-          <div
-            onClick={() => {
-              setSelectedStatuses((prev) =>
-                prev.includes('ACCEPTED')
-                  ? prev.filter((status) => status !== 'ACCEPTED')
-                  : [...prev, 'ACCEPTED'],
-              )
-            }}
-            className={`flex justify-center items-center px-3 py-1 rounded-[12px] text-p3 cursor-pointer ${
-              selectedStatuses.includes('ACCEPTED')
-                ? 'shadow-emphasize'
-                : 'shadow-normal'
-            }`}
-          >
-            수락됨
-          </div>
-          <div
-            onClick={() => {
-              setSelectedStatuses((prev) =>
-                prev.includes('REJECTED')
-                  ? prev.filter((status) => status !== 'REJECTED')
-                  : [...prev, 'REJECTED'],
-              )
-            }}
-            className={`flex justify-center items-center px-3 py-1 rounded-[12px] text-p3 cursor-pointer ${
-              selectedStatuses.includes('REJECTED')
-                ? 'shadow-emphasize'
-                : 'shadow-normal'
-            }`}
-          >
-            거절됨
-          </div>
-        </div>
-
         <div className="flex gap-2 relative">
           <ExperienceFilter
             value={filters.experience}
@@ -198,6 +153,16 @@ const TeamProposalClient = () => {
           </div>
         )}
       </div>
+
+      {/* 팀 제안 다이얼로그 */}
+      {showProposalDialog && selectedMakerId && (
+        <ProposalDialog
+          open={showProposalDialog}
+          onOpenChange={setShowProposalDialog}
+          makerUsername={selectedMakerUsername}
+          makerId={selectedMakerId}
+        />
+      )}
     </div>
   )
 }

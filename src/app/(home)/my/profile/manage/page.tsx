@@ -87,19 +87,19 @@ export default function ProfileManagePage() {
   }
 
   return (
-    <div className="w-full py-8 px-4">
+    <div className="w-full py-4 md:py-6 px-2 md:px-4">
       <Button
         variant="outline"
         onClick={() => router.back()}
-        className="mb-6"
+        className="mb-4 md:mb-6"
       >
         <ArrowLeft className="w-4 h-4 mr-2" />
         돌아가기
       </Button>
 
-      <div className="bg-white rounded-lg shadow-sm border p-6 md:p-8">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">프로필 관리</h1>
+      <div className="bg-white rounded-lg shadow-sm border p-4 md:p-6 lg:p-8">
+        <div className="mb-4 md:mb-6">
+          <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-2">프로필 관리</h1>
           <p className="text-gray-600">
             프리랜서와 기업 프로필을 관리하고 전환할 수 있습니다.
             <br />
@@ -112,7 +112,7 @@ export default function ProfileManagePage() {
         </div>
 
         {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-600">
+          <div className="mb-4 md:mb-6 p-3 md:p-4 bg-red-50 border border-red-200 rounded-lg text-red-600">
             {error}
           </div>
         )}
@@ -130,7 +130,7 @@ export default function ProfileManagePage() {
                    profiles.map((profile) => (
                      <div
                        key={profile.profile_id}
-                       className={`p-6 border-2 rounded-lg transition-all ${
+                       className={`p-4 md:p-6 border-2 rounded-lg transition-all ${
                          profile.is_active
                            ? 'border-blue-500 bg-blue-50'
                            : 'border-gray-200 bg-white hover:border-gray-300'
@@ -232,7 +232,7 @@ export default function ProfileManagePage() {
         </div>
 
         {/* 프로필 생성 안내 */}
-        <div className="mt-8 p-6 bg-gray-50 rounded-lg border border-gray-200">
+        <div className="mt-4 md:mt-8 p-4 md:p-6 bg-gray-50 rounded-lg border border-gray-200">
           <h3 className="font-semibold text-gray-900 mb-3">프로필 생성 안내</h3>
           <div className="space-y-2 text-sm text-gray-600">
             <p>

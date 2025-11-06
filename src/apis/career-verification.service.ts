@@ -21,8 +21,16 @@ export const submitCareerVerification = async (data: {
   if (authError) throw authError
   if (!user) throw new Error('Not authenticated')
 
-  // 본인의 프로필인지 확인
-  if (data.profile_id !== user.id) {
+  // 활성 프로필 가져오기
+  const { data: profile } = await supabase
+    .from('accounts')
+    .select('profile_id')
+    .eq('user_id', user.id)
+    .eq('is_active', true)
+    .is('deleted_at', null)
+    .single()
+
+  if (!profile || profile.profile_id !== data.profile_id) {
     throw new Error('권한이 없습니다.')
   }
 

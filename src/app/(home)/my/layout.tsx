@@ -12,7 +12,7 @@ export default function RootLayout({
           <SideNavigator />
         </nav>
       </div>
-      <div className="flex-1 mt-4 md:mt-8 px-4 md:px-0">{children}</div>
+      <div className="flex-1 mt-2 md:mt-4 px-2 md:px-0">{children}</div>
     </section>
   )
 }

@@ -32,6 +32,8 @@ const ProfileUpdateClient = () => {
   const [error, setError] = useState<string | null>(null)
   const [skillInput, setSkillInput] = useState('')
   const [isNewProfile, setIsNewProfile] = useState(false)
+  const [profileImage, setProfileImage] = useState<string | null>(null)
+  const [isUploadingImage, setIsUploadingImage] = useState(false)
 
   const [formData, setFormData] = useState<FormData>({
     bio: '',
@@ -74,8 +76,9 @@ const ProfileUpdateClient = () => {
           email: user?.email || '',
           phone: (profile as any)?.contact_phone || '',
           website: (profile as any)?.contact_website || '',
-          skills: [],
+          skills: (profile as any)?.skills || [],
         })
+        setProfileImage((profile as any)?.profile_image_url || null)
       } catch (err) {
         console.error('프로필 로드 실패:', err)
         setError('프로필 정보를 불러오는데 실패했습니다.')
@@ -145,6 +148,8 @@ const ProfileUpdateClient = () => {
         expertise: formData.expertise,
         contact_phone: formData.phone || null,
         contact_website: formData.website || null,
+        profile_image_url: profileImage || null,
+        skills: formData.skills,
       })
 
       // 프로필 새로고침
@@ -172,9 +177,88 @@ const ProfileUpdateClient = () => {
     )
   }
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // 이미지 파일 검증
+    if (!file.type.startsWith('image/')) {
+      toast({
+        variant: 'destructive',
+        title: '이미지 파일만 업로드 가능합니다',
+      })
+      return
+    }
+
+    // 파일 크기 검증 (5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        variant: 'destructive',
+        title: '파일 크기는 5MB 이하여야 합니다',
+      })
+      return
+    }
+
+    try {
+      setIsUploadingImage(true)
+      const supabase = createSupabaseBrowserClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      if (!user) {
+        throw new Error('로그인이 필요합니다')
+      }
+
+      // 활성 프로필 가져오기
+      const { data: profile } = await supabase
+        .from('accounts')
+        .select('profile_id')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .is('deleted_at', null)
+        .single()
+
+      if (!profile) {
+        throw new Error('프로필을 찾을 수 없습니다')
+      }
+
+      // 파일 업로드
+      const fileExt = file.name.split('.').pop()
+      const fileName = `profiles/${user.id}/${Date.now()}.${fileExt}`
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('profile-images')
+        .upload(fileName, file, { upsert: true })
+
+      if (uploadError) {
+        throw new Error('파일 업로드 실패: ' + uploadError.message)
+      }
+
+      // Public URL 가져오기
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from('profile-images').getPublicUrl(fileName)
+
+      setProfileImage(publicUrl)
+      toast({
+        title: '이미지 업로드 완료',
+        description: '프로필 이미지가 업로드되었습니다.',
+      })
+    } catch (error: any) {
+      console.error('이미지 업로드 실패:', error)
+      toast({
+        variant: 'destructive',
+        title: '이미지 업로드 실패',
+        description: error.message,
+      })
+    } finally {
+      setIsUploadingImage(false)
+    }
+  }
+
   return (
-    <div className="max-w-4xl mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-6">프로필 수정</h1>
+    <div className="w-full p-3 md:p-6">
+      <h1 className="text-xl md:text-2xl font-bold mb-4 md:mb-6">프로필 수정</h1>
 
       {/* 새 프로필 완성 유도 메시지 */}
       {isNewProfile && (
@@ -203,11 +287,58 @@ const ProfileUpdateClient = () => {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-4 md:space-y-6">
         {/* 기본 정보 */}
-        <div className="bg-white rounded-lg shadow-sm border p-6">
+        <div className="bg-white rounded-lg shadow-sm border p-4 md:p-6">
           <h2 className="text-lg font-semibold mb-4">기본 정보</h2>
           <div className="space-y-4">
+            {/* 프로필 이미지 */}
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                프로필 이미지
+              </label>
+              <div className="flex items-center gap-4">
+                <div className="relative">
+                  {profileImage ? (
+                    <img
+                      src={profileImage}
+                      alt="프로필 이미지"
+                      className="w-24 h-24 rounded-full object-cover border-2 border-gray-200"
+                    />
+                  ) : (
+                    <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white text-2xl font-bold border-2 border-gray-200">
+                      {formData.username?.[0]?.toUpperCase() || '?'}
+                    </div>
+                  )}
+                </div>
+                <div className="flex flex-col gap-2">
+                  <label className="cursor-pointer">
+                    <span className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors inline-block">
+                      {isUploadingImage ? '업로드 중...' : '이미지 선택'}
+                    </span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageUpload}
+                      disabled={isUploadingImage}
+                      className="hidden"
+                    />
+                  </label>
+                  {profileImage && (
+                    <button
+                      type="button"
+                      onClick={() => setProfileImage(null)}
+                      className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300 transition-colors"
+                    >
+                      이미지 제거
+                    </button>
+                  )}
+                  <p className="text-xs text-gray-500">
+                    JPG, PNG, GIF (최대 5MB)
+                  </p>
+                </div>
+              </div>
+            </div>
             <div>
               <label className="block text-sm font-medium mb-1">
                 사용자명 <span className="text-red-500">*</span>
@@ -274,7 +405,7 @@ const ProfileUpdateClient = () => {
         </div>
 
         {/* 직무 및 전문 분야 */}
-        <div className="bg-white rounded-lg shadow-sm border p-6">
+        <div className="bg-white rounded-lg shadow-sm border p-4 md:p-6">
           <h2 className="text-lg font-semibold mb-4">직무 및 전문 분야</h2>
           
           <div className="space-y-6">
@@ -335,7 +466,7 @@ const ProfileUpdateClient = () => {
         </div>
 
         {/* 스킬 셋 */}
-        <div className="bg-white rounded-lg shadow-sm border p-6">
+        <div className="bg-white rounded-lg shadow-sm border p-4 md:p-6">
           <h2 className="text-lg font-semibold mb-4">스킬 셋</h2>
           <div className="space-y-4">
             <div className="flex gap-2">
@@ -373,20 +504,6 @@ const ProfileUpdateClient = () => {
                 ))}
               </div>
             )}
-            <p className="text-xs text-gray-500">
-              스킬 셋은 추후 데이터베이스에 저장될 예정입니다.
-            </p>
-          </div>
-        </div>
-
-        {/* 포트폴리오 파일 첨부 */}
-        <div className="bg-white rounded-lg shadow-sm border p-6">
-          <h2 className="text-lg font-semibold mb-4">포트폴리오 파일 첨부</h2>
-          <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
-            <p className="text-gray-500 mb-2">포트폴리오 파일 첨부 기능은 추후 구현 예정입니다.</p>
-            <p className="text-xs text-gray-400">
-              PDF, 이미지 파일 등을 업로드할 수 있습니다.
-            </p>
           </div>
         </div>
 

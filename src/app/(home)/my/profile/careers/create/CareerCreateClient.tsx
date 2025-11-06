@@ -82,7 +82,7 @@ const CareerCreateClient = () => {
 
   return (
     <div className="w-full p-4 md:p-6 -mt-4 md:-mt-8">
-      <h1 className="text-2xl font-bold mb-6">경력 추가</h1>
+      <h1 className="text-xl md:text-2xl font-bold mb-4 md:mb-6">경력 추가</h1>
       {error && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
           {error}

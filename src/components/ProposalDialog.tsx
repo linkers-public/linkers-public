@@ -12,6 +12,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from '@/hooks/use-toast'
+import { propose } from '@/apis/proposal.service'
 
 interface ProposalDialogProps {
   open: boolean
@@ -61,9 +62,8 @@ export const ProposalDialog = ({
     setIsSubmitting(true)
     
     try {
-      // TODO: 실제 메시지 전송 API 연동
-      // 현재는 임시로 성공 처리
-      await new Promise(resolve => setTimeout(resolve, 500))
+      // 팀 제안 API 호출
+      await propose(makerId)
       
       toast({
         title: '팀 제안 전송 완료',

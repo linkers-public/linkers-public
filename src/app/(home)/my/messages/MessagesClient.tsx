@@ -255,12 +255,12 @@ export default function MessagesClient() {
   }
 
   return (
-    <div className="w-full max-w-4xl mx-auto py-8 px-4">
+    <div className="w-full py-4 md:py-6 px-2 md:px-4">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 mb-6">쪽지함</h1>
+        <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-4 md:mb-6">쪽지함</h1>
 
         {/* 탭 */}
-        <div className="flex gap-2 border-b mb-6">
+        <div className="flex gap-2 border-b mb-4 md:mb-6">
           <button
             onClick={() => setActiveTab('invites')}
             className={`px-4 py-2 font-medium transition-colors ${
@@ -289,7 +289,7 @@ export default function MessagesClient() {
         {activeTab === 'invites' && (
           <div className="space-y-4">
             {teamInvites.length === 0 ? (
-              <div className="bg-white rounded-lg shadow-sm border p-12 text-center">
+              <div className="bg-white rounded-lg shadow-sm border p-6 md:p-12 text-center">
                 <Mail className="w-16 h-16 text-gray-400 mx-auto mb-4" />
                 <p className="text-gray-600">팀 초대가 없습니다.</p>
               </div>
@@ -342,7 +342,7 @@ export default function MessagesClient() {
         {activeTab === 'proposals' && (
           <div className="space-y-4">
             {companyProposals.length === 0 ? (
-              <div className="bg-white rounded-lg shadow-sm border p-12 text-center">
+              <div className="bg-white rounded-lg shadow-sm border p-6 md:p-12 text-center">
                 <Mail className="w-16 h-16 text-gray-400 mx-auto mb-4" />
                 <p className="text-gray-600">기업 제안이 없습니다.</p>
               </div>

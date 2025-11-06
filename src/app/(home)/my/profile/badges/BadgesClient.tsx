@@ -239,7 +239,7 @@ export default function BadgesClient() {
   }
 
   return (
-    <div className="w-full py-8 px-4">
+    <div className="w-full py-4 md:py-6 px-2 md:px-4">
       <div className="mb-6 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Button
@@ -250,7 +250,7 @@ export default function BadgesClient() {
             <ArrowLeft className="w-4 h-4" />
             돌아가기
           </Button>
-          <h1 className="text-2xl font-bold text-gray-900">경력 인증 배지</h1>
+          <h1 className="text-xl md:text-2xl font-bold text-gray-900">경력 인증 배지</h1>
         </div>
         <Button
           onClick={() => setShowDialog(true)}
@@ -263,8 +263,8 @@ export default function BadgesClient() {
 
       {/* 승인된 배지 */}
       {badges.length > 0 && (
-        <div className="bg-white rounded-lg shadow-sm border p-6 mb-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">
+        <div className="bg-white rounded-lg shadow-sm border p-4 md:p-6 mb-4 md:mb-6">
+          <h2 className="text-base md:text-lg font-semibold text-gray-900 mb-3 md:mb-4">
             승인된 배지
           </h2>
           <div className="flex flex-wrap gap-3">
@@ -287,7 +287,7 @@ export default function BadgesClient() {
           인증 요청 내역
         </h2>
         {requests.length === 0 ? (
-          <div className="text-center py-12">
+            <div className="text-center py-6 md:py-12">
             <p className="text-gray-600 mb-4">인증 요청이 없습니다.</p>
             <Button onClick={() => setShowDialog(true)} variant="outline">
               첫 인증 요청하기

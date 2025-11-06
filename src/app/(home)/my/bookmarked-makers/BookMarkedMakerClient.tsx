@@ -87,7 +87,6 @@ const BookMarkedMakerClient = () => {
     }
   }, [])
 
-  const handlePropose = async (makerId: string) => {}
 
   //TODO - 유틸 추출
   const calculateTotalExperience = (experiences: any[]) => {
@@ -169,7 +168,6 @@ const BookMarkedMakerClient = () => {
                 key={bookmark.id}
                 bookmark={bookmark}
                 onUnbookmark={handleUnbookmark}
-                onPropose={handlePropose}
               />
             )
           })

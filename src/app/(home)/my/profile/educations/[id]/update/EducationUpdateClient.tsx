@@ -14,6 +14,7 @@ interface FormData {
   start_date: string
   end_date: string | null
   content: string
+  education_level: string
 }
 
 const EducationUpdateClient = ({ id }: { id: string }) => {
@@ -28,6 +29,7 @@ const EducationUpdateClient = ({ id }: { id: string }) => {
     start_date: '',
     end_date: null,
     content: '',
+    education_level: '',
   })
 
   useEffect(() => {
@@ -43,6 +45,7 @@ const EducationUpdateClient = ({ id }: { id: string }) => {
       start_date: education.start_date,
       end_date: education.end_date,
       content: education.content,
+      education_level: (education as any).education_level || '',
     })
 
     setIsCurrentEducation(education.end_date === null)
@@ -77,6 +80,7 @@ const EducationUpdateClient = ({ id }: { id: string }) => {
         start_date: formData.start_date,
         end_date: formData.end_date,
         content: formData.content,
+        education_level: formData.education_level || null,
       }
 
       const { error: updateError } = await updateEducation(
@@ -101,7 +105,7 @@ const EducationUpdateClient = ({ id }: { id: string }) => {
 
   return (
     <div className="w-full p-4 md:p-6">
-      <h1 className="text-2xl font-bold mb-6">학력 수정</h1>
+      <h1 className="text-xl md:text-2xl font-bold mb-4 md:mb-6">학력 수정</h1>
 
       {error && (
         <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
@@ -122,6 +126,21 @@ const EducationUpdateClient = ({ id }: { id: string }) => {
               onChange={handleInputChange}
               required
             />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">학력 레벨</label>
+            <select
+              name="education_level"
+              value={formData.education_level}
+              onChange={(e) => setFormData((prev) => ({ ...prev, education_level: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">선택하세요</option>
+              <option value="고교">고교</option>
+              <option value="대학">대학</option>
+              <option value="대학원">대학원</option>
+            </select>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

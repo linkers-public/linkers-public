@@ -46,4 +46,58 @@ export const unbookmark = async (makerId: string) => {
   if (error) console.error('Delete error:', error)
   return { data, error }
 }
-export const propose = async () => {}
+export const propose = async (makerId: string, teamId?: number | null) => {
+  const supabase = createSupabaseBrowserClient()
+  
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    throw new Error('로그인이 필요합니다')
+  }
+
+  // 매니저의 팀 정보 가져오기
+  let targetTeamId = teamId
+  if (!targetTeamId) {
+    const { data: team } = await supabase
+      .from('teams')
+      .select('id')
+      .eq('manager_id', user.id)
+      .single()
+
+    if (team) {
+      targetTeamId = team.id
+    }
+  }
+
+  // team_proposals에 제안 추가
+  const { data: proposal, error: proposalError } = await supabase
+    .from('team_proposals')
+    .insert({
+      maker_id: makerId,
+      manager_id: user.id,
+      team_id: targetTeamId,
+    })
+    .select()
+    .single()
+
+  if (proposalError) {
+    console.error('Proposal error:', proposalError)
+    throw proposalError
+  }
+
+  // manager_bookmarks의 proposal_status 업데이트
+  const { error: bookmarkError } = await supabase
+    .from('manager_bookmarks')
+    .update({ proposal_status: true })
+    .eq('maker_id', makerId)
+    .eq('manager_id', user.id)
+
+  if (bookmarkError) {
+    console.error('Bookmark update error:', bookmarkError)
+    // 제안은 성공했지만 북마크 업데이트 실패는 치명적이지 않음
+  }
+
+  return { data: proposal, error: proposalError }
+}
