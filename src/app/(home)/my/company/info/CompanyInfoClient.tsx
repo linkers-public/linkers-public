@@ -87,10 +87,10 @@ export default function CompanyInfoClient() {
       setCompanyInfo({
         company_name: clientData?.company_name || accountData?.username || '',
         contact_person: clientData?.contact_person || '',
-        contact_phone: accountData?.contact_phone || clientData?.contact_phone || '',
+        contact_phone: clientData?.contact_phone || accountData?.contact_phone || '',
         contact_email: user.email || '',
         address: clientData?.address || '',
-        website: accountData?.contact_website || clientData?.website || '',
+        website: clientData?.website || accountData?.contact_website || '',
       })
     } catch (error: any) {
       console.error('기업 정보 로드 실패:', error)
@@ -130,21 +130,84 @@ export default function CompanyInfoClient() {
       }
 
       // client 테이블 업데이트
-      const { error: clientError } = await supabase
+      // 먼저 기존 레코드가 있는지 확인
+      const { data: existingClient } = await supabase
         .from('client')
-        .upsert({
+        .select('user_id')
+        .eq('user_id', user.id)
+        .maybeSingle()
+
+      if (existingClient) {
+        // 스키마 캐시 문제로 address는 일시적으로 제외
+        const clientUpdateData: any = {
+          company_name: companyInfo.company_name,
+          contact_person: companyInfo.contact_person || null,
+          contact_phone: companyInfo.contact_phone || null,
+          website: companyInfo.website || null,
+          updated_at: new Date().toISOString(),
+        }
+
+        const { error: clientError } = await supabase
+          .from('client')
+          .update(clientUpdateData)
+          .eq('user_id', user.id)
+        
+        if (clientError) {
+          console.error('client 테이블 업데이트 실패:', clientError)
+          throw clientError
+        }
+
+        // address는 별도로 시도 (스키마 캐시가 업데이트되면 작동)
+        if (companyInfo.address) {
+          try {
+            const { error: addressError } = await supabase
+              .from('client')
+              .update({ address: companyInfo.address })
+              .eq('user_id', user.id)
+            
+            if (addressError) {
+              console.warn('address 필드 업데이트 실패 (스키마 캐시 대기 중):', addressError.message)
+            }
+          } catch (err) {
+            console.warn('address 필드 업데이트 중 예외 발생:', err)
+          }
+        }
+      } else {
+        // 새 레코드 삽입
+        const insertData: any = {
           user_id: user.id,
           company_name: companyInfo.company_name,
-          contact_person: companyInfo.contact_person,
-          contact_phone: companyInfo.contact_phone,
-          address: companyInfo.address,
-          website: companyInfo.website,
-          updated_at: new Date().toISOString(),
-        }, {
-          onConflict: 'user_id',
-        })
+          email: user.email || '',
+          contact_person: companyInfo.contact_person || null,
+          contact_phone: companyInfo.contact_phone || null,
+          website: companyInfo.website || null,
+        }
 
-      if (clientError) throw clientError
+        const { error: insertError } = await supabase
+          .from('client')
+          .insert(insertData)
+        
+        if (insertError) {
+          console.error('client 테이블 삽입 실패:', insertError)
+          throw insertError
+        }
+
+        // address는 별도로 업데이트 시도
+        if (companyInfo.address) {
+          try {
+            const { error: addressError } = await supabase
+              .from('client')
+              .update({ address: companyInfo.address })
+              .eq('user_id', user.id)
+            
+            if (addressError) {
+              console.warn('address 필드 업데이트 실패 (스키마 캐시 대기 중):', addressError.message)
+            }
+          } catch (err) {
+            console.warn('address 필드 업데이트 중 예외 발생:', err)
+          }
+        }
+      }
 
       // accounts 테이블 업데이트
       const { error: accountError } = await supabase

@@ -57,17 +57,31 @@ yarn install
 ```
 
 ### 3. 환경 변수 설정
-`.env.local` 파일을 생성하고 다음 변수들을 설정하세요:
 
-```env
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-NEXT_PUBLIC_SITE_URL=http://localhost:3000
+프로젝트 루트에 `.env.local` 파일을 생성하고 필요한 환경 변수를 설정하세요.
+
+**빠른 시작:**
+```bash
+# env.example 파일을 복사하여 .env.local 생성
+cp env.example .env.local
 ```
+
+**필수 환경 변수:**
+- `NEXT_PUBLIC_SUPABASE_URL` - Supabase 프로젝트 URL
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` - Supabase Anon Key
+- `NEXT_PUBLIC_STORAGE_BUCKET` - Supabase Storage 버킷 이름
+
+**포트원 V2 (정기 결제 사용 시):**
+- `PORTONE_V2_API_SECRET` - 포트원 V2 API Secret
+- `NEXT_PUBLIC_PORTONE_V2_STORE_ID` - 포트원 V2 Store ID
+- `NEXT_PUBLIC_PORTONE_V2_CHANNEL_KEY` - 포트원 V2 Channel Key
+- `PORTONE_V2_WEBHOOK_SECRET` - 포트원 V2 Webhook Secret
+
+> 📖 **자세한 환경 변수 설정 가이드**: [ENV_SETUP.md](./ENV_SETUP.md)를 참고하세요.
 
 **환경별 설정:**
 - **개발 환경**: `NEXT_PUBLIC_SITE_URL=http://localhost:3000`
-- **프로덕션 환경**: `NEXT_PUBLIC_SITE_URL=https://makers-b2b.vercel.app`
+- **프로덕션 환경**: `NEXT_PUBLIC_SITE_URL=https://your-domain.com`
 
 > 참고: `NEXT_PUBLIC_SITE_URL`은 소셜 로그인(OAuth) 리다이렉트 URL에 사용됩니다. 설정하지 않으면 자동으로 `window.location.origin`을 사용합니다.
 

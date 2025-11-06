@@ -51,20 +51,21 @@ export default function CompletedProjectsClient() {
       }
 
       // 완료된 프로젝트 조회
+      // counsel 테이블에 created_at 컬럼이 없으므로 counsel_date 또는 start_date 사용
       const { data: counselData, error } = await supabase
         .from('counsel')
-        .select('counsel_id, title, updated_at, created_at')
+        .select('counsel_id, title, counsel_date, start_date')
         .eq('client_id', clientData.user_id)
         .eq('counsel_status', 'end')
-        .order('updated_at', { ascending: false })
+        .order('counsel_date', { ascending: false })
 
       if (error) throw error
 
       const formattedProjects: Project[] = (counselData || []).map((counsel: any) => ({
         counsel_id: counsel.counsel_id,
         title: counsel.title,
-        completed_at: counsel.updated_at || counsel.created_at,
-        created_at: counsel.created_at,
+        completed_at: counsel.counsel_date || counsel.start_date || new Date().toISOString(),
+        created_at: counsel.start_date || counsel.counsel_date || new Date().toISOString(),
       }))
 
       setProjects(formattedProjects)

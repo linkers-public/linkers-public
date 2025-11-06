@@ -42,8 +42,7 @@ export default function TeamInvitesClient() {
       // 팀 초대 조회 (team_members 테이블에서 본인이 초대된 경우)
       const { data: invites, error: invitesError } = await supabase
         .from('team_members')
-        .select(
-          `
+        .select(`
           id,
           team_id,
           status,
@@ -51,37 +50,54 @@ export default function TeamInvitesClient() {
           teams:team_id (
             id,
             name,
-            manager_id,
-            accounts:manager_id (
-              user_id,
-              username
-            )
+            manager_id
           )
-        `
-        )
+        `)
         .eq('maker_id', user.id)
         .order('created_at', { ascending: false })
 
       if (invitesError) {
         console.error('팀 초대 조회 실패:', invitesError)
-        toast({
-          variant: 'destructive',
-          title: '팀 초대를 불러오는데 실패했습니다',
-          description: invitesError.message,
-        })
-      } else {
-        const formattedInvites: TeamInvite[] =
-          invites?.map((invite: any) => ({
-            id: invite.id,
-            team_id: invite.team_id,
-            team_name: invite.teams?.name || '알 수 없음',
-            manager_id: invite.teams?.manager_id || '',
-            manager_name: invite.teams?.accounts?.username || '알 수 없음',
-            status: invite.status,
-            created_at: invite.created_at,
-          })) || []
-        setTeamInvites(formattedInvites)
+        throw invitesError
       }
+
+      // 매니저 정보를 별도로 조회 (외래 키 관계가 없어서 자동 조인 불가)
+      const managerIds = [...new Set((invites || [])
+        .map((invite: any) => invite.teams?.manager_id)
+        .filter(Boolean))]
+
+      let managerMap: Record<string, string> = {}
+      if (managerIds.length > 0) {
+        const { data: managerAccounts } = await supabase
+          .from('accounts')
+          .select('user_id, username')
+          .in('user_id', managerIds)
+          .eq('profile_type', 'FREELANCER')
+          .eq('is_active', true)
+          .is('deleted_at', null)
+
+        if (managerAccounts) {
+          managerAccounts.forEach((account: any) => {
+            managerMap[account.user_id] = account.username
+          })
+        }
+      }
+
+      // 초대 데이터 포맷팅
+      const formattedInvites: TeamInvite[] = (invites || []).map((invite: any) => {
+        const managerId = invite.teams?.manager_id || ''
+        return {
+          id: invite.id,
+          team_id: invite.team_id,
+          team_name: invite.teams?.name || '알 수 없음',
+          manager_id: managerId,
+          manager_name: managerMap[managerId] || '알 수 없음',
+          status: invite.status,
+          created_at: invite.created_at,
+        }
+      })
+
+      setTeamInvites(formattedInvites)
     } catch (error: any) {
       console.error('팀 초대 로드 실패:', error)
       toast({

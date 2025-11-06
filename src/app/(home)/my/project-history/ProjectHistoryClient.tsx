@@ -53,12 +53,13 @@ export default function ProjectHistoryClient() {
       }
 
       // 진행 중인 프로젝트 조회
+      // counsel 테이블에 created_at 컬럼이 없으므로 start_date 사용
       const { data: counselData, error } = await supabase
         .from('counsel')
-        .select('counsel_id, title, counsel_status, start_date, due_date, created_at')
+        .select('counsel_id, title, counsel_status, start_date, due_date, counsel_date')
         .eq('client_id', clientData.user_id)
         .in('counsel_status', ['recruiting', 'contract_progress', 'estimate_received'])
-        .order('created_at', { ascending: false })
+        .order('start_date', { ascending: false })
 
       if (error) throw error
 
@@ -66,9 +67,9 @@ export default function ProjectHistoryClient() {
         counsel_id: counsel.counsel_id,
         title: counsel.title,
         status: counsel.counsel_status,
-        start_date: counsel.start_date || counsel.created_at,
+        start_date: counsel.start_date || counsel.counsel_date || new Date().toISOString(),
         end_date: counsel.due_date,
-        created_at: counsel.created_at,
+        created_at: counsel.counsel_date || counsel.start_date || new Date().toISOString(),
       }))
 
       setProjects(formattedProjects)

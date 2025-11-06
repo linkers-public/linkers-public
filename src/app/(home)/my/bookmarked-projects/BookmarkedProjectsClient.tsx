@@ -10,10 +10,11 @@ import Link from 'next/link'
 
 interface BookmarkedProject {
   id: number
+  bookmark_id: number
   counsel_id: number
   title: string
-  feild: string
-  expected_cost: number
+  feild: string | null
+  cost: any
   due_date: string
   created_at: string
 }
@@ -38,15 +39,78 @@ export default function BookmarkedProjectsClient() {
         return
       }
 
-      // TODO: project_bookmarks 테이블이 있다면 사용, 없다면 다른 방식으로 구현
-      // 현재는 counsel 테이블에서 북마크된 프로젝트를 조회하는 로직이 필요합니다
-      // 임시로 빈 배열 반환
-      setProjects([])
-      
-      toast({
-        title: '준비 중',
-        description: '관심 프로젝트 기능은 곧 제공될 예정입니다.',
+      // 활성 프로필 확인
+      const { data: profile } = await supabase
+        .from('accounts')
+        .select('profile_id')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .is('deleted_at', null)
+        .maybeSingle()
+
+      if (!profile) {
+        toast({
+          variant: 'destructive',
+          title: '프로필이 필요합니다',
+          description: '프로필을 생성해주세요.',
+        })
+        router.push('/my/profile/manage')
+        return
+      }
+
+      // project_bookmarks 테이블에서 북마크 조회
+      // counsel 테이블이 없을 수 있으므로 먼저 북마크만 조회
+      const { data: bookmarks, error: bookmarksError } = await supabase
+        .from('project_bookmarks')
+        .select('id, counsel_id, created_at')
+        .eq('profile_id', profile.profile_id)
+        .order('created_at', { ascending: false })
+
+      if (bookmarksError) {
+        console.error('북마크 조회 실패:', bookmarksError)
+        throw bookmarksError
+      }
+
+      if (!bookmarks || bookmarks.length === 0) {
+        setProjects([])
+        return
+      }
+
+      // counsel 테이블이 있는지 확인하고 조인 시도
+      let counselDataMap: Record<number, any> = {}
+      try {
+        const counselIds = bookmarks.map((b: any) => b.counsel_id)
+        const { data: counselData, error: counselError } = await supabase
+          .from('counsel')
+          .select('counsel_id, title, feild, cost, due_date')
+          .in('counsel_id', counselIds)
+
+        if (!counselError && counselData) {
+          counselData.forEach((c: any) => {
+            counselDataMap[c.counsel_id] = c
+          })
+        }
+      } catch (counselErr: any) {
+        // counsel 테이블이 없거나 접근할 수 없는 경우 무시
+        console.warn('counsel 테이블 조회 실패:', counselErr.message)
+      }
+
+      // 북마크 데이터 포맷팅
+      const formattedProjects: BookmarkedProject[] = bookmarks.map((bookmark: any) => {
+        const counsel = counselDataMap[bookmark.counsel_id]
+        return {
+          id: bookmark.counsel_id,
+          bookmark_id: bookmark.id,
+          counsel_id: bookmark.counsel_id,
+          title: counsel?.title || `프로젝트 #${bookmark.counsel_id}`,
+          feild: counsel?.feild || null,
+          cost: counsel?.cost || null,
+          due_date: counsel?.due_date || '',
+          created_at: bookmark.created_at,
+        }
       })
+
+      setProjects(formattedProjects)
     } catch (error: any) {
       console.error('관심 프로젝트 로드 실패:', error)
       toast({
@@ -59,13 +123,48 @@ export default function BookmarkedProjectsClient() {
     }
   }
 
-  const handleUnbookmark = async (projectId: number) => {
+  const handleUnbookmark = async (bookmarkId: number) => {
     try {
-      // TODO: 북마크 해제 로직 구현
+      const { data: { user } } = await supabase.auth.getUser()
+
+      if (!user) {
+        router.push('/auth')
+        return
+      }
+
+      // 활성 프로필 확인
+      const { data: profile } = await supabase
+        .from('accounts')
+        .select('profile_id')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .is('deleted_at', null)
+        .maybeSingle()
+
+      if (!profile) {
+        toast({
+          variant: 'destructive',
+          title: '프로필이 필요합니다',
+        })
+        return
+      }
+
+      // 북마크 삭제
+      const { error } = await supabase
+        .from('project_bookmarks')
+        .delete()
+        .eq('id', bookmarkId)
+        .eq('profile_id', profile.profile_id)
+
+      if (error) throw error
+
       toast({
-        title: '준비 중',
-        description: '북마크 해제 기능은 곧 제공될 예정입니다.',
+        title: '북마크 해제 완료',
+        description: '관심 프로젝트에서 제거되었습니다.',
       })
+
+      // 목록 새로고침
+      loadBookmarkedProjects()
     } catch (error: any) {
       console.error('북마크 해제 실패:', error)
       toast({
@@ -117,15 +216,17 @@ export default function BookmarkedProjectsClient() {
                   <p className="text-sm text-gray-600 mb-2">
                     분야: {project.feild}
                   </p>
-                  <p className="text-sm text-gray-600 mb-2">
-                    예상 비용: {project.expected_cost?.toLocaleString()}원
-                  </p>
+                  {project.cost && (
+                    <p className="text-sm text-gray-600 mb-2">
+                      예상 비용: {typeof project.cost === 'number' ? project.cost.toLocaleString() : project.cost}원
+                    </p>
+                  )}
                   <p className="text-xs text-gray-500">
                     마감일: {new Date(project.due_date).toLocaleDateString('ko-KR')}
                   </p>
                 </div>
                 <Button
-                  onClick={() => handleUnbookmark(project.id)}
+                  onClick={() => handleUnbookmark(project.bookmark_id)}
                   variant="ghost"
                   size="icon"
                   className="text-red-500 hover:text-red-700"
