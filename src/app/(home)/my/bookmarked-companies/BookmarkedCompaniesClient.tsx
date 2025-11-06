@@ -73,11 +73,11 @@ export default function BookmarkedCompaniesClient() {
         return
       }
 
-      // accounts 테이블과 조인하여 기업 정보 가져오기
+      // accounts 테이블에서 기업 정보 가져오기
       const companyProfileIds = bookmarks.map((b: any) => b.company_profile_id)
       const { data: companyData, error: companyError } = await supabase
         .from('accounts')
-        .select('profile_id, username, contact_email')
+        .select('profile_id, username, user_id')
         .in('profile_id', companyProfileIds)
         .eq('profile_type', 'COMPANY')
 
@@ -86,15 +86,23 @@ export default function BookmarkedCompaniesClient() {
         throw companyError
       }
 
+      // client 테이블에서 이메일 정보 가져오기
+      const userIds = companyData?.map((c: any) => c.user_id).filter(Boolean) || []
+      const { data: clientData } = await supabase
+        .from('client')
+        .select('user_id, email')
+        .in('user_id', userIds)
+
       // 북마크 데이터 포맷팅
       const formattedCompanies: BookmarkedCompany[] = bookmarks.map((bookmark: any) => {
         const company = companyData?.find((c: any) => c.profile_id === bookmark.company_profile_id)
+        const client = clientData?.find((c: any) => c.user_id === company?.user_id)
         return {
           id: bookmark.id,
           bookmark_id: bookmark.id,
           company_id: bookmark.company_profile_id,
           company_name: company?.username || '알 수 없음',
-          email: company?.contact_email || '',
+          email: client?.email || '',
           created_at: bookmark.created_at,
         }
       })

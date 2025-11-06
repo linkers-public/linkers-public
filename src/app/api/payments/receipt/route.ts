@@ -51,17 +51,18 @@ export async function GET(request: NextRequest) {
     }
 
     // 영수증 정보 반환
+    const paymentData = paymentInfo as any
     return NextResponse.json({
       success: true,
       payment: {
-        id: paymentInfo.id || paymentId,
-        amount: (paymentInfo as any).amount?.total || 0,
-        currency: (paymentInfo as any).amount?.currency || 'KRW',
-        status: paymentInfo.status,
-        paidAt: (paymentInfo as any).paidAt || (paymentInfo as any).paid_at,
-        orderName: (paymentInfo as any).orderName || (paymentInfo as any).order_name,
+        id: paymentData.id || paymentId,
+        amount: paymentData.amount?.total || 0,
+        currency: paymentData.amount?.currency || 'KRW',
+        status: paymentData.status,
+        paidAt: paymentData.paidAt || paymentData.paid_at,
+        orderName: paymentData.orderName || paymentData.order_name,
         // PortOne 관리자 콘솔 링크
-        receiptUrl: `https://admin.portone.io/payments/${paymentInfo.id || paymentId}`,
+        receiptUrl: `https://admin.portone.io/payments/${paymentData.id || paymentId}`,
       },
     })
   } catch (error: any) {

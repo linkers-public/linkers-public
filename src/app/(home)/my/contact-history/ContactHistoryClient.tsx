@@ -73,11 +73,11 @@ export default function ContactHistoryClient() {
         return
       }
 
-      // accounts 테이블과 조인하여 프리랜서 정보 가져오기
+      // accounts 테이블에서 프리랜서 정보 가져오기
       const sellerProfileIds = purchases.map((p: any) => p.seller_profile_id)
       const { data: sellerData, error: sellerError } = await supabase
         .from('accounts')
-        .select('profile_id, username, contact_phone')
+        .select('profile_id, username')
         .in('profile_id', sellerProfileIds)
         .eq('profile_type', 'FREELANCER')
 
@@ -93,7 +93,7 @@ export default function ContactHistoryClient() {
           id: purchase.id.toString(),
           profile_id: purchase.seller_profile_id,
           username: seller?.username || '알 수 없음',
-          contact_phone: seller?.contact_phone || '',
+          contact_phone: '', // accounts 테이블에 contact_phone 컬럼이 없음
           purchased_at: purchase.purchased_at,
           price: purchase.price,
         }

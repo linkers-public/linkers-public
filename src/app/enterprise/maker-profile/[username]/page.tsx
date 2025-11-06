@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { createSupabaseBrowserClient } from '@/supabase/supabase-client';
 import EnterpriseSidebar from '@/components/EnterpriseSidebar';
+import { Calendar, Briefcase, DollarSign, Star } from 'lucide-react';
 
 interface MakerProfile {
   user_id: string;
@@ -183,12 +184,12 @@ const MakerProfilePage: React.FC = () => {
                   <h1 className="text-3xl font-bold text-gray-900 mb-2">{maker.username}</h1>
                   <p className="text-gray-600 text-lg mb-2">{maker.bio || '소개가 없습니다.'}</p>
                   <div className="flex items-center gap-4 text-sm text-gray-500">
-                    <span>📅 {new Date(maker.created_at).toLocaleDateString('ko-KR')} 가입</span>
+                    <span className="flex items-center gap-1"><Calendar className="w-4 h-4" /> {new Date(maker.created_at).toLocaleDateString('ko-KR')} 가입</span>
                     {maker.experience_years && (
-                      <span>💼 {maker.experience_years}년 경력</span>
+                      <span className="flex items-center gap-1"><Briefcase className="w-4 h-4" /> {maker.experience_years}년 경력</span>
                     )}
                     {maker.hourly_rate && (
-                      <span>💰 시간당 {maker.hourly_rate.toLocaleString()}원</span>
+                      <span className="flex items-center gap-1"><DollarSign className="w-4 h-4" /> 시간당 {maker.hourly_rate.toLocaleString()}원</span>
                     )}
                   </div>
                 </div>
@@ -203,7 +204,19 @@ const MakerProfilePage: React.FC = () => {
                       : 'bg-gray-100 text-gray-700 border border-gray-300 hover:bg-gray-200'
                   }`}
                 >
-                  {isBookmarked ? '⭐ 북마크됨' : '☆ 북마크'}
+                  <span className="flex items-center gap-1">
+                    {isBookmarked ? (
+                      <>
+                        <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
+                        북마크됨
+                      </>
+                    ) : (
+                      <>
+                        <Star className="w-4 h-4" />
+                        북마크
+                      </>
+                    )}
+                  </span>
                 </button>
                 <button
                   onClick={handleContact}

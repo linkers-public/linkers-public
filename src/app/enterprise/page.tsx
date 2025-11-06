@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { createSupabaseBrowserClient } from '@/supabase/supabase-client';
 import MakersLogo from '@/components/common/MakersLogo';
 import EnterpriseSidebar from '@/components/EnterpriseSidebar';
+import { Hand, FileText, Search, BarChart, Users, Clipboard, Clock, CheckCircle, DollarSign, Calendar, Lightbulb, PenTool } from 'lucide-react';
 
 interface ProjectStats {
   totalProjects: number;
@@ -84,17 +85,17 @@ const EnterpriseHomePage: React.FC = () => {
   const getStatusInfo = (status: string) => {
     switch (status) {
       case 'pending':
-        return { text: '접수됨', color: 'bg-blue-100 text-blue-800', icon: '📋' };
+        return { text: '접수됨', color: 'bg-blue-100 text-blue-800', icon: <Clipboard className="w-4 h-4" /> };
       case 'recruiting':
-        return { text: '매칭 중', color: 'bg-yellow-100 text-yellow-800', icon: '🔍' };
+        return { text: '매칭 중', color: 'bg-yellow-100 text-yellow-800', icon: <Search className="w-4 h-4" /> };
       case 'estimate_received':
-        return { text: '견적 도착', color: 'bg-green-100 text-green-800', icon: '📄' };
+        return { text: '견적 도착', color: 'bg-green-100 text-green-800', icon: <FileText className="w-4 h-4" /> };
       case 'contract_progress':
-        return { text: '계약 진행', color: 'bg-purple-100 text-purple-800', icon: '📝' };
+        return { text: '계약 진행', color: 'bg-purple-100 text-purple-800', icon: <PenTool className="w-4 h-4" /> };
       case 'end':
-        return { text: '완료', color: 'bg-gray-100 text-gray-800', icon: '✅' };
+        return { text: '완료', color: 'bg-gray-100 text-gray-800', icon: <CheckCircle className="w-4 h-4" /> };
       default:
-        return { text: '접수됨', color: 'bg-blue-100 text-blue-800', icon: '📋' };
+        return { text: '접수됨', color: 'bg-blue-100 text-blue-800', icon: <Clipboard className="w-4 h-4" /> };
     }
   };
 
@@ -118,8 +119,8 @@ const EnterpriseHomePage: React.FC = () => {
         <div className="w-full px-4 md:px-6">
           {/* 환영 메시지 */}
           <div className="mb-8">
-            <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">
-              안녕하세요! 👋
+            <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2 flex items-center gap-2">
+              안녕하세요! <Hand className="w-6 h-6 md:w-7 md:h-7" />
             </h1>
             <p className="text-gray-600 text-lg">
               {user?.user_metadata?.full_name || user?.email || '고객'}님, 오늘도 좋은 하루 되세요!
@@ -134,7 +135,7 @@ const EnterpriseHomePage: React.FC = () => {
             >
               <div className="flex items-center mb-3">
                 <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mr-4">
-                  <span className="text-2xl">📝</span>
+                  <FileText className="w-6 h-6 text-blue-600" />
                 </div>
                 <h3 className="text-base md:text-lg font-semibold text-gray-900">프로젝트 상담 신청</h3>
               </div>
@@ -149,7 +150,7 @@ const EnterpriseHomePage: React.FC = () => {
             >
               <div className="flex items-center mb-3">
                 <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mr-4">
-                  <span className="text-2xl">🔍</span>
+                  <Search className="w-6 h-6 text-green-600" />
                 </div>
                 <h3 className="text-lg font-semibold text-gray-900">메이커 검색</h3>
               </div>
@@ -164,7 +165,7 @@ const EnterpriseHomePage: React.FC = () => {
             >
               <div className="flex items-center mb-3">
                 <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mr-4">
-                  <span className="text-2xl">📊</span>
+                  <BarChart className="w-6 h-6 text-purple-600" />
                 </div>
                 <h3 className="text-lg font-semibold text-gray-900">내 프로젝트</h3>
               </div>
@@ -179,7 +180,7 @@ const EnterpriseHomePage: React.FC = () => {
             >
               <div className="flex items-center mb-3">
                 <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center mr-4">
-                  <span className="text-2xl">👥</span>
+                  <Users className="w-6 h-6 text-orange-600" />
                 </div>
                 <h3 className="text-lg font-semibold text-gray-900">전체 메이커 보기</h3>
               </div>
@@ -194,7 +195,7 @@ const EnterpriseHomePage: React.FC = () => {
             <div className="bg-white p-4 md:p-6 rounded-lg shadow-sm border border-gray-200">
               <div className="flex items-center">
                 <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
-                  <span className="text-lg">📋</span>
+                  <Clipboard className="w-5 h-5 text-blue-600" />
                 </div>
                 <div>
                   <p className="text-2xl font-bold text-gray-900">{stats.totalProjects}</p>
@@ -206,7 +207,7 @@ const EnterpriseHomePage: React.FC = () => {
             <div className="bg-white p-4 md:p-6 rounded-lg shadow-sm border border-gray-200">
               <div className="flex items-center">
                 <div className="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center mr-3">
-                  <span className="text-lg">⏳</span>
+                  <Clock className="w-5 h-5 text-yellow-600" />
                 </div>
                 <div>
                   <p className="text-2xl font-bold text-gray-900">{stats.pendingProjects}</p>
@@ -218,7 +219,7 @@ const EnterpriseHomePage: React.FC = () => {
             <div className="bg-white p-4 md:p-6 rounded-lg shadow-sm border border-gray-200">
               <div className="flex items-center">
                 <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center mr-3">
-                  <span className="text-lg">📄</span>
+                  <FileText className="w-5 h-5 text-green-600" />
                 </div>
                 <div>
                   <p className="text-2xl font-bold text-gray-900">{stats.estimatesReceived}</p>
@@ -230,7 +231,7 @@ const EnterpriseHomePage: React.FC = () => {
             <div className="bg-white p-4 md:p-6 rounded-lg shadow-sm border border-gray-200">
               <div className="flex items-center">
                 <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center mr-3">
-                  <span className="text-lg">✅</span>
+                  <CheckCircle className="w-5 h-5 text-gray-600" />
                 </div>
                 <div>
                   <p className="text-2xl font-bold text-gray-900">{stats.completedProjects}</p>
@@ -255,7 +256,7 @@ const EnterpriseHomePage: React.FC = () => {
             {recentProjects.length === 0 ? (
               <div className="text-center py-8">
                 <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <span className="text-2xl">📝</span>
+                  <FileText className="w-8 h-8 text-gray-400" />
                 </div>
                 <h3 className="text-lg font-medium text-gray-900 mb-2">아직 프로젝트가 없습니다</h3>
                 <p className="text-gray-600 mb-4">첫 번째 프로젝트를 시작해보세요!</p>
@@ -279,13 +280,13 @@ const EnterpriseHomePage: React.FC = () => {
                       <div className="flex-1">
                         <h3 className="font-semibold text-gray-900 mb-1">{project.title}</h3>
                         <div className="flex items-center gap-4 text-sm text-gray-600">
-                          <span>💰 {project.cost}</span>
-                          <span>⏳ {project.period}</span>
-                          <span>📅 {new Date(project.start_date).toLocaleDateString('ko-KR')}</span>
+                          <span className="flex items-center gap-1"><DollarSign className="w-4 h-4" /> {project.cost}</span>
+                          <span className="flex items-center gap-1"><Clock className="w-4 h-4" /> {project.period}</span>
+                          <span className="flex items-center gap-1"><Calendar className="w-4 h-4" /> {new Date(project.start_date).toLocaleDateString('ko-KR')}</span>
                         </div>
                       </div>
                       <div className={`px-3 py-1 rounded-full text-sm font-medium ${statusInfo.color} flex items-center gap-1`}>
-                        <span>{statusInfo.icon}</span>
+                        {statusInfo.icon}
                         <span>{statusInfo.text}</span>
                       </div>
                     </div>
@@ -297,7 +298,10 @@ const EnterpriseHomePage: React.FC = () => {
 
           {/* 도움말 섹션 */}
           <div className="mt-8 bg-blue-50 rounded-lg p-4 md:p-6">
-            <h3 className="text-lg font-semibold text-blue-900 mb-3">💡 도움이 필요하신가요?</h3>
+            <h3 className="text-lg font-semibold text-blue-900 mb-3 flex items-center gap-2">
+              <Lightbulb className="w-5 h-5" />
+              도움이 필요하신가요?
+            </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-blue-800">
               <div>
                 <p className="font-medium mb-1">프로젝트 상담 신청 방법</p>
