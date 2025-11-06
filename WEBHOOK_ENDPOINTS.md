@@ -27,6 +27,11 @@ https://your-domain.com/api/subscription-v2/webhook
 
 **검증:**
 - `PORTONE_V2_WEBHOOK_SECRET` 환경 변수로 검증
+- Standard Webhooks 기반 검증 (2024-01-01 및 2024-04-25 버전 모두 지원)
+
+**웹훅 버전:**
+- 현재 사용 중: `2024-01-01`
+- 지원 버전: `2024-01-01`, `2024-04-25` (Standard Webhooks 검증 방식 동일)
 
 ---
 

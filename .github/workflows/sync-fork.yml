@@ -24,12 +24,27 @@ jobs:
 
       - name: Add upstream remote
         run: |
-          git remote add upstream https://github.com/suhyeon10/linkers.git || true
-          git remote set-url upstream https://github.com/suhyeon10/linkers.git
+          # 기존 upstream이 있으면 제거
+          git remote remove upstream 2>/dev/null || true
+          # upstream 추가 (에러 발생 시 스킵)
+          git remote add upstream https://github.com/suhyeon10/linkers.git || {
+            echo "⚠️ Upstream 저장소를 찾을 수 없습니다. private 저장소이거나 존재하지 않을 수 있습니다."
+            echo "워크플로우를 종료합니다."
+            exit 0
+          }
 
       - name: Fetch upstream changes
         run: |
-          git fetch upstream
+          # upstream 저장소 접근 시도
+          if ! git fetch upstream 2>&1; then
+            echo "⚠️ Upstream 저장소에 접근할 수 없습니다."
+            echo "가능한 원인:"
+            echo "  - 저장소가 private이고 접근 권한이 없음"
+            echo "  - 저장소가 존재하지 않음"
+            echo "  - 네트워크 오류"
+            echo "워크플로우를 종료합니다."
+            exit 0
+          fi
 
       - name: Check if main branch exists
         id: check-main

@@ -1,6 +1,9 @@
 /**
  * 포트원 V2 Webhook 처리
  * 정기 결제 결과 수신 및 다음 달 결제 예약
+ * 
+ * 웹훅 버전: 2024-01-01
+ * Standard Webhooks 기반 검증 사용 (2024-01-01 및 2024-04-25 버전 모두 지원)
  */
 
 import { NextRequest, NextResponse } from 'next/server'
