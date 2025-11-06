@@ -5,6 +5,7 @@ import Link from 'next/link'
 const LandingPage = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 w-full">
+      <div className="max-w-7xl mx-auto">
       {/* Hero Section - 프리랜서 중심 */}
       <section className="relative py-10 md:py-20 px-4 md:px-6 text-center">
         <div className="w-full">
@@ -303,6 +304,7 @@ const LandingPage = () => {
           </div>
         </div>
       </footer>
+      </div>
     </div>
   )
 }
