@@ -448,8 +448,55 @@ const Header = () => {
 
               {/* 네비게이션 메뉴 */}
               <nav className="space-y-2">
-                {isMyPage && account && account.role ? (
-                  // 마이페이지 메뉴 (그룹별로 표시)
+                {/* 일반 네비게이션 메뉴 (항상 표시) */}
+                {(() => {
+                  // Navigator 컴포넌트와 동일한 로직으로 일반 네비게이션 메뉴 생성
+                  let generalRoutes: Array<{ label: string; href: string }> = []
+                  
+                  if (activeProfileType === 'COMPANY') {
+                    generalRoutes = [
+                      { label: '내 프로젝트 목록', href: '/enterprise/my-counsel' },
+                      { label: '프로젝트 상담 신청', href: '/enterprise/counsel-form' },
+                    ]
+                  } else {
+                    generalRoutes = [
+                      { label: '프로젝트 찾기', href: '/search-projects' },
+                      { label: '메이커 검색', href: '/search-makers' },
+                    ]
+                    
+                    if (activeProfileType === 'FREELANCER' && activeRole === 'MANAGER') {
+                      generalRoutes.push(
+                        { label: '팀 프로필 조회', href: '/team-profile' },
+                        { label: '팀 프로젝트 확인', href: '/team-projects' }
+                      )
+                    }
+                  }
+                  
+                  return (
+                    <div className="mb-6">
+                      <h3 className="text-sm font-semibold text-gray-900 mb-2 px-4">메뉴</h3>
+                      <div className="space-y-1">
+                        {generalRoutes.map((route) => (
+                          <Link
+                            key={route.href}
+                            href={route.href}
+                            onClick={() => setShowMobileMenu(false)}
+                            className={`block px-4 py-2.5 rounded-lg transition-colors ${
+                              pathname === route.href
+                                ? 'bg-gray-100 text-palette-coolNeutral-20 font-semibold'
+                                : 'text-gray-700 hover:bg-gray-50'
+                            }`}
+                          >
+                            {route.label}
+                          </Link>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })()}
+
+                {/* 마이페이지 세부 메뉴 (마이페이지일 때만 표시) */}
+                {isMyPage && account && account.role && (
                   (() => {
                     const routes = getMobileRoutes as Array<{ label: string; href: string; group?: string }>
                     const groupedRoutes = routes.reduce((acc, route) => {
@@ -483,22 +530,6 @@ const Header = () => {
                       </div>
                     ))
                   })()
-                ) : (
-                  // 기본 네비게이션 메뉴
-                  (getMobileRoutes as Array<{ label: string; href: string }>).map((route) => (
-                    <Link
-                      key={route.href}
-                      href={route.href}
-                      onClick={() => setShowMobileMenu(false)}
-                      className={`block px-4 py-3 rounded-lg transition-colors ${
-                        pathname === route.href
-                          ? 'bg-gray-100 text-palette-coolNeutral-20 font-semibold'
-                          : 'text-gray-700 hover:bg-gray-50'
-                      }`}
-                    >
-                      {route.label}
-                    </Link>
-                  ))
                 )}
               </nav>
 
