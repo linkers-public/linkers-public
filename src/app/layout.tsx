@@ -14,8 +14,13 @@ export const metadata: Metadata = {
     type: 'website',
   },
   icons: {
-    icon: '/icon.svg',
-    apple: '/icon.svg',
+    icon: [
+      { url: '/icon.svg', type: 'image/svg+xml' },
+    ],
+    apple: [
+      { url: '/icon.svg', sizes: '180x180', type: 'image/svg+xml' },
+    ],
+    shortcut: '/icon.svg',
   },
 }
 

@@ -4,7 +4,7 @@ import Link from 'next/link'
 
 const LandingPage = () => {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 w-screen relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw]">
       {/* Hero Section - 프리랜서 중심 */}
       <section className="relative py-20 px-4 text-center">
         <div className="max-w-6xl mx-auto">
