@@ -53,7 +53,8 @@ export interface TeamEstimateFormData {
 export const submitTeamEstimate = async (
   counselId: number,
   companyProfileId: string,
-  formData: TeamEstimateFormData
+  formData: TeamEstimateFormData,
+  teamId?: number // 팀 ID를 선택적으로 받음
 ) => {
   const supabase = createSupabaseBrowserClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -74,15 +75,33 @@ export const submitTeamEstimate = async (
     throw new Error('프리랜서 프로필을 찾을 수 없습니다.')
   }
 
-  // 팀 정보 가져오기 (manager_profile_id로 조회)
-  const { data: teamData, error: teamError } = await supabase
-    .from('teams')
-    .select('id')
-    .eq('manager_profile_id', managerProfile.profile_id)
-    .maybeSingle()
+  // 팀 ID가 제공되지 않은 경우, 사용자의 팀 조회
+  let finalTeamId: number
+  if (teamId) {
+    // 제공된 팀 ID가 사용자의 팀인지 확인
+    const { data: teamData, error: teamError } = await supabase
+      .from('teams')
+      .select('id')
+      .eq('id', teamId)
+      .eq('manager_profile_id', managerProfile.profile_id)
+      .maybeSingle()
 
-  if (teamError || !teamData) {
-    throw new Error('팀 정보를 찾을 수 없습니다. 먼저 팀을 생성해주세요.')
+    if (teamError || !teamData) {
+      throw new Error('유효하지 않은 팀입니다.')
+    }
+    finalTeamId = teamData.id
+  } else {
+    // 팀 정보 가져오기 (manager_profile_id로 조회)
+    const { data: teamData, error: teamError } = await supabase
+      .from('teams')
+      .select('id')
+      .eq('manager_profile_id', managerProfile.profile_id)
+      .maybeSingle()
+
+    if (teamError || !teamData) {
+      throw new Error('팀 정보를 찾을 수 없습니다. 먼저 팀을 생성해주세요.')
+    }
+    finalTeamId = teamData.id
   }
 
   // counsel에서 company_profile_id 확인
@@ -101,7 +120,7 @@ export const submitTeamEstimate = async (
     .from('estimate')
     .select('estimate_id')
     .eq('counsel_id', counselId)
-    .eq('team_id', teamData.id)
+    .eq('team_id', finalTeamId)
     .maybeSingle()
 
   let estimateId: number
@@ -127,7 +146,7 @@ export const submitTeamEstimate = async (
     const { data: newEstimate, error: insertError } = await supabase
       .from('estimate')
       .insert({
-        team_id: teamData.id,
+        team_id: finalTeamId,
         manager_profile_id: managerProfile.profile_id,
         company_profile_id: companyProfileId || (counselData as any).company_profile_id,
         counsel_id: counselId,
@@ -204,7 +223,7 @@ export const submitTeamEstimate = async (
 /**
  * 팀 견적서 조회 (매니저용)
  */
-export const getTeamEstimate = async (counselId: number): Promise<TeamEstimate | null> => {
+export const getTeamEstimate = async (counselId: number, teamId?: number): Promise<TeamEstimate | null> => {
   const supabase = createSupabaseBrowserClient()
   const { data: { user } } = await supabase.auth.getUser()
 
@@ -224,15 +243,33 @@ export const getTeamEstimate = async (counselId: number): Promise<TeamEstimate |
     return null
   }
 
-  // 팀 정보 가져오기 (manager_profile_id로 조회)
-  const { data: teamData } = await supabase
-    .from('teams')
-    .select('id')
-    .eq('manager_profile_id', managerProfile.profile_id)
-    .maybeSingle()
+  // 팀 ID가 제공되지 않은 경우, 사용자의 팀 조회
+  let finalTeamId: number
+  if (teamId) {
+    // 제공된 팀 ID가 사용자의 팀인지 확인
+    const { data: teamData } = await supabase
+      .from('teams')
+      .select('id')
+      .eq('id', teamId)
+      .eq('manager_profile_id', managerProfile.profile_id)
+      .maybeSingle()
 
-  if (!teamData) {
-    return null
+    if (!teamData) {
+      return null
+    }
+    finalTeamId = teamData.id
+  } else {
+    // 팀 정보 가져오기 (manager_profile_id로 조회)
+    const { data: teamData } = await supabase
+      .from('teams')
+      .select('id')
+      .eq('manager_profile_id', managerProfile.profile_id)
+      .maybeSingle()
+
+    if (!teamData) {
+      return null
+    }
+    finalTeamId = teamData.id
   }
 
   // 견적서 조회
@@ -240,7 +277,7 @@ export const getTeamEstimate = async (counselId: number): Promise<TeamEstimate |
     .from('estimate')
     .select('*')
     .eq('counsel_id', counselId)
-    .eq('team_id', teamData.id)
+    .eq('team_id', finalTeamId)
     .maybeSingle()
 
   if (estimateError || !estimate) {

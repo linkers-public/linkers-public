@@ -4,6 +4,8 @@ import React, { useEffect, useState } from 'react';
 import { useRouter, useParams } from 'next/navigation'; // useParams로 URL 매개변수 추출
 import { fetchCounselWithClient } from '@/apis/counsel.service';
 import { insertEstimate } from '@/apis/estimate.service'
+import { fetchMyTeams } from '@/apis/team.service'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 
 const ConsultationForm: React.FC = () => {
@@ -22,6 +24,9 @@ const ConsultationForm: React.FC = () => {
   const [projectStartDate, setProjectStartDate] = useState('');
   const [projectEndDate, setProjectEndDate] = useState('');
   const [budget, setBudget] = useState(0);
+  const [teams, setTeams] = useState<any[]>([]);
+  const [selectedTeamId, setSelectedTeamId] = useState<number | null>(null);
+  const [loadingTeams, setLoadingTeams] = useState(false);
   const clientId = 'baa0fd5e-4add-44f2-b1df-1ec59a838b7e'
   // 날짜와 비용을 처리하는 함수들
   const handleStartDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -60,6 +65,25 @@ const ConsultationForm: React.FC = () => {
           setCounsel(result.counsel);
           setClient(result.client);
         }
+        
+        // 팀 목록 로드
+        setLoadingTeams(true);
+        try {
+          const { data: teamsData, error: teamsError } = await fetchMyTeams();
+          if (teamsError || !teamsData || teamsData.length === 0) {
+            console.warn('팀이 없습니다.');
+          } else {
+            setTeams(teamsData);
+            // 팀이 1개만 있으면 자동 선택
+            if (teamsData.length === 1) {
+              setSelectedTeamId(teamsData[0].id);
+            }
+          }
+        } catch (error) {
+          console.error('팀 목록 로드 실패:', error);
+        } finally {
+          setLoadingTeams(false);
+        }
       } catch (error) {
         console.error('Error fetching counsel details:', error);
       } finally {
@@ -93,6 +117,11 @@ const ConsultationForm: React.FC = () => {
 
   // 임시저장 버튼 클릭 시 API 호출
   const handleSaveDraft = async () => {
+    // 팀 선택 확인
+    if (!selectedTeamId) {
+      alert('팀을 선택해주세요. 견적서를 작성하려면 팀이 필요합니다.');
+      return;
+    }
 
     console.log("milestone: " + rows)
     const estimateData = {
@@ -103,6 +132,7 @@ const ConsultationForm: React.FC = () => {
       budget,
       detailEstimate,
       milestones: rows, // 마일스톤 데이터
+      teamId: selectedTeamId, // 팀 ID 전달
     };
 
 
@@ -113,6 +143,7 @@ const ConsultationForm: React.FC = () => {
       router.push('/search-projects'); // 임시저장 후 검색 페이지로 이동
     } catch (error) {
       console.error('임시저장 실패:', error);
+      alert('임시저장에 실패했습니다. 다시 시도해주세요.');
     }
   };
 
@@ -275,6 +306,47 @@ const ConsultationForm: React.FC = () => {
 
       {/* 가로선 */}
       <hr style={{ border: '1px solid', marginBottom: '20px' }} />
+
+      {/* 팀 선택 */}
+      {loadingTeams ? (
+        <div style={{ marginBottom: '20px', textAlign: 'center', padding: '20px' }}>
+          <p>팀 목록을 불러오는 중...</p>
+        </div>
+      ) : teams.length > 0 ? (
+        <div style={{ marginBottom: '20px' }}>
+          <label style={{ display: 'block', marginBottom: '10px', fontWeight: 'bold' }}>
+            팀 선택 <span style={{ color: 'red' }}>*</span>
+          </label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+            <Select
+              value={selectedTeamId?.toString() || ''}
+              onValueChange={(value) => setSelectedTeamId(Number(value))}
+            >
+              <SelectTrigger style={{ width: '100%', padding: '10px', borderRadius: '5px', border: '1px solid #ddd' }}>
+                <SelectValue placeholder="팀을 선택하세요" />
+              </SelectTrigger>
+              <SelectContent>
+                {teams.map((team) => (
+                  <SelectItem key={team.id} value={team.id.toString()}>
+                    {team.name || `팀 #${team.id}`} {team.isManager ? '(매니저)' : '(팀원)'}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {teams.length === 1 && (
+              <p style={{ fontSize: '12px', color: '#666', marginTop: '5px' }}>
+                팀이 1개만 있어 자동으로 선택되었습니다.
+              </p>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#fff3cd', border: '1px solid #ffc107', borderRadius: '5px' }}>
+          <p style={{ color: '#856404', margin: 0 }}>
+            팀이 없습니다. 먼저 팀을 생성해주세요.
+          </p>
+        </div>
+      )}
 
       {/* Project Schedule */}
       <div style={{ marginBottom: '20px' }}>

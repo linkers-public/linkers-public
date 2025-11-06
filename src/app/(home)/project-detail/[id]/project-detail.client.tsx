@@ -6,10 +6,12 @@ import { fetchCounselWithClient } from '@/apis/counsel.service'
 import { submitMakerEstimate, getMakerEstimate } from '@/apis/maker-estimate.service'
 import { getProjectMembers } from '@/apis/project-member.service'
 import { submitTeamEstimate, getTeamEstimate, TeamEstimate } from '@/apis/team-estimate.service'
+import { fetchMyTeams } from '@/apis/team.service'
 import { createSupabaseBrowserClient } from '@/supabase/supabase-client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from '@/hooks/use-toast'
 import { formatDate } from '@/lib/dateFormat'
 import { ArrowLeft, Plus, X } from 'lucide-react'
@@ -68,6 +70,9 @@ const ProjectDetailClient: React.FC = () => {
       endDate: string
     }>
   })
+  const [teams, setTeams] = useState<any[]>([])
+  const [selectedTeamId, setSelectedTeamId] = useState<number | null>(null)
+  const [loadingTeams, setLoadingTeams] = useState(false)
   const router = useRouter()
   const params = useParams()
   const counselId = params?.id
@@ -106,27 +111,32 @@ const ProjectDetailClient: React.FC = () => {
               .maybeSingle()
 
             if (managerProfile) {
-              const { data: teamData } = await supabase
-                .from('teams')
-                .select('id')
-                .eq('manager_profile_id', managerProfile.profile_id)
-                .maybeSingle()
+              // 사용자의 모든 팀 조회
+              const { data: teamsData, error: teamsError } = await fetchMyTeams()
               
-              setIsManager(!!teamData)
-
-              // 매니저인 경우 팀 견적서 조회
-              if (teamData) {
-                const estimate = await getTeamEstimate(Number(counselId))
-                setTeamEstimate(estimate)
-                if (estimate?.estimate_version) {
-                  setTeamEstimateForm(prev => ({
-                    ...prev,
-                    totalAmount: estimate.estimate_version?.total_amount?.toString() || '',
-                    startDate: estimate.estimate_version?.start_date || '',
-                    endDate: estimate.estimate_version?.end_date || '',
-                    detail: estimate.estimate_version?.detail || '',
-                  }))
+              if (teamsData && teamsData.length > 0) {
+                setIsManager(true)
+                setTeams(teamsData)
+                
+                // 팀이 1개만 있으면 자동 선택
+                if (teamsData.length === 1) {
+                  setSelectedTeamId(teamsData[0].id)
+                  
+                  // 팀 견적서 조회
+                  const estimate = await getTeamEstimate(Number(counselId), teamsData[0].id)
+                  setTeamEstimate(estimate)
+                  if (estimate?.estimate_version) {
+                    setTeamEstimateForm(prev => ({
+                      ...prev,
+                      totalAmount: estimate.estimate_version?.total_amount?.toString() || '',
+                      startDate: estimate.estimate_version?.start_date || '',
+                      endDate: estimate.estimate_version?.end_date || '',
+                      detail: estimate.estimate_version?.detail || '',
+                    }))
+                  }
                 }
+              } else {
+                setIsManager(false)
               }
             }
           }
@@ -239,6 +249,16 @@ const ProjectDetailClient: React.FC = () => {
   const handleTeamEstimateSubmit = async () => {
     if (!counselId || !client) return
 
+    // 팀 선택 확인
+    if (!selectedTeamId) {
+      toast({
+        variant: 'destructive',
+        title: '팀을 선택해주세요',
+        description: '견적서를 작성하려면 팀을 선택해야 합니다.',
+      })
+      return
+    }
+
     if (!teamEstimateForm.totalAmount || !teamEstimateForm.startDate || !teamEstimateForm.endDate || !teamEstimateForm.detail) {
       toast({
         variant: 'destructive',
@@ -278,7 +298,8 @@ const ProjectDetailClient: React.FC = () => {
             startDate: m.startDate,
             endDate: m.endDate,
           })),
-        }
+        },
+        selectedTeamId // 팀 ID 전달
       )
 
       setShowTeamEstimateForm(false)
@@ -288,7 +309,7 @@ const ProjectDetailClient: React.FC = () => {
       })
 
       // 견적서 정보 새로고침
-      const estimate = await getTeamEstimate(Number(counselId))
+      const estimate = await getTeamEstimate(Number(counselId), selectedTeamId)
       setTeamEstimate(estimate)
     } catch (error: any) {
       console.error('Error submitting team estimate:', error)
@@ -362,7 +383,7 @@ const ProjectDetailClient: React.FC = () => {
   }
 
   return (
-    <div className="w-full max-w-[1024px] mx-auto py-6">
+    <div className="w-full max-w-[1024px] mx-auto py-6 px-4 md:px-6">
       {/* 프로젝트 헤더 */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
         <div className="flex justify-between items-start mb-4">
@@ -527,6 +548,55 @@ const ProjectDetailClient: React.FC = () => {
                 {teamEstimate ? '팀 견적서 수정' : '팀 견적서 작성'}
               </h4>
               <div className="space-y-4">
+                {/* 팀 선택 */}
+                {teams.length > 0 ? (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      팀 선택 <span className="text-red-500">*</span>
+                    </label>
+                    <Select
+                      value={selectedTeamId?.toString() || ''}
+                      onValueChange={(value) => {
+                        const teamId = Number(value)
+                        setSelectedTeamId(teamId)
+                        // 팀 변경 시 해당 팀의 견적서 조회
+                        getTeamEstimate(Number(counselId), teamId).then(estimate => {
+                          setTeamEstimate(estimate)
+                          if (estimate?.estimate_version) {
+                            setTeamEstimateForm(prev => ({
+                              ...prev,
+                              totalAmount: estimate.estimate_version?.total_amount?.toString() || '',
+                              startDate: estimate.estimate_version?.start_date || '',
+                              endDate: estimate.estimate_version?.end_date || '',
+                              detail: estimate.estimate_version?.detail || '',
+                            }))
+                          }
+                        })
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="팀을 선택하세요" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {teams.map((team) => (
+                          <SelectItem key={team.id} value={team.id.toString()}>
+                            {team.name || `팀 #${team.id}`} {team.isManager ? '(매니저)' : '(팀원)'}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {teams.length === 1 && (
+                      <p className="text-xs text-gray-500 mt-1">팀이 1개만 있어 자동으로 선택되었습니다.</p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                    <p className="text-sm text-yellow-800">
+                      팀이 없습니다. 먼저 팀을 생성해주세요.
+                    </p>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">

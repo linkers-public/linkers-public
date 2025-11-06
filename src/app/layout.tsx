@@ -13,15 +13,8 @@ export const metadata: Metadata = {
     description: '프리랜서 개발자와 기업을 연결하는 초고속 서비스 제작 플랫폼',
     type: 'website',
   },
-  icons: {
-    icon: [
-      { url: '/icon.svg', type: 'image/svg+xml' },
-    ],
-    apple: [
-      { url: '/icon.svg', sizes: '180x180', type: 'image/svg+xml' },
-    ],
-    shortcut: '/icon.svg',
-  },
+  // Next.js 13+ App Router에서는 app/icon.svg를 자동으로 인식하므로 명시적 설정 불필요
+  // icons 설정을 제거하면 app/icon.svg가 자동으로 사용됩니다
 }
 
 const notoSansKR = Noto_Sans_KR({

@@ -6,7 +6,9 @@ import { createSupabaseBrowserClient } from '@/supabase/supabase-client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from '@/hooks/use-toast'
+import { fetchMyTeams } from '@/apis/team.service'
 import { Filter, SortAsc, Clock, DollarSign, FileText, Calendar, CheckCircle, XCircle, Search } from 'lucide-react'
 
 interface CounselRequest {
@@ -57,6 +59,9 @@ export default function EstimateRequestsClient() {
     detail: '',
   })
   const [submitting, setSubmitting] = useState(false)
+  const [teams, setTeams] = useState<any[]>([])
+  const [selectedTeamId, setSelectedTeamId] = useState<number | null>(null)
+  const [loadingTeams, setLoadingTeams] = useState(false)
 
   useEffect(() => {
     loadRequests()
@@ -212,7 +217,7 @@ export default function EstimateRequestsClient() {
     setFilteredRequests(filtered)
   }
 
-  const handleOpenEstimateDialog = (request: CounselRequest) => {
+  const handleOpenEstimateDialog = async (request: CounselRequest) => {
     setSelectedRequest(request)
     setEstimateForm({
       total_amount: '',
@@ -220,11 +225,55 @@ export default function EstimateRequestsClient() {
       end_date: '',
       detail: '',
     })
+    
+    // 팀 목록 로드
+    setLoadingTeams(true)
+    try {
+      const { data: teamsData, error: teamsError } = await fetchMyTeams()
+      if (teamsError || !teamsData || teamsData.length === 0) {
+        toast({
+          variant: 'destructive',
+          title: '팀이 없습니다',
+          description: '견적서를 작성하려면 먼저 팀을 생성해주세요.',
+        })
+        setLoadingTeams(false)
+        return
+      }
+      
+      setTeams(teamsData)
+      
+      // 팀이 1개만 있으면 자동 선택
+      if (teamsData.length === 1) {
+        setSelectedTeamId(teamsData[0].id)
+      } else {
+        setSelectedTeamId(null)
+      }
+    } catch (error: any) {
+      console.error('팀 목록 로드 실패:', error)
+      toast({
+        variant: 'destructive',
+        title: '팀 목록을 불러오는데 실패했습니다',
+        description: error.message,
+      })
+    } finally {
+      setLoadingTeams(false)
+    }
+    
     setShowEstimateDialog(true)
   }
 
   const handleSubmitEstimate = async () => {
     if (!selectedRequest) return
+
+    // 팀 선택 확인
+    if (!selectedTeamId) {
+      toast({
+        variant: 'destructive',
+        title: '팀을 선택해주세요',
+        description: '견적서를 작성하려면 팀을 선택해야 합니다.',
+      })
+      return
+    }
 
     try {
       setSubmitting(true)
@@ -243,16 +292,16 @@ export default function EstimateRequestsClient() {
         throw new Error('프리랜서 프로필을 찾을 수 없습니다.')
       }
 
-      // 팀 정보 가져오기 (manager_profile_id로 조회)
+      // 선택된 팀이 사용자의 팀인지 확인
       const { data: teamData, error: teamError } = await supabase
         .from('teams')
         .select('id')
+        .eq('id', selectedTeamId)
         .eq('manager_profile_id', managerProfile.profile_id)
-        .limit(1)
         .maybeSingle()
 
       if (teamError || !teamData) {
-        throw new Error('팀 정보를 찾을 수 없습니다. 먼저 팀을 생성해주세요.')
+        throw new Error('유효하지 않은 팀입니다.')
       }
 
       // counsel에서 company_profile_id 확인
@@ -270,7 +319,7 @@ export default function EstimateRequestsClient() {
       const { data: estimateData, error: estimateError } = await supabase
         .from('estimate')
         .insert({
-          team_id: teamData.id,
+          team_id: selectedTeamId,
           manager_profile_id: managerProfile.profile_id,
           company_profile_id: (counselData as any).company_profile_id,
           counsel_id: selectedRequest.counsel_id,
@@ -550,6 +599,43 @@ export default function EstimateRequestsClient() {
                   )}
                 </div>
               </div>
+
+              {/* 팀 선택 */}
+              {loadingTeams ? (
+                <div className="text-center py-4">
+                  <p className="text-sm text-gray-600">팀 목록을 불러오는 중...</p>
+                </div>
+              ) : teams.length > 0 ? (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    팀 선택 <span className="text-red-500">*</span>
+                  </label>
+                  <Select
+                    value={selectedTeamId?.toString() || ''}
+                    onValueChange={(value) => setSelectedTeamId(Number(value))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="팀을 선택하세요" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {teams.map((team) => (
+                        <SelectItem key={team.id} value={team.id.toString()}>
+                          {team.name || `팀 #${team.id}`} {team.isManager ? '(매니저)' : '(팀원)'}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {teams.length === 1 && (
+                    <p className="text-xs text-gray-500 mt-1">팀이 1개만 있어 자동으로 선택되었습니다.</p>
+                  )}
+                </div>
+              ) : (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                  <p className="text-sm text-yellow-800">
+                    팀이 없습니다. 먼저 팀을 생성해주세요.
+                  </p>
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">

@@ -160,11 +160,55 @@ export const insertEstimate = async (estimateData: {
     budget: number;
     detailEstimate: string;
     milestones: any[];
+    teamId?: number; // 팀 ID를 선택적으로 받음
 }) => {
     try {
         const managerId = await checkSession(); // 세션 체크
         
         console.log('Creating new estimate:', estimateData);
+
+        // 팀 ID가 제공되지 않은 경우, 사용자의 팀 조회
+        let finalTeamId: number
+        if (estimateData.teamId) {
+            // 제공된 팀 ID가 사용자의 팀인지 확인
+            const { data: teamData, error: teamError } = await supabase
+                .from('teams')
+                .select('id')
+                .eq('id', estimateData.teamId)
+                .maybeSingle()
+
+            if (teamError || !teamData) {
+                handleError('유효하지 않은 팀입니다.', teamError);
+                return;
+            }
+            finalTeamId = teamData.id
+        } else {
+            // 현재 사용자의 FREELANCER 프로필 조회
+            const { data: managerProfile, error: profileError } = await supabase
+                .from('accounts')
+                .select('profile_id')
+                .eq('user_id', managerId)
+                .eq('profile_type', 'FREELANCER')
+                .maybeSingle()
+
+            if (profileError || !managerProfile) {
+                handleError('프리랜서 프로필을 찾을 수 없습니다.', profileError);
+                return;
+            }
+
+            // 팀 정보 가져오기 (manager_profile_id로 조회)
+            const { data: teamData, error: teamError } = await supabase
+                .from('teams')
+                .select('id')
+                .eq('manager_profile_id', managerProfile.profile_id)
+                .maybeSingle()
+
+            if (teamError || !teamData) {
+                handleError('팀 정보를 찾을 수 없습니다. 먼저 팀을 생성해주세요.', teamError);
+                return;
+            }
+            finalTeamId = teamData.id
+        }
 
         // 1. estimate 테이블에 기본 정보 삽입
         const { data: estimate, error: estimateError } = await supabase
@@ -173,7 +217,7 @@ export const insertEstimate = async (estimateData: {
                 client_id: estimateData.clientId,
                 counsel_id: estimateData.counselId,
                 manager_id: managerId,
-                team_id: 1, // 임시로 1 설정 (실제로는 선택된 팀 ID 사용)
+                team_id: finalTeamId,
                 estimate_status: 'pending',
                 estimate_start_date: estimateData.projectStartDate,
                 estimate_due_date: estimateData.projectEndDate,

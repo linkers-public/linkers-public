@@ -4,21 +4,21 @@ import Link from 'next/link'
 
 const LandingPage = () => {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 w-screen relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw]">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 w-full">
       {/* Hero Section - 프리랜서 중심 */}
-      <section className="relative py-20 px-4 text-center">
+      <section className="relative py-20 px-4 md:px-6 text-center">
         <div className="max-w-6xl mx-auto">
-          <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 mb-4 md:mb-6 leading-tight px-4">
+          <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 mb-4 md:mb-6 leading-tight">
             개발자 어디서 찾아야 할지<br />
             <span className="text-blue-600">막막하다면?</span>
           </h1>
-          <p className="text-base sm:text-lg md:text-xl text-gray-600 mb-2 max-w-3xl mx-auto px-4">
+          <p className="text-base sm:text-lg md:text-xl text-gray-600 mb-2 max-w-3xl mx-auto">
             견적은 공짜, 연락할 때만 결제!
           </p>
-          <p className="text-lg sm:text-xl md:text-2xl font-bold text-blue-600 mb-6 md:mb-8 px-4">
+          <p className="text-lg sm:text-xl md:text-2xl font-bold text-blue-600 mb-6 md:mb-8">
             부담 없이 먼저 받아보고 선택하세요.
           </p>
-          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center px-4">
+          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
             <Link 
               href="/auth?role=maker"
               className="bg-blue-600 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-lg text-base sm:text-lg font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 shadow-lg"
@@ -38,7 +38,7 @@ const LandingPage = () => {
       </section>
 
       {/* 프리랜서 How it Works Section */}
-      <section className="py-20 px-4 bg-white">
+      <section className="py-20 px-4 md:px-6 bg-white">
         <div className="max-w-6xl mx-auto">
           <h2 className="text-4xl font-bold text-gray-900 mb-6 text-center">
             프리랜서는 이렇게 활동합니다
@@ -92,7 +92,7 @@ const LandingPage = () => {
       </section>
 
       {/* 프리랜서 혜택 Section */}
-      <section className="py-20 px-4 bg-gray-50">
+      <section className="py-20 px-4 md:px-6 bg-gray-50">
         <div className="max-w-6xl mx-auto text-center">
           <h2 className="text-4xl font-bold text-gray-900 mb-6">프리랜서가 선택하는 이유</h2>
           <div className="grid md:grid-cols-3 gap-8">
@@ -122,7 +122,7 @@ const LandingPage = () => {
       </section>
 
       {/* 기업 Section - 아래쪽 배치 */}
-      <section className="py-20 px-4 bg-white">
+      <section className="py-20 px-4 md:px-6 bg-white">
         <div className="max-w-6xl mx-auto">
           <h2 className="text-4xl font-bold text-gray-900 mb-4 text-center">
             클라이언트는 이렇게 사용해요
@@ -165,7 +165,7 @@ const LandingPage = () => {
       </section>
 
       {/* 가격 정책 Section */}
-      <section className="py-20 px-4 bg-gray-50">
+      <section className="py-20 px-4 md:px-6 bg-gray-50">
         <div className="max-w-6xl mx-auto">
           <h2 className="text-4xl font-bold text-gray-900 mb-12 text-center">가격 정책</h2>
           <div className="grid md:grid-cols-2 gap-8">
@@ -224,7 +224,7 @@ const LandingPage = () => {
       </section>
 
       {/* 마지막 CTA Section */}
-      <section className="py-20 px-4 bg-white">
+      <section className="py-20 px-4 md:px-6 bg-white">
         <div className="max-w-4xl mx-auto text-center">
           <h2 className="text-4xl font-bold text-gray-900 mb-6">지금 바로 시작하세요</h2>
           <p className="text-xl text-gray-600 mb-8">
@@ -250,7 +250,7 @@ const LandingPage = () => {
       </section>
 
       {/* FAQ Section */}
-      <section className="py-20 px-4 bg-gray-50">
+      <section className="py-20 px-4 md:px-6 bg-gray-50">
         <div className="max-w-4xl mx-auto">
           <h2 className="text-4xl font-bold text-gray-900 mb-12 text-center">
             자주 묻는 질문
@@ -274,7 +274,7 @@ const LandingPage = () => {
       </section>
 
       {/* Footer */}
-      <footer className="bg-gray-900 text-white py-12 px-4">
+      <footer className="bg-gray-900 text-white py-12 px-4 md:px-6">
         <div className="max-w-6xl mx-auto">
           <div className="grid md:grid-cols-3 gap-8">
             <div>

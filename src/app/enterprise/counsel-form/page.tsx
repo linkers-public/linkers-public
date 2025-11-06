@@ -130,8 +130,7 @@ const ProjectCounselForm: React.FC = () => {
   };
 
   return (
-    <div className="w-full -mx-4 md:-mx-6 px-4 md:px-6">
-      <div className="w-full">
+    <div className="w-full">
         {/* 헤더 */}
         <div className="text-center mb-10">
           <h1 className="text-4xl font-bold text-gray-900 mb-3">프로젝트 상담 신청</h1>
