@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
       .from('accounts')
       .select('username, contact_phone, contact_email')
       .eq('user_id', user.id)
-      .single()
+      .single() as any
 
     // 구독 정보 생성 (첫 달 무료)
     const subscriptionDate = new Date()
@@ -64,6 +64,9 @@ export async function POST(request: NextRequest) {
       buyer_info?.tel || 
       accountData?.contact_phone || 
       '010-0000-0000' // 기본값
+
+    // 빌링키 발급 직후 바로 사용하면 포트원 서버에 반영되지 않을 수 있으므로
+    // scheduleMonthlyPayment 함수 내부에서 재시도 로직이 처리됨
 
     try {
       // 첫 달은 무료이므로 30일 후 첫 결제 예약
