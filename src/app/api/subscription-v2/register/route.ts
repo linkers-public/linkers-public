@@ -60,10 +60,12 @@ export async function POST(request: NextRequest) {
     const paymentId = `linkers_sub_${user.id}_${Date.now()}`
 
     // 전화번호 설정 (필수 필드)
+    // 빌링키 발급 시 사용자가 입력한 전화번호를 우선 사용
     const phoneNumber = 
       buyer_info?.tel || 
+      buyer_info?.phoneNumber ||
       accountData?.contact_phone || 
-      '010-0000-0000' // 기본값
+      '010-0000-0000' // 기본값 (빌링키 발급 시 전화번호가 필수이므로 이 값은 사용되지 않아야 함)
 
     // 빌링키 발급 직후 바로 사용하면 포트원 서버에 반영되지 않을 수 있으므로
     // scheduleMonthlyPayment 함수 내부에서 재시도 로직이 처리됨

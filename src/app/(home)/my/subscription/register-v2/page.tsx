@@ -65,6 +65,24 @@ export default function SubscriptionRegisterV2Page() {
 
       // 빌링키 발급 성공
       const billingKey = billingKeyResponse.billingKey
+      
+      // 빌링키 발급 응답에서 사용자 정보 추출
+      // 포트원 V2 빌링키 발급 UI에서 사용자가 입력한 정보가 응답에 포함됨
+      // billingKeyResponse에는 billingKey와 함께 customer 정보가 포함될 수 있음
+      const customerInfo = billingKeyResponse.customer || billingKeyResponse.billingKeyInfo?.customer || {}
+      
+      // 빌링키 발급 UI에서 사용자가 입력한 전화번호 추출
+      const buyerInfo = {
+        name: customerInfo.fullName || customerInfo.name || user.email?.split('@')[0] || '사용자',
+        email: customerInfo.email || user.email || '',
+        tel: customerInfo.phoneNumber || customerInfo.phone || customerInfo.tel || '', // 빌링키 발급 UI에서 입력한 전화번호
+      }
+      
+      console.log('빌링키 발급 응답:', {
+        billingKey: billingKey.substring(0, 20) + '...',
+        customerInfo,
+        buyerInfo,
+      })
 
       // 서버에 구독 등록 요청
       try {
@@ -75,10 +93,7 @@ export default function SubscriptionRegisterV2Page() {
           },
           body: JSON.stringify({
             billingKey,
-            buyer_info: {
-              name: user.email?.split('@')[0] || '사용자',
-              email: user.email || '',
-            },
+            buyer_info: buyerInfo,
           }),
         })
 
