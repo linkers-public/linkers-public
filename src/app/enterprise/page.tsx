@@ -118,7 +118,7 @@ const EnterpriseHomePage: React.FC = () => {
         <div className="w-full px-4 md:px-6">
           {/* 환영 메시지 */}
           <div className="mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">
+            <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">
               안녕하세요! 👋
             </h1>
             <p className="text-gray-600 text-lg">
@@ -130,13 +130,13 @@ const EnterpriseHomePage: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             <button
               onClick={() => router.push('/enterprise/counsel-form')}
-              className="p-6 bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow text-left"
+              className="p-4 md:p-6 bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow text-left"
             >
               <div className="flex items-center mb-3">
                 <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mr-4">
                   <span className="text-2xl">📝</span>
                 </div>
-                <h3 className="text-lg font-semibold text-gray-900">프로젝트 상담 신청</h3>
+                <h3 className="text-base md:text-lg font-semibold text-gray-900">프로젝트 상담 신청</h3>
               </div>
               <p className="text-gray-600 text-sm">
                 새로운 프로젝트를 시작하고 싶으시다면 상담을 신청해보세요
@@ -145,7 +145,7 @@ const EnterpriseHomePage: React.FC = () => {
 
             <button
               onClick={() => router.push('/enterprise/search-makers')}
-              className="p-6 bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow text-left"
+              className="p-4 md:p-6 bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow text-left"
             >
               <div className="flex items-center mb-3">
                 <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mr-4">
@@ -160,7 +160,7 @@ const EnterpriseHomePage: React.FC = () => {
 
             <button
               onClick={() => router.push('/enterprise/my-counsel')}
-              className="p-6 bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow text-left"
+              className="p-4 md:p-6 bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow text-left"
             >
               <div className="flex items-center mb-3">
                 <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mr-4">
@@ -175,7 +175,7 @@ const EnterpriseHomePage: React.FC = () => {
 
             <button
               onClick={() => window.open('/search-makers', '_blank')}
-              className="p-6 bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow text-left"
+              className="p-4 md:p-6 bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow text-left"
             >
               <div className="flex items-center mb-3">
                 <div className="w-12 h-12 bg-orange-100 rounded-lg flex items-center justify-center mr-4">
@@ -191,7 +191,7 @@ const EnterpriseHomePage: React.FC = () => {
 
           {/* 프로젝트 통계 */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+            <div className="bg-white p-4 md:p-6 rounded-lg shadow-sm border border-gray-200">
               <div className="flex items-center">
                 <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
                   <span className="text-lg">📋</span>
@@ -203,7 +203,7 @@ const EnterpriseHomePage: React.FC = () => {
               </div>
             </div>
 
-            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+            <div className="bg-white p-4 md:p-6 rounded-lg shadow-sm border border-gray-200">
               <div className="flex items-center">
                 <div className="w-10 h-10 bg-yellow-100 rounded-lg flex items-center justify-center mr-3">
                   <span className="text-lg">⏳</span>
@@ -215,7 +215,7 @@ const EnterpriseHomePage: React.FC = () => {
               </div>
             </div>
 
-            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+            <div className="bg-white p-4 md:p-6 rounded-lg shadow-sm border border-gray-200">
               <div className="flex items-center">
                 <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center mr-3">
                   <span className="text-lg">📄</span>
@@ -227,7 +227,7 @@ const EnterpriseHomePage: React.FC = () => {
               </div>
             </div>
 
-            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+            <div className="bg-white p-4 md:p-6 rounded-lg shadow-sm border border-gray-200">
               <div className="flex items-center">
                 <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center mr-3">
                   <span className="text-lg">✅</span>
@@ -241,9 +241,9 @@ const EnterpriseHomePage: React.FC = () => {
           </div>
 
           {/* 최근 프로젝트 */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 md:p-6">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-semibold text-gray-900">최근 프로젝트</h2>
+              <h2 className="text-lg md:text-xl font-semibold text-gray-900">최근 프로젝트</h2>
               <button
                 onClick={() => router.push('/enterprise/my-counsel')}
                 className="text-blue-600 hover:text-blue-800 text-sm font-medium"
@@ -296,7 +296,7 @@ const EnterpriseHomePage: React.FC = () => {
           </div>
 
           {/* 도움말 섹션 */}
-          <div className="mt-8 bg-blue-50 rounded-lg p-6">
+          <div className="mt-8 bg-blue-50 rounded-lg p-4 md:p-6">
             <h3 className="text-lg font-semibold text-blue-900 mb-3">💡 도움이 필요하신가요?</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-blue-800">
               <div>

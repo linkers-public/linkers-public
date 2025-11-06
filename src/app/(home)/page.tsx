@@ -6,7 +6,7 @@ const LandingPage = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 w-full">
       {/* Hero Section - 프리랜서 중심 */}
-      <section className="relative py-20 px-4 md:px-6 text-center">
+      <section className="relative py-10 md:py-20 px-4 md:px-6 text-center">
         <div className="w-full">
           <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 mb-4 md:mb-6 leading-tight">
             개발자 어디서 찾아야 할지<br />
@@ -38,9 +38,9 @@ const LandingPage = () => {
       </section>
 
       {/* 프리랜서 How it Works Section */}
-      <section className="py-20 px-4 md:px-6 bg-white">
+      <section className="py-10 md:py-20 px-4 md:px-6 bg-white">
         <div className="w-full">
-          <h2 className="text-4xl font-bold text-gray-900 mb-6 text-center">
+          <h2 className="text-2xl md:text-4xl font-bold text-gray-900 mb-6 text-center">
             프리랜서는 이렇게 활동합니다
           </h2>
           <p className="text-xl text-gray-600 mb-12 text-center max-w-3xl mx-auto">
@@ -92,7 +92,7 @@ const LandingPage = () => {
       </section>
 
       {/* 프리랜서 혜택 Section */}
-      <section className="py-20 px-4 md:px-6 bg-gray-50">
+      <section className="py-10 md:py-20 px-4 md:px-6 bg-gray-50">
         <div className="w-full text-center">
           <h2 className="text-4xl font-bold text-gray-900 mb-6">프리랜서가 선택하는 이유</h2>
           <div className="grid md:grid-cols-3 gap-8">
@@ -122,9 +122,9 @@ const LandingPage = () => {
       </section>
 
       {/* 기업 Section - 아래쪽 배치 */}
-      <section className="py-20 px-4 md:px-6 bg-white">
+      <section className="py-10 md:py-20 px-4 md:px-6 bg-white">
         <div className="w-full">
-          <h2 className="text-4xl font-bold text-gray-900 mb-4 text-center">
+          <h2 className="text-2xl md:text-4xl font-bold text-gray-900 mb-4 text-center">
             클라이언트는 이렇게 사용해요
           </h2>
           <p className="text-lg text-gray-600 mb-12 text-center">
@@ -165,11 +165,11 @@ const LandingPage = () => {
       </section>
 
       {/* 가격 정책 Section */}
-      <section className="py-20 px-4 md:px-6 bg-gray-50">
+      <section className="py-10 md:py-20 px-4 md:px-6 bg-gray-50">
         <div className="w-full">
-          <h2 className="text-4xl font-bold text-gray-900 mb-12 text-center">가격 정책</h2>
+          <h2 className="text-2xl md:text-4xl font-bold text-gray-900 mb-12 text-center">가격 정책</h2>
           <div className="grid md:grid-cols-2 gap-8">
-            <div className="bg-white p-8 rounded-lg shadow-sm border-2 border-green-200">
+            <div className="bg-white p-4 md:p-8 rounded-lg shadow-sm border-2 border-green-200">
               <h3 className="text-2xl font-bold text-gray-900 mb-4 text-center">프리랜서</h3>
               <div className="text-center mb-6">
                 <span className="text-4xl font-bold text-green-600">무료</span>
@@ -194,7 +194,7 @@ const LandingPage = () => {
                 </li>
               </ul>
             </div>
-            <div className="bg-white p-8 rounded-lg shadow-sm border-2 border-blue-200">
+            <div className="bg-white p-4 md:p-8 rounded-lg shadow-sm border-2 border-blue-200">
               <h3 className="text-2xl font-bold text-gray-900 mb-4 text-center">기업</h3>
               <div className="text-center mb-6">
                 <span className="text-4xl font-bold text-blue-600">월 2,000원</span>
@@ -224,7 +224,7 @@ const LandingPage = () => {
       </section>
 
       {/* 마지막 CTA Section */}
-      <section className="py-20 px-4 md:px-6 bg-white">
+      <section className="py-10 md:py-20 px-4 md:px-6 bg-white">
         <div className="w-full text-center">
           <h2 className="text-4xl font-bold text-gray-900 mb-6">지금 바로 시작하세요</h2>
           <p className="text-xl text-gray-600 mb-8">
@@ -250,7 +250,7 @@ const LandingPage = () => {
       </section>
 
       {/* FAQ Section */}
-      <section className="py-20 px-4 md:px-6 bg-gray-50">
+      <section className="py-10 md:py-20 px-4 md:px-6 bg-gray-50">
         <div className="w-full">
           <h2 className="text-4xl font-bold text-gray-900 mb-12 text-center">
             자주 묻는 질문
