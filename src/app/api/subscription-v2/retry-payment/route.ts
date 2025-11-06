@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
       .from('accounts')
       .select('username, email')
       .eq('user_id', user.id)
-      .single()
+      .single() as any
 
     const paymentId = `linkers_sub_${user.id}_${Date.now()}`
 
@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
         subscription.price,
         '링커스 월 구독료',
         {
-          fullName: accountData?.username || user.email?.split('@')[0] || '사용자',
+          name: accountData?.username || user.email?.split('@')[0] || '사용자',
           email: user.email || accountData?.email || '',
           phoneNumber: '',
         }
@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
         pg_transaction_id: paymentId,
         portone_imp_uid: paymentId,
         portone_merchant_uid: paymentId,
-        paid_at: paymentResult.paidAt || new Date().toISOString(),
+        paid_at: (paymentResult.payment as any)?.paidAt || new Date().toISOString(),
       })
 
       // 다음 달 결제 예약
@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
         subscription.price,
         '링커스 월 구독료',
         {
-          fullName: accountData?.username || user.email?.split('@')[0] || '사용자',
+          name: accountData?.username || user.email?.split('@')[0] || '사용자',
           email: user.email || accountData?.email || '',
           phoneNumber: '',
         }

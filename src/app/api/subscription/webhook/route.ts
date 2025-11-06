@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
 
     // 구독 정보 조회
     const { data: subscription } = await supabase
-      .from('subscriptions')
+      .from('subscriptions' as any)
       .select('*')
       .eq('portone_merchant_uid', merchant_uid)
       .single()
@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
     const isFirstMonth = subscription.is_first_month_free && !subscription.first_month_used
 
     // 결제 내역 저장
-    const { error: paymentError } = await supabase.from('payments').insert({
+    const { error: paymentError } = await supabase.from('payments' as any).insert({
       user_id: subscription.user_id,
       subscription_id: subscription.id,
       amount: paymentInfo.amount,
@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
     if (isFirstMonth) {
       // 첫 달은 무료이므로 first_month_used만 업데이트
       const { error: updateError } = await supabase
-        .from('subscriptions')
+        .from('subscriptions' as any)
         .update({
           first_month_used: true,
         })
@@ -84,9 +84,9 @@ export async function POST(request: NextRequest) {
     const { data: userData } = await supabase.auth.admin.getUserById(subscription.user_id)
     const { data: accountData } = await supabase
       .from('accounts')
-      .select('username, email')
+      .select('username')
       .eq('user_id', subscription.user_id)
-      .single()
+      .single() as any
 
     // 다음 달 결제 예약 (현재 결제일 기준으로 다음 달)
     const currentDate = new Date()
@@ -105,14 +105,14 @@ export async function POST(request: NextRequest) {
         '링커스 월 구독료',
         {
           name: accountData?.username || userData?.user?.email?.split('@')[0] || '사용자',
-          email: userData?.user?.email || accountData?.email || '',
+            email: userData?.user?.email || '',
           tel: '',
         }
       )
 
       // 구독 정보 업데이트
       await supabase
-        .from('subscriptions')
+        .from('subscriptions' as any)
         .update({
           next_billing_date: nextBillingDate.toISOString(),
           portone_merchant_uid: nextMerchantUid,

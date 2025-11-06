@@ -83,7 +83,7 @@ const Navigator = ({ profileType, role }: NavigatorProps) => {
         icon: '',
         label: '팀',
         isActive: pathname === '/team-profile' || pathname === '/team-projects',
-        href: null,
+        href: '#',
         isDropdown: true,
       })
     }

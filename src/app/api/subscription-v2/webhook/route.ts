@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
         portone_imp_uid: paymentId,
         portone_merchant_uid: paymentId,
         is_first_month: isFirstMonth,
-        paid_at: paymentInfo.paidAt || new Date().toISOString(),
+        paid_at: (paymentInfo as any)?.paidAt || new Date().toISOString(),
       })
 
       if (paymentError) {
@@ -92,11 +92,11 @@ export async function POST(request: NextRequest) {
 
       // 사용자 정보 조회
       const { data: userData } = await supabase.auth.admin.getUserById(subscription.user_id)
-      const { data: accountData } = await supabase
-        .from('accounts')
-        .select('username, email')
-        .eq('user_id', subscription.user_id)
-        .single()
+    const { data: accountData } = await supabase
+      .from('accounts')
+      .select('username, email')
+      .eq('user_id', subscription.user_id)
+      .single() as any
 
       // 다음 달 결제 예약 (현재 결제일 기준으로 다음 달)
       const currentDate = new Date()
@@ -114,7 +114,7 @@ export async function POST(request: NextRequest) {
           2000,
           '링커스 월 구독료',
           {
-            fullName: accountData?.username || userData?.user?.email?.split('@')[0] || '사용자',
+            name: accountData?.username || userData?.user?.email?.split('@')[0] || '사용자',
             email: userData?.user?.email || accountData?.email || '',
             phoneNumber: '',
           }

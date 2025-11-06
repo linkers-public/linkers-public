@@ -40,23 +40,24 @@ export default function SubscriptionRegisterV2Page() {
       // 빌링키 ID 생성
       const billingKeyId = generateBillingKeyId(user.id)
 
-      // 포트원 V2 빌링키 발급 UI 로드
-      const billingKeyResponse = await PortOne.loadIssueBillingKeyUI({
+      // 포트원 V2 빌링키 발급 요청
+      const billingKeyResponse = await PortOne.requestIssueBillingKey({
         storeId: process.env.NEXT_PUBLIC_PORTONE_V2_STORE_ID || '',
         channelKey: process.env.NEXT_PUBLIC_PORTONE_V2_CHANNEL_KEY || '',
-        billingKeyId,
+        billingKeyMethod: 'CARD',
+        issueId: billingKeyId,
         customer: {
           fullName: user.email?.split('@')[0] || '사용자',
           email: user.email || '',
         },
       })
 
-      if (billingKeyResponse.code !== undefined) {
+      if (!billingKeyResponse || billingKeyResponse.code !== undefined) {
         // 빌링키 발급 실패
         toast({
           variant: 'destructive',
           title: '카드 등록 실패',
-          description: billingKeyResponse.message || '카드 등록에 실패했습니다',
+          description: billingKeyResponse?.message || '카드 등록에 실패했습니다',
         })
         setRegistering(false)
         return
@@ -67,7 +68,7 @@ export default function SubscriptionRegisterV2Page() {
 
       // 서버에 구독 등록 요청
       try {
-        const response = await fetch('/api/subscription-v2/register', {
+        const registerResponse = await fetch('/api/subscription-v2/register', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -81,7 +82,7 @@ export default function SubscriptionRegisterV2Page() {
           }),
         })
 
-        const data = await response.json()
+        const data = await registerResponse.json()
 
         if (data.success) {
           toast({
@@ -99,6 +100,8 @@ export default function SubscriptionRegisterV2Page() {
           title: '구독 등록 실패',
           description: error.message || '서버 오류가 발생했습니다',
         })
+      } finally {
+        setRegistering(false)
       }
     } catch (error: any) {
       console.error('구독 등록 오류:', error)

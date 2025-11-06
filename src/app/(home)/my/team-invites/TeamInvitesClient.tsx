@@ -62,9 +62,9 @@ export default function TeamInvitesClient() {
       }
 
       // 매니저 정보를 별도로 조회 (외래 키 관계가 없어서 자동 조인 불가)
-      const managerIds = [...new Set((invites || [])
+      const managerIds = Array.from(new Set((invites || [])
         .map((invite: any) => invite.teams?.manager_id)
-        .filter(Boolean))]
+        .filter(Boolean)))
 
       let managerMap: Record<string, string> = {}
       if (managerIds.length > 0) {

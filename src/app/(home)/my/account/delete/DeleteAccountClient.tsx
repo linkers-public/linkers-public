@@ -114,9 +114,9 @@ export default function DeleteAccountClient() {
 
           <Button
             onClick={handleDelete}
-            variant="destructive"
+            variant="outline"
             disabled={confirmText !== '탈퇴' || deleting}
-            className="w-full md:w-auto"
+            className="w-full md:w-auto text-red-600 border-red-600 hover:bg-red-50"
           >
             <Trash2 className="w-4 h-4 mr-2" />
             {deleting ? '탈퇴 처리 중...' : '회원 탈퇴'}

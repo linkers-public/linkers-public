@@ -71,7 +71,7 @@ export default function CompanyInfoClient() {
         .from('client')
         .select('*')
         .eq('user_id', user.id)
-        .maybeSingle()
+        .maybeSingle() as any
 
       if (clientError) {
         console.error('기업 정보 조회 실패:', clientError)
@@ -82,7 +82,7 @@ export default function CompanyInfoClient() {
         .from('accounts')
         .select('username, contact_phone, contact_website')
         .eq('profile_id', profile.profile_id)
-        .maybeSingle()
+        .maybeSingle() as any
 
       setCompanyInfo({
         company_name: clientData?.company_name || accountData?.username || '',
@@ -141,9 +141,7 @@ export default function CompanyInfoClient() {
         // 스키마 캐시 문제로 address는 일시적으로 제외
         const clientUpdateData: any = {
           company_name: companyInfo.company_name,
-          contact_person: companyInfo.contact_person || null,
-          contact_phone: companyInfo.contact_phone || null,
-          website: companyInfo.website || null,
+          email: companyInfo.contact_email,
           updated_at: new Date().toISOString(),
         }
 
@@ -162,7 +160,7 @@ export default function CompanyInfoClient() {
           try {
             const { error: addressError } = await supabase
               .from('client')
-              .update({ address: companyInfo.address })
+              .update({ address: companyInfo.address } as any)
               .eq('user_id', user.id)
             
             if (addressError) {
@@ -178,9 +176,6 @@ export default function CompanyInfoClient() {
           user_id: user.id,
           company_name: companyInfo.company_name,
           email: user.email || '',
-          contact_person: companyInfo.contact_person || null,
-          contact_phone: companyInfo.contact_phone || null,
-          website: companyInfo.website || null,
         }
 
         const { error: insertError } = await supabase
@@ -197,7 +192,7 @@ export default function CompanyInfoClient() {
           try {
             const { error: addressError } = await supabase
               .from('client')
-              .update({ address: companyInfo.address })
+              .update({ address: companyInfo.address } as any)
               .eq('user_id', user.id)
             
             if (addressError) {

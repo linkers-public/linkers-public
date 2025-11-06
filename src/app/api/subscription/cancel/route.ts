@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
 
     // 구독 정보 조회
     const { data: subscription, error: fetchError } = await supabase
-      .from('subscriptions')
+      .from('subscriptions' as any)
       .select('*')
       .eq('user_id', user.id)
       .eq('status', 'active')
@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
 
     // 구독 상태 업데이트
     const { error: updateError } = await supabase
-      .from('subscriptions')
+      .from('subscriptions' as any)
       .update({
         status: 'cancelled',
         auto_renew: false,

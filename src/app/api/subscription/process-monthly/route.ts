@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     tomorrow.setDate(tomorrow.getDate() + 1)
 
     const { data: subscriptions, error: fetchError } = await supabase
-      .from('subscriptions')
+      .from('subscriptions' as any)
       .select('*')
       .eq('status', 'active')
       .eq('auto_renew', true)
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
           .from('accounts')
           .select('username, email')
           .eq('user_id', subscription.user_id)
-          .single()
+          .single() as any
 
         const merchantUid = `linkers_sub_${subscription.user_id}_${Date.now()}`
 
@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
         // 결제 내역 저장
         const isFirstMonth = subscription.is_first_month_free && !subscription.first_month_used
 
-        await supabase.from('payments').insert({
+        await supabase.from('payments' as any).insert({
           user_id: subscription.user_id,
           subscription_id: subscription.id,
           amount: subscription.price,
@@ -102,7 +102,7 @@ export async function POST(request: NextRequest) {
         // 첫 달 무료 처리
         if (isFirstMonth) {
           await supabase
-            .from('subscriptions')
+            .from('subscriptions' as any)
             .update({
               first_month_used: true,
             })
@@ -130,7 +130,7 @@ export async function POST(request: NextRequest) {
 
         // 구독 정보 업데이트
         await supabase
-          .from('subscriptions')
+          .from('subscriptions' as any)
           .update({
             next_billing_date: nextBillingDate.toISOString(),
             portone_merchant_uid: nextMerchantUid,
@@ -144,7 +144,7 @@ export async function POST(request: NextRequest) {
         results.errors.push(`구독 ${subscription.id}: ${error.message}`)
 
         // 결제 실패 내역 저장
-        await supabase.from('payments').insert({
+        await supabase.from('payments' as any).insert({
           user_id: subscription.user_id,
           subscription_id: subscription.id,
           amount: subscription.price,

@@ -221,7 +221,8 @@ export default function SecurityClient() {
           </p>
           <Button
             onClick={handleDeleteAccount}
-            variant="destructive"
+            variant="outline"
+            className="text-red-600 border-red-600 hover:bg-red-50"
           >
             계정 삭제
           </Button>

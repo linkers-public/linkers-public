@@ -61,7 +61,7 @@ export default function BookmarkedProjectsClient() {
       // project_bookmarks 테이블에서 북마크 조회
       // counsel 테이블이 없을 수 있으므로 먼저 북마크만 조회
       const { data: bookmarks, error: bookmarksError } = await supabase
-        .from('project_bookmarks')
+        .from('project_bookmarks' as any)
         .select('id, counsel_id, created_at')
         .eq('profile_id', profile.profile_id)
         .order('created_at', { ascending: false })
@@ -151,7 +151,7 @@ export default function BookmarkedProjectsClient() {
 
       // 북마크 삭제
       const { error } = await supabase
-        .from('project_bookmarks')
+        .from('project_bookmarks' as any)
         .delete()
         .eq('id', bookmarkId)
         .eq('profile_id', profile.profile_id)

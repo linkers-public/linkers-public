@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
 
     // 구독 정보 조회
     const { data: subscription, error: subError } = await supabase
-      .from('subscriptions')
+      .from('subscriptions' as any)
       .select('*')
       .eq('id', subscription_id)
       .eq('user_id', user.id)
@@ -50,9 +50,9 @@ export async function POST(request: NextRequest) {
     // 사용자 정보 조회
     const { data: accountData } = await supabase
       .from('accounts')
-      .select('username, email')
+      .select('username')
       .eq('user_id', user.id)
-      .single()
+      .single() as any
 
     const merchantUid = `linkers_sub_${user.id}_${Date.now()}`
 
@@ -65,13 +65,13 @@ export async function POST(request: NextRequest) {
         '링커스 월 구독료',
         {
           name: accountData?.username || user.email?.split('@')[0] || '사용자',
-          email: user.email || accountData?.email || '',
+          email: user.email || '',
           tel: '',
         }
       )
 
       // 결제 내역 저장
-      await supabase.from('payments').insert({
+      await supabase.from('payments' as any).insert({
         user_id: user.id,
         subscription_id: subscription.id,
         amount: subscription.price,
@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
       const nextMerchantUid = `linkers_sub_${user.id}_${Date.now() + 1}`
 
       await supabase
-        .from('subscriptions')
+        .from('subscriptions' as any)
         .update({
           next_billing_date: nextBillingDate.toISOString(),
           portone_merchant_uid: nextMerchantUid,
@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
       console.error('결제 재시도 실패:', error)
 
       // 실패 내역 저장
-      await supabase.from('payments').insert({
+      await supabase.from('payments' as any).insert({
         user_id: user.id,
         subscription_id: subscription.id,
         amount: subscription.price,

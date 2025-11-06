@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
         2000, // 월 구독료 2000원
         '링커스 월 구독료',
         {
-          fullName: buyer_info?.name || user.email?.split('@')[0] || '사용자',
+          name: buyer_info?.name || user.email?.split('@')[0] || '사용자',
           email: buyer_info?.email || user.email || '',
           phoneNumber: buyer_info?.tel || '',
         }

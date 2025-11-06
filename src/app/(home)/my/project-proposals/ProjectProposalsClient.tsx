@@ -118,7 +118,7 @@ export default function ProjectProposalsClient() {
     try {
       const { error } = await supabase
         .from('project_members')
-        .update({ status: 'active' })
+        .update({ status: 'ACTIVE' })
         .eq('id', proposalId)
 
       if (error) throw error
@@ -142,7 +142,7 @@ export default function ProjectProposalsClient() {
     try {
       const { error } = await supabase
         .from('project_members')
-        .update({ status: 'declined' })
+        .update({ status: 'LEFT' })
         .eq('id', proposalId)
 
       if (error) throw error

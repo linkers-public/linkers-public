@@ -41,7 +41,7 @@ export default function TeamMembersClient() {
 
       // company_team_members 테이블에서 팀 멤버 조회
       const { data: teamMembers, error } = await supabase
-        .from('company_team_members')
+        .from('company_team_members' as any)
         .select('*')
         .eq('company_user_id', user.id)
         .order('created_at', { ascending: false })
@@ -104,7 +104,7 @@ export default function TeamMembersClient() {
 
       // 이미 팀 멤버인지 확인 (이메일 기준)
       const { data: existingMember } = await supabase
-        .from('company_team_members')
+        .from('company_team_members' as any)
         .select('id')
         .eq('company_user_id', user.id)
         .eq('member_email', newMemberEmail)
@@ -132,7 +132,7 @@ export default function TeamMembersClient() {
       // 팀 멤버 추가
       // member_user_id는 이메일을 임시로 사용하고, 나중에 실제 user_id로 업데이트
       const { error: insertError } = await supabase
-        .from('company_team_members')
+        .from('company_team_members' as any)
         .insert({
           company_user_id: user.id,
           member_user_id: newMemberEmail, // 임시로 이메일 사용 (나중에 실제 user_id로 업데이트)
@@ -190,7 +190,7 @@ export default function TeamMembersClient() {
 
       // 팀 멤버 제거
       const { error } = await supabase
-        .from('company_team_members')
+        .from('company_team_members' as any)
         .delete()
         .eq('id', parseInt(memberId))
         .eq('company_user_id', user.id) // 본인만 제거 가능하도록 확인

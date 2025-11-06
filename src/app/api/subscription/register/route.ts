@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
 
     // 기존 구독 확인
     const { data: existingSubscription } = await supabase
-      .from('subscriptions')
+      .from('subscriptions' as any)
       .select('*')
       .eq('user_id', user.id)
       .single()
@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
 
       // 구독 정보 DB 저장
       const { data: subscription, error: insertError } = await supabase
-        .from('subscriptions')
+        .from('subscriptions' as any)
         .insert({
           user_id: user.id,
           plan: 'basic',
