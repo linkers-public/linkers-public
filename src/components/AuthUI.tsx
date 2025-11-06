@@ -35,10 +35,13 @@ const AuthUI = ({ role }: { role: string }) => {
     // sessionStorage에 프로필 타입 저장
     sessionStorage.setItem('profileType', profileType)
 
+    // 환경에 따른 site URL 설정
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || window.location.origin
+
     await supabaseClient.auth.signInWithOAuth({
       provider,
       options: {
-        redirectTo: `${window.location.origin}/auth/callback?profile_type=${profileType}&next=/`,
+        redirectTo: `${siteUrl}/auth/callback?profile_type=${profileType}&next=/`,
       },
     })
   }
@@ -79,7 +82,7 @@ const AuthUI = ({ role }: { role: string }) => {
   const profileTypeInfo = getProfileTypeInfo(profileType)
 
   return (
-    <section className="w-full min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+    <section className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 w-screen relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw]">
       <div className="w-full max-w-md mx-auto px-6">
         {/* 헤더 섹션 */}
         <div className="text-center mb-8">

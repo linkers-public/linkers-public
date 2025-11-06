@@ -62,7 +62,14 @@ yarn install
 ```env
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+NEXT_PUBLIC_SITE_URL=http://localhost:3000
 ```
+
+**환경별 설정:**
+- **개발 환경**: `NEXT_PUBLIC_SITE_URL=http://localhost:3000`
+- **프로덕션 환경**: `NEXT_PUBLIC_SITE_URL=https://makers-b2b.vercel.app`
+
+> 참고: `NEXT_PUBLIC_SITE_URL`은 소셜 로그인(OAuth) 리다이렉트 URL에 사용됩니다. 설정하지 않으면 자동으로 `window.location.origin`을 사용합니다.
 
 ### 4. 개발 서버 실행
 ```bash

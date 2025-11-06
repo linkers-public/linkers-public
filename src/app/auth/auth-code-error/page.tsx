@@ -4,7 +4,7 @@ import React from 'react'
 
 export default function AuthCodeError() {
   return (
-    <div className="min-h-screen flex items-center justify-center">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 w-screen relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw]">
       <div className="text-center">
         <h1 className="text-2xl font-bold text-red-600 mb-4">
           인증 오류가 발생했습니다
