@@ -29,19 +29,32 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'billingKey가 필요합니다' }, { status: 400 })
     }
 
-    // 기존 구독 확인
-    const { data: existingSubscription } = await supabase
+    // 활성 구독 확인 (취소된 구독은 재구독 가능)
+    const { data: activeSubscription } = await supabase
       .from('subscriptions' as any)
       .select('*')
       .eq('user_id', user.id)
-      .single()
+      .eq('status', 'active')
+      .maybeSingle()
 
-    if (existingSubscription) {
+    if (activeSubscription) {
       return NextResponse.json(
         { error: '이미 구독 중입니다' },
         { status: 400 }
       )
     }
+
+    // 이전 구독 확인 (재구독 시 첫 달 무료 여부 결정)
+    const { data: previousSubscription } = await supabase
+      .from('subscriptions' as any)
+      .select('first_month_used')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    // 이전에 첫 달 무료를 사용했다면 재구독 시 첫 달 무료 없음
+    const isFirstMonthFree = !previousSubscription?.first_month_used
 
     // 사용자 계정 정보 조회 (전화번호 포함)
     // 기업(COMPANY) 프로필만 구독 결제 가능
@@ -54,13 +67,19 @@ export async function POST(request: NextRequest) {
       .is('deleted_at', null)
       .maybeSingle() as any
 
-    // 구독 정보 생성 (첫 달 무료)
+    // 구독 정보 생성
     const subscriptionDate = new Date()
     const nextBillingDate = new Date(subscriptionDate)
-    nextBillingDate.setDate(nextBillingDate.getDate() + 30) // 첫 달 무료 기간 30일
+    
+    // 첫 달 무료인 경우 30일 후, 아닌 경우 즉시 결제 예약
+    if (isFirstMonthFree) {
+      nextBillingDate.setDate(nextBillingDate.getDate() + 30) // 첫 달 무료 기간 30일
+    } else {
+      nextBillingDate.setDate(nextBillingDate.getDate() + 1) // 재구독 시 다음날 결제
+    }
 
-    // 첫 달은 무료이므로 30일 후 첫 결제 예약
-    const scheduledAt = getNextBillingDateISO(subscriptionDate, true)
+    // 첫 달 무료 여부에 따라 결제 예약 날짜 결정
+    const scheduledAt = getNextBillingDateISO(subscriptionDate, isFirstMonthFree)
     const paymentId = `linkers_sub_${user.id}_${Date.now()}`
 
     // 전화번호 설정 (필수 필드)
@@ -81,7 +100,7 @@ export async function POST(request: NextRequest) {
         status: 'active',
         auto_renew: true,
         customer_uid: billingKey, // V2에서는 billingKey를 customer_uid에 저장
-        is_first_month_free: true,
+        is_first_month_free: isFirstMonthFree,
         first_month_used: false,
         next_billing_date: nextBillingDate.toISOString(),
         portone_merchant_uid: paymentId,
@@ -97,27 +116,29 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 첫 달 무료 결제 내역 생성 (카드 등록 직후 결제 내역에 표시)
-    const firstMonthPaymentId = `linkers_sub_${user.id}_first_month_${Date.now()}`
-    const { error: paymentError } = await supabase.from('payments' as any).insert({
-      user_id: user.id,
-      subscription_id: subscription.id,
-      amount: 0, // 첫 달은 무료
-      currency: 'KRW',
-      payment_method: 'card',
-      payment_status: 'completed',
-      pg_provider: 'portone',
-      pg_transaction_id: firstMonthPaymentId,
-      portone_merchant_uid: firstMonthPaymentId,
-      is_first_month: true,
-      paid_at: new Date().toISOString(),
-    })
+    // 첫 달 무료인 경우에만 결제 내역 생성 (카드 등록 직후 결제 내역에 표시)
+    if (isFirstMonthFree) {
+      const firstMonthPaymentId = `linkers_sub_${user.id}_first_month_${Date.now()}`
+      const { error: paymentError } = await supabase.from('payments' as any).insert({
+        user_id: user.id,
+        subscription_id: subscription.id,
+        amount: 0, // 첫 달은 무료
+        currency: 'KRW',
+        payment_method: 'card',
+        payment_status: 'completed',
+        pg_provider: 'portone',
+        pg_transaction_id: firstMonthPaymentId,
+        portone_merchant_uid: firstMonthPaymentId,
+        is_first_month: true,
+        paid_at: new Date().toISOString(),
+      })
 
-    if (paymentError) {
-      console.error('첫 달 무료 결제 내역 저장 실패:', paymentError)
-      // 결제 내역 저장 실패해도 구독 등록은 성공으로 처리
-    } else {
-      console.log('첫 달 무료 결제 내역 저장 완료')
+      if (paymentError) {
+        console.error('첫 달 무료 결제 내역 저장 실패:', paymentError)
+        // 결제 내역 저장 실패해도 구독 등록은 성공으로 처리
+      } else {
+        console.log('첫 달 무료 결제 내역 저장 완료')
+      }
     }
 
     // 결제 예약은 비동기로 처리 (사용자 응답을 기다리지 않음)
@@ -159,7 +180,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       subscription,
-      message: '구독이 등록되었습니다. 첫 달은 무료입니다.',
+      message: isFirstMonthFree 
+        ? '구독이 등록되었습니다. 첫 달은 무료입니다.'
+        : '구독이 등록되었습니다.',
     })
   } catch (error: any) {
     console.error('구독 등록 API 오류:', error)
