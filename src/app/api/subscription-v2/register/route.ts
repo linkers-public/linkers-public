@@ -68,26 +68,8 @@ export async function POST(request: NextRequest) {
       '010-0000-0000' // 기본값 (빌링키 발급 시 전화번호가 필수이므로 이 값은 사용되지 않아야 함)
 
     // 빌링키 발급 직후 바로 사용하면 포트원 서버에 반영되지 않을 수 있으므로
-    // 빌링키 정보 조회로 존재 여부 확인 후 결제 예약
-    const { getBillingKey } = await import('@/apis/subscription-v2.service')
-    
-    // 빌링키가 포트원 서버에 반영될 때까지 대기 (최대 10초)
-    let billingKeyReady = false
-    for (let i = 0; i < 10; i++) {
-      try {
-        await getBillingKey(billingKey)
-        billingKeyReady = true
-        console.log(`빌링키 확인 성공 (시도 ${i + 1}/10)`)
-        break
-      } catch (error: any) {
-        if (i < 9) {
-          console.log(`빌링키 확인 실패 (시도 ${i + 1}/10), 1초 후 재시도...`)
-          await new Promise(resolve => setTimeout(resolve, 1000))
-        } else {
-          console.warn('빌링키 확인 실패, 결제 예약 시도 (재시도 로직이 처리함)')
-        }
-      }
-    }
+    // scheduleMonthlyPayment 함수 내부의 재시도 로직이 처리함
+    // 빌링키 확인 로직은 제거 (중복이며 시간만 소모)
 
     try {
       // 첫 달은 무료이므로 30일 후 첫 결제 예약

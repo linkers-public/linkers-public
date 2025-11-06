@@ -55,14 +55,33 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Webhook 검증 실패' }, { status: 401 })
     }
 
-    // Transaction.Paid 이벤트 처리
-    if (webhook.type === 'Transaction.Paid' && 'paymentId' in webhook.data) {
-      const { paymentId } = webhook.data
+    // 공식 문서에 따르면 알지 못하는 type은 무시하고 성공 응답
+    // paymentId가 있는 경우에만 결제 관련 처리
+    const webhookData = (webhook as any).data || {}
+    
+    if ('paymentId' in webhookData) {
+      // 결제 관련 이벤트 처리 (Transaction.Paid, Transaction.Failed 등)
+      const { paymentId } = webhookData
+      
+      // Transaction.Paid 이벤트만 처리 (다른 이벤트는 로그만 남기고 성공 응답)
+      if (webhook.type !== 'Transaction.Paid') {
+        console.log('결제 관련 이벤트이지만 Transaction.Paid가 아닙니다:', {
+          type: webhook.type,
+          paymentId,
+        })
+        return NextResponse.json({ success: true }, { status: 200 })
+      }
 
       console.log('Transaction.Paid 이벤트 처리 시작:', { paymentId })
 
-      // 결제 정보 조회
+      // 공식 문서 권장: 웹훅 메시지를 신뢰하지 않고 포트원 API로 결제 정보 조회하여 검증
       const paymentInfo = await getPayment(paymentId)
+
+      if (paymentInfo === null) {
+        // 웹훅 정보와 일치하는 결제건이 실제로는 존재하지 않는 경우
+        console.warn('결제 정보를 찾을 수 없습니다:', { paymentId })
+        return NextResponse.json({ success: true }, { status: 200 })
+      }
 
       console.log('결제 정보 조회 완료:', {
         paymentId,
@@ -70,13 +89,13 @@ export async function POST(request: NextRequest) {
         amount: (paymentInfo as any).amount?.total,
       })
 
+      // 공식 문서 권장: 결제 상태가 PAID가 아닌 경우 처리하지 않음
       if (paymentInfo.status !== 'PAID') {
         console.warn('결제 상태가 PAID가 아닙니다:', {
           paymentId,
           status: paymentInfo.status,
-          paymentInfo,
         })
-        return NextResponse.json({ success: false, message: '결제 실패' }, { status: 200 })
+        return NextResponse.json({ success: true }, { status: 200 })
       }
 
       const supabase = await createServerSideClient()
@@ -202,10 +221,11 @@ export async function POST(request: NextRequest) {
         // 예약 실패해도 현재 결제는 완료되었으므로 계속 진행
       }
     } else {
-      // 다른 이벤트 타입은 로그만 남기고 성공 응답
-      console.log('처리하지 않는 웹훅 이벤트:', {
+      // 공식 문서 권장: 알지 못하는 type을 가진 메시지는 에러를 발생시키지 말고 무시
+      // BillingKey 관련 이벤트 등은 로그만 남기고 성공 응답
+      console.log('처리하지 않는 웹훅 이벤트 (무시):', {
         type: webhook.type,
-        data: (webhook as any).data,
+        hasData: !!(webhook as any).data,
       })
     }
 

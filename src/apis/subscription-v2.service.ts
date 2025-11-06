@@ -114,8 +114,8 @@ export async function scheduleMonthlyPayment(
     email?: string
     phoneNumber?: string
   },
-  retryCount: number = 5, // 재시도 횟수 증가
-  retryDelay: number = 2000 // 재시도 간격 증가 (2초)
+  retryCount: number = 10, // 재시도 횟수 증가 (빌링키 반영 시간 고려)
+  retryDelay: number = 3000 // 재시도 간격 증가 (3초)
 ) {
   // 서버 사이드에서만 실행
   if (typeof window !== 'undefined') {
@@ -128,7 +128,8 @@ export async function scheduleMonthlyPayment(
   for (let attempt = 1; attempt <= retryCount; attempt++) {
     try {
       if (attempt > 1) {
-        // 재시도 간격: 2초, 4초, 6초, 8초, 10초 (지수적 증가)
+        // 재시도 간격: 3초, 6초, 9초, 12초, 15초... (선형 증가)
+        // 빌링키 발급 직후 포트원 서버 반영 시간을 고려하여 충분한 대기
         const delay = retryDelay * attempt
         console.log(`결제 예약 재시도 (${attempt}/${retryCount})... ${delay}ms 대기`)
         await new Promise(resolve => setTimeout(resolve, delay))
