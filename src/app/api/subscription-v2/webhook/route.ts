@@ -196,28 +196,32 @@ export async function POST(request: NextRequest) {
       // 전화번호 설정 (필수 필드)
       const phoneNumber = accountData?.contact_phone || '010-0000-0000'
 
-      try {
-        await scheduleMonthlyPayment(
-          subscription.customer_uid!,
-          nextPaymentId,
-          scheduledAt,
-          2000,
-          '링커스 월 구독료',
-          {
-            name: accountData?.username || userData?.user?.email?.split('@')[0] || '사용자',
-            email: userData?.user?.email || accountData?.contact_email || '',
-            phoneNumber: phoneNumber,
-          }
-        )
+            try {
+              const scheduledPayment = await scheduleMonthlyPayment(
+                subscription.customer_uid!,
+                nextPaymentId,
+                scheduledAt,
+                2000,
+                '링커스 월 구독료',
+                {
+                  name: accountData?.username || userData?.user?.email?.split('@')[0] || '사용자',
+                  email: userData?.user?.email || accountData?.contact_email || '',
+                  phoneNumber: phoneNumber,
+                }
+              )
 
-        // 구독 정보 업데이트
-        await supabase
-          .from('subscriptions' as any)
-          .update({
-            next_billing_date: nextBillingDate.toISOString(),
-            portone_merchant_uid: nextPaymentId,
-          })
-          .eq('id', subscription.id)
+              // 결제 예약 성공 시 scheduleId를 DB에 저장
+              const scheduleId = (scheduledPayment as any)?.scheduleId || (scheduledPayment as any)?.id
+
+              // 구독 정보 업데이트
+              await supabase
+                .from('subscriptions' as any)
+                .update({
+                  next_billing_date: nextBillingDate.toISOString(),
+                  portone_merchant_uid: nextPaymentId,
+                  portone_schedule_id: scheduleId || null,
+                })
+                .eq('id', subscription.id)
       } catch (scheduleError: any) {
         console.error('다음 달 결제 예약 실패:', {
           error: scheduleError.message,

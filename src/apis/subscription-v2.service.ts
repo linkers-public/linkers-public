@@ -169,7 +169,11 @@ export async function scheduleMonthlyPayment(
         },
       })
 
-      console.log('결제 예약 성공:', scheduledPayment)
+      console.log('결제 예약 성공:', {
+        paymentId,
+        scheduleId: (scheduledPayment as any).scheduleId || (scheduledPayment as any).id,
+        scheduledPayment,
+      })
       return scheduledPayment
     } catch (error: any) {
       lastError = error
@@ -217,8 +221,9 @@ export async function scheduleMonthlyPayment(
 
 /**
  * 결제 예약 취소
+ * @param scheduleId - 결제 예약 ID (subscriptions 테이블의 portone_schedule_id)
  */
-export async function unschedulePayment(paymentId: string): Promise<void> {
+export async function unschedulePayment(scheduleId: string): Promise<void> {
   // 서버 사이드에서만 실행
   if (typeof window !== 'undefined') {
     throw new Error('이 함수는 서버 사이드에서만 사용할 수 있습니다.')
@@ -226,14 +231,21 @@ export async function unschedulePayment(paymentId: string): Promise<void> {
   
   const paymentClient = getPaymentClient()
   try {
-    // paymentId로 예약된 결제를 찾아서 취소
-    // 실제로는 scheduleId를 사용해야 하므로, paymentId로 조회 후 scheduleId를 찾아야 함
-    // 간단하게 paymentId를 scheduleId로 사용 (실제로는 조회 필요)
+    console.log('결제 예약 취소 요청:', { scheduleId })
+    
     await paymentClient.paymentSchedule.revokePaymentSchedules({
-      scheduleIds: [paymentId],
+      scheduleIds: [scheduleId],
     })
+    
+    console.log('결제 예약 취소 성공:', { scheduleId })
   } catch (error: any) {
-    throw new Error(`결제 예약 취소 실패: ${error.message || '알 수 없는 오류'}`)
+    const errorData = error.data || error.response?.data
+    console.error('결제 예약 취소 실패:', {
+      scheduleId,
+      errorType: errorData?.type,
+      errorMessage: errorData?.message || error.message,
+    })
+    throw new Error(`결제 예약 취소 실패: ${errorData?.message || error.message || '알 수 없는 오류'}`)
   }
 }
 

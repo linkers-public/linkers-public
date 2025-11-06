@@ -13,6 +13,12 @@ interface Payment {
   date: string
   status: 'completed' | 'pending' | 'failed'
   receipt_url?: string
+  payment_id?: string
+  portone_imp_uid?: string
+  portone_merchant_uid?: string
+  is_first_month?: boolean
+  currency?: string
+  payment_method?: string
 }
 
 export default function PaymentsClient() {
@@ -35,14 +41,35 @@ export default function PaymentsClient() {
         return
       }
 
-      // TODO: 결제 내역 조회 (payments 테이블 또는 PG 연동)
-      // 현재는 임시로 빈 배열
-      setPayments([])
-      
-      toast({
-        title: '준비 중',
-        description: '결제 내역 조회 기능은 곧 제공될 예정입니다.',
-      })
+      // payments 테이블에서 결제 내역 조회
+      const { data: paymentsData, error } = await supabase
+        .from('payments' as any)
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(50)
+
+      if (error) {
+        console.error('결제 내역 조회 실패:', error)
+        throw error
+      }
+
+      // 데이터 변환
+      const formattedPayments: Payment[] = (paymentsData || []).map((payment: any) => ({
+        id: payment.id,
+        amount: payment.amount,
+        date: payment.paid_at || payment.created_at,
+        status: payment.payment_status === 'completed' ? 'completed' :
+                payment.payment_status === 'pending' ? 'pending' : 'failed',
+        payment_id: payment.portone_imp_uid || payment.portone_merchant_uid,
+        portone_imp_uid: payment.portone_imp_uid,
+        portone_merchant_uid: payment.portone_merchant_uid,
+        is_first_month: payment.is_first_month || false,
+        currency: payment.currency || 'KRW',
+        payment_method: payment.payment_method || 'card',
+      }))
+
+      setPayments(formattedPayments)
     } catch (error: any) {
       console.error('결제 내역 로드 실패:', error)
       toast({
@@ -55,18 +82,45 @@ export default function PaymentsClient() {
     }
   }
 
-  const handleDownloadReceipt = async (paymentId: string) => {
+  const handleDownloadReceipt = async (payment: Payment) => {
     try {
-      // TODO: 영수증 다운로드 로직 구현
-      toast({
-        title: '준비 중',
-        description: '영수증 다운로드 기능은 곧 제공될 예정입니다.',
-      })
+      if (!payment.payment_id) {
+        toast({
+          variant: 'destructive',
+          title: '영수증 정보 없음',
+          description: '결제 ID를 찾을 수 없습니다.',
+        })
+        return
+      }
+
+      // API를 통해 영수증 정보 조회
+      const response = await fetch(`/api/payments/receipt?paymentId=${payment.payment_id}`)
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || '영수증 조회에 실패했습니다')
+      }
+
+      // PortOne 관리자 콘솔에서 영수증 확인
+      // 또는 영수증 정보를 표시할 수 있음
+      if (data.payment?.receiptUrl) {
+        window.open(data.payment.receiptUrl, '_blank')
+        toast({
+          title: '영수증 열기',
+          description: 'PortOne 관리자 콘솔에서 영수증을 확인할 수 있습니다.',
+        })
+      } else {
+        // 영수증 정보를 모달이나 새 페이지에 표시할 수 있음
+        toast({
+          title: '영수증 정보',
+          description: `결제 금액: ${data.payment?.amount?.toLocaleString()}원, 상태: ${data.payment?.status}`,
+        })
+      }
     } catch (error: any) {
-      console.error('영수증 다운로드 실패:', error)
+      console.error('영수증 조회 실패:', error)
       toast({
         variant: 'destructive',
-        title: '영수증 다운로드 실패',
+        title: '영수증 조회 실패',
         description: error.message,
       })
     }
@@ -103,30 +157,55 @@ export default function PaymentsClient() {
               className="bg-white rounded-lg shadow-sm border p-6"
             >
               <div className="flex items-start justify-between mb-4">
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-1">
-                    {payment.amount.toLocaleString()}원
-                  </h3>
-                  <p className="text-sm text-gray-600">
-                    {new Date(payment.date).toLocaleDateString('ko-KR')}
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <h3 className="text-lg font-semibold text-gray-900">
+                      {payment.amount.toLocaleString()}원
+                    </h3>
+                    {payment.is_first_month && (
+                      <span className="px-2 py-0.5 bg-green-100 text-green-800 text-xs font-medium rounded">
+                        첫 달 무료
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm text-gray-600 mb-1">
+                    {new Date(payment.date).toLocaleDateString('ko-KR', {
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
                   </p>
-                  <span className={`inline-block mt-2 px-2 py-1 rounded text-xs font-medium ${
-                    payment.status === 'completed' ? 'bg-green-100 text-green-800' :
-                    payment.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                    'bg-red-100 text-red-800'
-                  }`}>
-                    {payment.status === 'completed' ? '완료' :
-                     payment.status === 'pending' ? '대기중' : '실패'}
-                  </span>
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${
+                      payment.status === 'completed' ? 'bg-green-100 text-green-800' :
+                      payment.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                      'bg-red-100 text-red-800'
+                    }`}>
+                      {payment.status === 'completed' ? '완료' :
+                       payment.status === 'pending' ? '대기중' : '실패'}
+                    </span>
+                    {payment.payment_method && (
+                      <span className="text-xs text-gray-500">
+                        {payment.payment_method === 'card' ? '카드' : payment.payment_method}
+                      </span>
+                    )}
+                  </div>
+                  {payment.portone_merchant_uid && (
+                    <p className="text-xs text-gray-400 mt-1">
+                      주문번호: {payment.portone_merchant_uid}
+                    </p>
+                  )}
                 </div>
-                {payment.receipt_url && (
+                {payment.status === 'completed' && payment.payment_id && (
                   <Button
-                    onClick={() => handleDownloadReceipt(payment.id)}
+                    onClick={() => handleDownloadReceipt(payment)}
                     variant="outline"
                     size="sm"
                   >
                     <Download className="w-4 h-4 mr-2" />
-                    영수증 다운로드
+                    영수증 확인
                   </Button>
                 )}
               </div>

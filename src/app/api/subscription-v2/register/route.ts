@@ -97,6 +97,29 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // 첫 달 무료 결제 내역 생성 (카드 등록 직후 결제 내역에 표시)
+    const firstMonthPaymentId = `linkers_sub_${user.id}_first_month_${Date.now()}`
+    const { error: paymentError } = await supabase.from('payments' as any).insert({
+      user_id: user.id,
+      subscription_id: subscription.id,
+      amount: 0, // 첫 달은 무료
+      currency: 'KRW',
+      payment_method: 'card',
+      payment_status: 'completed',
+      pg_provider: 'portone',
+      pg_transaction_id: firstMonthPaymentId,
+      portone_merchant_uid: firstMonthPaymentId,
+      is_first_month: true,
+      paid_at: new Date().toISOString(),
+    })
+
+    if (paymentError) {
+      console.error('첫 달 무료 결제 내역 저장 실패:', paymentError)
+      // 결제 내역 저장 실패해도 구독 등록은 성공으로 처리
+    } else {
+      console.log('첫 달 무료 결제 내역 저장 완료')
+    }
+
     // 결제 예약은 비동기로 처리 (사용자 응답을 기다리지 않음)
     // 빌링키 발급 직후 포트원 서버에 반영 시간이 필요하므로 약간의 지연 후 처리
     scheduleMonthlyPayment(
@@ -110,7 +133,23 @@ export async function POST(request: NextRequest) {
         email: buyer_info?.email || accountData?.contact_email || user.email || '',
         phoneNumber: phoneNumber,
       }
-    ).catch((error: any) => {
+    ).then((scheduledPayment: any) => {
+      // 결제 예약 성공 시 scheduleId를 DB에 저장
+      const scheduleId = scheduledPayment?.scheduleId || scheduledPayment?.id
+      if (scheduleId) {
+        supabase
+          .from('subscriptions' as any)
+          .update({ portone_schedule_id: scheduleId })
+          .eq('id', subscription.id)
+          .then(({ error }) => {
+            if (error) {
+              console.error('scheduleId 저장 실패:', error)
+            } else {
+              console.log('scheduleId 저장 완료:', scheduleId)
+            }
+          })
+      }
+    }).catch((error: any) => {
       // 비동기 작업이므로 에러는 로그만 남기고 사용자에게는 영향 없음
       console.error('결제 예약 실패 (비동기):', error)
       // TODO: 실패 시 재시도 로직 추가 (예: cron job 또는 별도 큐)

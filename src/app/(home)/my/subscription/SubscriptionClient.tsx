@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createSupabaseBrowserClient } from '@/supabase/supabase-client'
 import { Button } from '@/components/ui/button'
-import { CreditCard, Calendar, CheckCircle, RefreshCw, History } from 'lucide-react'
+import { CreditCard, Calendar, CheckCircle, RefreshCw, History, Download } from 'lucide-react'
 import { toast } from '@/hooks/use-toast'
 
 interface Subscription {
@@ -309,41 +309,87 @@ export default function SubscriptionClient() {
                 {payments.map((payment) => (
                   <div
                     key={payment.id}
-                    className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                    className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
                   >
-                    <div>
+                    <div className="flex-1">
                       <p className="text-sm font-medium text-gray-900">
                         {payment.is_first_month ? '첫 달 무료' : '월 구독료'}
                       </p>
                       <p className="text-xs text-gray-600">
                         {payment.paid_at
-                          ? new Date(payment.paid_at).toLocaleDateString('ko-KR')
+                          ? new Date(payment.paid_at).toLocaleDateString('ko-KR', {
+                              year: 'numeric',
+                              month: 'long',
+                              day: 'numeric',
+                            })
                           : '결제 대기 중'}
                       </p>
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm font-semibold text-gray-900">
-                        {payment.is_first_month ? (
-                          <span className="text-green-600">무료</span>
-                        ) : (
-                          `${payment.amount.toLocaleString()}원`
-                        )}
-                      </p>
-                      <p
-                        className={`text-xs ${
-                          payment.payment_status === 'completed'
-                            ? 'text-green-600'
+                    <div className="flex items-center gap-3">
+                      <div className="text-right">
+                        <p className="text-sm font-semibold text-gray-900">
+                          {payment.is_first_month ? (
+                            <span className="text-green-600">무료</span>
+                          ) : (
+                            `${payment.amount.toLocaleString()}원`
+                          )}
+                        </p>
+                        <p
+                          className={`text-xs ${
+                            payment.payment_status === 'completed'
+                              ? 'text-green-600'
+                              : payment.payment_status === 'failed'
+                              ? 'text-red-600'
+                              : 'text-gray-600'
+                          }`}
+                        >
+                          {payment.payment_status === 'completed'
+                            ? '완료'
                             : payment.payment_status === 'failed'
-                            ? 'text-red-600'
-                            : 'text-gray-600'
-                        }`}
-                      >
-                        {payment.payment_status === 'completed'
-                          ? '완료'
-                          : payment.payment_status === 'failed'
-                          ? '실패'
-                          : '대기'}
-                      </p>
+                            ? '실패'
+                            : '대기'}
+                        </p>
+                      </div>
+                      {payment.payment_status === 'completed' && 
+                       !payment.is_first_month && 
+                       (payment as any).portone_imp_uid && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={async () => {
+                            try {
+                              const paymentId = (payment as any).portone_imp_uid || (payment as any).portone_merchant_uid
+                              if (!paymentId) return
+                              
+                              const response = await fetch(`/api/payments/receipt?paymentId=${paymentId}`)
+                              const data = await response.json()
+                              
+                              if (response.ok && data.payment?.receiptUrl) {
+                                window.open(data.payment.receiptUrl, '_blank')
+                                toast({
+                                  title: '영수증 열기',
+                                  description: 'PortOne 관리자 콘솔에서 영수증을 확인할 수 있습니다.',
+                                })
+                              } else {
+                                toast({
+                                  variant: 'destructive',
+                                  title: '영수증 조회 실패',
+                                  description: data.error || '영수증을 불러올 수 없습니다.',
+                                })
+                              }
+                            } catch (error: any) {
+                              toast({
+                                variant: 'destructive',
+                                title: '영수증 조회 실패',
+                                description: error.message,
+                              })
+                            }
+                          }}
+                        >
+                          <Download className="w-4 h-4 mr-1" />
+                          영수증
+                        </Button>
+                      )}
                     </div>
                   </div>
                 ))}

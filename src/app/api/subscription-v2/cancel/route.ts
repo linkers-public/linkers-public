@@ -32,14 +32,29 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 예약된 결제 취소
-    if (subscription.portone_merchant_uid) {
+    // 예약된 결제 취소 (scheduleId 사용)
+    if (subscription.portone_schedule_id) {
+      try {
+        await unschedulePayment(subscription.portone_schedule_id)
+        console.log('결제 예약 취소 성공:', subscription.portone_schedule_id)
+      } catch (error: any) {
+        console.error('결제 예약 취소 실패:', {
+          scheduleId: subscription.portone_schedule_id,
+          error: error.message,
+        })
+        // 예약 취소 실패해도 구독 해지는 진행
+      }
+    } else if (subscription.portone_merchant_uid) {
+      // scheduleId가 없으면 paymentId로 시도 (하위 호환성)
+      console.warn('scheduleId가 없어 paymentId로 취소 시도:', subscription.portone_merchant_uid)
       try {
         await unschedulePayment(subscription.portone_merchant_uid)
       } catch (error: any) {
-        console.error('결제 예약 취소 실패:', error)
+        console.error('결제 예약 취소 실패 (paymentId 사용):', error)
         // 예약 취소 실패해도 구독 해지는 진행
       }
+    } else {
+      console.warn('취소할 결제 예약이 없습니다 (scheduleId와 paymentId 모두 없음)')
     }
 
     // 구독 상태 업데이트

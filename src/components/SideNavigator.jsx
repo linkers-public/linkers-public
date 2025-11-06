@@ -82,7 +82,7 @@ const SideNavigator = () => {
         },
         {
           icon: '',
-          label: '결제 내역 / 영수증',
+          label: '결제 내역',
           type: 'subscription',
           isActive: pathname === '/my/payments',
           href: '/my/payments',

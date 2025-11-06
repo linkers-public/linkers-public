@@ -6,6 +6,7 @@ import { ProfileClient } from '@/components/ProfileClient'
 import { getUserProfiles } from '@/apis/profile-refactor.service'
 import { Button } from '@/components/ui/button'
 import { Plus } from 'lucide-react'
+import { createSupabaseBrowserClient } from '@/supabase/supabase-client'
 
 export default function Page() {
   const router = useRouter()
@@ -15,6 +16,29 @@ export default function Page() {
   useEffect(() => {
     const checkProfiles = async () => {
       try {
+        const supabase = createSupabaseBrowserClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        
+        if (!user) {
+          router.push('/auth')
+          return
+        }
+
+        // 활성 프로필 확인
+        const { data: activeProfile } = await supabase
+          .from('accounts')
+          .select('profile_type, profile_id')
+          .eq('user_id', user.id)
+          .eq('is_active', true)
+          .is('deleted_at', null)
+          .maybeSingle()
+
+        // 기업 프로필이 활성화되어 있으면 /my/company/info로 리다이렉트
+        if (activeProfile?.profile_type === 'COMPANY') {
+          router.replace('/my/company/info')
+          return
+        }
+
         const profiles = await getUserProfiles()
         setHasProfile(profiles && profiles.length > 0)
       } catch (error) {
@@ -25,7 +49,7 @@ export default function Page() {
       }
     }
     checkProfiles()
-  }, [])
+  }, [router])
 
   if (loading) {
     return (
