@@ -3,7 +3,6 @@
 import React, { useState } from 'react'
 import { createSupabaseBrowserClient } from '@/supabase/supabase-client'
 import useHydration from '@/hooks/use-hydrate'
-import MakersLogo from './common/MakersLogo'
 import { Database } from '@/types/supabase'
 
 type ProfileType = Database['public']['Enums']['profile_type']
@@ -55,8 +54,8 @@ const AuthUI = ({ role }: { role: string }) => {
   const getProfileTypeInfo = (type: ProfileType | null) => {
     if (!type) {
       return {
-        title: 'Makers에 오신 것을 환영합니다',
-        description: 'AI 코더와 프리랜서를 연결하는 초고속 서비스 제작 플랫폼',
+        title: 'LINKUS에 오신 것을 환영합니다',
+        description: '프리랜서 개발자와 기업을 연결하는 초고속 서비스 제작 플랫폼',
         subtitle: '프로필 타입을 선택해주세요'
       }
     }
@@ -85,10 +84,12 @@ const AuthUI = ({ role }: { role: string }) => {
         {/* 헤더 섹션 */}
         <div className="text-center mb-8">
           <div className="flex justify-center mb-4">
-            <MakersLogo size="lg" />
+            <div className="text-4xl font-bold text-blue-600">
+              LINKUS
+            </div>
           </div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            Makers에 오신 것을 환영합니다
+            LINKUS에 오신 것을 환영합니다
           </h1>
           <p className="text-gray-600 mb-6">
             AI 코더와 프리랜서를 연결하는 초고속 서비스 제작 플랫폼

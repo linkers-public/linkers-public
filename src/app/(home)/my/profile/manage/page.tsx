@@ -98,26 +98,17 @@ export default function ProfileManagePage() {
       </Button>
 
       <div className="bg-white rounded-lg shadow-sm border p-6 md:p-8">
-        <div className="flex justify-between items-center mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">프로필 관리</h1>
-            <p className="text-gray-600">
-              프리랜서와 기업 프로필을 관리하고 전환할 수 있습니다.
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">프로필 관리</h1>
+          <p className="text-gray-600">
+            프리랜서와 기업 프로필을 관리하고 전환할 수 있습니다.
+            <br />
+            <span className="text-sm text-gray-500">
+              • 프리랜서: 프로젝트를 수행하는 역할 (메이커)
               <br />
-              <span className="text-sm text-gray-500">
-                • 프리랜서: 프로젝트를 수행하는 역할 (메이커)
-                <br />
-                • 기업: 프로젝트를 의뢰하고 견적서를 요청하는 역할 (클라이언트)
-              </span>
-            </p>
-          </div>
-          <Button
-            onClick={() => router.push('/my/profile/create')}
-            className="flex items-center gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            프로필 생성
-          </Button>
+              • 기업: 프로젝트를 의뢰하고 견적서를 요청하는 역할 (클라이언트)
+            </span>
+          </p>
         </div>
 
         {error && (
@@ -264,30 +255,45 @@ export default function ProfileManagePage() {
             <p className="text-xs text-gray-500 mt-2">
               한 유저당 프리랜서 프로필과 기업 프로필을 각각 최대 1개씩 생성할 수 있습니다.
             </p>
-            {!hasFreelancer && (
-              <p className="mt-3">
-                <Button
-                  onClick={() => router.push('/my/profile/create')}
-                  variant="link"
-                  size="sm"
-                  className="text-blue-600"
-                >
-                  프리랜서 프로필 생성하기 →
-                </Button>
-              </p>
-            )}
-            {!hasCompany && (
-              <p>
-                <Button
-                  onClick={() => router.push('/my/profile/create')}
-                  variant="link"
-                  size="sm"
-                  className="text-blue-600"
-                >
-                  기업 프로필 생성하기 →
-                </Button>
-              </p>
-            )}
+            <div className="mt-4 space-y-3">
+              {!hasFreelancer && (
+                <div className="flex items-center justify-between p-4 bg-white rounded-lg border border-gray-200">
+                  <div>
+                    <h4 className="font-semibold text-gray-900 mb-1">프리랜서 프로필</h4>
+                    <p className="text-sm text-gray-600">프로젝트를 수행하는 역할 (메이커)</p>
+                  </div>
+                  <Button
+                    onClick={() => router.push('/my/profile/create?type=FREELANCER')}
+                    className="flex items-center gap-2"
+                  >
+                    <Plus className="w-4 h-4" />
+                    생성하기
+                  </Button>
+                </div>
+              )}
+              {!hasCompany && (
+                <div className="flex items-center justify-between p-4 bg-white rounded-lg border border-gray-200">
+                  <div>
+                    <h4 className="font-semibold text-gray-900 mb-1">기업 프로필</h4>
+                    <p className="text-sm text-gray-600">프로젝트를 의뢰하고 견적서를 요청하는 역할</p>
+                  </div>
+                  <Button
+                    onClick={() => router.push('/my/profile/create?type=COMPANY')}
+                    className="flex items-center gap-2"
+                  >
+                    <Plus className="w-4 h-4" />
+                    생성하기
+                  </Button>
+                </div>
+              )}
+              {hasFreelancer && hasCompany && (
+                <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                  <p className="text-sm text-green-800 font-medium">
+                    ✅ 모든 프로필이 생성되었습니다. 프로필 전환을 통해 다른 프로필을 활성화할 수 있습니다.
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

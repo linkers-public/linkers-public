@@ -5,79 +5,131 @@ import Link from 'next/link'
 const LandingPage = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      {/* Hero Section */}
+      {/* Hero Section - 프리랜서 중심 */}
       <section className="relative py-20 px-4 text-center">
         <div className="max-w-6xl mx-auto">
           <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 mb-4 md:mb-6 leading-tight px-4">
-            개발팀 없어도,<br />
-            <span className="text-blue-600">2주 만에 AI+메이커</span>로<br />
-            MVP를 만들어 드립니다.
+            개발자 어디서 찾아야 할지<br />
+            <span className="text-blue-600">막막하다면?</span>
           </h1>
-          <p className="text-base sm:text-lg md:text-xl text-gray-600 mb-6 md:mb-8 max-w-3xl mx-auto px-4">
-            AI 코더와 프리랜서 개발자가 함께하는 초고속 서비스 제작 플랫폼
+          <p className="text-base sm:text-lg md:text-xl text-gray-600 mb-2 max-w-3xl mx-auto px-4">
+            견적은 공짜, 연락할 때만 결제!
+          </p>
+          <p className="text-lg sm:text-xl md:text-2xl font-bold text-blue-600 mb-6 md:mb-8 px-4">
+            부담 없이 먼저 받아보고 선택하세요.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center px-4">
             <Link 
-              href="/enterprise/counsel-form"
-              className="bg-blue-600 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-lg text-base sm:text-lg font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
+              href="/auth?role=maker"
+              className="bg-blue-600 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-lg text-base sm:text-lg font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 shadow-lg"
             >
-              프로젝트 상담 신청하기
-              <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
+              무료 프로필 만들기
+              <UserPlus className="w-4 h-4 sm:w-5 sm:h-5" />
             </Link>
             <Link 
-              href="/auth?role=maker"
+              href="/enterprise/counsel-form"
               className="bg-white text-blue-600 border-2 border-blue-600 px-6 sm:px-8 py-3 sm:py-4 rounded-lg text-base sm:text-lg font-semibold hover:bg-blue-50 transition-colors flex items-center justify-center gap-2"
             >
-              프리랜서 등록하기
-              <UserPlus className="w-4 h-4 sm:w-5 sm:h-5" />
+              프로젝트 등록하기
+              <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
             </Link>
           </div>
         </div>
       </section>
 
-      {/* Value Proposition Section */}
+      {/* 프리랜서 How it Works Section */}
       <section className="py-20 px-4 bg-white">
-        <div className="max-w-6xl mx-auto text-center">
-          <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-900 mb-4 md:mb-6 px-4">
-            Makers는 어떤 서비스인가요?
+        <div className="max-w-6xl mx-auto">
+          <h2 className="text-4xl font-bold text-gray-900 mb-6 text-center">
+            프리랜서는 이렇게 활동합니다
           </h2>
-          <p className="text-base sm:text-lg md:text-xl text-gray-600 mb-8 md:mb-12 max-w-3xl mx-auto px-4">
-            Makers는 AI 코더에 익숙한 프리랜서(메이커)와 빠른 실험이 필요한 기업을 연결하는 매칭 플랫폼입니다.<br />
-            아이디어만 있으면, 개발팀 없이도 서비스를 만들 수 있습니다.
+          <p className="text-xl text-gray-600 mb-12 text-center max-w-3xl mx-auto">
+            AI 툴을 활용하는 개발자라면 누구나 참여할 수 있습니다.<br />
+            프로젝트 경험을 쌓고, 안정적인 수익 기회를 확보하세요.
           </p>
           
+          <div className="grid md:grid-cols-4 gap-8 mb-12">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                <UserPlus className="w-8 h-8 text-white" />
+              </div>
+              <h3 className="font-semibold mb-2">프로필 등록</h3>
+              <p className="text-sm text-gray-600">무료로 프로필을 만들고 포트폴리오를 등록하세요</p>
+            </div>
+            <div className="text-center">
+              <div className="w-16 h-16 bg-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Zap className="w-8 h-8 text-white" />
+              </div>
+              <h3 className="font-semibold mb-2">프로젝트 매칭</h3>
+              <p className="text-sm text-gray-600">맞춤형 프로젝트 제안을 받아보세요</p>
+            </div>
+            <div className="text-center">
+              <div className="w-16 h-16 bg-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Target className="w-8 h-8 text-white" />
+              </div>
+              <h3 className="font-semibold mb-2">견적 제출 & 계약</h3>
+              <p className="text-sm text-gray-600">견적서를 제출하고 계약을 체결하세요</p>
+            </div>
+            <div className="text-center">
+              <div className="w-16 h-16 bg-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                <DollarSign className="w-8 h-8 text-white" />
+              </div>
+              <h3 className="font-semibold mb-2">작업 & 보상</h3>
+              <p className="text-sm text-gray-600">프로젝트를 완료하고 보상을 받으세요</p>
+            </div>
+          </div>
+          
+          <div className="text-center">
+            <Link 
+              href="/auth?role=maker"
+              className="bg-green-600 text-white px-8 py-4 rounded-lg text-lg font-semibold hover:bg-green-700 transition-colors inline-flex items-center gap-2"
+            >
+              무료 프로필 만들기
+              <UserPlus className="w-5 h-5" />
+            </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* 프리랜서 혜택 Section */}
+      <section className="py-20 px-4 bg-gray-50">
+        <div className="max-w-6xl mx-auto text-center">
+          <h2 className="text-4xl font-bold text-gray-900 mb-6">프리랜서가 선택하는 이유</h2>
           <div className="grid md:grid-cols-3 gap-8">
             <div className="text-center p-6">
               <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Clock className="w-8 h-8 text-blue-600" />
               </div>
-              <h3 className="text-xl font-semibold mb-2">빠른 제작</h3>
-              <p className="text-gray-600">2주 MVP 제작</p>
+              <h3 className="text-xl font-semibold mb-2">자유로운 일정</h3>
+              <p className="text-gray-600">원하는 시간에 프로젝트를 선택하고 작업하세요</p>
             </div>
             <div className="text-center p-6">
               <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <DollarSign className="w-8 h-8 text-green-600" />
               </div>
-              <h3 className="text-xl font-semibold mb-2">합리적 비용</h3>
-              <p className="text-gray-600">AI 활용으로 30% 이상 비용 절감</p>
+              <h3 className="text-xl font-semibold mb-2">공정한 보상</h3>
+              <p className="text-gray-600">투명한 견적 시스템으로 합리적인 보상을 받으세요</p>
             </div>
             <div className="text-center p-6">
               <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Users className="w-8 h-8 text-purple-600" />
               </div>
-              <h3 className="text-xl font-semibold mb-2">전문 매칭</h3>
-              <p className="text-gray-600">프로젝트 맞춤형 메이커 연결</p>
+              <h3 className="text-xl font-semibold mb-2">팀 프로젝트</h3>
+              <p className="text-gray-600">팀을 구성하여 대규모 프로젝트에도 참여 가능</p>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Enterprise Section */}
-      <section className="py-20 px-4 bg-gray-50">
+      {/* 기업 Section - 아래쪽 배치 */}
+      <section className="py-20 px-4 bg-white">
         <div className="max-w-6xl mx-auto">
-          <h2 className="text-4xl font-bold text-gray-900 mb-12 text-center">
-            기업은 이렇게 사용합니다
+          <h2 className="text-4xl font-bold text-gray-900 mb-4 text-center">
+            클라이언트는 이렇게 사용해요
           </h2>
+          <p className="text-lg text-gray-600 mb-12 text-center max-w-3xl mx-auto">
+            비교 견적은 무료, 실제 컨택 시에만 비용이 발생합니다.
+          </p>
           
           <div className="grid md:grid-cols-4 gap-8 mb-12">
             <div className="text-center">
@@ -109,95 +161,96 @@ const LandingPage = () => {
               <p className="text-sm text-gray-600">클라우드 배포까지 지원</p>
             </div>
           </div>
-          
-          <div className="text-center">
+        </div>
+      </section>
+
+      {/* 가격 정책 Section */}
+      <section className="py-20 px-4 bg-gray-50">
+        <div className="max-w-6xl mx-auto">
+          <h2 className="text-4xl font-bold text-gray-900 mb-12 text-center">가격 정책</h2>
+          <div className="grid md:grid-cols-2 gap-8">
+            <div className="bg-white p-8 rounded-lg shadow-sm border-2 border-green-200">
+              <h3 className="text-2xl font-bold text-gray-900 mb-4 text-center">프리랜서</h3>
+              <div className="text-center mb-6">
+                <span className="text-4xl font-bold text-green-600">무료</span>
+                <p className="text-gray-600 mt-2">프로필 등록 및 프로젝트 지원</p>
+              </div>
+              <ul className="space-y-3">
+                <li className="flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5 text-green-600" />
+                  <span>무료 프로필 등록</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5 text-green-600" />
+                  <span>무제한 프로젝트 지원</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5 text-green-600" />
+                  <span>팀 구성 및 관리</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5 text-green-600" />
+                  <span>포트폴리오 무제한 등록</span>
+                </li>
+              </ul>
+            </div>
+            <div className="bg-white p-8 rounded-lg shadow-sm border-2 border-blue-200">
+              <h3 className="text-2xl font-bold text-gray-900 mb-4 text-center">기업</h3>
+              <div className="text-center mb-6">
+                <span className="text-4xl font-bold text-blue-600">월 2,000원</span>
+                <p className="text-gray-600 mt-2">첫 달 무료</p>
+              </div>
+              <ul className="space-y-3">
+                <li className="flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5 text-blue-600" />
+                  <span>무료 견적 비교</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5 text-blue-600" />
+                  <span>연락처 확인 시에만 결제</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5 text-blue-600" />
+                  <span>프로젝트 무제한 등록</span>
+                </li>
+                <li className="flex items-center gap-2">
+                  <CheckCircle className="w-5 h-5 text-blue-600" />
+                  <span>메이커 검색 및 북마크</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 마지막 CTA Section */}
+      <section className="py-20 px-4 bg-white">
+        <div className="max-w-4xl mx-auto text-center">
+          <h2 className="text-4xl font-bold text-gray-900 mb-6">지금 바로 시작하세요</h2>
+          <p className="text-xl text-gray-600 mb-8">
+            LINKUS와 함께 프로젝트를 시작하거나 새로운 기회를 찾아보세요
+          </p>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <Link 
+              href="/auth?role=maker"
+              className="bg-green-600 text-white px-8 py-4 rounded-lg text-lg font-semibold hover:bg-green-700 transition-colors inline-flex items-center justify-center gap-2 shadow-lg"
+            >
+              무료 프로필 만들기
+              <UserPlus className="w-5 h-5" />
+            </Link>
             <Link 
               href="/enterprise/counsel-form"
-              className="bg-blue-600 text-white px-8 py-4 rounded-lg text-lg font-semibold hover:bg-blue-700 transition-colors inline-flex items-center gap-2"
+              className="bg-blue-600 text-white px-8 py-4 rounded-lg text-lg font-semibold hover:bg-blue-700 transition-colors inline-flex items-center justify-center gap-2"
             >
-              프로젝트 상담 신청하기
+              견적 비교 시작하기
               <ArrowRight className="w-5 h-5" />
             </Link>
           </div>
         </div>
       </section>
 
-      {/* Maker Section */}
-      <section className="py-20 px-4 bg-white">
-        <div className="max-w-6xl mx-auto">
-          <h2 className="text-4xl font-bold text-gray-900 mb-6 text-center">
-            메이커는 이렇게 활동합니다
-          </h2>
-          <p className="text-xl text-gray-600 mb-12 text-center max-w-3xl mx-auto">
-            AI 툴을 활용하는 개발자라면 누구나 참여할 수 있습니다.<br />
-            프로젝트 경험을 쌓고, 안정적인 수익 기회를 확보하세요.
-          </p>
-          
-          <div className="grid md:grid-cols-4 gap-8 mb-12">
-            <div className="text-center">
-              <div className="w-16 h-16 bg-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                <UserPlus className="w-8 h-8 text-white" />
-              </div>
-              <h3 className="font-semibold mb-2">프로필 등록</h3>
-            </div>
-            <div className="text-center">
-              <div className="w-16 h-16 bg-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Zap className="w-8 h-8 text-white" />
-              </div>
-              <h3 className="font-semibold mb-2">프로젝트 매칭</h3>
-            </div>
-            <div className="text-center">
-              <div className="w-16 h-16 bg-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Target className="w-8 h-8 text-white" />
-              </div>
-              <h3 className="font-semibold mb-2">견적 제출 & 계약</h3>
-            </div>
-            <div className="text-center">
-              <div className="w-16 h-16 bg-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                <DollarSign className="w-8 h-8 text-white" />
-              </div>
-              <h3 className="font-semibold mb-2">작업 & 보상</h3>
-            </div>
-          </div>
-          
-          <div className="text-center">
-            <Link 
-              href="/auth?role=maker"
-              className="bg-green-600 text-white px-8 py-4 rounded-lg text-lg font-semibold hover:bg-green-700 transition-colors inline-flex items-center gap-2"
-            >
-              프리랜서 등록하기
-              <UserPlus className="w-5 h-5" />
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      {/* Success Cases Section */}
-      <section className="py-20 px-4 bg-gray-50">
-        <div className="max-w-6xl mx-auto">
-          <h2 className="text-4xl font-bold text-gray-900 mb-12 text-center">
-            이런 기업이 Makers를 찾습니다
-          </h2>
-          
-          <div className="grid md:grid-cols-3 gap-8">
-            <div className="bg-white p-8 rounded-lg shadow-sm">
-              <h3 className="text-xl font-semibold mb-4 text-blue-600">스타트업</h3>
-              <p className="text-gray-600">빠른 아이디어 검증이 필요할 때</p>
-            </div>
-            <div className="bg-white p-8 rounded-lg shadow-sm">
-              <h3 className="text-xl font-semibold mb-4 text-green-600">중소기업</h3>
-              <p className="text-gray-600">신사업 PoC를 저비용으로 실험할 때</p>
-            </div>
-            <div className="bg-white p-8 rounded-lg shadow-sm">
-              <h3 className="text-xl font-semibold mb-4 text-purple-600">개인 창업자</h3>
-              <p className="text-gray-600">MVP를 빠르게 출시하고 싶을 때</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
       {/* FAQ Section */}
-      <section className="py-20 px-4 bg-white">
+      <section className="py-20 px-4 bg-gray-50">
         <div className="max-w-4xl mx-auto">
           <h2 className="text-4xl font-bold text-gray-900 mb-12 text-center">
             자주 묻는 질문
@@ -225,9 +278,9 @@ const LandingPage = () => {
         <div className="max-w-6xl mx-auto">
           <div className="grid md:grid-cols-3 gap-8">
             <div>
-              <h3 className="text-xl font-bold mb-4">Makers</h3>
+              <h3 className="text-xl font-bold mb-4">LINKUS</h3>
               <p className="text-gray-400">
-                AI와 프리랜서를 연결하는<br />
+                프리랜서와 기업을 연결하는<br />
                 초고속 서비스 제작 플랫폼
               </p>
             </div>
@@ -241,11 +294,12 @@ const LandingPage = () => {
             </div>
             <div>
               <h4 className="font-semibold mb-4">문의</h4>
-              <p className="text-gray-400">이메일: contact@makers.com</p>
+              <p className="text-gray-400 mb-2">이메일: suhyeonjan10@gmail.com</p>
+              <p className="text-gray-400">전화: 010-4081-4151</p>
             </div>
           </div>
           <div className="border-t border-gray-800 mt-8 pt-8 text-center text-gray-400">
-            <p>&copy; 2024 Makers. All rights reserved.</p>
+            <p>&copy; 2024 LINKUS. All rights reserved.</p>
           </div>
         </div>
       </footer>

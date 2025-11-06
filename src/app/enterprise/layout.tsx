@@ -2,8 +2,8 @@ import Header from '@/layout/Header'
 import GlobalNavigator from '@/components/GlobalNavigator'
 
 export const metadata = {
-  title: 'Makers - 기업 서비스',
-  description: 'AI와 프리랜서를 연결하는 초고속 서비스 제작 플랫폼',
+  title: 'LINKUS - 기업 서비스',
+  description: '프리랜서와 기업을 연결하는 초고속 서비스 제작 플랫폼. 비교 견적은 무료, 실제 컨택 시에만 비용이 발생합니다.',
 };
 
 export default function EnterpriseLayout({

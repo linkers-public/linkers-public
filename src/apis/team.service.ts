@@ -274,7 +274,7 @@ export const fetchTeamDetail = async (teamId: number) => {
   }
 
   // 매니저인지 확인
-  const isManager = data.manager_profile_id === currentProfile.profile_id
+  const isManager = (data as any).manager_profile_id === currentProfile.profile_id
 
   return {
     data: {
@@ -325,7 +325,7 @@ export const addTeamMember = async (teamId: number, profileId: string) => {
   }
 
   // 매니저인지 확인
-  if (team.manager_profile_id !== currentProfile.profile_id) {
+  if ((team as any).manager_profile_id !== currentProfile.profile_id) {
     throw new Error('팀 매니저만 팀원을 추가할 수 있습니다.')
   }
 
@@ -391,7 +391,7 @@ export const removeTeamMember = async (teamId: number, memberId: number) => {
   }
 
   // 매니저인지 확인
-  if (team.manager_profile_id !== currentProfile.profile_id) {
+  if ((team as any).manager_profile_id !== currentProfile.profile_id) {
     throw new Error('팀 매니저만 팀원을 제거할 수 있습니다.')
   }
 

@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { fetchAllCounsel } from '@/apis/counsel.service';
 import { createSupabaseBrowserClient } from '@/supabase/supabase-client';
-import { FileText } from 'lucide-react';
+import { FileText, Clock, DollarSign, ChevronRight } from 'lucide-react';
 
 const SearchProjectsClient: React.FC = () => {
   const router = useRouter();
@@ -98,7 +98,7 @@ const SearchProjectsClient: React.FC = () => {
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
-                📋 접수됨 ({projects.filter(p => (p.counsel_status || p.status) === 'pending').length})
+                접수됨 ({projects.filter(p => (p.counsel_status || p.status) === 'pending').length})
               </button>
               <button
                 onClick={() => setStatusFilter('recruiting')}
@@ -108,7 +108,7 @@ const SearchProjectsClient: React.FC = () => {
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
-                🔍 매칭 중 ({projects.filter(p => (p.counsel_status || p.status) === 'recruiting').length})
+                매칭 중 ({projects.filter(p => (p.counsel_status || p.status) === 'recruiting').length})
               </button>
               <button
                 onClick={() => setStatusFilter('estimate_received')}
@@ -118,7 +118,7 @@ const SearchProjectsClient: React.FC = () => {
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
-                📄 견적 도착 ({projects.filter(p => (p.counsel_status || p.status) === 'estimate_received').length})
+                견적 도착 ({projects.filter(p => (p.counsel_status || p.status) === 'estimate_received').length})
               </button>
               <button
                 onClick={() => setStatusFilter('contract_progress')}
@@ -128,7 +128,7 @@ const SearchProjectsClient: React.FC = () => {
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
-                📝 계약 진행 ({projects.filter(p => (p.counsel_status || p.status) === 'contract_progress').length})
+                계약 진행 ({projects.filter(p => (p.counsel_status || p.status) === 'contract_progress').length})
               </button>
               <button
                 onClick={() => setStatusFilter('end')}
@@ -138,7 +138,7 @@ const SearchProjectsClient: React.FC = () => {
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
-                ✅ 완료 ({projects.filter(p => (p.counsel_status || p.status) === 'end').length})
+                완료 ({projects.filter(p => (p.counsel_status || p.status) === 'end').length})
               </button>
             </div>
           </div>
@@ -213,17 +213,17 @@ const ProjectMeta = ({
   const getStatusInfo = (status: string) => {
     switch (status) {
       case 'pending':
-        return { text: '접수됨', color: 'bg-blue-100 text-blue-800', icon: '📋' };
+        return { text: '접수됨', color: 'bg-blue-50 text-blue-700 border-blue-200' };
       case 'recruiting':
-        return { text: '매칭 중', color: 'bg-yellow-100 text-yellow-800', icon: '🔍' };
+        return { text: '매칭 중', color: 'bg-amber-50 text-amber-700 border-amber-200' };
       case 'estimate_received':
-        return { text: '견적 도착', color: 'bg-green-100 text-green-800', icon: '📄' };
+        return { text: '견적 도착', color: 'bg-green-50 text-green-700 border-green-200' };
       case 'contract_progress':
-        return { text: '계약 진행', color: 'bg-purple-100 text-purple-800', icon: '📝' };
+        return { text: '계약 진행', color: 'bg-purple-50 text-purple-700 border-purple-200' };
       case 'end':
-        return { text: '완료', color: 'bg-gray-100 text-gray-800', icon: '✅' };
+        return { text: '완료', color: 'bg-gray-50 text-gray-700 border-gray-200' };
       default:
-        return { text: '접수됨', color: 'bg-blue-100 text-blue-800', icon: '📋' };
+        return { text: '접수됨', color: 'bg-blue-50 text-blue-700 border-blue-200' };
     }
   };
 
@@ -259,9 +259,8 @@ const ProjectMeta = ({
                 </button>
               )}
             </div>
-            <div className={`px-4 py-1.5 text-sm font-semibold rounded-lg shadow-sm ${statusInfo.color} flex items-center gap-2 whitespace-nowrap`}>
-              <span className="text-base">{statusInfo.icon}</span>
-              <span>{statusInfo.text}</span>
+            <div className={`px-4 py-1.5 text-sm font-medium rounded-lg border ${statusInfo.color} whitespace-nowrap`}>
+              {statusInfo.text}
             </div>
           </div>
 
@@ -273,19 +272,23 @@ const ProjectMeta = ({
           )}
 
           {/* 예상 금액 및 기간 */}
-          <div className="flex flex-wrap gap-6 text-gray-700">
-            <div className="flex items-center gap-2">
-              <span className="text-lg">💰</span>
+          <div className="flex flex-wrap gap-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-blue-50 rounded-lg">
+                <DollarSign className="w-4 h-4 text-blue-600" />
+              </div>
               <div>
-                <span className="text-sm font-medium text-gray-500">예상 금액</span>
-                <p className="text-base font-semibold">{project.cost || '미정'}</p>
+                <span className="text-xs font-medium text-gray-500 block mb-1">예상 금액</span>
+                <p className="text-sm font-semibold text-gray-900">{project.cost || '미정'}</p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="text-lg">⏳</span>
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-green-50 rounded-lg">
+                <Clock className="w-4 h-4 text-green-600" />
+              </div>
               <div>
-                <span className="text-sm font-medium text-gray-500">예상 기간</span>
-                <p className="text-base font-semibold">{project.period || '미정'}</p>
+                <span className="text-xs font-medium text-gray-500 block mb-1">예상 기간</span>
+                <p className="text-sm font-semibold text-gray-900">{project.period || '미정'}</p>
               </div>
             </div>
           </div>
@@ -341,11 +344,9 @@ const ProjectMeta = ({
                   <span>견적서 검토 ({estimateCount})</span>
                 </button>
               )}
-              <span className="text-sm text-blue-600 font-semibold hover:text-blue-700 flex items-center gap-1">
+              <span className="text-sm text-blue-600 font-medium hover:text-blue-700 flex items-center gap-1">
                 자세히 보기
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
+                <ChevronRight className="w-4 h-4" />
               </span>
             </div>
           </div>
@@ -356,3 +357,4 @@ const ProjectMeta = ({
 };
 
 export default SearchProjectsClient;
+

@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { createProfile } from '@/apis/profile-refactor.service'
+import { useState, useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { createProfile, getUserProfiles } from '@/apis/profile-refactor.service'
 import { Database } from '@/types/supabase'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,8 +13,9 @@ import { JOB_OPTIONS, EXPERTISE_OPTIONS } from '@/constants/job-options'
 
 type ProfileType = Database['public']['Enums']['profile_type']
 
-export default function CreateProfilePage() {
+function CreateProfilePageContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [profileType, setProfileType] = useState<ProfileType | null>(null)
   const [formData, setFormData] = useState({
     username: '',
@@ -24,6 +25,39 @@ export default function CreateProfilePage() {
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [checking, setChecking] = useState(true)
+
+  // 쿼리 파라미터에서 프로필 타입 가져오기 및 중복 체크
+  useEffect(() => {
+    const checkExistingProfiles = async () => {
+      try {
+        const typeParam = searchParams.get('type')
+        if (typeParam && (typeParam === 'FREELANCER' || typeParam === 'COMPANY')) {
+          // 기존 프로필 확인
+          const profiles = await getUserProfiles()
+          const existingProfile = profiles.find((p: any) => p.profile_type === typeParam)
+          
+          if (existingProfile) {
+            toast({
+              variant: 'destructive',
+              title: '프로필이 이미 존재합니다',
+              description: `${typeParam === 'FREELANCER' ? '프리랜서' : '기업'} 프로필이 이미 생성되어 있습니다.`,
+            })
+            router.push('/my/profile/manage')
+            return
+          }
+          
+          setProfileType(typeParam as ProfileType)
+        }
+      } catch (err: any) {
+        console.error('프로필 확인 실패:', err)
+      } finally {
+        setChecking(false)
+      }
+    }
+
+    checkExistingProfiles()
+  }, [searchParams, router])
 
   const handleProfileTypeSelect = (type: ProfileType) => {
     setProfileType(type)
@@ -86,6 +120,17 @@ export default function CreateProfilePage() {
     }
   }
 
+  if (checking) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-lg text-gray-600">프로필 확인 중...</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="w-full max-w-4xl mx-auto py-8 px-4">
       <Button
@@ -100,50 +145,63 @@ export default function CreateProfilePage() {
       <div className="bg-white rounded-lg shadow-sm border p-6 md:p-8">
         <h1 className="text-2xl font-bold text-gray-900 mb-2">새 프로필 생성</h1>
         <p className="text-gray-600 mb-8">
-          프리랜서 또는 기업 프로필을 생성하세요. 한 유저당 각각 최대 1개씩 생성할 수 있습니다.
+          {profileType 
+            ? `${profileType === 'FREELANCER' ? '프리랜서' : '기업'} 프로필을 생성하세요.`
+            : '프리랜서 또는 기업 프로필을 생성하세요. 한 유저당 각각 최대 1개씩 생성할 수 있습니다.'}
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-8">
           {/* 프로필 타입 선택 */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-3">
-              프로필 타입 선택 <span className="text-red-500">*</span>
-            </label>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <button
-                type="button"
-                onClick={() => handleProfileTypeSelect('FREELANCER')}
-                className={`p-6 border-2 rounded-lg text-left transition-all ${
-                  profileType === 'FREELANCER'
-                    ? 'border-blue-500 bg-blue-50'
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <div className="font-semibold text-lg text-gray-900 mb-2">
-                  프리랜서
-                </div>
-                <div className="text-sm text-gray-600">
-                  개인 개발자, 디자이너, 컨설턴트 등으로 활동하시나요?
-                </div>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleProfileTypeSelect('COMPANY')}
-                className={`p-6 border-2 rounded-lg text-left transition-all ${
-                  profileType === 'COMPANY'
-                    ? 'border-blue-500 bg-blue-50'
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
-              >
-                <div className="font-semibold text-lg text-gray-900 mb-2">
-                  기업
-                </div>
-                <div className="text-sm text-gray-600">
-                  회사 또는 팀으로 프로젝트를 수주하시나요?
-                </div>
-              </button>
+          {!profileType && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-3">
+                프로필 타입 선택 <span className="text-red-500">*</span>
+              </label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <button
+                  type="button"
+                  onClick={() => handleProfileTypeSelect('FREELANCER')}
+                  className={`p-6 border-2 rounded-lg text-left transition-all ${
+                    profileType === 'FREELANCER'
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <div className="font-semibold text-lg text-gray-900 mb-2">
+                    프리랜서
+                  </div>
+                  <div className="text-sm text-gray-600">
+                    개인 개발자, 디자이너, 컨설턴트 등으로 활동하시나요?
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleProfileTypeSelect('COMPANY')}
+                  className={`p-6 border-2 rounded-lg text-left transition-all ${
+                    profileType === 'COMPANY'
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-gray-200 hover:border-gray-300'
+                  }`}
+                >
+                  <div className="font-semibold text-lg text-gray-900 mb-2">
+                    기업
+                  </div>
+                  <div className="text-sm text-gray-600">
+                    회사 또는 팀으로 프로젝트를 수주하시나요?
+                  </div>
+                </button>
+              </div>
             </div>
-          </div>
+          )}
+
+          {/* 프로필 타입이 선택된 경우 표시 */}
+          {profileType && (
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-800">
+                <strong>{profileType === 'FREELANCER' ? '프리랜서' : '기업'}</strong> 프로필을 생성합니다.
+              </p>
+            </div>
+          )}
 
           {/* 기본 정보 */}
           {profileType && (
@@ -254,3 +312,17 @@ export default function CreateProfilePage() {
   )
 }
 
+export default function CreateProfilePage() {
+  return (
+    <Suspense fallback={
+      <div className="flex justify-center items-center h-64">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-lg text-gray-600">로딩 중...</p>
+        </div>
+      </div>
+    }>
+      <CreateProfilePageContent />
+    </Suspense>
+  )
+}

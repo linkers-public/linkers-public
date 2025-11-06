@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { fetchAllCounsel } from '@/apis/counsel.service';
-import { Search, Briefcase, DollarSign, Calendar, Tag, MapPin, CheckCircle } from 'lucide-react';
+import { Search, Briefcase, DollarSign, Tag, MapPin, ChevronRight, Clock } from 'lucide-react';
 
 type Counsel = {
   counsel_id: number;
@@ -237,13 +237,13 @@ const ProjectMeta = ({
   const getStatusInfo = (status: string) => {
     switch (status) {
       case 'recruiting':
-        return { text: '모집중', color: 'bg-green-100 text-green-800', icon: '🔍' };
+        return { text: '모집중', color: 'bg-green-50 text-green-700 border-green-200' };
       case 'pending':
-        return { text: '대기중', color: 'bg-blue-100 text-blue-800', icon: '⏳' };
+        return { text: '대기중', color: 'bg-blue-50 text-blue-700 border-blue-200' };
       case 'end':
-        return { text: '종료', color: 'bg-gray-100 text-gray-800', icon: '✅' };
+        return { text: '종료', color: 'bg-gray-50 text-gray-700 border-gray-200' };
       default:
-        return { text: '대기중', color: 'bg-gray-100 text-gray-800', icon: '⏳' };
+        return { text: '대기중', color: 'bg-gray-50 text-gray-700 border-gray-200' };
     }
   };
 
@@ -261,33 +261,38 @@ const ProjectMeta = ({
             <h3 className="font-bold text-xl text-gray-900 flex-1 leading-tight">
               {project.title}
             </h3>
-            <div className={`px-4 py-1.5 text-sm font-semibold rounded-lg shadow-sm ${statusInfo.color} flex items-center gap-2 whitespace-nowrap`}>
-              <span className="text-base">{statusInfo.icon}</span>
-              <span>{statusInfo.text}</span>
+            <div className={`px-4 py-1.5 text-sm font-medium rounded-lg border ${statusInfo.color} whitespace-nowrap`}>
+              {statusInfo.text}
             </div>
           </div>
 
           {/* 예상 금액 및 기간 */}
-          <div className="flex flex-wrap gap-6 text-gray-700">
-            <div className="flex items-center gap-2">
-              <DollarSign className="w-5 h-5 text-blue-600" />
+          <div className="flex flex-wrap gap-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-blue-50 rounded-lg">
+                <DollarSign className="w-4 h-4 text-blue-600" />
+              </div>
               <div>
-                <span className="text-sm font-medium text-gray-500">예상 금액</span>
-                <p className="text-base font-semibold">{project.cost || '미정'}</p>
+                <span className="text-xs font-medium text-gray-500 block mb-1">예상 금액</span>
+                <p className="text-sm font-semibold text-gray-900">{project.cost || '미정'}</p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-green-600" />
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-green-50 rounded-lg">
+                <Clock className="w-4 h-4 text-green-600" />
+              </div>
               <div>
-                <span className="text-sm font-medium text-gray-500">예상 기간</span>
-                <p className="text-base font-semibold">{project.period || '미정'}</p>
+                <span className="text-xs font-medium text-gray-500 block mb-1">예상 기간</span>
+                <p className="text-sm font-semibold text-gray-900">{project.period || '미정'}</p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <MapPin className="w-5 h-5 text-purple-600" />
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-purple-50 rounded-lg">
+                <MapPin className="w-4 h-4 text-purple-600" />
+              </div>
               <div>
-                <span className="text-sm font-medium text-gray-500">근무 방식</span>
-                <p className="text-base font-semibold">{project.isRemote ? '원격' : '현장'}</p>
+                <span className="text-xs font-medium text-gray-500 block mb-1">근무 방식</span>
+                <p className="text-sm font-semibold text-gray-900">{project.isRemote ? '원격' : '현장'}</p>
               </div>
             </div>
           </div>
@@ -332,11 +337,9 @@ const ProjectMeta = ({
                 day: 'numeric'
               }) : '날짜 없음'}
             </span>
-            <span className="text-sm text-blue-600 font-semibold hover:text-blue-700 flex items-center gap-1">
+            <span className="text-sm text-blue-600 font-medium hover:text-blue-700 flex items-center gap-1">
               자세히 보기
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
+              <ChevronRight className="w-4 h-4" />
             </span>
           </div>
         </div>
