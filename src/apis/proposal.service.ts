@@ -176,7 +176,7 @@ export const acceptTeamProposal = async (proposalId: number) => {
     return { data: { alreadyMember: true }, error: null }
   }
 
-  // team_members에 추가
+  // team_members에 추가 (제안 수락 시)
   const { data: teamMember, error: memberError } = await supabase
     .from('team_members')
     .insert({
@@ -184,6 +184,7 @@ export const acceptTeamProposal = async (proposalId: number) => {
       profile_id: profile.profile_id,
       maker_id: user.id,
       status: 'active',
+      request_type: 'invite', // 매니저의 제안을 수락한 것이므로 'invite'
     })
     .select()
     .single()

@@ -340,6 +340,7 @@ export type Database = {
       counsel: {
         Row: {
           client_id: string
+          company_profile_id: string | null
           cost: Database["public"]["Enums"]["counsel_cost"]
           counsel_date: string | null
           counsel_id: number
@@ -356,6 +357,7 @@ export type Database = {
         }
         Insert: {
           client_id?: string
+          company_profile_id?: string | null
           cost?: Database["public"]["Enums"]["counsel_cost"]
           counsel_date?: string | null
           counsel_id?: number
@@ -372,6 +374,7 @@ export type Database = {
         }
         Update: {
           client_id?: string
+          company_profile_id?: string | null
           cost?: Database["public"]["Enums"]["counsel_cost"]
           counsel_date?: string | null
           counsel_id?: number
@@ -399,6 +402,7 @@ export type Database = {
       estimate: {
         Row: {
           client_id: string
+          company_profile_id: string | null
           counsel_id: number | null
           estimate_date: string | null
           estimate_due_date: string | null
@@ -406,10 +410,12 @@ export type Database = {
           estimate_start_date: string | null
           estimate_status: Database["public"]["Enums"]["estimate_status"]
           manager_id: string | null
+          manager_profile_id: string | null
           team_id: number
         }
         Insert: {
           client_id?: string
+          company_profile_id?: string | null
           counsel_id?: number | null
           estimate_date?: string | null
           estimate_due_date?: string | null
@@ -417,10 +423,12 @@ export type Database = {
           estimate_start_date?: string | null
           estimate_status?: Database["public"]["Enums"]["estimate_status"]
           manager_id?: string | null
+          manager_profile_id?: string | null
           team_id: number
         }
         Update: {
           client_id?: string
+          company_profile_id?: string | null
           counsel_id?: number | null
           estimate_date?: string | null
           estimate_due_date?: string | null
@@ -428,6 +436,7 @@ export type Database = {
           estimate_start_date?: string | null
           estimate_status?: Database["public"]["Enums"]["estimate_status"]
           manager_id?: string | null
+          manager_profile_id?: string | null
           team_id?: number
         }
         Relationships: [
@@ -729,6 +738,7 @@ export type Database = {
           created_at: string
           id: number
           maker_id: string | null
+          profile_id: string | null
           status: string | null
           team_id: number | null
           updated_at: string | null
@@ -737,6 +747,7 @@ export type Database = {
           created_at?: string
           id?: number
           maker_id?: string | null
+          profile_id?: string | null
           status?: string | null
           team_id?: number | null
           updated_at?: string | null
@@ -745,6 +756,7 @@ export type Database = {
           created_at?: string
           id?: number
           maker_id?: string | null
+          profile_id?: string | null
           status?: string | null
           team_id?: number | null
           updated_at?: string | null
@@ -835,6 +847,7 @@ export type Database = {
           deleted_at: string | null
           id: number
           manager_id: string
+          manager_profile_id: string | null
           name: string
           prefered: string[]
           specialty: Database["public"]["Enums"]["team_specialty"][]
@@ -847,6 +860,7 @@ export type Database = {
           deleted_at?: string | null
           id?: number
           manager_id?: string
+          manager_profile_id?: string | null
           name: string
           prefered: string[]
           specialty: Database["public"]["Enums"]["team_specialty"][]
@@ -859,6 +873,7 @@ export type Database = {
           deleted_at?: string | null
           id?: number
           manager_id?: string
+          manager_profile_id?: string | null
           name?: string
           prefered?: string[]
           specialty?: Database["public"]["Enums"]["team_specialty"][]

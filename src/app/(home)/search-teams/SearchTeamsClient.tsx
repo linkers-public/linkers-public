@@ -25,12 +25,10 @@ interface Team {
   prefered: string[] | null
   manager: {
     username: string
-    profile_image_url: string | null
   } | null
   team_members: Array<{
     account: {
       username: string
-      profile_image_url: string | null
     } | null
   }>
   created_at: string
@@ -52,21 +50,14 @@ const SearchTeamsClient = () => {
       setError(null)
       
       try {
-        const { data, error } = await searchTeams({
+        const { data } = await searchTeams({
           searchTerm: searchTerm.trim() || undefined,
           specialty: selectedSpecialty.length > 0 ? selectedSpecialty : undefined,
         })
         
-        if (error) {
-          console.error('팀 조회 에러:', error)
-          setError(error.message || '팀을 불러오는데 실패했습니다.')
-          setTeamList([])
-          return
-        }
-        
         if (data && Array.isArray(data)) {
-          setTeamList(data)
-          setFilteredTeamList(data)
+          setTeamList(data as Team[])
+          setFilteredTeamList(data as Team[])
         } else {
           setTeamList([])
           setFilteredTeamList([])

@@ -58,15 +58,24 @@ interface TeamJoinRequest {
   created_at: string
 }
 
+interface SentTeamJoinRequest {
+  id: number
+  team_id: number
+  team_name: string
+  status: string
+  created_at: string
+}
+
 export default function MessagesClient() {
   const router = useRouter()
   const [teamInvites, setTeamInvites] = useState<TeamInvite[]>([])
   const [teamProposals, setTeamProposals] = useState<TeamProposal[]>([])
   const [sentTeamProposals, setSentTeamProposals] = useState<SentTeamProposal[]>([])
+  const [sentTeamJoinRequests, setSentTeamJoinRequests] = useState<SentTeamJoinRequest[]>([])
   const [teamJoinRequests, setTeamJoinRequests] = useState<TeamJoinRequest[]>([])
   const [companyProposals, setCompanyProposals] = useState<CompanyProposal[]>([])
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'invites' | 'team-proposals' | 'sent-proposals' | 'join-requests' | 'proposals'>('invites')
+  const [activeTab, setActiveTab] = useState<'invites' | 'team-proposals' | 'sent-proposals' | 'sent-join-requests' | 'join-requests' | 'proposals'>('invites')
 
   useEffect(() => {
     loadMessages()
@@ -106,6 +115,7 @@ export default function MessagesClient() {
           id,
           team_id,
           status,
+          request_type,
           created_at,
           teams:team_id (
             id,
@@ -116,6 +126,7 @@ export default function MessagesClient() {
         `
         )
         .eq('profile_id', currentProfile.profile_id)
+        .eq('request_type', 'invite') // 매니저가 초대한 것만
         .order('created_at', { ascending: false })
 
       if (invitesError) {
@@ -298,6 +309,55 @@ export default function MessagesClient() {
         setSentTeamProposals(formattedSentProposals)
       }
 
+      // 메이커가 보낸 합류 신청 조회 (team_members 테이블에서 status가 'pending'이고 request_type이 'request'인 경우)
+      const { data: sentJoinRequests, error: sentJoinRequestsError } = await supabase
+        .from('team_members')
+        .select('id, team_id, status, created_at')
+        .eq('profile_id', currentProfile.profile_id)
+        .eq('status', 'pending')
+        .eq('request_type', 'request') // 메이커가 신청한 것만
+        .order('created_at', { ascending: false })
+
+      if (sentJoinRequestsError) {
+        console.error('보낸 합류 신청 조회 실패:', sentJoinRequestsError)
+        setSentTeamJoinRequests([])
+      } else if (!sentJoinRequests || sentJoinRequests.length === 0) {
+        setSentTeamJoinRequests([])
+      } else {
+        // 팀 정보 조회
+        const sentJoinTeamIds = sentJoinRequests
+          .map((r: any) => r.team_id)
+          .filter((id: any) => id !== null) as number[]
+        
+        const sentJoinTeamInfo: Record<number, any> = {}
+        if (sentJoinTeamIds.length > 0) {
+          const { data: teams } = await supabase
+            .from('teams')
+            .select('id, name')
+            .in('id', sentJoinTeamIds)
+          
+          if (teams) {
+            teams.forEach((team: any) => {
+              sentJoinTeamInfo[team.id] = team
+            })
+          }
+        }
+
+        const formattedSentJoinRequests: SentTeamJoinRequest[] =
+          sentJoinRequests.map((request: any) => {
+            const team = sentJoinTeamInfo[request.team_id]
+            
+            return {
+              id: request.id,
+              team_id: request.team_id,
+              team_name: team?.name || '알 수 없음',
+              status: request.status,
+              created_at: request.created_at,
+            }
+          })
+        setSentTeamJoinRequests(formattedSentJoinRequests)
+      }
+
       // 매니저가 받은 합류 신청 조회 (team_members 테이블에서 status가 'pending'인 경우)
       // 현재 사용자가 매니저인 팀들의 합류 신청 조회
       const { data: managedTeams } = await supabase
@@ -317,6 +377,7 @@ export default function MessagesClient() {
           .select('id, team_id, profile_id, maker_id, status, created_at')
           .in('team_id', teamIds)
           .eq('status', 'pending')
+          .eq('request_type', 'request') // 메이커가 신청한 것만
           .order('created_at', { ascending: false })
 
         if (joinRequestsError) {
@@ -645,11 +706,26 @@ export default function MessagesClient() {
                 : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
             }`}
           >
-            보낸 팀 제안
+            보낸 팀 제안 (매니저)
             <span className={`ml-2 px-2 py-0.5 text-xs rounded-full ${
               activeTab === 'sent-proposals' ? 'bg-blue-100 text-blue-700' : 'bg-gray-200 text-gray-600'
             }`}>
               {sentTeamProposals.length}
+            </span>
+          </button>
+          <button
+            onClick={() => setActiveTab('sent-join-requests')}
+            className={`px-4 py-2.5 text-sm font-medium transition-all whitespace-nowrap rounded-md ${
+              activeTab === 'sent-join-requests'
+                ? 'bg-white text-blue-600 shadow-sm'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+            }`}
+          >
+            보낸 합류 신청 (메이커)
+            <span className={`ml-2 px-2 py-0.5 text-xs rounded-full ${
+              activeTab === 'sent-join-requests' ? 'bg-blue-100 text-blue-700' : 'bg-gray-200 text-gray-600'
+            }`}>
+              {sentTeamJoinRequests.length}
             </span>
           </button>
           <button
@@ -660,7 +736,7 @@ export default function MessagesClient() {
                 : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
             }`}
           >
-            받은 합류 신청
+            받은 합류 신청 (매니저)
             <span className={`ml-2 px-2 py-0.5 text-xs rounded-full ${
               activeTab === 'join-requests' ? 'bg-blue-100 text-blue-700' : 'bg-gray-200 text-gray-600'
             }`}>
@@ -802,12 +878,12 @@ export default function MessagesClient() {
           </div>
         )}
 
-        {/* 보낸 팀 제안 목록 */}
+        {/* 보낸 팀 제안 목록 (매니저가 메이커에게 보낸 제안) */}
         {activeTab === 'sent-proposals' && (
           <div className="space-y-4">
             <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
               <p className="text-sm text-slate-700 leading-relaxed">
-                <span className="font-semibold text-slate-900">보낸 팀 제안:</span> 내가 다른 메이커에게 팀 합류를 제안한 내역입니다. 제안한 메이커와 팀 정보를 확인할 수 있습니다.
+                <span className="font-semibold text-slate-900">보낸 팀 제안 (매니저):</span> 내가 매니저로서 다른 메이커에게 팀 합류를 제안한 내역입니다. 제안한 메이커와 팀 정보를 확인할 수 있습니다.
               </p>
             </div>
             {sentTeamProposals.length === 0 ? (
@@ -866,12 +942,64 @@ export default function MessagesClient() {
           </div>
         )}
 
-        {/* 받은 합류 신청 목록 */}
+        {/* 보낸 합류 신청 목록 (메이커가 팀에 보낸 신청) */}
+        {activeTab === 'sent-join-requests' && (
+          <div className="space-y-4">
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+              <p className="text-sm text-slate-700 leading-relaxed">
+                <span className="font-semibold text-slate-900">보낸 합류 신청 (메이커):</span> 내가 메이커로서 팀에 합류를 신청한 내역입니다. 매니저의 승인을 기다리는 중입니다.
+              </p>
+            </div>
+            {sentTeamJoinRequests.length === 0 ? (
+              <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+                <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Users className="w-8 h-8 text-gray-400" />
+                </div>
+                <p className="text-gray-600 font-medium">보낸 합류 신청이 없습니다</p>
+                <p className="text-sm text-gray-500 mt-1">팀에 합류 신청을 보내면 여기에 표시됩니다</p>
+              </div>
+            ) : (
+              sentTeamJoinRequests.map((request) => (
+                <div
+                  key={request.id}
+                  className="bg-white rounded-xl border border-gray-200 hover:border-gray-300 transition-colors p-6"
+                >
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex-1">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                        {request.team_name} 팀 합류 신청
+                      </h3>
+                      <p className="text-xs text-gray-500">
+                        {new Date(request.created_at).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })}
+                      </p>
+                    </div>
+                    <div className="ml-4">
+                      {getStatusBadge(request.status)}
+                    </div>
+                  </div>
+                  {request.team_id && (
+                    <div className="pt-4 border-t border-gray-100">
+                      <Button
+                        variant="outline"
+                        onClick={() => router.push(`/team/${request.team_id}`)}
+                        className="border-gray-300 hover:bg-gray-50"
+                      >
+                        팀 프로필 보기
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {/* 받은 합류 신청 목록 (매니저가 받은 신청) */}
         {activeTab === 'join-requests' && (
           <div className="space-y-4">
             <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
               <p className="text-sm text-slate-700 leading-relaxed">
-                <span className="font-semibold text-slate-900">받은 합류 신청:</span> 메이커가 내 팀에 합류를 신청한 내역입니다. 수락하면 해당 메이커가 팀원이 되며, 거절할 수 있습니다.
+                <span className="font-semibold text-slate-900">받은 합류 신청 (매니저):</span> 메이커가 내 팀에 합류를 신청한 내역입니다. 수락하면 해당 메이커가 팀원이 되며, 거절할 수 있습니다.
               </p>
             </div>
             {teamJoinRequests.length === 0 ? (

@@ -341,13 +341,14 @@ export const addTeamMember = async (teamId: number, profileId: string) => {
     throw new Error('이미 팀원으로 등록되어 있습니다.')
   }
 
-  // 팀원 추가
+  // 팀원 추가 (매니저가 초대)
   const { data: member, error } = await supabase
     .from('team_members')
     .insert({
       team_id: teamId,
       profile_id: profileId,
       status: 'active',
+      request_type: 'invite', // 매니저가 초대
     })
     .select()
     .single()
@@ -557,8 +558,7 @@ export const searchTeams = async (filters?: {
         user_id,
         username,
         role,
-        bio,
-        profile_image_url
+        bio
       ),
       team_members:team_members (
         *,
@@ -567,8 +567,7 @@ export const searchTeams = async (filters?: {
           user_id,
           username,
           role,
-          bio,
-          profile_image_url
+          bio
         )
       )
     `)
@@ -672,7 +671,7 @@ export const requestTeamJoin = async (teamId: number, message?: string) => {
     throw new Error('이미 해당 팀으로부터 제안을 받았습니다. 쪽지함에서 확인해주세요.')
   }
 
-  // team_members에 pending 상태로 추가
+  // team_members에 pending 상태로 추가 (메이커가 신청)
   const { data: teamMember, error: memberError } = await supabase
     .from('team_members')
     .insert({
@@ -680,6 +679,7 @@ export const requestTeamJoin = async (teamId: number, message?: string) => {
       profile_id: currentProfile.profile_id,
       maker_id: user.id,
       status: 'pending',
+      request_type: 'request', // 메이커가 신청
     })
     .select()
     .single()
