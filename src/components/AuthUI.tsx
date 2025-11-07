@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { createSupabaseBrowserClient } from '@/supabase/supabase-client'
 import useHydration from '@/hooks/use-hydrate'
 import { Database } from '@/types/supabase'
@@ -12,7 +12,39 @@ const AuthUI = ({ role }: { role: string }) => {
   const isMounted = useHydration()
   const [user, setUser] = useState()
   const [profileType, setProfileType] = useState<ProfileType | null>(null)
+  const [hasExistingProfile, setHasExistingProfile] = useState<boolean | null>(null)
+  const [checkingProfile, setCheckingProfile] = useState(true)
   const supabaseClient = createSupabaseBrowserClient()
+
+  useEffect(() => {
+    const checkExistingProfile = async () => {
+      try {
+        const { data: { user: currentUser } } = await supabaseClient.auth.getUser()
+        
+        if (currentUser) {
+          setUser(currentUser)
+          
+          // 기존 프로필 확인
+          const { data: profiles } = await supabaseClient
+            .from('accounts')
+            .select('profile_type')
+            .eq('user_id', currentUser.id)
+            .is('deleted_at', null)
+          
+          setHasExistingProfile(profiles && profiles.length > 0)
+        } else {
+          setHasExistingProfile(false)
+        }
+      } catch (error) {
+        console.error('프로필 확인 실패:', error)
+        setHasExistingProfile(false)
+      } finally {
+        setCheckingProfile(false)
+      }
+    }
+
+    checkExistingProfile()
+  }, [supabaseClient])
 
   if (!isMounted) return null
 
@@ -28,21 +60,29 @@ const AuthUI = ({ role }: { role: string }) => {
   }
 
   const signInWithProvider = async (provider: 'google' | 'kakao') => {
-    if (!profileType) {
+    // 기존 프로필이 없는 경우에만 프로필 타입 선택 필수
+    if (!hasExistingProfile && !profileType) {
       alert('프로필 타입을 선택해주세요.')
       return
     }
 
-    // sessionStorage에 프로필 타입 저장
-    sessionStorage.setItem('profileType', profileType)
-
     // 환경에 따른 site URL 설정
     const siteUrl = getSiteUrl()
+
+    // 프로필 타입이 선택된 경우에만 파라미터에 포함
+    const redirectUrl = profileType
+      ? `${siteUrl}/auth/callback?profile_type=${profileType}&next=/`
+      : `${siteUrl}/auth/callback?next=/`
+
+    if (profileType) {
+      // sessionStorage에 프로필 타입 저장
+      sessionStorage.setItem('profileType', profileType)
+    }
 
     await supabaseClient.auth.signInWithOAuth({
       provider,
       options: {
-        redirectTo: `${siteUrl}/auth/callback?profile_type=${profileType}&next=/`,
+        redirectTo: redirectUrl,
       },
     })
   }
@@ -101,10 +141,27 @@ const AuthUI = ({ role }: { role: string }) => {
         </div>
 
         {/* 프로필 타입 선택 섹션 */}
-        <div className="mb-8">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4 text-center">
-            어떤 프로필로 시작하시나요?
-          </h2>
+        {checkingProfile ? (
+          <div className="mb-8 text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-sm text-gray-600">확인 중...</p>
+          </div>
+        ) : (
+          <div className="mb-8">
+            {hasExistingProfile ? (
+              <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-800 text-center">
+                  기존 프로필이 있습니다. 프로필 타입을 선택하지 않아도 로그인할 수 있습니다.
+                </p>
+                <p className="text-xs text-blue-600 text-center mt-2">
+                  새로운 프로필 타입을 추가하려면 선택해주세요.
+                </p>
+              </div>
+            ) : (
+              <h2 className="text-lg font-semibold text-gray-900 mb-4 text-center">
+                어떤 프로필로 시작하시나요?
+              </h2>
+            )}
           <div className="grid grid-cols-2 gap-3">
             <button
               onClick={() => setProfileType('FREELANCER')}
@@ -145,10 +202,13 @@ const AuthUI = ({ role }: { role: string }) => {
             </button>
           </div>
           
-          <p className="text-xs text-gray-500 text-center mt-3">
-            나중에 다른 프로필 타입도 추가할 수 있습니다
-          </p>
+          {!hasExistingProfile && (
+            <p className="text-xs text-gray-500 text-center mt-3">
+              나중에 다른 프로필 타입도 추가할 수 있습니다
+            </p>
+          )}
         </div>
+        )}
 
         {/* 선택된 프로필 타입 정보 */}
         {profileType && (
@@ -166,11 +226,11 @@ const AuthUI = ({ role }: { role: string }) => {
         <div className="flex flex-col gap-3">
           <button
             onClick={handleGoogleLogin}
-            disabled={!profileType}
+            disabled={checkingProfile || (!hasExistingProfile && !profileType)}
             className={`flex items-center justify-center w-full h-12 rounded-lg shadow-sm p-4 border transition-colors ${
-              profileType
-                ? 'bg-white border-gray-200 hover:bg-gray-50'
-                : 'bg-gray-100 border-gray-300 cursor-not-allowed opacity-50'
+              checkingProfile || (!hasExistingProfile && !profileType)
+                ? 'bg-gray-100 border-gray-300 cursor-not-allowed opacity-50'
+                : 'bg-white border-gray-200 hover:bg-gray-50'
             }`}
           >
             <svg className="w-5 h-5 mr-3" viewBox="0 0 24 24">
@@ -184,11 +244,11 @@ const AuthUI = ({ role }: { role: string }) => {
           
           <button
             onClick={handleKakaoLogin}
-            disabled={!profileType}
+            disabled={checkingProfile || (!hasExistingProfile && !profileType)}
             className={`flex items-center justify-center w-full h-12 rounded-lg shadow-sm p-4 transition-colors ${
-              profileType
-                ? 'bg-[#FEE500] hover:bg-[#FDD835]'
-                : 'bg-gray-300 cursor-not-allowed opacity-50'
+              checkingProfile || (!hasExistingProfile && !profileType)
+                ? 'bg-gray-300 cursor-not-allowed opacity-50'
+                : 'bg-[#FEE500] hover:bg-[#FDD835]'
             }`}
           >
             <svg className="w-5 h-5 mr-3" viewBox="0 0 24 24">

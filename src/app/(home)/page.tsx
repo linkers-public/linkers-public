@@ -1,5 +1,5 @@
 import React from 'react'
-import { ArrowRight, Clock, DollarSign, Users, CheckCircle, Zap, Target, Rocket, MessageCircle, UserPlus } from 'lucide-react'
+import { ArrowRight, Clock, DollarSign, Users, CheckCircle, Zap, Target, Rocket, MessageCircle, UserPlus, Code, Briefcase } from 'lucide-react'
 import Link from 'next/link'
 
 const LandingPage = () => {
@@ -87,6 +87,87 @@ const LandingPage = () => {
               무료 프로필 만들기
               <UserPlus className="w-5 h-5" />
             </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* 메이커/매니저 역할 설명 Section */}
+      <section className="py-10 md:py-20 bg-gradient-to-br from-green-50 to-emerald-50">
+        <div className="w-full">
+          <h2 className="text-2xl md:text-4xl font-bold text-gray-900 mb-4 text-center">
+            메이커와 매니저, 두 가지 역할로 활동하세요
+          </h2>
+          <p className="text-base md:text-lg text-gray-600 mb-8 md:mb-12 text-center max-w-3xl mx-auto">
+            프로젝트마다 역할을 선택할 수 있습니다. 직접 개발에 참여하거나 팀을 이끌며 프로젝트를 관리하세요.
+          </p>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 max-w-4xl mx-auto">
+            {/* 메이커 카드 */}
+            <div className="bg-white p-6 md:p-8 rounded-2xl shadow-lg border-2 border-green-200">
+              <div className="flex items-center gap-4 mb-4">
+                <div className="w-12 h-12 md:w-16 md:h-16 bg-green-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <Code className="w-6 h-6 md:w-8 md:h-8 text-green-600" />
+                </div>
+                <div>
+                  <h3 className="text-xl md:text-2xl font-bold text-gray-900">메이커 (MAKER)</h3>
+                  <p className="text-sm text-gray-500">개발 작업 수행</p>
+                </div>
+              </div>
+              <p className="text-gray-700 mb-4 leading-relaxed">
+                프로젝트에 직접 참여하여 개발 작업을 수행하는 역할입니다.
+              </p>
+              <ul className="space-y-2 text-sm text-gray-600">
+                <li className="flex items-start gap-2">
+                  <CheckCircle className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+                  <span>프로젝트에 직접 참여하여 개발 작업 수행</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+                  <span>개인 또는 팀 프로젝트에서 개발자로 활동</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle className="w-4 h-4 text-green-600 mt-0.5 flex-shrink-0" />
+                  <span>코딩, 디자인, 개발 작업에 집중</span>
+                </li>
+              </ul>
+            </div>
+
+            {/* 매니저 카드 */}
+            <div className="bg-white p-6 md:p-8 rounded-2xl shadow-lg border-2 border-blue-200">
+              <div className="flex items-center gap-4 mb-4">
+                <div className="w-12 h-12 md:w-16 md:h-16 bg-blue-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                  <Briefcase className="w-6 h-6 md:w-8 md:h-8 text-blue-600" />
+                </div>
+                <div>
+                  <h3 className="text-xl md:text-2xl font-bold text-gray-900">매니저 (MANAGER)</h3>
+                  <p className="text-sm text-gray-500">프로젝트 관리</p>
+                </div>
+              </div>
+              <p className="text-gray-700 mb-4 leading-relaxed">
+                팀을 구성하고 프로젝트를 관리하며 클라이언트와 소통하는 역할입니다.
+              </p>
+              <ul className="space-y-2 text-sm text-gray-600">
+                <li className="flex items-start gap-2">
+                  <CheckCircle className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                  <span>팀을 구성하고 프로젝트 전체를 관리</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                  <span>클라이언트와 소통하며 요구사항 조율</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <CheckCircle className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                  <span>프로젝트 일정 및 품질 관리</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="mt-8 p-4 md:p-6 bg-white rounded-xl border border-gray-200 max-w-3xl mx-auto">
+            <p className="text-sm md:text-base text-gray-700 text-center leading-relaxed">
+              <span className="font-semibold text-gray-900">유연한 역할 전환:</span> 같은 프로젝트에서도 필요에 따라 메이커와 매니저 역할을 전환할 수 있습니다. 
+              한 프로젝트에서는 메이커로, 다른 프로젝트에서는 매니저로 활동하세요.
+            </p>
           </div>
         </div>
       </section>
@@ -251,23 +332,173 @@ const LandingPage = () => {
 
       {/* FAQ Section */}
       <section className="py-10 md:py-20 bg-gray-50">
-        <div className="w-full">
+        <div className="w-full max-w-6xl mx-auto">
           <h2 className="text-2xl md:text-4xl font-bold text-gray-900 mb-8 md:mb-12 text-center">
             자주 묻는 질문
           </h2>
           
-          <div className="space-y-4 md:space-y-6">
-            <div className="border-b pb-4 md:pb-6">
-              <h3 className="text-base md:text-lg font-semibold mb-2">비용은 얼마나 드나요?</h3>
-              <p className="text-gray-600">프로젝트 범위에 따라 달라집니다. AI 활용으로 기존 대비 30% 이상 비용을 절감할 수 있습니다.</p>
+          {/* 기업용 FAQ */}
+          <div className="mb-12 md:mb-16">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-1 h-8 bg-blue-600 rounded"></div>
+              <h3 className="text-xl md:text-2xl font-bold text-gray-900">기업(프로젝트 의뢰자)용 FAQ</h3>
             </div>
-            <div className="border-b pb-6">
-              <h3 className="text-lg font-semibold mb-2">AI가 만든 코드 품질은 괜찮나요?</h3>
-              <p className="text-gray-600">메이커가 검수하고 운영까지 지원합니다. 전문 개발자의 품질 관리로 안정적인 서비스를 제공합니다.</p>
+            
+            <div className="space-y-4 md:space-y-6">
+              <div className="bg-white p-6 md:p-8 rounded-xl border border-gray-200">
+                <h4 className="text-base md:text-lg font-semibold mb-3 text-gray-900">Q. 비용은 어떻게 되나요?</h4>
+                <p className="text-gray-600 leading-relaxed mb-3">
+                  견적 확인은 완전히 무료이며, 프리랜서 연락처를 열람할 때만 소액 결제가 발생합니다. 원치 않는 제안에 비용을 쓰지 않아도 되며, "필요할 때만 결제"하는 구조입니다.
+                </p>
+                <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                  <p className="text-sm text-blue-900">
+                    <span className="font-semibold">✅ 첫 달 무료</span> + 월 2,000원 정기 구독 시 → 무제한 열람 가능
+                  </p>
+                </div>
+              </div>
+              
+              <div className="bg-white p-6 md:p-8 rounded-xl border border-gray-200">
+                <h4 className="text-base md:text-lg font-semibold mb-3 text-gray-900">Q. 여러 명에게 견적을 받아볼 수 있나요?</h4>
+                <p className="text-gray-600 leading-relaxed">
+                  가능합니다. 프로젝트를 등록하면 관심 있는 프리랜서/팀이 자동으로 견적서를 제출하며, 비용 없이 여러 건을 비교할 수 있습니다.
+                </p>
+              </div>
+              
+              <div className="bg-white p-6 md:p-8 rounded-xl border border-gray-200">
+                <h4 className="text-base md:text-lg font-semibold mb-3 text-gray-900">Q. 개발 관련 지식이 없어도 상담할 수 있나요?</h4>
+                <p className="text-gray-600 leading-relaxed">
+                  네. 아이디어·레퍼런스·예산만 있어도 등록 가능합니다. 기술적인 구조, 기능 정의, 일정 산출 등은 프리랜서 또는 매니저가 제안서 형태로 작성해드립니다.
+                </p>
+              </div>
+              
+              <div className="bg-white p-6 md:p-8 rounded-xl border border-gray-200">
+                <h4 className="text-base md:text-lg font-semibold mb-3 text-gray-900">Q. 프리랜서 품질은 어떻게 검증되나요?</h4>
+                <ul className="text-gray-600 leading-relaxed space-y-2">
+                  <li className="flex items-start gap-2">
+                    <CheckCircle className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                    <span>프로필·기술스택·포트폴리오 검수 후 등록</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                    <span>팀 단위 수행 가능 (매니저 + 메이커 구성 가능)</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+                    <span>기업이 직접 이력·리뷰·작업 기록을 확인하고 결정할 수 있음</span>
+                  </li>
+                </ul>
+              </div>
+              
+              <div className="bg-white p-6 md:p-8 rounded-xl border border-gray-200">
+                <h4 className="text-base md:text-lg font-semibold mb-3 text-gray-900">Q. 플랫폼 수수료가 있나요?</h4>
+                <p className="text-gray-600 leading-relaxed mb-2">
+                  <span className="font-semibold text-red-600">❌ 없습니다.</span>
+                </p>
+                <p className="text-gray-600 leading-relaxed">
+                  계약 금액과 무관하게 추가 수수료·중개 수수료 0원, 오직 "연락처 열람 비용"만 발생합니다.
+                </p>
+              </div>
+              
+              <div className="bg-white p-6 md:p-8 rounded-xl border border-gray-200">
+                <h4 className="text-base md:text-lg font-semibold mb-3 text-gray-900">Q. 계약과 결제는 어떻게 진행되나요?</h4>
+                <p className="text-gray-600 leading-relaxed">
+                  링커스는 중개 결제에 개입하지 않습니다. 기업과 프리랜서가 직접 협의·계약하며, 추후 에스크로/계약서 템플릿 기능은 업데이트 예정입니다. (V2)
+                </p>
+              </div>
             </div>
-            <div className="border-b pb-6">
-              <h3 className="text-lg font-semibold mb-2">개발자가 아니어도 상담 가능한가요?</h3>
-              <p className="text-gray-600">네, 아이디어만 있으면 충분합니다. 기술적인 부분은 메이커가 모두 담당해드립니다.</p>
+          </div>
+
+          {/* 프리랜서용 FAQ */}
+          <div>
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-1 h-8 bg-green-600 rounded"></div>
+              <h3 className="text-xl md:text-2xl font-bold text-gray-900">프리랜서 / 팀(메이커·매니저)용 FAQ</h3>
+            </div>
+            
+            <div className="space-y-4 md:space-y-6">
+              <div className="bg-white p-6 md:p-8 rounded-xl border border-gray-200">
+                <h4 className="text-base md:text-lg font-semibold mb-3 text-gray-900">Q. 링커스에 등록하면 어떤 이점이 있나요?</h4>
+                <ul className="text-gray-600 leading-relaxed space-y-2">
+                  <li className="flex items-start gap-2">
+                    <CheckCircle className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
+                    <span>기업이 먼저 견적 요청을 보내는 구조 → 영업 부담 ↓</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
+                    <span>견적서를 제출하면 기업이 연락처를 유료로 열람 → "진짜 의향 있는 고객"만 연결됨</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
+                    <span>팀을 구성해 프로젝트 단위로 제안 가능 (매니저 ↔ 메이커 역할 분리)</span>
+                  </li>
+                </ul>
+              </div>
+              
+              <div className="bg-white p-6 md:p-8 rounded-xl border border-gray-200">
+                <h4 className="text-base md:text-lg font-semibold mb-3 text-gray-900">Q. 견적서를 보내는 데 비용이 드나요?</h4>
+                <p className="text-gray-600 leading-relaxed mb-2">
+                  <span className="font-semibold text-red-600">❌ 무료입니다.</span>
+                </p>
+                <p className="text-gray-600 leading-relaxed">
+                  프리랜서는 언제든지 견적을 제출할 수 있고, 기업이 내 연락처를 열람할 때만 비용이 발생합니다. (기업이 지불)
+                </p>
+              </div>
+              
+              <div className="bg-white p-6 md:p-8 rounded-xl border border-gray-200">
+                <h4 className="text-base md:text-lg font-semibold mb-3 text-gray-900">Q. 팀을 만들어서 제안할 수 있나요?</h4>
+                <p className="text-gray-600 leading-relaxed mb-3">
+                  가능합니다.
+                </p>
+                <ul className="text-gray-600 leading-relaxed space-y-2">
+                  <li className="flex items-start gap-2">
+                    <CheckCircle className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
+                    <span>매니저형 프리랜서가 팀 생성 → 메이커 초대</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
+                    <span>백엔드·프론트·디자인 등 역할별 구성 가능</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
+                    <span>팀 명의로 견적 제출도 가능 (MVP에 포함 여부 선택 가능)</span>
+                  </li>
+                </ul>
+              </div>
+              
+              <div className="bg-white p-6 md:p-8 rounded-xl border border-gray-200">
+                <h4 className="text-base md:text-lg font-semibold mb-3 text-gray-900">Q. 개발자가 아니라 기획자·PM도 등록할 수 있나요?</h4>
+                <p className="text-gray-600 leading-relaxed">
+                  네. 링커스는 개발자 전용 플랫폼이 아닙니다. → PM, 기획, 디자이너, 마케터, AI 프롬프트 엔지니어 등 가능 → "매니저형 프로필"로 등록하면 프로젝트 관리/제안/견적 작성 가능
+                </p>
+              </div>
+              
+              <div className="bg-white p-6 md:p-8 rounded-xl border border-gray-200">
+                <h4 className="text-base md:text-lg font-semibold mb-3 text-gray-900">Q. 수익은 어떻게 발생하나요?</h4>
+                <p className="text-gray-600 leading-relaxed">
+                  기업이 연락처를 구매하고 프로젝트 계약이 체결되면, 프리랜서는 100% 금액을 직접 수령합니다. 수수료·커미션 0% → 정산 부담 없음.
+                </p>
+              </div>
+              
+              <div className="bg-white p-6 md:p-8 rounded-xl border border-gray-200">
+                <h4 className="text-base md:text-lg font-semibold mb-3 text-gray-900">Q. 내 연락처는 아무나 볼 수 있나요?</h4>
+                <p className="text-gray-600 leading-relaxed mb-2">
+                  <span className="font-semibold text-red-600">❌ 무작위로 공개되지 않습니다.</span>
+                </p>
+                <ul className="text-gray-600 leading-relaxed space-y-2">
+                  <li className="flex items-start gap-2">
+                    <CheckCircle className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
+                    <span>프로필은 공개되지만 연락처는 비공개</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
+                    <span>기업이 결제한 경우에만 연락처가 열람됨</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle className="w-5 h-5 text-green-600 mt-0.5 flex-shrink-0" />
+                    <span>스팸 연락 또는 무의미한 문의를 최소화하는 구조</span>
+                  </li>
+                </ul>
+              </div>
             </div>
           </div>
         </div>

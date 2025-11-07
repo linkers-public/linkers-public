@@ -127,19 +127,19 @@ export default function ProfileManagePage() {
                 첫 프로필 생성하기
               </Button>
             </div>
-          ) : (
+                 ) : (
             profiles.map((profile) => {
               const isFreelancer = profile.profile_type === 'FREELANCER'
               
               return (
-                <div
-                  key={profile.profile_id}
+                     <div
+                       key={profile.profile_id}
                   className={`group relative overflow-hidden rounded-2xl border-2 transition-all duration-300 ${
-                    profile.is_active
+                         profile.is_active
                       ? 'border-blue-500 bg-gradient-to-br from-blue-50 to-indigo-50 shadow-lg shadow-blue-100'
                       : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-md'
-                  }`}
-                >
+                       }`}
+                     >
                   {profile.is_active && (
                     <div className="absolute top-0 right-0 w-32 h-32 bg-blue-200 opacity-10 rounded-full -mr-16 -mt-16"></div>
                   )}
@@ -152,101 +152,101 @@ export default function ProfileManagePage() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
                               <h3 className="text-xl md:text-2xl font-bold text-gray-900">
-                                {profile.username}
-                              </h3>
+                               {profile.username}
+                             </h3>
                               <span className={`px-3 py-1 text-xs font-semibold rounded-full ${
                                 isFreelancer
                                   ? 'bg-purple-100 text-purple-700'
                                   : 'bg-blue-100 text-blue-700'
                               }`}>
-                                {getProfileTypeLabel(profile.profile_type)}
-                              </span>
-                              {profile.is_active && (
+                               {getProfileTypeLabel(profile.profile_type)}
+                             </span>
+                             {profile.is_active && (
                                 <span className="px-3 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-700">
                                   활성 프로필
-                                </span>
-                              )}
+                               </span>
+                             )}
                             </div>
                           </div>
-                        </div>
+                           </div>
 
                         {/* 소개 */}
-                        {profile.bio && (
+                           {profile.bio && (
                           <p className="text-gray-700 mb-4 line-clamp-2 leading-relaxed">
-                            {profile.bio}
-                          </p>
-                        )}
+                               {profile.bio}
+                             </p>
+                           )}
 
-                        {/* 배지 표시 */}
-                        {profile.badges && Array.isArray(profile.badges) && profile.badges.length > 0 && (
+                           {/* 배지 표시 */}
+                           {profile.badges && Array.isArray(profile.badges) && profile.badges.length > 0 && (
                           <div className="flex flex-wrap gap-2 mb-4">
-                            {profile.badges.map((badge: string, idx: number) => (
-                              <span
-                                key={idx}
+                               {profile.badges.map((badge: string, idx: number) => (
+                                 <span
+                                   key={idx}
                                 className="px-3 py-1.5 text-xs font-medium rounded-lg bg-amber-100 text-amber-700 border border-amber-200"
-                              >
-                                {badge}
-                              </span>
-                            ))}
-                          </div>
-                        )}
+                                 >
+                                   {badge}
+                                 </span>
+                               ))}
+                             </div>
+                           )}
 
-                        {/* 주요 정보 */}
+                           {/* 주요 정보 */}
                         <div className="flex flex-wrap gap-6 text-sm text-gray-600 mt-6 pt-6 border-t border-gray-200">
-                          {profile.main_job && profile.main_job.length > 0 && (
-                            <div>
+                             {profile.main_job && profile.main_job.length > 0 && (
+                               <div>
                               <span className="font-medium text-gray-700">주직무: </span>
-                              <span>{profile.main_job.slice(0, 3).join(', ')}</span>
-                            </div>
-                          )}
-                          {profile.profile_created_at && (
-                            <div>
+                                 <span>{profile.main_job.slice(0, 3).join(', ')}</span>
+                               </div>
+                             )}
+                             {profile.profile_created_at && (
+                               <div>
                               <span className="font-medium text-gray-700">생성일: </span>
-                              <span>
-                                {new Date(profile.profile_created_at).toLocaleDateString('ko-KR')}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
+                                 <span>
+                                   {new Date(profile.profile_created_at).toLocaleDateString('ko-KR')}
+                                 </span>
+                               </div>
+                             )}
+                           </div>
+                         </div>
 
-                      {/* 액션 버튼 */}
-                      <div className="flex flex-col gap-2 ml-4">
-                        {!profile.is_active && (
-                          <Button
-                            onClick={() => handleSwitchProfile(profile.profile_id)}
-                            disabled={switching === profile.profile_id}
+                         {/* 액션 버튼 */}
+                         <div className="flex flex-col gap-2 ml-4">
+                           {!profile.is_active && (
+                             <Button
+                               onClick={() => handleSwitchProfile(profile.profile_id)}
+                               disabled={switching === profile.profile_id}
                             variant="default"
-                            size="sm"
+                               size="sm"
                             className="min-w-[140px]"
-                          >
-                            {switching === profile.profile_id ? (
-                              <>
-                                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                                전환 중...
-                              </>
-                            ) : (
-                              '활성 프로필로 전환'
-                            )}
-                          </Button>
-                        )}
-                        <Button
-                          onClick={() => router.push(`/my/profile`)}
-                          variant="outline"
-                          size="sm"
-                        >
-                          프로필 보기
-                        </Button>
-                        <Button
-                          onClick={() => router.push(`/my/update`)}
-                          variant="outline"
-                          size="sm"
-                        >
-                          프로필 수정
-                        </Button>
-                      </div>
-                    </div>
+                             >
+                               {switching === profile.profile_id ? (
+                                 <>
+                                   <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                                   전환 중...
+                                 </>
+                               ) : (
+                                 '활성 프로필로 전환'
+                               )}
+                             </Button>
+                           )}
+                    <Button
+                      onClick={() => router.push(`/my/profile`)}
+                      variant="outline"
+                      size="sm"
+                    >
+                      프로필 보기
+                    </Button>
+                    <Button
+                      onClick={() => router.push(`/my/update`)}
+                      variant="outline"
+                      size="sm"
+                    >
+                      프로필 수정
+                    </Button>
                   </div>
+                </div>
+              </div>
                 </div>
               )
             })
@@ -275,7 +275,7 @@ export default function ProfileManagePage() {
               <h4 className="font-semibold text-gray-900 mb-2">기업 프로필</h4>
               <p className="text-sm text-gray-600 mb-2">
                 프로젝트를 의뢰하고 견적서를 요청할 때 사용합니다.
-              </p>
+            </p>
               <p className="text-xs text-gray-500">
                 프로젝트 의뢰서 작성 및 견적 요청
               </p>
@@ -284,42 +284,42 @@ export default function ProfileManagePage() {
 
           {/* 프로필 생성 버튼 */}
           <div className="space-y-3">
-            {!hasFreelancer && (
+              {!hasFreelancer && (
               <div className="flex items-center justify-between p-5 bg-white rounded-xl border-2 border-dashed border-purple-200 hover:border-purple-300 transition-colors">
-                <div>
-                  <h4 className="font-semibold text-gray-900 mb-1">프리랜서 프로필</h4>
-                  <p className="text-sm text-gray-600">프로젝트를 수행하는 역할 (메이커)</p>
+                  <div>
+                    <h4 className="font-semibold text-gray-900 mb-1">프리랜서 프로필</h4>
+                    <p className="text-sm text-gray-600">프로젝트를 수행하는 역할 (메이커)</p>
+                  </div>
+                  <Button
+                    onClick={() => router.push('/my/profile/create?type=FREELANCER')}
+                  >
+                    생성하기
+                  </Button>
                 </div>
-                <Button
-                  onClick={() => router.push('/my/profile/create?type=FREELANCER')}
-                >
-                  생성하기
-                </Button>
-              </div>
-            )}
-            {!hasCompany && (
+              )}
+              {!hasCompany && (
               <div className="flex items-center justify-between p-5 bg-white rounded-xl border-2 border-dashed border-blue-200 hover:border-blue-300 transition-colors">
-                <div>
-                  <h4 className="font-semibold text-gray-900 mb-1">기업 프로필</h4>
-                  <p className="text-sm text-gray-600">프로젝트를 의뢰하고 견적서를 요청하는 역할</p>
+                  <div>
+                    <h4 className="font-semibold text-gray-900 mb-1">기업 프로필</h4>
+                    <p className="text-sm text-gray-600">프로젝트를 의뢰하고 견적서를 요청하는 역할</p>
+                  </div>
+                  <Button
+                    onClick={() => router.push('/my/profile/create?type=COMPANY')}
+                  >
+                    생성하기
+                  </Button>
                 </div>
-                <Button
-                  onClick={() => router.push('/my/profile/create?type=COMPANY')}
-                >
-                  생성하기
-                </Button>
-              </div>
-            )}
-            {hasFreelancer && hasCompany && (
+              )}
+              {hasFreelancer && hasCompany && (
               <div className="p-5 bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl border border-green-200">
                 <p className="text-sm font-semibold text-green-800 mb-1">
                   모든 프로필이 생성되었습니다
                 </p>
                 <p className="text-xs text-green-700">
                   프로필 전환을 통해 다른 프로필을 활성화할 수 있습니다.
-                </p>
-              </div>
-            )}
+                  </p>
+                </div>
+              )}
           </div>
         </div>
       </div>
