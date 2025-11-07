@@ -103,7 +103,7 @@ const Navigator = ({ profileType, role }: NavigatorProps) => {
             >
               <button
                 onClick={() => setShowTeamMenu(!showTeamMenu)}
-                className={`text-subtitle4 transition-colors duration-200 flex items-center gap-1 ${
+                className={`text-sm font-semibold transition-colors duration-200 flex items-center gap-1 ${
                   route.isActive
                     ? 'text-palette-coolNeutral-20'
                     : 'text-palette-coolNeutral-70 hover:text-palette-coolNeutral-20'
@@ -117,7 +117,7 @@ const Navigator = ({ profileType, role }: NavigatorProps) => {
                   <Link
                     href="/team-profile"
                     onClick={() => setShowTeamMenu(false)}
-                    className={`block px-4 py-2 text-sm transition-colors ${
+                    className={`block px-4 py-2 text-xs transition-colors ${
                       pathname === '/team-profile'
                         ? 'bg-gray-100 text-palette-coolNeutral-20'
                         : 'text-gray-700 hover:bg-gray-100'
@@ -128,7 +128,7 @@ const Navigator = ({ profileType, role }: NavigatorProps) => {
                   <Link
                     href="/team-projects"
                     onClick={() => setShowTeamMenu(false)}
-                    className={`block px-4 py-2 text-sm transition-colors ${
+                    className={`block px-4 py-2 text-xs transition-colors ${
                       pathname === '/team-projects'
                         ? 'bg-gray-100 text-palette-coolNeutral-20'
                         : 'text-gray-700 hover:bg-gray-100'
@@ -145,7 +145,7 @@ const Navigator = ({ profileType, role }: NavigatorProps) => {
         return (
           <div
             key={route.label}
-            className="text-subtitle4 text-palette-coolNeutral-70 hover:text-palette-coolNeutral-20 transition-colors duration-200"
+            className="text-sm font-semibold text-palette-coolNeutral-70 hover:text-palette-coolNeutral-20 transition-colors duration-200"
           >
             <Link href={route.href || '#'}>{route.label}</Link>
           </div>

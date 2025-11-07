@@ -313,7 +313,7 @@ const Header = () => {
     <>
       <div className="relative z-[800] w-full h-[64px] flex items-center border-b-[1px] border-solid border-[rgba(0,0,0,0.08)]">
         <div className="absolute inset-0 z-[-1] bg-white/88 backdrop-saturate-[1.5] backdrop-blur-[32px]"></div>
-        <header className="flex h-full items-center px-4 md:px-6 w-full md:max-w-[90%] md:mx-auto">
+        <header className="flex h-full items-center px-0 md:px-6 w-full md:max-w-[90%] md:mx-auto">
           <div className="flex items-center h-full gap-8 flex-1">
             <Logo />
             {/* 데스크톱 네비게이터 - 모바일에서 숨김 */}
@@ -349,7 +349,7 @@ const Header = () => {
                   {showNotificationMenu && (
                     <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50 max-h-96 overflow-y-auto">
                       <div className="px-4 py-2 border-b border-gray-200">
-                        <h3 className="text-sm font-semibold text-gray-900">알림</h3>
+                        <h3 className="text-xs font-semibold text-gray-900">알림</h3>
                       </div>
                       <div className="py-2">
                         <button
@@ -357,7 +357,7 @@ const Header = () => {
                             router.push('/my/messages')
                             setShowNotificationMenu(false)
                           }}
-                          className="w-full px-4 py-3 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-3"
+                          className="w-full px-4 py-3 text-left text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-3"
                         >
                           <Mail className="w-4 h-4 text-gray-400" />
                           <div className="flex-1">
@@ -367,7 +367,7 @@ const Header = () => {
                         </button>
                       </div>
                       {unreadCount === 0 && (
-                        <div className="px-4 py-8 text-center text-sm text-gray-500">
+                        <div className="px-4 py-8 text-center text-xs text-gray-500">
                           새로운 알림이 없습니다
                         </div>
                       )}
@@ -390,7 +390,7 @@ const Header = () => {
                           router.push('/my/profile')
                           setShowUserMenu(false)
                         }}
-                        className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                        className="w-full px-4 py-2 text-left text-xs text-gray-700 hover:bg-gray-100 flex items-center gap-2"
                       >
                         <User className="w-4 h-4" />
                         내 프로필
@@ -400,7 +400,7 @@ const Header = () => {
                           router.push('/my/profile/manage')
                           setShowUserMenu(false)
                         }}
-                        className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                        className="w-full px-4 py-2 text-left text-xs text-gray-700 hover:bg-gray-100 flex items-center gap-2"
                       >
                         <Settings className="w-4 h-4" />
                         프로필 관리
@@ -408,7 +408,7 @@ const Header = () => {
                       <div className="border-t border-gray-200 my-1"></div>
                       <button
                         onClick={handleLogout}
-                        className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                        className="w-full px-4 py-2 text-left text-xs text-red-600 hover:bg-red-50 flex items-center gap-2"
                       >
                         <LogOut className="w-4 h-4" />
                         로그아웃
