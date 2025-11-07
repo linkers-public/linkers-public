@@ -313,7 +313,7 @@ const Header = () => {
     <>
       <div className="relative z-[800] w-full h-[64px] flex items-center border-b-[1px] border-solid border-[rgba(0,0,0,0.08)]">
         <div className="absolute inset-0 z-[-1] bg-white/88 backdrop-saturate-[1.5] backdrop-blur-[32px]"></div>
-        <header className="flex h-full items-center px-4 md:px-6 w-full max-w-7xl mx-auto">
+        <header className="flex h-full items-center px-4 md:px-6 w-full md:max-w-[90%] md:mx-auto">
           <div className="flex items-center h-full gap-8 flex-1">
             <Logo />
             {/* 데스크톱 네비게이터 - 모바일에서 숨김 */}

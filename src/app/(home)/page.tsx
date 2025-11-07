@@ -44,7 +44,7 @@ const LandingPage = () => {
       </section>
 
       {/* Hero Section */}
-      <section className="relative py-10 md:py-20 text-center px-4 md:px-0">
+      <section className="relative py-10 md:py-20 text-center">
         <div className="w-full max-w-6xl mx-auto">
           {activeTab === 'freelancer' ? (
             <>
@@ -95,7 +95,7 @@ const LandingPage = () => {
 
       {/* 프리랜서 How it Works Section */}
       {activeTab === 'freelancer' && (
-      <section className="py-10 md:py-20 bg-white px-4 md:px-0">
+      <section className="py-10 md:py-20 bg-white">
         <div className="w-full max-w-6xl mx-auto">
           <h2 className="text-2xl md:text-4xl font-bold text-gray-900 mb-6 text-center">
             프리랜서는 이렇게 활동합니다
@@ -151,7 +151,7 @@ const LandingPage = () => {
 
       {/* 메이커/매니저 역할 설명 Section */}
       {activeTab === 'freelancer' && (
-      <section className="py-10 md:py-20 bg-gradient-to-br from-green-50 to-emerald-50 px-4 md:px-0">
+      <section className="py-10 md:py-20 bg-gradient-to-br from-green-50 to-emerald-50">
         <div className="w-full max-w-6xl mx-auto">
           <h2 className="text-2xl md:text-4xl font-bold text-gray-900 mb-4 text-center">
             메이커와 매니저, 두 가지 역할로 활동하세요
@@ -234,7 +234,7 @@ const LandingPage = () => {
 
       {/* 프리랜서 혜택 Section */}
       {activeTab === 'freelancer' && (
-      <section className="py-10 md:py-20 bg-gray-50 px-4 md:px-0">
+      <section className="py-10 md:py-20 bg-gray-50">
         <div className="w-full max-w-6xl mx-auto text-center">
           <h2 className="text-2xl md:text-4xl font-bold text-gray-900 mb-6">프리랜서가 선택하는 이유</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 md:gap-8">
@@ -267,7 +267,7 @@ const LandingPage = () => {
       {/* 기업 Section */}
       {activeTab === 'company' && (
       <>
-        <section className="py-10 md:py-20 bg-white px-4 md:px-0">
+        <section className="py-10 md:py-20 bg-white">
           <div className="w-full max-w-6xl mx-auto">
           <h2 className="text-2xl md:text-4xl font-bold text-gray-900 mb-4 text-center">
             클라이언트는 이렇게 사용해요
@@ -310,7 +310,7 @@ const LandingPage = () => {
       </section>
 
         {/* 기업 혜택 Section */}
-        <section className="py-10 md:py-20 bg-gray-50 px-4 md:px-0">
+        <section className="py-10 md:py-20 bg-gray-50">
           <div className="w-full max-w-6xl mx-auto text-center">
             <h2 className="text-2xl md:text-4xl font-bold text-gray-900 mb-6">기업이 선택하는 이유</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 md:gap-8">
@@ -342,7 +342,7 @@ const LandingPage = () => {
       )}
 
       {/* 가격 정책 Section */}
-      <section className="py-10 md:py-20 bg-gray-50 px-4 md:px-0">
+      <section className="py-10 md:py-20 bg-gray-50">
         <div className="w-full max-w-4xl mx-auto">
           <h2 className="text-2xl md:text-4xl font-bold text-gray-900 mb-8 md:mb-12 text-center">가격 정책</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
@@ -404,7 +404,7 @@ const LandingPage = () => {
       </section>
 
       {/* 마지막 CTA Section */}
-      <section className="py-10 md:py-20 bg-white px-4 md:px-0">
+      <section className="py-10 md:py-20 bg-white">
         <div className="w-full max-w-6xl mx-auto text-center">
           <h2 className="text-2xl md:text-4xl font-bold text-gray-900 mb-6">지금 바로 시작하세요</h2>
           <p className="text-base md:text-xl text-gray-600 mb-6 md:mb-8">
@@ -436,7 +436,7 @@ const LandingPage = () => {
       </section>
 
       {/* FAQ Section */}
-      <section className="py-10 md:py-20 bg-gray-50 px-4 md:px-0">
+      <section className="py-10 md:py-20 bg-gray-50">
         <div className="w-full max-w-6xl mx-auto">
           <h2 className="text-2xl md:text-4xl font-bold text-gray-900 mb-8 md:mb-12 text-center">
             자주 묻는 질문
@@ -614,7 +614,7 @@ const LandingPage = () => {
       </section>
 
       {/* Footer */}
-      <footer className="bg-gray-900 text-white py-12 px-4 md:px-0">
+      <footer className="bg-gray-900 text-white py-12">
         <div className="w-full max-w-6xl mx-auto">
           <div className="grid md:grid-cols-3 gap-8">
             <div>
