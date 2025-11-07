@@ -62,32 +62,63 @@ const LandingPage = () => {
         </div>
       </section>
 
-      {/* Hero Section - 간략하게 (레이아웃에서 이미 패딩 적용됨) */}
+      {/* Hero Section - 탭에 따라 다른 메시지 표시 */}
       <section className="relative py-8 md:py-12 text-center">
         <div className="w-full max-w-6xl mx-auto">
-          <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 mb-4 md:mb-6 leading-tight">
-            아이디어를 현실로, 빠르게
-          </h1>
-          <p className="text-xs sm:text-sm md:text-base text-gray-600 mb-6 md:mb-8">
-            프리랜서는 더 많은 프로젝트를, 기업은 더 빠른 개발을<br className="hidden sm:block" />
-            투명한 견적 비교로 최적의 파트너를 만나보세요
-          </p>
-          <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
-            <button
-              onClick={() => scrollToSection('freelancer-section')}
-              className="bg-green-600 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-lg text-sm sm:text-base font-semibold hover:bg-green-700 transition-colors flex items-center justify-center gap-2 shadow-lg"
-            >
-              프리랜서로 시작하기
-              <UserPlus className="w-4 h-4 sm:w-5 sm:h-5" />
-            </button>
-            <button
-              onClick={() => scrollToSection('company-section')}
-              className="bg-blue-600 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-lg text-sm sm:text-base font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 shadow-lg"
-            >
-              기업으로 시작하기
-              <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
-            </button>
-          </div>
+          {activeTab === 'freelancer' ? (
+            <>
+              <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 mb-4 md:mb-6 leading-tight">
+                프리랜서로 시작하세요
+              </h1>
+              <p className="text-xs sm:text-sm md:text-base text-gray-600 mb-6 md:mb-8">
+                무료로 프로필을 만들고 프로젝트에 참여하세요<br className="hidden sm:block" />
+                기업이 먼저 견적을 요청하는 구조로 영업 부담 없이 활동하세요.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
+                <Link
+                  href="/auth?role=maker"
+                  className="bg-green-600 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-lg text-sm sm:text-base font-semibold hover:bg-green-700 transition-colors flex items-center justify-center gap-2 shadow-lg"
+                >
+                  무료 프로필 만들기
+                  <UserPlus className="w-4 h-4 sm:w-5 sm:h-5" />
+                </Link>
+                <button
+                  onClick={() => scrollToSection('freelancer-section')}
+                  className="bg-gray-100 text-gray-700 px-6 sm:px-8 py-3 sm:py-4 rounded-lg text-sm sm:text-base font-semibold hover:bg-gray-200 transition-colors"
+                >
+                  더 알아보기
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <h1 className="text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 mb-4 md:mb-6 leading-tight">
+                개발자 어디서 찾아야 할지<br className="hidden sm:block" />
+                <span className="text-blue-600">막막하다면?</span>
+              </h1>
+              <p className="text-xs sm:text-sm md:text-base text-gray-600 mb-2">
+                <span className="font-semibold">견적은 공짜, 연락할 때만 결제!</span>
+              </p>
+              <p className="text-xs sm:text-sm md:text-base text-blue-600 mb-6 md:mb-8">
+                부담 없이 먼저 받아보고 선택하세요.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
+                <Link
+                  href="/enterprise/counsel-form"
+                  className="bg-blue-600 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-lg text-sm sm:text-base font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 shadow-lg"
+                >
+                  프로젝트 등록하기
+                  <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
+                </Link>
+                <button
+                  onClick={() => scrollToSection('company-section')}
+                  className="bg-gray-100 text-gray-700 px-6 sm:px-8 py-3 sm:py-4 rounded-lg text-sm sm:text-base font-semibold hover:bg-gray-200 transition-colors"
+                >
+                  더 알아보기
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </section>
 
