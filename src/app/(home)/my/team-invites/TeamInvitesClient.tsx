@@ -27,12 +27,23 @@ interface TeamProposal {
   created_at: string
 }
 
+interface SentTeamProposal {
+  id: number
+  team_id: number | null
+  team_name: string
+  maker_id: string
+  maker_name: string
+  message: string | null
+  created_at: string
+}
+
 export default function TeamInvitesClient() {
   const router = useRouter()
   const [teamInvites, setTeamInvites] = useState<TeamInvite[]>([])
   const [teamProposals, setTeamProposals] = useState<TeamProposal[]>([])
+  const [sentTeamProposals, setSentTeamProposals] = useState<SentTeamProposal[]>([])
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'invites' | 'proposals'>('invites')
+  const [activeTab, setActiveTab] = useState<'invites' | 'received' | 'sent'>('invites')
   const supabase = createSupabaseBrowserClient()
 
   useEffect(() => {
@@ -235,6 +246,75 @@ export default function TeamInvitesClient() {
           })
         setTeamProposals(formattedTeamProposals)
       }
+
+      // 보낸 팀 제안 조회 (team_proposals 테이블에서 본인이 보낸 제안)
+      const { data: sentProposals, error: sentProposalsError } = await supabase
+        .from('team_proposals')
+        .select('id, team_id, maker_id, message, created_at')
+        .eq('manager_id', user.id)
+        .order('created_at', { ascending: false })
+
+      if (sentProposalsError) {
+        console.error('보낸 팀 제안 조회 실패:', sentProposalsError)
+      } else if (!sentProposals || sentProposals.length === 0) {
+        setSentTeamProposals([])
+      } else {
+        // team_id 목록 추출
+        const sentTeamIds = sentProposals
+          .map((p: any) => p.team_id)
+          .filter((id: any) => id !== null) as number[]
+        
+        // 팀 정보 별도 조회
+        const sentTeamInfo: Record<number, any> = {}
+        if (sentTeamIds.length > 0) {
+          const { data: teams } = await supabase
+            .from('teams')
+            .select('id, name')
+            .in('id', sentTeamIds)
+          
+          if (teams) {
+            teams.forEach((team: any) => {
+              sentTeamInfo[team.id] = team
+            })
+          }
+        }
+
+        // 메이커 정보를 별도로 조회
+        const makerIds = sentProposals
+          .map((p: any) => p.maker_id)
+          .filter(Boolean) || []
+        const makerInfo: Record<string, any> = {}
+        
+        if (makerIds.length > 0) {
+          const { data: makers } = await supabase
+            .from('accounts')
+            .select('user_id, username')
+            .in('user_id', makerIds)
+          
+          if (makers) {
+            makers.forEach((maker: any) => {
+              makerInfo[maker.user_id] = maker
+            })
+          }
+        }
+
+        const formattedSentProposals: SentTeamProposal[] =
+          sentProposals.map((proposal: any) => {
+            const team = proposal.team_id ? sentTeamInfo[proposal.team_id] : null
+            const maker = makerInfo[proposal.maker_id]
+            
+            return {
+              id: proposal.id,
+              team_id: proposal.team_id,
+              team_name: team?.name || '알 수 없음',
+              maker_id: proposal.maker_id,
+              maker_name: maker?.username || '알 수 없음',
+              message: proposal.message,
+              created_at: proposal.created_at,
+            }
+          })
+        setSentTeamProposals(formattedSentProposals)
+      }
     } catch (error: any) {
       console.error('팀 초대 로드 실패:', error)
       toast({
@@ -355,15 +435,26 @@ export default function TeamInvitesClient() {
           팀 초대 ({teamInvites.length})
         </button>
         <button
-          onClick={() => setActiveTab('proposals')}
+          onClick={() => setActiveTab('received')}
           className={`px-4 py-2 font-medium transition-colors whitespace-nowrap ${
-            activeTab === 'proposals'
+            activeTab === 'received'
               ? 'text-blue-600 border-b-2 border-blue-600'
               : 'text-gray-600 hover:text-gray-900'
           }`}
         >
           <Users className="w-4 h-4 inline mr-2" />
-          팀 제안 ({teamProposals.length})
+          받은 제안 ({teamProposals.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('sent')}
+          className={`px-4 py-2 font-medium transition-colors whitespace-nowrap ${
+            activeTab === 'sent'
+              ? 'text-blue-600 border-b-2 border-blue-600'
+              : 'text-gray-600 hover:text-gray-900'
+          }`}
+        >
+          <Users className="w-4 h-4 inline mr-2" />
+          보낸 제안 ({sentTeamProposals.length})
         </button>
       </div>
 
@@ -418,8 +509,8 @@ export default function TeamInvitesClient() {
         </div>
       )}
 
-      {/* 팀 제안 목록 */}
-      {activeTab === 'proposals' && (
+      {/* 받은 팀 제안 목록 */}
+      {activeTab === 'received' && (
         <div className="space-y-4">
           {teamProposals.length === 0 ? (
             <div className="bg-white rounded-lg shadow-sm border p-6 md:p-12 text-center">
@@ -461,6 +552,62 @@ export default function TeamInvitesClient() {
                       팀 프로필 보기
                     </Button>
                   )}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {/* 보낸 팀 제안 목록 */}
+      {activeTab === 'sent' && (
+        <div className="space-y-4">
+          {sentTeamProposals.length === 0 ? (
+            <div className="bg-white rounded-lg shadow-sm border p-6 md:p-12 text-center">
+              <Users className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+              <p className="text-gray-600">보낸 팀 제안이 없습니다.</p>
+            </div>
+          ) : (
+            sentTeamProposals.map((proposal) => (
+              <div
+                key={proposal.id}
+                className="bg-white rounded-lg shadow-sm border p-4 md:p-6"
+              >
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                      {proposal.team_name} 팀 제안
+                    </h3>
+                    <p className="text-sm text-gray-600">
+                      메이커: {proposal.maker_name}
+                    </p>
+                    {proposal.message && (
+                      <div className="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                        <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                          {proposal.message}
+                        </p>
+                      </div>
+                    )}
+                    <p className="text-xs text-gray-500 mt-2">
+                      {new Date(proposal.created_at).toLocaleDateString('ko-KR')}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  {proposal.team_id && (
+                    <Button
+                      variant="outline"
+                      onClick={() => router.push(`/team/${proposal.team_id}`)}
+                    >
+                      팀 프로필 보기
+                    </Button>
+                  )}
+                  <Button
+                    variant="outline"
+                    onClick={() => router.push(`/profile/${encodeURIComponent(proposal.maker_name)}`)}
+                  >
+                    메이커 프로필 보기
+                  </Button>
                 </div>
               </div>
             ))
