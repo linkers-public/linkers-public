@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createSupabaseBrowserClient } from '@/supabase/supabase-client'
 import { Button } from '@/components/ui/button'
-import { CheckCircle, XCircle, Clock, Mail, User, Building2, Users } from 'lucide-react'
+import { CheckCircle, XCircle, Clock, Mail, Users, Building2 } from 'lucide-react'
 import { toast } from '@/hooks/use-toast'
 
 interface TeamInvite {
@@ -37,13 +37,24 @@ interface TeamProposal {
   created_at: string
 }
 
+interface SentTeamProposal {
+  id: number
+  team_id: number | null
+  team_name: string
+  maker_id: string
+  maker_name: string
+  message: string | null
+  created_at: string
+}
+
 export default function MessagesClient() {
   const router = useRouter()
   const [teamInvites, setTeamInvites] = useState<TeamInvite[]>([])
   const [teamProposals, setTeamProposals] = useState<TeamProposal[]>([])
+  const [sentTeamProposals, setSentTeamProposals] = useState<SentTeamProposal[]>([])
   const [companyProposals, setCompanyProposals] = useState<CompanyProposal[]>([])
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'invites' | 'team-proposals' | 'proposals'>('invites')
+  const [activeTab, setActiveTab] = useState<'invites' | 'team-proposals' | 'sent-proposals' | 'proposals'>('invites')
 
   useEffect(() => {
     loadMessages()
@@ -203,6 +214,76 @@ export default function MessagesClient() {
             }
           })
         setTeamProposals(formattedTeamProposals)
+      }
+
+      // 보낸 팀 제안 조회 (team_proposals 테이블에서 본인이 보낸 제안)
+      const { data: sentProposals, error: sentProposalsError } = await supabase
+        .from('team_proposals')
+        .select('id, team_id, maker_id, message, created_at')
+        .eq('manager_id', user.id)
+        .order('created_at', { ascending: false })
+
+      if (sentProposalsError) {
+        console.error('보낸 팀 제안 조회 실패:', sentProposalsError)
+        setSentTeamProposals([])
+      } else if (!sentProposals || sentProposals.length === 0) {
+        setSentTeamProposals([])
+      } else {
+        // team_id 목록 추출
+        const sentTeamIds = sentProposals
+          .map((p: any) => p.team_id)
+          .filter((id: any) => id !== null) as number[]
+        
+        // 팀 정보 별도 조회
+        const sentTeamInfo: Record<number, any> = {}
+        if (sentTeamIds.length > 0) {
+          const { data: teams } = await supabase
+            .from('teams')
+            .select('id, name')
+            .in('id', sentTeamIds)
+          
+          if (teams) {
+            teams.forEach((team: any) => {
+              sentTeamInfo[team.id] = team
+            })
+          }
+        }
+
+        // 메이커 정보를 별도로 조회
+        const makerIds = sentProposals
+          .map((p: any) => p.maker_id)
+          .filter(Boolean) || []
+        const makerInfo: Record<string, any> = {}
+        
+        if (makerIds.length > 0) {
+          const { data: makers } = await supabase
+            .from('accounts')
+            .select('user_id, username')
+            .in('user_id', makerIds)
+          
+          if (makers) {
+            makers.forEach((maker: any) => {
+              makerInfo[maker.user_id] = maker
+            })
+          }
+        }
+
+        const formattedSentProposals: SentTeamProposal[] =
+          sentProposals.map((proposal: any) => {
+            const team = proposal.team_id ? sentTeamInfo[proposal.team_id] : null
+            const maker = makerInfo[proposal.maker_id]
+            
+            return {
+              id: proposal.id,
+              team_id: proposal.team_id,
+              team_name: team?.name || '알 수 없음',
+              maker_id: proposal.maker_id,
+              maker_name: maker?.username || '알 수 없음',
+              message: proposal.message,
+              created_at: proposal.created_at,
+            }
+          })
+        setSentTeamProposals(formattedSentProposals)
       }
 
       // 기업 제안 조회 (project_members 테이블에서 본인이 초대된 경우)
@@ -374,20 +455,23 @@ export default function MessagesClient() {
   const getStatusBadge = (status: string | null) => {
     if (!status || status === 'pending' || status === 'INVITED') {
       return (
-        <span className="px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-800">
+        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-amber-50 text-amber-700 border border-amber-200">
+          <Clock className="w-3.5 h-3.5" />
           대기 중
         </span>
       )
     }
     if (status === 'active' || status === 'ACTIVE') {
       return (
-        <span className="px-2 py-1 text-xs rounded-full bg-green-100 text-green-800">
+        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">
+          <CheckCircle className="w-3.5 h-3.5" />
           수락됨
         </span>
       )
     }
     return (
-      <span className="px-2 py-1 text-xs rounded-full bg-red-100 text-red-800">
+      <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-red-50 text-red-700 border border-red-200">
+        <XCircle className="w-3.5 h-3.5" />
         거절됨
       </span>
     )
@@ -395,100 +479,138 @@ export default function MessagesClient() {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-64">
+      <div className="flex justify-center items-center min-h-[400px]">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-lg text-gray-600">메시지를 불러오는 중...</p>
+          <div className="animate-spin rounded-full h-10 w-10 border-2 border-gray-200 border-t-blue-600 mx-auto mb-4"></div>
+          <p className="text-sm text-gray-500">메시지를 불러오는 중...</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="w-full py-6 md:py-8">
-      <div className="mb-6">
-        <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-4 md:mb-6">쪽지함</h1>
+    <div className="w-full max-w-6xl mx-auto py-6 md:py-8 px-4">
+      <div className="mb-8">
+        <div className="mb-6">
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">쪽지함</h1>
+          <p className="text-sm text-gray-500">팀 초대 및 프로젝트 제안을 확인하세요</p>
+        </div>
 
         {/* 탭 */}
-        <div className="flex gap-2 border-b mb-4 md:mb-6 overflow-x-auto">
+        <div className="flex gap-1 bg-gray-50 p-1 rounded-lg mb-6 overflow-x-auto">
           <button
             onClick={() => setActiveTab('invites')}
-            className={`px-4 py-2 font-medium transition-colors whitespace-nowrap ${
+            className={`px-4 py-2.5 text-sm font-medium transition-all whitespace-nowrap rounded-md ${
               activeTab === 'invites'
-                ? 'text-blue-600 border-b-2 border-blue-600'
-                : 'text-gray-600 hover:text-gray-900'
+                ? 'bg-white text-blue-600 shadow-sm'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
             }`}
           >
-            <User className="w-4 h-4 inline mr-2" />
-            팀 초대 ({teamInvites.length})
+            팀 초대
+            <span className={`ml-2 px-2 py-0.5 text-xs rounded-full ${
+              activeTab === 'invites' ? 'bg-blue-100 text-blue-700' : 'bg-gray-200 text-gray-600'
+            }`}>
+              {teamInvites.length}
+            </span>
           </button>
           <button
             onClick={() => setActiveTab('team-proposals')}
-            className={`px-4 py-2 font-medium transition-colors whitespace-nowrap ${
+            className={`px-4 py-2.5 text-sm font-medium transition-all whitespace-nowrap rounded-md ${
               activeTab === 'team-proposals'
-                ? 'text-blue-600 border-b-2 border-blue-600'
-                : 'text-gray-600 hover:text-gray-900'
+                ? 'bg-white text-blue-600 shadow-sm'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
             }`}
           >
-            <Users className="w-4 h-4 inline mr-2" />
-            팀 제안 ({teamProposals.length})
+            받은 팀 제안
+            <span className={`ml-2 px-2 py-0.5 text-xs rounded-full ${
+              activeTab === 'team-proposals' ? 'bg-blue-100 text-blue-700' : 'bg-gray-200 text-gray-600'
+            }`}>
+              {teamProposals.length}
+            </span>
+          </button>
+          <button
+            onClick={() => setActiveTab('sent-proposals')}
+            className={`px-4 py-2.5 text-sm font-medium transition-all whitespace-nowrap rounded-md ${
+              activeTab === 'sent-proposals'
+                ? 'bg-white text-blue-600 shadow-sm'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+            }`}
+          >
+            보낸 팀 제안
+            <span className={`ml-2 px-2 py-0.5 text-xs rounded-full ${
+              activeTab === 'sent-proposals' ? 'bg-blue-100 text-blue-700' : 'bg-gray-200 text-gray-600'
+            }`}>
+              {sentTeamProposals.length}
+            </span>
           </button>
           <button
             onClick={() => setActiveTab('proposals')}
-            className={`px-4 py-2 font-medium transition-colors whitespace-nowrap ${
+            className={`px-4 py-2.5 text-sm font-medium transition-all whitespace-nowrap rounded-md ${
               activeTab === 'proposals'
-                ? 'text-blue-600 border-b-2 border-blue-600'
-                : 'text-gray-600 hover:text-gray-900'
+                ? 'bg-white text-blue-600 shadow-sm'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
             }`}
           >
-            <Building2 className="w-4 h-4 inline mr-2" />
-            기업 제안 ({companyProposals.length})
+            기업 제안
+            <span className={`ml-2 px-2 py-0.5 text-xs rounded-full ${
+              activeTab === 'proposals' ? 'bg-blue-100 text-blue-700' : 'bg-gray-200 text-gray-600'
+            }`}>
+              {companyProposals.length}
+            </span>
           </button>
         </div>
 
         {/* 팀 초대 목록 */}
         {activeTab === 'invites' && (
           <div className="space-y-4">
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+              <p className="text-sm text-slate-700 leading-relaxed">
+                <span className="font-semibold text-slate-900">팀 초대:</span> 다른 매니저가 나를 팀 멤버로 초대한 내역입니다. 수락하면 해당 팀의 멤버가 되며, 거절할 수 있습니다.
+              </p>
+            </div>
             {teamInvites.length === 0 ? (
-              <div className="bg-white rounded-lg shadow-sm border p-6 md:p-12 text-center">
-                <Mail className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-600">팀 초대가 없습니다.</p>
+              <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+                <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Mail className="w-8 h-8 text-gray-400" />
+                </div>
+                <p className="text-gray-600 font-medium">팀 초대가 없습니다</p>
+                <p className="text-sm text-gray-500 mt-1">새로운 팀 초대가 오면 여기에 표시됩니다</p>
               </div>
             ) : (
               teamInvites.map((invite) => (
                 <div
                   key={invite.id}
-                  className="bg-white rounded-lg shadow-sm border p-4 md:p-6"
+                  className="bg-white rounded-xl border border-gray-200 hover:border-gray-300 transition-colors p-6"
                 >
                   <div className="flex items-start justify-between mb-4">
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                    <div className="flex-1">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-2">
                         {invite.team_name} 팀 초대
                       </h3>
-                      <p className="text-sm text-gray-600">
-                        매니저: {invite.manager_name}
+                      <p className="text-sm text-gray-600 mb-2">
+                        매니저: <span className="font-medium">{invite.manager_name}</span>
                       </p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        {new Date(invite.created_at).toLocaleDateString('ko-KR')}
+                      <p className="text-xs text-gray-500">
+                        {new Date(invite.created_at).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })}
                       </p>
                     </div>
-                    {getStatusBadge(invite.status)}
+                    <div className="ml-4">
+                      {getStatusBadge(invite.status)}
+                    </div>
                   </div>
                   {(!invite.status || invite.status === 'pending') && (
-                    <div className="flex gap-2">
+                    <div className="flex gap-3 pt-4 border-t border-gray-100">
                       <Button
                         onClick={() => handleTeamInviteAction(invite.id, 'accept')}
-                        className="flex items-center gap-2"
+                        className="bg-blue-600 hover:bg-blue-700"
                       >
-                        <CheckCircle className="w-4 h-4" />
                         수락
                       </Button>
                       <Button
                         variant="outline"
                         onClick={() => handleTeamInviteAction(invite.id, 'decline')}
-                        className="flex items-center gap-2"
+                        className="border-gray-300 hover:bg-gray-50"
                       >
-                        <XCircle className="w-4 h-4" />
                         거절
                       </Button>
                     </div>
@@ -499,49 +621,120 @@ export default function MessagesClient() {
           </div>
         )}
 
-        {/* 팀 제안 목록 */}
+        {/* 받은 팀 제안 목록 */}
         {activeTab === 'team-proposals' && (
           <div className="space-y-4">
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+              <p className="text-sm text-slate-700 leading-relaxed">
+                <span className="font-semibold text-slate-900">받은 팀 제안:</span> 다른 매니저가 나에게 팀 합류를 제안한 내역입니다. 제안 내용과 팀 정보를 확인할 수 있습니다.
+              </p>
+            </div>
             {teamProposals.length === 0 ? (
-              <div className="bg-white rounded-lg shadow-sm border p-6 md:p-12 text-center">
-                <Users className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-600">받은 팀 제안이 없습니다.</p>
+              <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+                <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Users className="w-8 h-8 text-gray-400" />
+                </div>
+                <p className="text-gray-600 font-medium">받은 팀 제안이 없습니다</p>
+                <p className="text-sm text-gray-500 mt-1">새로운 팀 제안이 오면 여기에 표시됩니다</p>
               </div>
             ) : (
               teamProposals.map((proposal) => (
                 <div
                   key={proposal.id}
-                  className="bg-white rounded-lg shadow-sm border p-4 md:p-6"
+                  className="bg-white rounded-xl border border-gray-200 hover:border-gray-300 transition-colors p-6"
                 >
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex-1">
-                      <h3 className="text-lg font-semibold text-gray-900 mb-1">
-                        {proposal.team_name} 팀 제안
-                      </h3>
-                      <p className="text-sm text-gray-600">
-                        매니저: {proposal.manager_name}
-                      </p>
-                      {proposal.message && (
-                        <div className="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
-                          <p className="text-sm text-gray-700 whitespace-pre-wrap">
-                            {proposal.message}
-                          </p>
-                        </div>
-                      )}
-                      <p className="text-xs text-gray-500 mt-2">
-                        {new Date(proposal.created_at).toLocaleDateString('ko-KR')}
-                      </p>
-                    </div>
+                  <div className="mb-4">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                      {proposal.team_name} 팀 제안
+                    </h3>
+                    <p className="text-sm text-gray-600 mb-3">
+                      매니저: <span className="font-medium">{proposal.manager_name}</span>
+                    </p>
+                    {proposal.message && (
+                      <div className="mt-3 p-4 bg-slate-50 rounded-lg border border-slate-200">
+                        <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+                          {proposal.message}
+                        </p>
+                      </div>
+                    )}
+                    <p className="text-xs text-gray-500 mt-3">
+                      {new Date(proposal.created_at).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })}
+                    </p>
                   </div>
-                  <div className="flex gap-2">
+                  {proposal.team_id && (
+                    <div className="pt-4 border-t border-gray-100">
+                      <Button
+                        variant="outline"
+                        onClick={() => router.push(`/team/${proposal.team_id}`)}
+                        className="border-gray-300 hover:bg-gray-50"
+                      >
+                        팀 프로필 보기
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {/* 보낸 팀 제안 목록 */}
+        {activeTab === 'sent-proposals' && (
+          <div className="space-y-4">
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+              <p className="text-sm text-slate-700 leading-relaxed">
+                <span className="font-semibold text-slate-900">보낸 팀 제안:</span> 내가 다른 메이커에게 팀 합류를 제안한 내역입니다. 제안한 메이커와 팀 정보를 확인할 수 있습니다.
+              </p>
+            </div>
+            {sentTeamProposals.length === 0 ? (
+              <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+                <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Users className="w-8 h-8 text-gray-400" />
+                </div>
+                <p className="text-gray-600 font-medium">보낸 팀 제안이 없습니다</p>
+                <p className="text-sm text-gray-500 mt-1">메이커에게 팀 제안을 보내면 여기에 표시됩니다</p>
+              </div>
+            ) : (
+              sentTeamProposals.map((proposal) => (
+                <div
+                  key={proposal.id}
+                  className="bg-white rounded-xl border border-gray-200 hover:border-gray-300 transition-colors p-6"
+                >
+                  <div className="mb-4">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                      {proposal.team_name} 팀 제안
+                    </h3>
+                    <p className="text-sm text-gray-600 mb-3">
+                      메이커: <span className="font-medium">{proposal.maker_name}</span>
+                    </p>
+                    {proposal.message && (
+                      <div className="mt-3 p-4 bg-slate-50 rounded-lg border border-slate-200">
+                        <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+                          {proposal.message}
+                        </p>
+                      </div>
+                    )}
+                    <p className="text-xs text-gray-500 mt-3">
+                      {new Date(proposal.created_at).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })}
+                    </p>
+                  </div>
+                  <div className="flex gap-3 pt-4 border-t border-gray-100">
                     {proposal.team_id && (
                       <Button
                         variant="outline"
                         onClick={() => router.push(`/team/${proposal.team_id}`)}
+                        className="border-gray-300 hover:bg-gray-50"
                       >
                         팀 프로필 보기
                       </Button>
                     )}
+                    <Button
+                      variant="outline"
+                      onClick={() => router.push(`/profile/${encodeURIComponent(proposal.maker_name)}`)}
+                      className="border-gray-300 hover:bg-gray-50"
+                    >
+                      메이커 프로필 보기
+                    </Button>
                   </div>
                 </div>
               ))
@@ -552,53 +745,60 @@ export default function MessagesClient() {
         {/* 기업 제안 목록 */}
         {activeTab === 'proposals' && (
           <div className="space-y-4">
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+              <p className="text-sm text-slate-700 leading-relaxed">
+                <span className="font-semibold text-slate-900">기업 제안:</span> 기업이 나를 프로젝트에 초대한 내역입니다. 수락하면 프로젝트에 참여하게 되며, 거절할 수 있습니다.
+              </p>
+            </div>
             {companyProposals.length === 0 ? (
-              <div className="bg-white rounded-lg shadow-sm border p-6 md:p-12 text-center">
-                <Mail className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                <p className="text-gray-600">기업 제안이 없습니다.</p>
+              <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+                <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Building2 className="w-8 h-8 text-gray-400" />
+                </div>
+                <p className="text-gray-600 font-medium">기업 제안이 없습니다</p>
+                <p className="text-sm text-gray-500 mt-1">새로운 프로젝트 제안이 오면 여기에 표시됩니다</p>
               </div>
             ) : (
               companyProposals.map((proposal) => (
                 <div
                   key={proposal.id}
-                  className="bg-white rounded-lg shadow-sm border p-4 md:p-6"
+                  className="bg-white rounded-xl border border-gray-200 hover:border-gray-300 transition-colors p-6"
                 >
                   <div className="flex items-start justify-between mb-4">
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                    <div className="flex-1">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-2">
                         {proposal.counsel_title}
                       </h3>
-                      <p className="text-sm text-gray-600">
-                        기업: {proposal.client_name}
+                      <p className="text-sm text-gray-600 mb-2">
+                        기업: <span className="font-medium">{proposal.client_name}</span>
                       </p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        {new Date(proposal.created_at).toLocaleDateString('ko-KR')}
+                      <p className="text-xs text-gray-500">
+                        {new Date(proposal.created_at).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })}
                       </p>
                     </div>
-                    {getStatusBadge(proposal.status)}
+                    <div className="ml-4">
+                      {getStatusBadge(proposal.status)}
+                    </div>
                   </div>
                   {(!proposal.status || proposal.status === 'INVITED') && (
-                    <div className="flex gap-2">
+                    <div className="flex gap-3 pt-4 border-t border-gray-100">
                       <Button
                         onClick={() => handleProposalAction(proposal.id, 'accept')}
-                        className="flex items-center gap-2"
+                        className="bg-blue-600 hover:bg-blue-700"
                       >
-                        <CheckCircle className="w-4 h-4" />
                         수락
                       </Button>
                       <Button
                         variant="outline"
                         onClick={() => handleProposalAction(proposal.id, 'decline')}
-                        className="flex items-center gap-2"
+                        className="border-gray-300 hover:bg-gray-50"
                       >
-                        <XCircle className="w-4 h-4" />
                         거절
                       </Button>
                       <Button
                         variant="outline"
-                        onClick={() =>
-                          router.push(`/project-detail/${proposal.counsel_id}`)
-                        }
+                        onClick={() => router.push(`/project-detail/${proposal.counsel_id}`)}
+                        className="border-gray-300 hover:bg-gray-50"
                       >
                         상세 보기
                       </Button>

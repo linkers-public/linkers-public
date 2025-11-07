@@ -157,10 +157,10 @@ const SideNavigator = () => {
         },
         {
           icon: '',
-          label: '받은 팀 초대',
+          label: '쪽지함',
           type: 'profile',
-          isActive: pathname === '/my/team-invites',
-          href: '/my/team-invites',
+          isActive: pathname === '/my/messages',
+          href: '/my/messages',
         },
       ]
 

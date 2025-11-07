@@ -14,7 +14,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from '@/hooks/use-toast'
 import { formatDate } from '@/lib/dateFormat'
-import { ArrowLeft, Plus, X, AlertCircle, DollarSign, Calendar, Clock, Briefcase, Users, FileText, CheckCircle, XCircle, Clock3 } from 'lucide-react'
+import { ArrowLeft, Plus, X, AlertCircle, DollarSign, Calendar, Clock, Briefcase, Users, FileText, CheckCircle, XCircle, Clock3, Heart } from 'lucide-react'
+import { bookmarkProject, unbookmarkProject, checkProjectBookmarked } from '@/apis/bookmark.service'
 import ProjectJoinModal from '@/components/ProjectJoinModal'
 
 interface Counsel {
@@ -74,6 +75,8 @@ const ProjectDetailClient: React.FC = () => {
   const [selectedTeamId, setSelectedTeamId] = useState<number | null>(null)
   const [loadingTeams, setLoadingTeams] = useState(false)
   const [estimateCount, setEstimateCount] = useState<number>(0)
+  const [isBookmarked, setIsBookmarked] = useState<boolean>(false)
+  const [checkingBookmark, setCheckingBookmark] = useState(false)
   const router = useRouter()
   const params = useParams()
   const counselId = params?.id
@@ -196,6 +199,14 @@ const ProjectDetailClient: React.FC = () => {
         } catch (error) {
           console.warn('견적서 개수 조회 실패 (무시):', error)
         }
+
+        // 북마크 상태 확인
+        try {
+          const bookmarked = await checkProjectBookmarked(Number(counselId))
+          setIsBookmarked(bookmarked)
+        } catch (error) {
+          console.warn('북마크 상태 확인 실패 (무시):', error)
+        }
       } catch (error) {
         console.error('Error fetching project details:', error)
         toast({
@@ -224,6 +235,37 @@ const ProjectDetailClient: React.FC = () => {
       } catch (error) {
         console.warn('프로젝트 멤버 조회 실패:', error)
       }
+    }
+  }
+
+  const handleBookmarkToggle = async () => {
+    if (!counselId || checkingBookmark) return
+
+    setCheckingBookmark(true)
+    try {
+      if (isBookmarked) {
+        await unbookmarkProject(Number(counselId))
+        setIsBookmarked(false)
+        toast({
+          title: '북마크 해제',
+          description: '관심 프로젝트에서 제거되었습니다.',
+        })
+      } else {
+        await bookmarkProject(Number(counselId))
+        setIsBookmarked(true)
+        toast({
+          title: '북마크 추가',
+          description: '관심 프로젝트에 추가되었습니다.',
+        })
+      }
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: '북마크 실패',
+        description: error.message || '북마크 처리에 실패했습니다.',
+      })
+    } finally {
+      setCheckingBookmark(false)
     }
   }
 
@@ -443,7 +485,22 @@ const ProjectDetailClient: React.FC = () => {
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 md:p-8 mb-6">
         <div className="flex justify-between items-start mb-6">
           <div className="flex-1">
-            <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-3">{counsel.title || '제목 없음'}</h1>
+            <div className="flex items-start justify-between gap-4 mb-3">
+              <h1 className="text-2xl md:text-3xl font-bold text-gray-900">{counsel.title || '제목 없음'}</h1>
+              {/* 북마크 버튼 */}
+              <button
+                onClick={handleBookmarkToggle}
+                disabled={checkingBookmark}
+                className={`p-2 rounded-lg transition-colors flex-shrink-0 ${
+                  isBookmarked
+                    ? 'text-red-500 hover:bg-red-50'
+                    : 'text-gray-400 hover:text-red-500 hover:bg-gray-50'
+                } ${checkingBookmark ? 'opacity-50 cursor-not-allowed' : ''}`}
+                title={isBookmarked ? '북마크 해제' : '북마크 추가'}
+              >
+                <Heart className={`w-6 h-6 ${isBookmarked ? 'fill-current' : ''}`} />
+              </button>
+            </div>
             <div className="flex items-center gap-2 flex-wrap">
               <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
                 counsel.counsel_status === 'recruiting' 

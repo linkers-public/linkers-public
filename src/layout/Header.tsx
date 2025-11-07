@@ -254,7 +254,7 @@ const Header = () => {
       if (isFreelancer) {
         const profileRoutes = [
           { label: '프로필 보기/수정', href: '/my/profile', group: '내 프로필' },
-          { label: '받은 팀 초대', href: '/my/team-invites', group: '내 프로필' },
+          { label: '쪽지함', href: '/my/messages', group: '내 프로필' },
         ]
         const proposalRoutes = [
           { label: '받은 프로젝트 제안', href: '/my/project-proposals', group: '제안 & 메시지' },

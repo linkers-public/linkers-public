@@ -3,8 +3,10 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { fetchAllCounsel } from '@/apis/counsel.service';
-import { Search, Briefcase, DollarSign, Tag, MapPin, ChevronRight, Clock, FileText } from 'lucide-react';
+import { Search, Briefcase, DollarSign, Tag, MapPin, ChevronRight, Clock, FileText, Heart } from 'lucide-react';
 import { createSupabaseBrowserClient } from '@/supabase/supabase-client';
+import { bookmarkProject, unbookmarkProject, checkProjectBookmarked } from '@/apis/bookmark.service';
+import { toast } from '@/hooks/use-toast';
 
 type Counsel = {
   counsel_id: number;
@@ -67,6 +69,7 @@ const SearchProjectsClient: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [estimateCounts, setEstimateCounts] = useState<{[key: number]: number}>({});
+  const [bookmarkedProjects, setBookmarkedProjects] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     const fetchData = async () => {
@@ -95,6 +98,22 @@ const SearchProjectsClient: React.FC = () => {
           })
         );
         setEstimateCounts(counts);
+        
+        // 북마크 상태 확인
+        const bookmarkedSet = new Set<number>();
+        await Promise.all(
+          transformedData.map(async (project) => {
+            try {
+              const isBookmarked = await checkProjectBookmarked(project.id);
+              if (isBookmarked) {
+                bookmarkedSet.add(project.id);
+              }
+            } catch (error) {
+              // 북마크 확인 실패는 무시
+            }
+          })
+        );
+        setBookmarkedProjects(bookmarkedSet);
       } catch (error) {
         console.error('Error fetching projects:', error);
       } finally {
@@ -237,6 +256,36 @@ const SearchProjectsClient: React.FC = () => {
                     key={project.id}
                     project={project}
                     estimateCount={estimateCounts[project.id] || 0}
+                    isBookmarked={bookmarkedProjects.has(project.id)}
+                    onBookmarkToggle={async () => {
+                      try {
+                        if (bookmarkedProjects.has(project.id)) {
+                          await unbookmarkProject(project.id);
+                          setBookmarkedProjects(prev => {
+                            const next = new Set(prev);
+                            next.delete(project.id);
+                            return next;
+                          });
+                          toast({
+                            title: '북마크 해제',
+                            description: '관심 프로젝트에서 제거되었습니다.',
+                          });
+                        } else {
+                          await bookmarkProject(project.id);
+                          setBookmarkedProjects(prev => new Set(prev).add(project.id));
+                          toast({
+                            title: '북마크 추가',
+                            description: '관심 프로젝트에 추가되었습니다.',
+                          });
+                        }
+                      } catch (error: any) {
+                        toast({
+                          variant: 'destructive',
+                          title: '북마크 실패',
+                          description: error.message || '북마크 처리에 실패했습니다.',
+                        });
+                      }
+                    }}
                     onClick={() => handleProjectClick(project.id)}
                   />
                 ))
@@ -252,10 +301,14 @@ const SearchProjectsClient: React.FC = () => {
 const ProjectMeta = ({
   project,
   estimateCount,
+  isBookmarked = false,
+  onBookmarkToggle,
   onClick,
 }: {
   project: Project;
   estimateCount?: number;
+  isBookmarked?: boolean;
+  onBookmarkToggle?: () => void;
   onClick: () => void;
 }) => {
   // 상태 변환 및 색상 설정
@@ -276,17 +329,38 @@ const ProjectMeta = ({
 
   return (
     <div
-      className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-lg hover:border-blue-300 transition-all duration-300 cursor-pointer overflow-hidden"
-      onClick={onClick}
+      className="bg-white rounded-xl shadow-sm border border-gray-200 hover:shadow-lg hover:border-blue-300 transition-all duration-300 overflow-hidden relative"
     >
       <div className="p-6">
         <div className="flex flex-col gap-5">
           {/* 프로젝트 제목과 상태 */}
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
             <div className="flex-1">
-              <h3 className="font-bold text-xl text-gray-900 leading-tight mb-2">
-                {project.title}
-              </h3>
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <h3 
+                  className="font-bold text-xl text-gray-900 leading-tight cursor-pointer hover:text-blue-600 transition-colors flex-1"
+                  onClick={onClick}
+                >
+                  {project.title}
+                </h3>
+                {/* 북마크 버튼 */}
+                {onBookmarkToggle && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onBookmarkToggle();
+                    }}
+                    className={`p-2 rounded-lg transition-colors flex-shrink-0 ${
+                      isBookmarked
+                        ? 'text-red-500 hover:bg-red-50'
+                        : 'text-gray-400 hover:text-red-500 hover:bg-gray-50'
+                    }`}
+                    title={isBookmarked ? '북마크 해제' : '북마크 추가'}
+                  >
+                    <Heart className={`w-5 h-5 ${isBookmarked ? 'fill-current' : ''}`} />
+                  </button>
+                )}
+              </div>
               {/* 견적서 개수 표시 */}
               {estimateCount !== undefined && estimateCount > 0 && (
                 <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-sm font-semibold border border-blue-200">
@@ -371,10 +445,13 @@ const ProjectMeta = ({
                 day: 'numeric'
               }) : '날짜 없음'}
             </span>
-            <span className="text-sm text-blue-600 font-medium hover:text-blue-700 flex items-center gap-1">
+            <button
+              onClick={onClick}
+              className="text-sm text-blue-600 font-medium hover:text-blue-700 flex items-center gap-1 transition-colors"
+            >
               자세히 보기
               <ChevronRight className="w-4 h-4" />
-            </span>
+            </button>
           </div>
         </div>
       </div>
