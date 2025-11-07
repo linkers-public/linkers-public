@@ -519,7 +519,7 @@ const Header = () => {
                   
                   return (
                     <div className="mb-6">
-                      <h3 className="text-sm font-semibold text-gray-900 mb-2 px-4">메뉴</h3>
+                      <h3 className="text-xs font-semibold text-gray-900 mb-2 px-4">메뉴</h3>
                       <div className="space-y-1">
                         {generalRoutes.map((route) => (
                           <Link
@@ -555,7 +555,7 @@ const Header = () => {
                     
                     return Object.entries(groupedRoutes).map(([groupName, groupRoutes]) => (
                       <div key={groupName} className="mb-6">
-                        <h3 className="text-sm font-semibold text-gray-900 mb-2 px-4">{groupName}</h3>
+                        <h3 className="text-xs font-semibold text-gray-900 mb-2 px-4">{groupName}</h3>
                         <div className="space-y-1">
                           {groupRoutes.map((route) => (
                             <Link

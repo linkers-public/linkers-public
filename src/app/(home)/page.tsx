@@ -48,13 +48,13 @@ const LandingPage = () => {
         <div className="w-full max-w-6xl mx-auto">
           {activeTab === 'freelancer' ? (
             <>
-              <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 mb-4 md:mb-6 leading-tight">
+              <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-gray-900 mb-4 md:mb-6 leading-tight">
                 프리랜서로 시작하세요
               </h1>
-              <p className="text-base sm:text-lg md:text-xl text-gray-600 mb-2">
+              <p className="text-sm sm:text-base md:text-lg text-gray-600 mb-2">
                 무료로 프로필을 만들고 프로젝트에 참여하세요
               </p>
-              <p className="text-lg sm:text-xl md:text-2xl font-bold text-green-600 mb-6 md:mb-8">
+              <p className="text-base sm:text-lg md:text-xl font-bold text-green-600 mb-6 md:mb-8">
                 기업이 먼저 견적을 요청하는 구조로 영업 부담 없이 활동하세요.
               </p>
               <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
@@ -69,14 +69,14 @@ const LandingPage = () => {
             </>
           ) : (
             <>
-          <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-gray-900 mb-4 md:mb-6 leading-tight">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-gray-900 mb-4 md:mb-6 leading-tight">
             개발자 어디서 찾아야 할지<br />
             <span className="text-blue-600">막막하다면?</span>
           </h1>
-          <p className="text-base sm:text-lg md:text-xl text-gray-600 mb-2">
+          <p className="text-sm sm:text-base md:text-lg text-gray-600 mb-2">
             견적은 공짜, 연락할 때만 결제!
           </p>
-          <p className="text-lg sm:text-xl md:text-2xl font-bold text-blue-600 mb-6 md:mb-8">
+          <p className="text-base sm:text-lg md:text-xl font-bold text-blue-600 mb-6 md:mb-8">
             부담 없이 먼저 받아보고 선택하세요.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center">
@@ -97,10 +97,10 @@ const LandingPage = () => {
       {activeTab === 'freelancer' && (
       <section className="py-10 md:py-20 bg-white">
         <div className="w-full max-w-6xl mx-auto">
-          <h2 className="text-2xl md:text-4xl font-bold text-gray-900 mb-6 text-center">
+          <h2 className="text-xl md:text-3xl font-bold text-gray-900 mb-6 text-center">
             프리랜서는 이렇게 활동합니다
           </h2>
-          <p className="text-base sm:text-lg md:text-xl text-gray-600 mb-8 md:mb-12 text-center">
+          <p className="text-sm sm:text-base md:text-lg text-gray-600 mb-8 md:mb-12 text-center">
             AI 툴을 활용하는 개발자라면 누구나 참여할 수 있습니다.<br />
             프로젝트 경험을 쌓고, 안정적인 수익 기회를 확보하세요.
           </p>
@@ -153,10 +153,10 @@ const LandingPage = () => {
       {activeTab === 'freelancer' && (
       <section className="py-10 md:py-20 bg-gradient-to-br from-green-50 to-emerald-50">
         <div className="w-full max-w-6xl mx-auto">
-          <h2 className="text-2xl md:text-4xl font-bold text-gray-900 mb-4 text-center">
+          <h2 className="text-xl md:text-3xl font-bold text-gray-900 mb-4 text-center">
             메이커와 매니저, 두 가지 역할로 활동하세요
           </h2>
-          <p className="text-base md:text-lg text-gray-600 mb-8 md:mb-12 text-center max-w-3xl mx-auto">
+          <p className="text-sm md:text-base text-gray-600 mb-8 md:mb-12 text-center max-w-3xl mx-auto">
             프로젝트마다 역할을 선택할 수 있습니다. 직접 개발에 참여하거나 팀을 이끌며 프로젝트를 관리하세요.
           </p>
           
@@ -168,7 +168,7 @@ const LandingPage = () => {
                   <Code className="w-6 h-6 md:w-8 md:h-8 text-green-600" />
                 </div>
                 <div>
-                  <h3 className="text-xl md:text-2xl font-bold text-gray-900">메이커 (MAKER)</h3>
+                  <h3 className="text-lg md:text-xl font-bold text-gray-900">메이커 (MAKER)</h3>
                   <p className="text-sm text-gray-500">개발 작업 수행</p>
                 </div>
               </div>
@@ -198,7 +198,7 @@ const LandingPage = () => {
                   <Briefcase className="w-6 h-6 md:w-8 md:h-8 text-blue-600" />
                 </div>
                 <div>
-                  <h3 className="text-xl md:text-2xl font-bold text-gray-900">매니저 (MANAGER)</h3>
+                  <h3 className="text-lg md:text-xl font-bold text-gray-900">매니저 (MANAGER)</h3>
                   <p className="text-sm text-gray-500">프로젝트 관리</p>
                 </div>
               </div>
@@ -236,27 +236,27 @@ const LandingPage = () => {
       {activeTab === 'freelancer' && (
       <section className="py-10 md:py-20 bg-gray-50">
         <div className="w-full max-w-6xl mx-auto text-center">
-          <h2 className="text-2xl md:text-4xl font-bold text-gray-900 mb-6">프리랜서가 선택하는 이유</h2>
+          <h2 className="text-xl md:text-3xl font-bold text-gray-900 mb-6">프리랜서가 선택하는 이유</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 md:gap-8">
             <div className="text-center p-4 md:p-6">
               <div className="w-12 h-12 md:w-16 md:h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Clock className="w-6 h-6 md:w-8 md:h-8 text-blue-600" />
               </div>
-              <h3 className="text-lg md:text-xl font-semibold mb-2">자유로운 일정</h3>
+              <h3 className="text-base md:text-lg font-semibold mb-2">자유로운 일정</h3>
               <p className="text-gray-600">원하는 시간에 프로젝트를 선택하고 작업하세요</p>
             </div>
             <div className="text-center p-4 md:p-6">
               <div className="w-12 h-12 md:w-16 md:h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <DollarSign className="w-6 h-6 md:w-8 md:h-8 text-green-600" />
               </div>
-              <h3 className="text-lg md:text-xl font-semibold mb-2">공정한 보상</h3>
+              <h3 className="text-base md:text-lg font-semibold mb-2">공정한 보상</h3>
               <p className="text-gray-600">투명한 견적 시스템으로 합리적인 보상을 받으세요</p>
             </div>
             <div className="text-center p-4 md:p-6">
               <div className="w-12 h-12 md:w-16 md:h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Users className="w-6 h-6 md:w-8 md:h-8 text-purple-600" />
               </div>
-              <h3 className="text-lg md:text-xl font-semibold mb-2">팀 프로젝트</h3>
+              <h3 className="text-base md:text-lg font-semibold mb-2">팀 프로젝트</h3>
               <p className="text-gray-600">팀을 구성하여 대규모 프로젝트에도 참여 가능</p>
             </div>
           </div>
@@ -269,10 +269,10 @@ const LandingPage = () => {
       <>
         <section className="py-10 md:py-20 bg-white">
           <div className="w-full max-w-6xl mx-auto">
-          <h2 className="text-2xl md:text-4xl font-bold text-gray-900 mb-4 text-center">
+          <h2 className="text-xl md:text-3xl font-bold text-gray-900 mb-4 text-center">
             클라이언트는 이렇게 사용해요
           </h2>
-          <p className="text-base md:text-lg text-gray-600 mb-8 md:mb-12 text-center">
+          <p className="text-sm md:text-base text-gray-600 mb-8 md:mb-12 text-center">
             비교 견적은 무료, 실제 컨택 시에만 비용이 발생합니다.
           </p>
           
@@ -312,27 +312,27 @@ const LandingPage = () => {
         {/* 기업 혜택 Section */}
         <section className="py-10 md:py-20 bg-gray-50">
           <div className="w-full max-w-6xl mx-auto text-center">
-            <h2 className="text-2xl md:text-4xl font-bold text-gray-900 mb-6">기업이 선택하는 이유</h2>
+            <h2 className="text-xl md:text-3xl font-bold text-gray-900 mb-6">기업이 선택하는 이유</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 md:gap-8">
               <div className="text-center p-4 md:p-6">
                 <div className="w-12 h-12 md:w-16 md:h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
                   <DollarSign className="w-6 h-6 md:w-8 md:h-8 text-blue-600" />
                 </div>
-                <h3 className="text-lg md:text-xl font-semibold mb-2">비용 효율적</h3>
+                <h3 className="text-base md:text-lg font-semibold mb-2">비용 효율적</h3>
                 <p className="text-gray-600">견적 비교는 무료, 연락처 확인 시에만 소액 결제</p>
               </div>
               <div className="text-center p-4 md:p-6">
                 <div className="w-12 h-12 md:w-16 md:h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
                   <Users className="w-6 h-6 md:w-8 md:h-8 text-green-600" />
                 </div>
-                <h3 className="text-lg md:text-xl font-semibold mb-2">다양한 선택지</h3>
+                <h3 className="text-base md:text-lg font-semibold mb-2">다양한 선택지</h3>
                 <p className="text-gray-600">여러 메이커의 견적을 비교하여 최적의 파트너 선택</p>
               </div>
               <div className="text-center p-4 md:p-6">
                 <div className="w-12 h-12 md:w-16 md:h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
                   <Zap className="w-6 h-6 md:w-8 md:h-8 text-purple-600" />
                 </div>
-                <h3 className="text-lg md:text-xl font-semibold mb-2">빠른 매칭</h3>
+                <h3 className="text-base md:text-lg font-semibold mb-2">빠른 매칭</h3>
                 <p className="text-gray-600">프로젝트 등록 시 관심 있는 메이커가 자동으로 견적 제출</p>
               </div>
             </div>
@@ -344,13 +344,13 @@ const LandingPage = () => {
       {/* 가격 정책 Section */}
       <section className="py-10 md:py-20 bg-gray-50">
         <div className="w-full max-w-4xl mx-auto">
-          <h2 className="text-2xl md:text-4xl font-bold text-gray-900 mb-8 md:mb-12 text-center">가격 정책</h2>
+          <h2 className="text-xl md:text-3xl font-bold text-gray-900 mb-8 md:mb-12 text-center">가격 정책</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8">
             {activeTab === 'freelancer' ? (
             <div className="bg-white p-4 md:p-8 rounded-lg shadow-sm border-2 border-green-200">
-              <h3 className="text-xl md:text-2xl font-bold text-gray-900 mb-4 text-center">프리랜서</h3>
-              <div className="text-center mb-6">
-                <span className="text-3xl md:text-4xl font-bold text-green-600">무료</span>
+                <h3 className="text-lg md:text-xl font-bold text-gray-900 mb-4 text-center">프리랜서</h3>
+                <div className="text-center mb-6">
+                  <span className="text-2xl md:text-3xl font-bold text-green-600">무료</span>
                 <p className="text-gray-600 mt-2">프로필 등록 및 프로젝트 지원</p>
               </div>
               <ul className="space-y-3">
@@ -374,9 +374,9 @@ const LandingPage = () => {
             </div>
             ) : (
             <div className="bg-white p-4 md:p-8 rounded-lg shadow-sm border-2 border-blue-200">
-              <h3 className="text-xl md:text-2xl font-bold text-gray-900 mb-4 text-center">기업</h3>
-              <div className="text-center mb-6">
-                <span className="text-3xl md:text-4xl font-bold text-blue-600">월 2,000원</span>
+                <h3 className="text-lg md:text-xl font-bold text-gray-900 mb-4 text-center">기업</h3>
+                <div className="text-center mb-6">
+                  <span className="text-2xl md:text-3xl font-bold text-blue-600">월 2,000원</span>
                 <p className="text-gray-600 mt-2">첫 달 무료</p>
               </div>
               <ul className="space-y-3">
@@ -406,8 +406,8 @@ const LandingPage = () => {
       {/* 마지막 CTA Section */}
       <section className="py-10 md:py-20 bg-white">
         <div className="w-full max-w-6xl mx-auto text-center">
-          <h2 className="text-2xl md:text-4xl font-bold text-gray-900 mb-6">지금 바로 시작하세요</h2>
-          <p className="text-base md:text-xl text-gray-600 mb-6 md:mb-8">
+          <h2 className="text-xl md:text-3xl font-bold text-gray-900 mb-6">지금 바로 시작하세요</h2>
+          <p className="text-sm md:text-lg text-gray-600 mb-6 md:mb-8">
             {activeTab === 'freelancer' 
               ? 'LINKUS와 함께 새로운 기회를 찾아보세요'
               : 'LINKUS와 함께 프로젝트를 시작하세요'
@@ -438,7 +438,7 @@ const LandingPage = () => {
       {/* FAQ Section */}
       <section className="py-10 md:py-20 bg-gray-50">
         <div className="w-full max-w-6xl mx-auto">
-          <h2 className="text-2xl md:text-4xl font-bold text-gray-900 mb-8 md:mb-12 text-center">
+          <h2 className="text-xl md:text-3xl font-bold text-gray-900 mb-8 md:mb-12 text-center">
             자주 묻는 질문
           </h2>
           
@@ -447,7 +447,7 @@ const LandingPage = () => {
           <div className="mb-12 md:mb-16">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-1 h-8 bg-blue-600 rounded"></div>
-              <h3 className="text-xl md:text-2xl font-bold text-gray-900">기업(프로젝트 의뢰자)용 FAQ</h3>
+              <h3 className="text-lg md:text-xl font-bold text-gray-900">기업(프로젝트 의뢰자)용 FAQ</h3>
             </div>
           
           <div className="space-y-4 md:space-y-6">
@@ -520,7 +520,7 @@ const LandingPage = () => {
           <div>
             <div className="flex items-center gap-3 mb-6">
               <div className="w-1 h-8 bg-green-600 rounded"></div>
-              <h3 className="text-xl md:text-2xl font-bold text-gray-900">프리랜서 / 팀(메이커·매니저)용 FAQ</h3>
+              <h3 className="text-lg md:text-xl font-bold text-gray-900">프리랜서 / 팀(메이커·매니저)용 FAQ</h3>
             </div>
             
             <div className="space-y-4 md:space-y-6">
