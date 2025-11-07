@@ -6,9 +6,9 @@
 - **프로젝트 ID**: `prj_rqwcidTL9jaB0yj10TFs4PQBPkNm`
 - **팀 ID**: `team_zQOMhwK0Xbzk5DcY7nA6eCYx`
 - **도메인**: 
-  - `makers-b2b.vercel.app`
-  - `linkers-suhyeon10s-projects.vercel.app`
-  - `linkers-git-main-suhyeon10s-projects.vercel.app`
+  - `linkforus.com` (커스텀 도메인 - 프로덕션)
+  - `makers-b2b.vercel.app` (Vercel 기본 도메인)
+  - `linkers-6qr9kouxu-suhyeon10s-projects.vercel.app` (배포 URL)
 
 ## ⚠️ 현재 문제
 
@@ -50,9 +50,20 @@ PORTONE_V2_WEBHOOK_SECRET=your_v2_webhook_secret_here
 
 #### 기타 (선택사항)
 ```
-NEXT_PUBLIC_SITE_URL=https://makers-b2b.vercel.app
+NEXT_PUBLIC_SITE_URL=https://linkforus.com
 CRON_SECRET=your_secure_random_string_here
 ```
+
+> 💡 **환경별 Site URL 설정 팁**
+> 
+> `NEXT_PUBLIC_SITE_URL`은 OAuth 리다이렉트 URL에 사용됩니다. 
+> Production과 Preview 환경에 **다른 값**을 설정할 수 있습니다:
+> 
+> - **Production**: `https://linkforus.com` (커스텀 도메인)
+> - **Preview**: `https://linkers-6qr9kouxu-suhyeon10s-projects.vercel.app` (또는 프리뷰 URL)
+> 
+> 각 환경 변수를 추가할 때 **Environment** 체크박스를 선택적으로 체크하여 
+> Production과 Preview에 서로 다른 값을 설정하세요.
 
 ### 4. 환경 변수 추가 단계
 
@@ -109,7 +120,9 @@ CRON_SECRET=your_secure_random_string_here
 - [ ] `PORTONE_V2_WEBHOOK_SECRET` 설정
 
 ### 선택 항목
-- [ ] `NEXT_PUBLIC_SITE_URL` 설정
+- [ ] `NEXT_PUBLIC_SITE_URL` 설정 (환경별로 다르게 설정 가능)
+  - Production: 프로덕션 도메인
+  - Preview: 프리뷰 도메인
 - [ ] `CRON_SECRET` 설정
 
 ## 🚨 중요 보안 주의사항
@@ -154,9 +167,40 @@ CRON_SECRET=your_secure_random_string_here
 2. 배포 로그 확인 (Deployments → 최신 배포 → Build Logs)
 3. 서버 로그 확인 (Functions 탭)
 
+## 🌐 Supabase Site URL 설정 (OAuth 리다이렉트용)
+
+Supabase에서 OAuth 인증이 정상적으로 작동하려면, Supabase 대시보드에도 Site URL을 등록해야 합니다.
+
+### Supabase 대시보드에서 Site URL 등록
+
+1. [Supabase 대시보드](https://app.supabase.com) 접속
+2. 프로젝트 선택
+3. **Authentication** → **URL Configuration** 메뉴로 이동
+4. **Site URL** 섹션에서 여러 URL을 등록할 수 있습니다:
+   - Production URL: `https://linkforus.com` (커스텀 도메인)
+   - Preview URL: `https://linkers-6qr9kouxu-suhyeon10s-projects.vercel.app`
+   - 로컬 개발 URL: `http://localhost:3000`
+
+5. **Redirect URLs** 섹션에도 각 환경의 콜백 URL을 추가:
+   - `https://linkforus.com/auth/callback` (커스텀 도메인)
+   - `https://linkers-6qr9kouxu-suhyeon10s-projects.vercel.app/auth/callback`
+   - `http://localhost:3000/auth/callback`
+
+> ⚠️ **중요**: Supabase는 와일드카드 URL을 지원하지 않으므로, 
+> 각 환경의 정확한 URL을 모두 등록해야 합니다.
+
+### 환경별 설정 요약
+
+| 환경 | Vercel 환경 변수 | Supabase Site URL | Supabase Redirect URL |
+|------|-----------------|-------------------|----------------------|
+| Production | `NEXT_PUBLIC_SITE_URL=https://linkforus.com` (Production만 체크) | `https://linkforus.com` | `https://linkforus.com/auth/callback` |
+| Preview | `NEXT_PUBLIC_SITE_URL=https://linkers-6qr9kouxu-suhyeon10s-projects.vercel.app` (Preview만 체크) | `https://linkers-6qr9kouxu-suhyeon10s-projects.vercel.app` | `https://linkers-6qr9kouxu-suhyeon10s-projects.vercel.app/auth/callback` |
+| Development | `NEXT_PUBLIC_SITE_URL=http://localhost:3000` (Development만 체크) | `http://localhost:3000` | `http://localhost:3000/auth/callback` |
+
 ## 🔗 참고 링크
 
 - [Vercel 환경 변수 문서](https://vercel.com/docs/concepts/projects/environment-variables)
+- [Supabase Authentication 설정](https://supabase.com/docs/guides/auth/url-configuration)
 - [포트원 V2 관리자 콘솔](https://admin.portone.io/integration-v2)
 - [ENV_SETUP.md](./ENV_SETUP.md) - 전체 환경 변수 가이드
 

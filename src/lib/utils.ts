@@ -38,7 +38,8 @@ export function isProduction(): boolean {
   
   // 클라이언트 사이드에서는 hostname으로 확인
   if (typeof window !== 'undefined') {
-    return window.location.hostname === 'makers-b2b.vercel.app' ||
+    return window.location.hostname === 'linkforus.com' ||
+           window.location.hostname === 'makers-b2b.vercel.app' ||
            (!window.location.hostname.includes('localhost') && 
             !window.location.hostname.includes('127.0.0.1'))
   }
@@ -62,7 +63,7 @@ export function getSiteUrl(): string {
   // 프로덕션 환경이면 프로덕션 URL 반환
   const isProd = isProduction()
   if (isProd) {
-    const prodUrl = 'https://makers-b2b.vercel.app'
+    const prodUrl = 'https://linkforus.com'
     if (typeof window !== 'undefined') {
       console.log('프로덕션 환경 감지, URL:', prodUrl)
     }
