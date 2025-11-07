@@ -299,11 +299,16 @@ const Header = () => {
       { label: '메이커 검색', href: '/search-makers' },
     ]
     
-    if (activeProfileType === 'FREELANCER' && activeRole === 'MANAGER') {
+    if (activeProfileType === 'FREELANCER') {
       freelancerRoutes.push(
-        { label: '팀 프로필 조회', href: '/team-profile' },
-        { label: '팀 프로젝트 확인', href: '/team-projects' }
+        { label: '팀 검색', href: '/search-teams' }
       )
+      if (activeRole === 'MANAGER') {
+        freelancerRoutes.push(
+          { label: '팀 프로필 조회', href: '/team-profile' },
+          { label: '팀 프로젝트 확인', href: '/team-projects' }
+        )
+      }
     }
     
     return freelancerRoutes
@@ -511,6 +516,7 @@ const Header = () => {
                     // 프리랜서 프로필일 경우 팀 메뉴 추가 (Navigator 컴포넌트와 동일한 로직)
                     if (activeProfileType === 'FREELANCER') {
                       generalRoutes.push(
+                        { label: '팀 검색', href: '/search-teams' },
                         { label: '팀 프로필 조회', href: '/team-profile' },
                         { label: '팀 프로젝트 확인', href: '/team-projects' }
                       )

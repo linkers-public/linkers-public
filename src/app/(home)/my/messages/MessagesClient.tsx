@@ -47,14 +47,26 @@ interface SentTeamProposal {
   created_at: string
 }
 
+interface TeamJoinRequest {
+  id: number
+  team_id: number
+  team_name: string
+  maker_id: string
+  maker_name: string
+  profile_id: string
+  status: string
+  created_at: string
+}
+
 export default function MessagesClient() {
   const router = useRouter()
   const [teamInvites, setTeamInvites] = useState<TeamInvite[]>([])
   const [teamProposals, setTeamProposals] = useState<TeamProposal[]>([])
   const [sentTeamProposals, setSentTeamProposals] = useState<SentTeamProposal[]>([])
+  const [teamJoinRequests, setTeamJoinRequests] = useState<TeamJoinRequest[]>([])
   const [companyProposals, setCompanyProposals] = useState<CompanyProposal[]>([])
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'invites' | 'team-proposals' | 'sent-proposals' | 'proposals'>('invites')
+  const [activeTab, setActiveTab] = useState<'invites' | 'team-proposals' | 'sent-proposals' | 'join-requests' | 'proposals'>('invites')
 
   useEffect(() => {
     loadMessages()
@@ -286,6 +298,72 @@ export default function MessagesClient() {
         setSentTeamProposals(formattedSentProposals)
       }
 
+      // 매니저가 받은 합류 신청 조회 (team_members 테이블에서 status가 'pending'인 경우)
+      // 현재 사용자가 매니저인 팀들의 합류 신청 조회
+      const { data: managedTeams } = await supabase
+        .from('teams')
+        .select('id, name')
+        .eq('manager_profile_id', currentProfile.profile_id)
+
+      if (managedTeams && managedTeams.length > 0) {
+        const teamIds = managedTeams.map((t: any) => t.id)
+        const teamInfo: Record<number, any> = {}
+        managedTeams.forEach((team: any) => {
+          teamInfo[team.id] = team
+        })
+
+        const { data: joinRequests, error: joinRequestsError } = await supabase
+          .from('team_members')
+          .select('id, team_id, profile_id, maker_id, status, created_at')
+          .in('team_id', teamIds)
+          .eq('status', 'pending')
+          .order('created_at', { ascending: false })
+
+        if (joinRequestsError) {
+          console.error('합류 신청 조회 실패:', joinRequestsError)
+          setTeamJoinRequests([])
+        } else if (!joinRequests || joinRequests.length === 0) {
+          setTeamJoinRequests([])
+        } else {
+          // 메이커 정보 조회
+          const makerIds = joinRequests.map((r: any) => r.maker_id).filter(Boolean) || []
+          const makerInfo: Record<string, any> = {}
+          
+          if (makerIds.length > 0) {
+            const { data: makers } = await supabase
+              .from('accounts')
+              .select('user_id, username')
+              .in('user_id', makerIds)
+            
+            if (makers) {
+              makers.forEach((maker: any) => {
+                makerInfo[maker.user_id] = maker
+              })
+            }
+          }
+
+          const formattedJoinRequests: TeamJoinRequest[] =
+            joinRequests.map((request: any) => {
+              const team = teamInfo[request.team_id]
+              const maker = makerInfo[request.maker_id]
+              
+              return {
+                id: request.id,
+                team_id: request.team_id,
+                team_name: team?.name || '알 수 없음',
+                maker_id: request.maker_id,
+                maker_name: maker?.username || '알 수 없음',
+                profile_id: request.profile_id,
+                status: request.status,
+                created_at: request.created_at,
+              }
+            })
+          setTeamJoinRequests(formattedJoinRequests)
+        }
+      } else {
+        setTeamJoinRequests([])
+      }
+
       // 기업 제안 조회 (project_members 테이블에서 본인이 초대된 경우)
       const { data: profile } = await supabase
         .from('accounts')
@@ -414,6 +492,37 @@ export default function MessagesClient() {
     }
   }
 
+  const handleJoinRequestAction = async (
+    requestId: number,
+    action: 'accept' | 'decline'
+  ) => {
+    try {
+      const supabase = createSupabaseBrowserClient()
+      const { error } = await supabase
+        .from('team_members')
+        .update({
+          status: action === 'accept' ? 'active' : 'declined',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', requestId)
+
+      if (error) throw error
+
+      toast({
+        title: action === 'accept' ? '합류 신청을 수락했습니다' : '합류 신청을 거절했습니다',
+      })
+
+      await loadMessages()
+    } catch (error: any) {
+      console.error('합류 신청 처리 실패:', error)
+      toast({
+        variant: 'destructive',
+        title: '처리에 실패했습니다',
+        description: error.message,
+      })
+    }
+  }
+
   const handleProposalAction = async (
     proposalId: number,
     action: 'accept' | 'decline'
@@ -491,7 +600,7 @@ export default function MessagesClient() {
   return (
     <div className="w-full max-w-6xl mx-auto py-6 md:py-8 px-4">
       <div className="mb-8">
-        <div className="mb-6">
+      <div className="mb-6">
           <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">쪽지함</h1>
           <p className="text-sm text-gray-500">팀 초대 및 프로젝트 제안을 확인하세요</p>
         </div>
@@ -541,6 +650,21 @@ export default function MessagesClient() {
               activeTab === 'sent-proposals' ? 'bg-blue-100 text-blue-700' : 'bg-gray-200 text-gray-600'
             }`}>
               {sentTeamProposals.length}
+            </span>
+          </button>
+          <button
+            onClick={() => setActiveTab('join-requests')}
+            className={`px-4 py-2.5 text-sm font-medium transition-all whitespace-nowrap rounded-md ${
+              activeTab === 'join-requests'
+                ? 'bg-white text-blue-600 shadow-sm'
+                : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+            }`}
+          >
+            받은 합류 신청
+            <span className={`ml-2 px-2 py-0.5 text-xs rounded-full ${
+              activeTab === 'join-requests' ? 'bg-blue-100 text-blue-700' : 'bg-gray-200 text-gray-600'
+            }`}>
+              {teamJoinRequests.length}
             </span>
           </button>
           <button
@@ -595,7 +719,7 @@ export default function MessagesClient() {
                       </p>
                     </div>
                     <div className="ml-4">
-                      {getStatusBadge(invite.status)}
+                    {getStatusBadge(invite.status)}
                     </div>
                   </div>
                   {(!invite.status || invite.status === 'pending') && (
@@ -645,21 +769,21 @@ export default function MessagesClient() {
                 >
                   <div className="mb-4">
                     <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                      {proposal.team_name} 팀 제안
-                    </h3>
+                        {proposal.team_name} 팀 제안
+                      </h3>
                     <p className="text-sm text-gray-600 mb-3">
                       매니저: <span className="font-medium">{proposal.manager_name}</span>
-                    </p>
-                    {proposal.message && (
+                      </p>
+                      {proposal.message && (
                       <div className="mt-3 p-4 bg-slate-50 rounded-lg border border-slate-200">
                         <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
-                          {proposal.message}
-                        </p>
-                      </div>
-                    )}
+                            {proposal.message}
+                          </p>
+                        </div>
+                      )}
                     <p className="text-xs text-gray-500 mt-3">
                       {new Date(proposal.created_at).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })}
-                    </p>
+                      </p>
                   </div>
                   {proposal.team_id && (
                     <div className="pt-4 border-t border-gray-100">
@@ -742,6 +866,74 @@ export default function MessagesClient() {
           </div>
         )}
 
+        {/* 받은 합류 신청 목록 */}
+        {activeTab === 'join-requests' && (
+          <div className="space-y-4">
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+              <p className="text-sm text-slate-700 leading-relaxed">
+                <span className="font-semibold text-slate-900">받은 합류 신청:</span> 메이커가 내 팀에 합류를 신청한 내역입니다. 수락하면 해당 메이커가 팀원이 되며, 거절할 수 있습니다.
+              </p>
+            </div>
+            {teamJoinRequests.length === 0 ? (
+              <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+                <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Users className="w-8 h-8 text-gray-400" />
+                </div>
+                <p className="text-gray-600 font-medium">받은 합류 신청이 없습니다</p>
+                <p className="text-sm text-gray-500 mt-1">메이커가 팀 합류를 신청하면 여기에 표시됩니다</p>
+              </div>
+            ) : (
+              teamJoinRequests.map((request) => (
+                <div
+                  key={request.id}
+                  className="bg-white rounded-xl border border-gray-200 hover:border-gray-300 transition-colors p-6"
+                >
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex-1">
+                      <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                        {request.team_name} 팀 합류 신청
+                      </h3>
+                      <p className="text-sm text-gray-600 mb-2">
+                        메이커: <span className="font-medium">{request.maker_name}</span>
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {new Date(request.created_at).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })}
+                      </p>
+                    </div>
+                    <div className="ml-4">
+                      {getStatusBadge(request.status)}
+                    </div>
+                  </div>
+                  {request.status === 'pending' && (
+                    <div className="flex gap-3 pt-4 border-t border-gray-100">
+                      <Button
+                        onClick={() => handleJoinRequestAction(request.id, 'accept')}
+                        className="bg-blue-600 hover:bg-blue-700"
+                      >
+                        수락
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => handleJoinRequestAction(request.id, 'decline')}
+                        className="border-gray-300 hover:bg-gray-50"
+                      >
+                        거절
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => router.push(`/profile/${encodeURIComponent(request.maker_name)}`)}
+                        className="border-gray-300 hover:bg-gray-50"
+                      >
+                        메이커 프로필 보기
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
         {/* 기업 제안 목록 */}
         {activeTab === 'proposals' && (
           <div className="space-y-4">
@@ -777,7 +969,7 @@ export default function MessagesClient() {
                       </p>
                     </div>
                     <div className="ml-4">
-                      {getStatusBadge(proposal.status)}
+                    {getStatusBadge(proposal.status)}
                     </div>
                   </div>
                   {(!proposal.status || proposal.status === 'INVITED') && (

@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import Link from 'next/link'
 import { createSupabaseBrowserClient } from '@/supabase/supabase-client'
-import { fetchTeamDetail } from '@/apis/team.service'
+import { fetchTeamDetail, requestTeamJoin } from '@/apis/team.service'
 import { acceptTeamProposal, declineTeamProposal } from '@/apis/proposal.service'
 import { Button } from '@/components/ui/button'
 import { 
@@ -17,7 +17,8 @@ import {
   Loader2,
   AlertCircle,
   CheckCircle,
-  XCircle
+  XCircle,
+  UserPlus
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 
@@ -34,6 +35,8 @@ const TeamViewClient: React.FC<TeamViewClientProps> = ({ teamId }) => {
   const [hasProposal, setHasProposal] = useState(false)
   const [proposalId, setProposalId] = useState<number | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [isMember, setIsMember] = useState(false)
+  const [hasPendingRequest, setHasPendingRequest] = useState(false)
 
   useEffect(() => {
     const loadTeam = async () => {
@@ -55,17 +58,45 @@ const TeamViewClient: React.FC<TeamViewClientProps> = ({ teamId }) => {
           return
         }
 
-        // 팀 제안 확인
-        const { data: proposal } = await supabase
-          .from('team_proposals')
-          .select('id')
-          .eq('maker_id', user.id)
-          .eq('team_id', teamIdNum)
+        // 현재 사용자의 프로필 조회
+        const { data: currentProfile } = await supabase
+          .from('accounts')
+          .select('profile_id')
+          .eq('user_id', user.id)
+          .eq('profile_type', 'FREELANCER')
+          .eq('is_active', true)
+          .is('deleted_at', null)
           .maybeSingle()
 
-        if (proposal) {
-          setHasProposal(true)
-          setProposalId(proposal.id)
+        if (currentProfile) {
+          // 팀 제안 확인
+          const { data: proposal } = await supabase
+            .from('team_proposals')
+            .select('id')
+            .eq('maker_id', user.id)
+            .eq('team_id', teamIdNum)
+            .maybeSingle()
+
+          if (proposal) {
+            setHasProposal(true)
+            setProposalId(proposal.id)
+          }
+
+          // 팀원 여부 확인
+          const { data: member } = await supabase
+            .from('team_members')
+            .select('id, status')
+            .eq('team_id', teamIdNum)
+            .eq('profile_id', currentProfile.profile_id)
+            .maybeSingle()
+
+          if (member) {
+            if (member.status === 'active') {
+              setIsMember(true)
+            } else if (member.status === 'pending') {
+              setHasPendingRequest(true)
+            }
+          }
         }
 
         // 팀 정보 조회
@@ -191,6 +222,29 @@ const TeamViewClient: React.FC<TeamViewClientProps> = ({ teamId }) => {
     }
   }
 
+  const handleRequestJoin = async () => {
+    if (!teamData?.id) return
+
+    setIsProcessing(true)
+    try {
+      await requestTeamJoin(teamData.id)
+      toast({
+        title: '합류 신청 완료',
+        description: '팀 합류 신청이 완료되었습니다. 매니저의 승인을 기다려주세요.',
+      })
+      setHasPendingRequest(true)
+    } catch (error: any) {
+      console.error('합류 신청 실패:', error)
+      toast({
+        variant: 'destructive',
+        title: '합류 신청 실패',
+        description: error.message || '합류 신청에 실패했습니다.',
+      })
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="flex justify-center items-center min-h-[60vh] w-full">
@@ -290,6 +344,41 @@ const TeamViewClient: React.FC<TeamViewClientProps> = ({ teamId }) => {
                 )}
               </Button>
             </div>
+          </div>
+        )}
+        {!hasProposal && !isMember && !hasPendingRequest && teamData && !teamData.isManager && (
+          <div className="flex items-center gap-4 flex-1">
+            <Button
+              onClick={handleRequestJoin}
+              disabled={isProcessing}
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700"
+            >
+              {isProcessing ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  처리 중...
+                </>
+              ) : (
+                <>
+                  <UserPlus className="w-4 h-4" />
+                  팀 합류 신청
+                </>
+              )}
+            </Button>
+          </div>
+        )}
+        {isMember && (
+          <div className="px-4 py-2 bg-green-50 border border-green-200 rounded-lg">
+            <p className="text-sm text-green-700 font-medium">
+              이미 이 팀의 멤버입니다
+            </p>
+          </div>
+        )}
+        {hasPendingRequest && (
+          <div className="px-4 py-2 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <p className="text-sm text-yellow-700 font-medium">
+              합류 신청이 진행 중입니다. 매니저의 승인을 기다려주세요.
+            </p>
           </div>
         )}
       </div>

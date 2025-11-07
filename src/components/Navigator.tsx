@@ -81,6 +81,12 @@ const Navigator = ({ profileType, role }: NavigatorProps) => {
     if (profileType === 'FREELANCER') {
       freelancerRoutes.push({
         icon: '',
+        label: '팀 검색',
+        isActive: pathname === '/search-teams',
+        href: '/search-teams',
+      })
+      freelancerRoutes.push({
+        icon: '',
         label: '팀',
         isActive: pathname === '/team-profile' || pathname === '/team-projects',
         href: '#',

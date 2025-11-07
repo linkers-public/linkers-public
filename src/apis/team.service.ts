@@ -537,3 +537,156 @@ export const updateTeam = async (
   if (error) throw error
   return updatedTeam
 }
+
+/**
+ * 모든 팀 검색 (필터링 지원)
+ */
+export const searchTeams = async (filters?: {
+  searchTerm?: string
+  specialty?: string[]
+  subSpecialty?: string[]
+}) => {
+  const supabase = createSupabaseBrowserClient()
+
+  let query = supabase
+    .from('teams')
+    .select(`
+      *,
+      manager:manager_profile_id (
+        profile_id,
+        user_id,
+        username,
+        role,
+        bio,
+        profile_image_url
+      ),
+      team_members:team_members (
+        *,
+        account:profile_id (
+          profile_id,
+          user_id,
+          username,
+          role,
+          bio,
+          profile_image_url
+        )
+      )
+    `)
+
+  // 검색어 필터링 (팀 이름, 소개)
+  if (filters?.searchTerm) {
+    query = query.or(`name.ilike.%${filters.searchTerm}%,bio.ilike.%${filters.searchTerm}%`)
+  }
+
+  // 전문분야 필터링
+  if (filters?.specialty && filters.specialty.length > 0) {
+    const specialtyFilters = filters.specialty.map(s => `specialty.cs.{${s}}`).join(',')
+    query = query.or(specialtyFilters)
+  }
+
+  // 세부 전문분야 필터링
+  if (filters?.subSpecialty && filters.subSpecialty.length > 0) {
+    const subSpecialtyFilters = filters.subSpecialty.map(s => `sub_specialty.cs.{${s}}`).join(',')
+    query = query.or(subSpecialtyFilters)
+  }
+
+  const { data, error } = await query.order('created_at', { ascending: false })
+
+  if (error) {
+    console.error('팀 검색 에러:', error)
+    throw error
+  }
+
+  return { data: data || [], error: null }
+}
+
+/**
+ * 메이커가 팀에 합류 신청
+ */
+export const requestTeamJoin = async (teamId: number, message?: string) => {
+  const supabase = createSupabaseBrowserClient()
+  
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    throw new Error('로그인이 필요합니다')
+  }
+
+  // 현재 사용자의 FREELANCER 프로필 조회
+  const { data: currentProfile, error: profileError } = await supabase
+    .from('accounts')
+    .select('profile_id')
+    .eq('user_id', user.id)
+    .eq('profile_type', 'FREELANCER')
+    .eq('is_active', true)
+    .is('deleted_at', null)
+    .maybeSingle()
+
+  if (profileError || !currentProfile) {
+    throw new Error('프리랜서 프로필을 찾을 수 없습니다.')
+  }
+
+  // 팀 정보 확인
+  const { data: team, error: teamError } = await supabase
+    .from('teams')
+    .select('id, manager_profile_id')
+    .eq('id', teamId)
+    .single()
+
+  if (teamError || !team) {
+    throw new Error('팀을 찾을 수 없습니다.')
+  }
+
+  // 자신의 팀인지 확인
+  if (team.manager_profile_id === currentProfile.profile_id) {
+    throw new Error('자신이 매니저인 팀에는 신청할 수 없습니다.')
+  }
+
+  // 이미 팀원인지 확인
+  const { data: existingMember } = await supabase
+    .from('team_members')
+    .select('id, status')
+    .eq('team_id', teamId)
+    .eq('profile_id', currentProfile.profile_id)
+    .maybeSingle()
+
+  if (existingMember) {
+    if (existingMember.status === 'active') {
+      throw new Error('이미 팀원으로 등록되어 있습니다.')
+    } else if (existingMember.status === 'pending') {
+      throw new Error('이미 합류 신청이 진행 중입니다.')
+    }
+  }
+
+  // 이미 제안을 받았는지 확인
+  const { data: existingProposal } = await supabase
+    .from('team_proposals')
+    .select('id')
+    .eq('team_id', teamId)
+    .eq('maker_id', user.id)
+    .maybeSingle()
+
+  if (existingProposal) {
+    throw new Error('이미 해당 팀으로부터 제안을 받았습니다. 쪽지함에서 확인해주세요.')
+  }
+
+  // team_members에 pending 상태로 추가
+  const { data: teamMember, error: memberError } = await supabase
+    .from('team_members')
+    .insert({
+      team_id: teamId,
+      profile_id: currentProfile.profile_id,
+      maker_id: user.id,
+      status: 'pending',
+    })
+    .select()
+    .single()
+
+  if (memberError) {
+    throw memberError
+  }
+
+  return { data: teamMember, error: null }
+}
