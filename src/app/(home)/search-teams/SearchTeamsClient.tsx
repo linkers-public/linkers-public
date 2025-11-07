@@ -56,8 +56,8 @@ const SearchTeamsClient = () => {
         })
         
         if (data && Array.isArray(data)) {
-          setTeamList(data as Team[])
-          setFilteredTeamList(data as Team[])
+          setTeamList(data as unknown as Team[])
+          setFilteredTeamList(data as unknown as Team[])
         } else {
           setTeamList([])
           setFilteredTeamList([])

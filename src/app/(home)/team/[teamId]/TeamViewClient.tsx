@@ -68,14 +68,18 @@ const TeamViewClient: React.FC<TeamViewClientProps> = ({ teamId }) => {
           .is('deleted_at', null)
           .maybeSingle()
 
+        let proposal: { id: number } | null = null
+        
         if (currentProfile) {
           // 팀 제안 확인
-          const { data: proposal } = await supabase
+          const { data: proposalData } = await supabase
             .from('team_proposals')
             .select('id')
             .eq('maker_id', user.id)
             .eq('team_id', teamIdNum)
             .maybeSingle()
+
+          proposal = proposalData
 
           if (proposal) {
             setHasProposal(true)
