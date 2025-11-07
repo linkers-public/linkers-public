@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { selectAccount, useAccountStore } from '@/stores/useAccoutStore'
 import { useTeamProfileStore } from '@/stores/useTeamProfileStore'
 import { addTeamMember, removeTeamMember } from '@/apis/team.service'
@@ -30,6 +30,7 @@ import { useToast } from '@/hooks/use-toast'
 
 const TeamProfileClient = () => {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { toast } = useToast()
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -40,6 +41,7 @@ const TeamProfileClient = () => {
   const { teamProfile, teams, selectedTeamId, fetchMyTeams, selectTeam, refreshTeam } = useTeamProfileStore()
   const account = useAccountStore(selectAccount)
 
+  // 팀 목록 불러오기
   useEffect(() => {
     const getTeams = async () => {
       setIsLoading(true)
@@ -53,7 +55,74 @@ const TeamProfileClient = () => {
     }
 
     getTeams()
-  }, [])
+  }, [fetchMyTeams])
+
+  // URL 쿼리 파라미터에서 team_id 확인
+  useEffect(() => {
+    const teamIdParam = searchParams.get('team_id')
+    if (teamIdParam) {
+      const teamId = parseInt(teamIdParam, 10)
+      if (!isNaN(teamId)) {
+        // 먼저 teams 목록에서 확인
+        const teamExists = teams.some((team: any) => team.id === teamId)
+        if (teamExists) {
+          // 현재 선택된 팀과 다를 때만 선택
+          if (selectedTeamId !== teamId) {
+            selectTeam(teamId)
+          }
+        } else if (!isLoading) {
+          // teams 목록에 없고 로딩이 완료된 경우
+          // 팀 제안을 받은 사용자일 수 있으므로 직접 조회 시도
+          const loadTeamDirectly = async () => {
+            try {
+              // 먼저 팀 제안을 받은 사용자인지 확인
+              const supabase = (await import('@/supabase/supabase-client')).createSupabaseBrowserClient()
+              const { data: { user } } = await supabase.auth.getUser()
+              if (user) {
+                const { data: proposal } = await supabase
+                  .from('team_proposals')
+                  .select('id')
+                  .eq('maker_id', user.id)
+                  .eq('team_id', teamId)
+                  .maybeSingle()
+                
+                if (proposal) {
+                  // 팀 제안을 받은 사용자이므로 팀 정보를 직접 조회
+                  const { fetchTeamDetail } = await import('@/apis/team.service')
+                  const { data, error } = await fetchTeamDetail(teamId)
+                  if (error) {
+                    toast({
+                      variant: 'destructive',
+                      title: '팀 정보를 불러올 수 없습니다',
+                      description: error.message || '팀 정보를 조회하는데 실패했습니다.',
+                    })
+                  } else if (data) {
+                    // 팀 정보를 성공적으로 조회했으므로 선택
+                    await selectTeam(teamId)
+                  }
+                } else {
+                  toast({
+                    variant: 'destructive',
+                    title: '팀을 찾을 수 없습니다',
+                    description: '해당 팀에 대한 접근 권한이 없습니다.',
+                  })
+                }
+              }
+            } catch (err) {
+              console.error('팀 정보 조회 실패:', err)
+              toast({
+                variant: 'destructive',
+                title: '팀을 찾을 수 없습니다',
+                description: '해당 팀에 대한 접근 권한이 없습니다.',
+              })
+            }
+          }
+          loadTeamDirectly()
+        }
+        // isLoading이 true인 경우는 아직 로딩 중이므로 기다림
+      }
+    }
+  }, [searchParams, teams, selectedTeamId, selectTeam, toast, isLoading])
 
   const {
     id,
@@ -197,10 +266,10 @@ const TeamProfileClient = () => {
 
   if (isLoading) {
     return (
-      <div className="flex justify-center items-center min-h-[60vh]">
-        <div className="text-center space-y-4">
+      <div className="flex justify-center items-center min-h-[60vh] w-full">
+        <div className="text-center space-y-4 w-full">
           <Loader2 className="w-12 h-12 text-blue-600 mx-auto animate-spin" />
-          <p className="text-base font-medium text-gray-700">팀 목록을 불러오는 중...</p>
+          <p className="text-base font-medium text-gray-700 text-center">팀 목록을 불러오는 중...</p>
         </div>
       </div>
     )
@@ -208,11 +277,11 @@ const TeamProfileClient = () => {
 
   if (error) {
     return (
-      <div className="flex justify-center items-center min-h-[60vh] px-4">
-        <div className="text-center bg-red-50 border border-red-200 rounded-xl p-8 max-w-md w-full">
+      <div className="flex justify-center items-center min-h-[60vh] px-4 w-full">
+        <div className="text-center bg-red-50 border border-red-200 rounded-xl p-8 max-w-md w-full mx-auto">
           <AlertCircle className="w-12 h-12 text-red-600 mx-auto mb-4" />
-          <p className="text-lg font-semibold text-red-900 mb-2">오류가 발생했습니다</p>
-          <p className="text-sm text-red-700">{error}</p>
+          <p className="text-lg font-semibold text-red-900 mb-2 text-center">오류가 발생했습니다</p>
+          <p className="text-sm text-red-700 text-center">{error}</p>
         </div>
       </div>
     )
@@ -220,14 +289,14 @@ const TeamProfileClient = () => {
 
   if (!teams || teams.length === 0) {
     return (
-      <div className="flex justify-center items-center min-h-[60vh] px-4">
-        <div className="text-center space-y-4">
+      <div className="flex justify-center items-center min-h-[60vh] px-4 w-full">
+        <div className="text-center space-y-4 w-full max-w-md mx-auto">
           <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto">
             <Building2 className="w-8 h-8 text-gray-400" />
           </div>
           <div className="space-y-2">
-            <p className="text-lg font-semibold text-gray-900">속한 팀이 없습니다</p>
-            <p className="text-sm text-gray-500">팀에 가입하거나 팀을 생성해보세요.</p>
+            <p className="text-lg font-semibold text-gray-900 text-center">속한 팀이 없습니다</p>
+            <p className="text-sm text-gray-500 text-center">팀에 가입하거나 팀을 생성해보세요.</p>
           </div>
         </div>
       </div>

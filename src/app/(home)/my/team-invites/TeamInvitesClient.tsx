@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createSupabaseBrowserClient } from '@/supabase/supabase-client'
 import { Button } from '@/components/ui/button'
-import { CheckCircle, XCircle, Clock, Mail } from 'lucide-react'
+import { CheckCircle, XCircle, Clock, Mail, Users } from 'lucide-react'
 import { toast } from '@/hooks/use-toast'
 
 interface TeamInvite {
@@ -17,10 +17,22 @@ interface TeamInvite {
   created_at: string
 }
 
+interface TeamProposal {
+  id: number
+  team_id: number | null
+  team_name: string
+  manager_id: string
+  manager_name: string
+  message: string | null
+  created_at: string
+}
+
 export default function TeamInvitesClient() {
   const router = useRouter()
   const [teamInvites, setTeamInvites] = useState<TeamInvite[]>([])
+  const [teamProposals, setTeamProposals] = useState<TeamProposal[]>([])
   const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState<'invites' | 'proposals'>('invites')
   const supabase = createSupabaseBrowserClient()
 
   useEffect(() => {
@@ -147,6 +159,82 @@ export default function TeamInvitesClient() {
       })
 
       setTeamInvites(formattedInvites)
+
+      // 팀 제안 조회 (team_proposals 테이블에서 본인이 받은 제안)
+      // teams 조인을 피하고 별도로 조회하여 PostgREST 관계 충돌 방지
+      const { data: proposals, error: teamProposalsError } = await supabase
+        .from('team_proposals')
+        .select('id, team_id, manager_id, message, created_at')
+        .eq('maker_id', user.id)
+        .order('created_at', { ascending: false })
+
+      if (teamProposalsError) {
+        console.error('팀 제안 조회 실패:', teamProposalsError)
+        toast({
+          variant: 'destructive',
+          title: '팀 제안 조회 실패',
+          description: teamProposalsError.message || '팀 제안을 불러오는데 실패했습니다.',
+        })
+        setTeamProposals([])
+      } else if (!proposals || proposals.length === 0) {
+        setTeamProposals([])
+      } else {
+        // team_id 목록 추출
+        const teamIds = proposals
+          .map((p: any) => p.team_id)
+          .filter((id: any) => id !== null) as number[]
+        
+        // 팀 정보 별도 조회
+        const teamInfo: Record<number, any> = {}
+        if (teamIds.length > 0) {
+          const { data: teams } = await supabase
+            .from('teams')
+            .select('id, name, manager_profile_id')
+            .in('id', teamIds)
+          
+          if (teams) {
+            teams.forEach((team: any) => {
+              teamInfo[team.id] = team
+            })
+          }
+        }
+
+        // 매니저 정보를 별도로 조회
+        const managerIds = proposals
+          .map((p: any) => p.manager_id)
+          .filter(Boolean) || []
+        const managerInfo: Record<string, any> = {}
+        
+        if (managerIds.length > 0) {
+          const { data: managers } = await supabase
+            .from('accounts')
+            .select('user_id, username')
+            .in('user_id', managerIds)
+          
+          if (managers) {
+            managers.forEach((manager: any) => {
+              managerInfo[manager.user_id] = manager
+            })
+          }
+        }
+
+        const formattedTeamProposals: TeamProposal[] =
+          proposals.map((proposal: any) => {
+            const team = proposal.team_id ? teamInfo[proposal.team_id] : null
+            const manager = managerInfo[proposal.manager_id]
+            
+            return {
+              id: proposal.id,
+              team_id: proposal.team_id,
+              team_name: team?.name || '알 수 없음',
+              manager_id: proposal.manager_id,
+              manager_name: manager?.username || '알 수 없음',
+              message: proposal.message,
+              created_at: proposal.created_at,
+            }
+          })
+        setTeamProposals(formattedTeamProposals)
+      }
     } catch (error: any) {
       console.error('팀 초대 로드 실패:', error)
       toast({
@@ -249,57 +337,136 @@ export default function TeamInvitesClient() {
   return (
     <div className="w-full py-6 md:py-8">
       <div className="mb-6">
-        <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-2">받은 팀 초대</h1>
+        <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-2">팀 초대 및 제안</h1>
         <p className="text-gray-600">다른 매니저가 보낸 팀 합류 제안을 확인하세요</p>
       </div>
 
-      <div className="space-y-4">
-        {teamInvites.length === 0 ? (
-          <div className="bg-white rounded-lg shadow-sm border p-6 md:p-12 text-center">
-            <Mail className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-            <p className="text-gray-600">받은 팀 초대가 없습니다.</p>
-          </div>
-        ) : (
-          teamInvites.map((invite) => (
-            <div
-              key={invite.id}
-              className="bg-white rounded-lg shadow-sm border p-4 md:p-6"
-            >
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 mb-1">
-                    {invite.team_name} 팀 초대
-                  </h3>
-                  <p className="text-sm text-gray-600">
-                    매니저: {invite.manager_name}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {new Date(invite.created_at).toLocaleDateString('ko-KR')}
-                  </p>
-                </div>
-                {getStatusBadge(invite.status)}
-              </div>
-              {(!invite.status || invite.status === 'pending') && (
-                <div className="flex gap-2">
-                  <Button
-                    onClick={() => handleAccept(invite.id)}
-                    className="flex-1"
-                  >
-                    수락
-                  </Button>
-                  <Button
-                    onClick={() => handleDecline(invite.id)}
-                    variant="outline"
-                    className="flex-1"
-                  >
-                    거절
-                  </Button>
-                </div>
-              )}
-            </div>
-          ))
-        )}
+      {/* 탭 */}
+      <div className="flex gap-2 border-b mb-4 md:mb-6 overflow-x-auto">
+        <button
+          onClick={() => setActiveTab('invites')}
+          className={`px-4 py-2 font-medium transition-colors whitespace-nowrap ${
+            activeTab === 'invites'
+              ? 'text-blue-600 border-b-2 border-blue-600'
+              : 'text-gray-600 hover:text-gray-900'
+          }`}
+        >
+          <Mail className="w-4 h-4 inline mr-2" />
+          팀 초대 ({teamInvites.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('proposals')}
+          className={`px-4 py-2 font-medium transition-colors whitespace-nowrap ${
+            activeTab === 'proposals'
+              ? 'text-blue-600 border-b-2 border-blue-600'
+              : 'text-gray-600 hover:text-gray-900'
+          }`}
+        >
+          <Users className="w-4 h-4 inline mr-2" />
+          팀 제안 ({teamProposals.length})
+        </button>
       </div>
+
+      {/* 팀 초대 목록 */}
+      {activeTab === 'invites' && (
+        <div className="space-y-4">
+          {teamInvites.length === 0 ? (
+            <div className="bg-white rounded-lg shadow-sm border p-6 md:p-12 text-center">
+              <Mail className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+              <p className="text-gray-600">받은 팀 초대가 없습니다.</p>
+            </div>
+          ) : (
+            teamInvites.map((invite) => (
+              <div
+                key={invite.id}
+                className="bg-white rounded-lg shadow-sm border p-4 md:p-6"
+              >
+                <div className="flex items-start justify-between mb-4">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                      {invite.team_name} 팀 초대
+                    </h3>
+                    <p className="text-sm text-gray-600">
+                      매니저: {invite.manager_name}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {new Date(invite.created_at).toLocaleDateString('ko-KR')}
+                    </p>
+                  </div>
+                  {getStatusBadge(invite.status)}
+                </div>
+                {(!invite.status || invite.status === 'pending') && (
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={() => handleAccept(invite.id)}
+                      className="flex-1"
+                    >
+                      수락
+                    </Button>
+                    <Button
+                      onClick={() => handleDecline(invite.id)}
+                      variant="outline"
+                      className="flex-1"
+                    >
+                      거절
+                    </Button>
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {/* 팀 제안 목록 */}
+      {activeTab === 'proposals' && (
+        <div className="space-y-4">
+          {teamProposals.length === 0 ? (
+            <div className="bg-white rounded-lg shadow-sm border p-6 md:p-12 text-center">
+              <Users className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+              <p className="text-gray-600">받은 팀 제안이 없습니다.</p>
+            </div>
+          ) : (
+            teamProposals.map((proposal) => (
+              <div
+                key={proposal.id}
+                className="bg-white rounded-lg shadow-sm border p-4 md:p-6"
+              >
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                      {proposal.team_name} 팀 제안
+                    </h3>
+                    <p className="text-sm text-gray-600">
+                      매니저: {proposal.manager_name}
+                    </p>
+                    {proposal.message && (
+                      <div className="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                        <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                          {proposal.message}
+                        </p>
+                      </div>
+                    )}
+                    <p className="text-xs text-gray-500 mt-2">
+                      {new Date(proposal.created_at).toLocaleDateString('ko-KR')}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  {proposal.team_id && (
+                    <Button
+                      variant="outline"
+                      onClick={() => router.push(`/team/${proposal.team_id}`)}
+                    >
+                      팀 프로필 보기
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
     </div>
   )
 }

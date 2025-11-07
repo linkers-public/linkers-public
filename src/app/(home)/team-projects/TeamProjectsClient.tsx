@@ -168,10 +168,10 @@ const TeamProjectsClient = () => {
 
   if (loading && projects.length === 0) {
     return (
-      <div className="flex justify-center items-center h-64">
-        <div className="text-center">
+      <div className="flex justify-center items-center min-h-[60vh] w-full">
+        <div className="text-center space-y-4 w-full">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-lg text-gray-600">프로젝트 목록을 불러오는 중...</p>
+          <p className="text-lg text-gray-600 text-center">프로젝트 목록을 불러오는 중...</p>
         </div>
       </div>
     )
@@ -179,11 +179,13 @@ const TeamProjectsClient = () => {
 
   if (!teams || teams.length === 0) {
     return (
-      <div className="flex justify-center items-center h-64">
-        <div className="text-center">
+      <div className="flex justify-center items-center min-h-[60vh] px-4 w-full">
+        <div className="text-center space-y-4 w-full max-w-md mx-auto">
           <Briefcase className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-          <p className="text-lg text-gray-600 mb-2">속한 팀이 없습니다.</p>
-          <p className="text-sm text-gray-500">팀에 가입하거나 팀을 생성해보세요.</p>
+          <div className="space-y-2">
+            <p className="text-lg font-semibold text-gray-900 text-center">속한 팀이 없습니다</p>
+            <p className="text-sm text-gray-500 text-center">팀에 가입하거나 팀을 생성해보세요.</p>
+          </div>
         </div>
       </div>
     )

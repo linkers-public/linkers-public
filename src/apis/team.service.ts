@@ -405,3 +405,60 @@ export const removeTeamMember = async (teamId: number, memberId: number) => {
   if (error) throw error
   return { success: true }
 }
+
+/**
+ * 기본 팀 생성 (매니저용)
+ * 사용자가 팀이 없을 때 자동으로 기본 팀을 생성합니다.
+ */
+export const createDefaultTeam = async () => {
+  const supabase = createSupabaseBrowserClient()
+  
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    throw new Error('로그인이 필요합니다')
+  }
+
+  // 현재 사용자의 FREELANCER 프로필 조회
+  const { data: currentProfile, error: profileError } = await supabase
+    .from('accounts')
+    .select('profile_id, username')
+    .eq('user_id', user.id)
+    .eq('profile_type', 'FREELANCER')
+    .maybeSingle()
+
+  if (profileError || !currentProfile) {
+    throw new Error('프리랜서 프로필을 찾을 수 없습니다.')
+  }
+
+  // 이미 팀이 있는지 확인
+  const { data: existingTeam } = await supabase
+    .from('teams')
+    .select('id')
+    .eq('manager_profile_id', currentProfile.profile_id)
+    .maybeSingle()
+
+  if (existingTeam) {
+    return { data: existingTeam, error: null }
+  }
+
+  // 기본 팀 생성
+  const teamName = `${currentProfile.username || '나'}의 팀`
+  const { data: newTeam, error: teamError } = await supabase
+    .from('teams')
+    .insert({
+      manager_profile_id: currentProfile.profile_id,
+      name: teamName,
+      description: '기본 팀입니다.',
+    })
+    .select()
+    .single()
+
+  if (teamError) {
+    throw teamError
+  }
+
+  return { data: newTeam, error: null }
+}

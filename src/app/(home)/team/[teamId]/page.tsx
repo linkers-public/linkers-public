@@ -1,7 +1,13 @@
 import React, { Suspense } from 'react'
-import TeamProfileClient from './TeamProfileClient'
+import TeamViewClient from './TeamViewClient'
 
-const page = () => {
+interface PageProps {
+  params: {
+    teamId: string
+  }
+}
+
+export default function Page({ params }: PageProps) {
   return (
     <Suspense fallback={
       <div className="flex items-center justify-center min-h-[400px]">
@@ -11,10 +17,8 @@ const page = () => {
         </div>
       </div>
     }>
-      <TeamProfileClient />
+      <TeamViewClient teamId={params.teamId} />
     </Suspense>
   )
 }
-
-export default page
 

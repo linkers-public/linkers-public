@@ -439,7 +439,31 @@ const WorkExperienceMeta = ({
   }
 
   if (!account_work_experiences || account_work_experiences.length === 0) {
-    return null
+    if (!isOwner) {
+      return null
+    }
+    return (
+      <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 md:p-6 mb-6">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-lg md:text-xl font-bold text-gray-900 flex items-center gap-2">
+            <Briefcase className="w-5 h-5" />
+            이력
+          </h2>
+          {isOwner && (
+            <Button
+              onClick={onCreateExperience}
+              variant="outline"
+              size="sm"
+            >
+              + 추가하기
+            </Button>
+          )}
+        </div>
+        <div className="text-center py-8 text-gray-500">
+          등록된 경력이 없습니다.
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -652,7 +676,31 @@ const EduCationMeta = ({
   }
 
   if (!account_educations || account_educations.length === 0) {
-    return null
+    if (!isOwner) {
+      return null
+    }
+    return (
+      <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-4 md:p-6 mb-6">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-lg md:text-xl font-bold text-gray-900 flex items-center gap-2">
+            <GraduationCap className="w-5 h-5" />
+            학력
+          </h2>
+          {isOwner && (
+            <Button
+              onClick={onCreateEducation}
+              variant="outline"
+              size="sm"
+            >
+              + 추가하기
+            </Button>
+          )}
+        </div>
+        <div className="text-center py-8 text-gray-500">
+          등록된 학력이 없습니다.
+        </div>
+      </div>
+    )
   }
   return (
     <>
