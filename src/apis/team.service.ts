@@ -449,9 +449,13 @@ export const createDefaultTeam = async () => {
   const { data: newTeam, error: teamError } = await supabase
     .from('teams')
     .insert({
+      manager_id: user.id,
       manager_profile_id: currentProfile.profile_id,
       name: teamName,
-      description: '기본 팀입니다.',
+      bio: '기본 팀입니다.',
+      specialty: [],
+      sub_specialty: [],
+      prefered: [],
     })
     .select()
     .single()

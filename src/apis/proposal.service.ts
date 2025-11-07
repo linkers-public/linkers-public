@@ -137,6 +137,10 @@ export const acceptTeamProposal = async (proposalId: number) => {
     throw new Error('팀 제안을 찾을 수 없습니다.')
   }
 
+  if (!proposal.team_id) {
+    throw new Error('팀 정보가 없습니다.')
+  }
+
   // 현재 사용자의 프로필 조회
   const { data: profile, error: profileError } = await supabase
     .from('accounts')
