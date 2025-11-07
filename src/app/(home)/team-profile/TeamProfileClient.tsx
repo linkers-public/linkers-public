@@ -10,7 +10,22 @@ import { searchMakers } from '@/apis/search-maker.service'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { SearchMakerCard } from '@/components/SearchMakerCard'
-import { Plus, Trash2, Users, XCircle } from 'lucide-react'
+import { 
+  Plus, 
+  Trash2, 
+  Users, 
+  XCircle, 
+  UserPlus, 
+  Settings, 
+  Briefcase, 
+  Award, 
+  Search, 
+  Edit, 
+  Building2,
+  UserCircle,
+  Loader2,
+  AlertCircle
+} from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 
 const TeamProfileClient = () => {
@@ -182,10 +197,10 @@ const TeamProfileClient = () => {
 
   if (isLoading) {
     return (
-      <div className="flex justify-center items-center h-64">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-lg text-gray-600">팀 목록을 불러오는 중...</p>
+      <div className="flex justify-center items-center min-h-[60vh]">
+        <div className="text-center space-y-4">
+          <Loader2 className="w-12 h-12 text-blue-600 mx-auto animate-spin" />
+          <p className="text-base font-medium text-gray-700">팀 목록을 불러오는 중...</p>
         </div>
       </div>
     )
@@ -193,10 +208,10 @@ const TeamProfileClient = () => {
 
   if (error) {
     return (
-      <div className="flex justify-center items-center h-64">
-        <div className="text-center bg-red-50 border border-red-200 rounded-lg p-6 max-w-md">
-          <XCircle className="w-16 h-16 text-red-600 mx-auto mb-4" />
-          <p className="text-lg font-semibold text-red-900 mb-2">에러가 발생했습니다</p>
+      <div className="flex justify-center items-center min-h-[60vh] px-4">
+        <div className="text-center bg-red-50 border border-red-200 rounded-xl p-8 max-w-md w-full">
+          <AlertCircle className="w-12 h-12 text-red-600 mx-auto mb-4" />
+          <p className="text-lg font-semibold text-red-900 mb-2">오류가 발생했습니다</p>
           <p className="text-sm text-red-700">{error}</p>
         </div>
       </div>
@@ -205,50 +220,65 @@ const TeamProfileClient = () => {
 
   if (!teams || teams.length === 0) {
     return (
-      <div className="flex justify-center items-center h-64">
-        <div className="text-center">
-          <Users className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-          <p className="text-lg text-gray-600 mb-2">속한 팀이 없습니다.</p>
-          <p className="text-sm text-gray-500">팀에 가입하거나 팀을 생성해보세요.</p>
+      <div className="flex justify-center items-center min-h-[60vh] px-4">
+        <div className="text-center space-y-4">
+          <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto">
+            <Building2 className="w-8 h-8 text-gray-400" />
+          </div>
+          <div className="space-y-2">
+            <p className="text-lg font-semibold text-gray-900">속한 팀이 없습니다</p>
+            <p className="text-sm text-gray-500">팀에 가입하거나 팀을 생성해보세요.</p>
+          </div>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="flex flex-col gap-6 w-full pb-8">
+    <div className="flex flex-col gap-8 w-full pb-12 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       {/* 팀 목록 */}
-      <section className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
-        <h2 className="text-xl font-bold text-gray-900 mb-4">내가 속한 팀</h2>
+      <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 sm:p-8">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center">
+            <Building2 className="w-5 h-5 text-blue-600" />
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900">내가 속한 팀</h2>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {teams.map((team) => (
             <button
               key={team.id}
               onClick={() => selectTeam(team.id)}
-              className={`text-left border-2 rounded-lg p-4 transition-all hover:shadow-md ${
+              className={`text-left border-2 rounded-xl p-5 transition-all duration-200 hover:shadow-lg ${
                 selectedTeamId === team.id
-                  ? 'border-blue-500 bg-blue-50'
-                  : 'border-gray-200 hover:border-gray-300'
+                  ? 'border-blue-500 bg-blue-50 shadow-md'
+                  : 'border-gray-200 hover:border-gray-300 bg-white'
               }`}
             >
-              <div className="flex items-center gap-3 mb-2">
-                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white font-bold">
+              <div className="flex items-start gap-4 mb-3">
+                <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-lg shadow-sm flex-shrink-0">
                   {team.name?.[0] || '팀'}
                 </div>
-                <div className="flex-1">
-                  <h3 className="font-semibold text-gray-900">{team.name || '팀 이름 없음'}</h3>
-                  {team.isManager && (
-                    <span className="inline-block mt-1 text-xs px-2 py-1 rounded-full bg-blue-100 text-blue-700 font-medium">
-                      매니저
-                    </span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <h3 className="font-semibold text-gray-900 truncate">{team.name || '팀 이름 없음'}</h3>
+                    {team.isManager && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-100 text-blue-700 text-xs font-medium flex-shrink-0">
+                        <Settings className="w-3 h-3" />
+                        매니저
+                      </span>
+                    )}
+                  </div>
+                  {team.bio && (
+                    <p className="text-sm text-gray-600 line-clamp-2 mt-1">{team.bio}</p>
                   )}
                 </div>
               </div>
-              {team.bio && (
-                <p className="text-sm text-gray-600 line-clamp-2 mt-2">{team.bio}</p>
-              )}
-              <div className="mt-2 text-xs text-gray-500">
-                팀원 {team.team_members?.length || 0}명
+              <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-100">
+                <Users className="w-4 h-4 text-gray-400" />
+                <span className="text-xs font-medium text-gray-600">
+                  팀원 {team.team_members?.length || 0}명
+                </span>
               </div>
             </button>
           ))}
@@ -257,44 +287,54 @@ const TeamProfileClient = () => {
 
       {/* 선택된 팀 상세 정보 */}
       {!teamProfile ? (
-        <div className="flex justify-center items-center h-64 bg-white rounded-xl shadow-lg border border-gray-200">
-          <div className="text-center">
-            <p className="text-lg text-gray-600">팀을 선택해주세요.</p>
+        <div className="flex justify-center items-center min-h-[400px] bg-white rounded-2xl shadow-sm border border-gray-100">
+          <div className="text-center space-y-3">
+            <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto">
+              <Building2 className="w-8 h-8 text-gray-400" />
+            </div>
+            <p className="text-lg font-medium text-gray-700">팀을 선택해주세요</p>
+            <p className="text-sm text-gray-500">위에서 팀을 선택하면 상세 정보를 확인할 수 있습니다.</p>
           </div>
         </div>
       ) : (
         <>
       {/* 팀 기본 정보 */}
-      <section className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
-        <div className="flex items-start justify-between mb-4">
-          <div className="flex items-center gap-4">
-            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white text-2xl font-bold">
+      <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 sm:p-8">
+        <div className="flex items-start justify-between mb-6 gap-4">
+          <div className="flex items-start gap-5 flex-1">
+            <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-2xl font-bold shadow-md flex-shrink-0">
               {name?.[0] || '팀'}
             </div>
-            <div>
+            <div className="flex-1 min-w-0">
               <h1 className="text-3xl font-bold text-gray-900 mb-2">{name || '팀 이름 없음'}</h1>
-              <p className="text-gray-600 text-lg">{bio || '소개가 없습니다.'}</p>
+              <p className="text-gray-600 text-base leading-relaxed">{bio || '소개가 없습니다.'}</p>
             </div>
           </div>
           {isManager && (
-            <button
+            <Button
               onClick={editProfile}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
+              variant="outline"
+              size="sm"
+              className="flex items-center gap-2 flex-shrink-0 border-gray-200 hover:bg-gray-50 hover:border-gray-300"
             >
+              <Edit className="w-4 h-4" />
               프로필 수정
-            </button>
+            </Button>
           )}
         </div>
 
         {/* 전문분야 */}
         {specialty && specialty.length > 0 && (
-          <div className="mb-4">
-            <h3 className="text-sm font-semibold text-gray-700 mb-2">전문분야</h3>
+          <div className="mb-5">
+            <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+              <Briefcase className="w-4 h-4 text-gray-500" />
+              전문분야
+            </h3>
             <div className="flex flex-wrap gap-2">
               {specialty.map((sep, idx) => (
                 <span
                   key={idx}
-                  className="px-3 py-1 text-sm rounded-full bg-blue-100 text-blue-700 font-medium"
+                  className="px-3 py-1.5 text-sm rounded-lg bg-blue-50 text-blue-700 font-medium border border-blue-100"
                 >
                   {sep}
                 </span>
@@ -305,13 +345,16 @@ const TeamProfileClient = () => {
 
         {/* 세부 전문분야 */}
         {sub_specialty && sub_specialty.length > 0 && (
-          <div className="mb-4">
-            <h3 className="text-sm font-semibold text-gray-700 mb-2">세부 전문분야</h3>
+          <div className="mb-5">
+            <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+              <Award className="w-4 h-4 text-gray-500" />
+              세부 전문분야
+            </h3>
             <div className="flex flex-wrap gap-2">
               {sub_specialty.map((ssep, idx) => (
                 <span
                   key={idx}
-                  className="px-3 py-1 text-sm rounded-full bg-purple-100 text-purple-700 font-medium"
+                  className="px-3 py-1.5 text-sm rounded-lg bg-purple-50 text-purple-700 font-medium border border-purple-100"
                 >
                   {ssep}
                 </span>
@@ -323,12 +366,15 @@ const TeamProfileClient = () => {
         {/* 선호 유형 */}
         {prefered && prefered.length > 0 && (
           <div>
-            <h3 className="text-sm font-semibold text-gray-700 mb-2">선호 프로젝트 유형</h3>
+            <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+              <Briefcase className="w-4 h-4 text-gray-500" />
+              선호 프로젝트 유형
+            </h3>
             <div className="flex flex-wrap gap-2">
               {prefered.map((pref, idx) => (
                 <span
                   key={idx}
-                  className="px-3 py-1 text-sm rounded-full bg-green-100 text-green-700 font-medium"
+                  className="px-3 py-1.5 text-sm rounded-lg bg-green-50 text-green-700 font-medium border border-green-100"
                 >
                   {pref}
                 </span>
@@ -340,27 +386,31 @@ const TeamProfileClient = () => {
 
       {/* 팀 매니저 */}
       {manager && (
-        <section className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold text-gray-900">팀 매니저</h2>
+        <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 sm:p-8">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center">
+              <UserCircle className="w-5 h-5 text-blue-600" />
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900">팀 매니저</h2>
           </div>
           <Link
             href={`/profile/${encodeURIComponent(manager.username)}`}
-            className="block border border-blue-200 rounded-lg p-4 bg-blue-50 hover:bg-blue-100 transition-colors cursor-pointer"
+            className="block border-2 border-blue-100 rounded-xl p-5 bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 transition-all duration-200 hover:shadow-md cursor-pointer"
           >
-            <div className="flex items-center gap-3">
-              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-xl font-bold">
+            <div className="flex items-center gap-4">
+              <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-xl font-bold shadow-md flex-shrink-0">
                 {manager.username?.[0] || '?'}
               </div>
-              <div className="flex-1">
-                <div className="flex items-center gap-2 mb-1">
-                  <h3 className="font-semibold text-gray-900 text-lg">{manager.username}</h3>
-                  <span className="px-2 py-1 text-xs rounded-full bg-blue-200 text-blue-800 font-medium">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-2">
+                  <h3 className="font-semibold text-gray-900 text-lg truncate">{manager.username}</h3>
+                  <span className="inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-lg bg-blue-200 text-blue-800 font-medium flex-shrink-0">
+                    <Settings className="w-3 h-3" />
                     매니저
                   </span>
                 </div>
                 {manager.bio && (
-                  <p className="text-sm text-gray-600 line-clamp-2">{manager.bio}</p>
+                  <p className="text-sm text-gray-600 line-clamp-2 leading-relaxed">{manager.bio}</p>
                 )}
               </div>
             </div>
@@ -369,19 +419,26 @@ const TeamProfileClient = () => {
       )}
 
       {/* 팀 멤버 */}
-      <section className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold text-gray-900">팀 멤버</h2>
+      <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 sm:p-8">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center">
+              <Users className="w-5 h-5 text-blue-600" />
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900">팀 멤버</h2>
+          </div>
           {isManager ? (
-            <button
+            <Button
               onClick={editTeam}
-              className="px-3 py-1 text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1 transition-colors"
+              variant="outline"
+              size="sm"
+              className="flex items-center gap-2 border-gray-200 hover:bg-gray-50 hover:border-gray-300"
             >
-              <Plus className="w-4 h-4" />
+              <UserPlus className="w-4 h-4" />
               멤버 추가
-            </button>
+            </Button>
           ) : (
-            <p className="text-xs text-gray-500">매니저만 팀원을 관리할 수 있습니다.</p>
+            <p className="text-xs text-gray-500 hidden sm:block">매니저만 팀원을 관리할 수 있습니다.</p>
           )}
         </div>
         
@@ -390,21 +447,21 @@ const TeamProfileClient = () => {
             {team_members.map((member) => (
               <div
                 key={member.id}
-                className="relative border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+                className="relative border-2 border-gray-100 rounded-xl p-5 hover:shadow-lg hover:border-gray-200 transition-all duration-200 bg-white"
               >
                 <Link
                   href={`/profile/${encodeURIComponent(member.account?.username || '')}`}
                   className="block"
                 >
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-indigo-400 to-pink-500 flex items-center justify-center text-white font-bold">
+                  <div className="flex items-start gap-4 mb-3">
+                    <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-lg shadow-sm flex-shrink-0">
                       {member.account?.username?.[0] || '?'}
                     </div>
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-gray-900">
+                    <div className="flex-1 min-w-0">
+                      <h3 className="font-semibold text-gray-900 truncate mb-1">
                         {member.account?.username || '이름 없음'}
                       </h3>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-xs text-gray-500 font-medium">
                         {member.account?.role === 'MAKER' && '메이커'}
                         {member.account?.role === 'MANAGER' && '매니저'}
                         {member.account?.role === 'NONE' && '역할 없음'}
@@ -413,15 +470,16 @@ const TeamProfileClient = () => {
                     </div>
                   </div>
                   {member.account?.bio && (
-                    <p className="text-sm text-gray-600 line-clamp-2">{member.account.bio}</p>
+                    <p className="text-sm text-gray-600 line-clamp-2 leading-relaxed mb-3">{member.account.bio}</p>
                   )}
                   {member.status && (
                     <div className="mt-2">
-                      <span className={`px-2 py-1 text-xs rounded ${
+                      <span className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs rounded-lg font-medium ${
                         member.status === 'active' 
-                          ? 'bg-green-100 text-green-700' 
-                          : 'bg-gray-100 text-gray-700'
+                          ? 'bg-green-50 text-green-700 border border-green-100' 
+                          : 'bg-gray-50 text-gray-700 border border-gray-100'
                       }`}>
+                        {member.status === 'active' && <div className="w-1.5 h-1.5 rounded-full bg-green-500" />}
                         {member.status}
                       </span>
                     </div>
@@ -433,7 +491,7 @@ const TeamProfileClient = () => {
                       e.preventDefault()
                       handleRemoveMember(member.id)
                     }}
-                    className="absolute top-2 right-2 p-1 text-red-600 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
+                    className="absolute top-3 right-3 p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all duration-200"
                     title="팀원 제거"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -443,16 +501,21 @@ const TeamProfileClient = () => {
             ))}
           </div>
         ) : (
-          <div className="text-center py-8 text-gray-500">
-            <p>팀 멤버가 없습니다.</p>
+          <div className="text-center py-12">
+            <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
+              <Users className="w-8 h-8 text-gray-400" />
+            </div>
+            <p className="text-base font-medium text-gray-700 mb-2">팀 멤버가 없습니다</p>
             {isManager && (
-              <button
+              <Button
                 onClick={editTeam}
-                className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium flex items-center gap-2 mx-auto"
+                variant="outline"
+                size="default"
+                className="mt-4 flex items-center gap-2 mx-auto border-gray-200 hover:bg-gray-50 hover:border-gray-300"
               >
-                <Plus className="w-4 h-4" />
+                <UserPlus className="w-4 h-4" />
                 멤버 추가하기
-              </button>
+              </Button>
             )}
           </div>
         )}
@@ -462,7 +525,10 @@ const TeamProfileClient = () => {
       <Dialog open={showAddMemberDialog} onOpenChange={setShowAddMemberDialog}>
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>팀원 추가</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <UserPlus className="w-5 h-5 text-blue-600" />
+              팀원 추가
+            </DialogTitle>
             <DialogDescription>
               메이커를 검색하여 팀에 추가하세요.
             </DialogDescription>
@@ -471,39 +537,60 @@ const TeamProfileClient = () => {
           <div className="space-y-4">
             {/* 검색 입력 */}
             <div className="flex gap-2">
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter') {
-                    handleSearch()
-                  }
-                }}
-                placeholder="메이커 이름 또는 소개로 검색..."
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              <Button onClick={handleSearch} disabled={searching}>
-                {searching ? '검색 중...' : '검색'}
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter') {
+                      handleSearch()
+                    }
+                  }}
+                  placeholder="메이커 이름 또는 소개로 검색..."
+                  className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              <Button 
+                onClick={handleSearch} 
+                disabled={searching} 
+                variant="default"
+                size="default"
+                className="flex items-center gap-2 px-6"
+              >
+                {searching ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    검색 중...
+                  </>
+                ) : (
+                  <>
+                    <Search className="w-4 h-4" />
+                    검색
+                  </>
+                )}
               </Button>
             </div>
 
             {/* 검색 결과 */}
             {searchResults.length > 0 && (
-              <div className="space-y-2 max-h-96 overflow-y-auto">
+              <div className="space-y-3 max-h-96 overflow-y-auto">
                 {searchResults.map((maker) => (
                   <div
                     key={maker.profile_id}
-                    className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50"
+                    className="flex items-center justify-between p-4 border-2 border-gray-100 rounded-xl hover:bg-gray-50 hover:border-gray-200 transition-all"
                   >
                     <div className="flex-1">
                       <SearchMakerCard maker={maker} />
                     </div>
                     <Button
                       onClick={() => handleAddMember(maker.profile_id)}
+                      variant="outline"
                       size="sm"
-                      className="ml-4"
+                      className="ml-4 flex items-center gap-2 border-gray-200 hover:bg-gray-50 hover:border-gray-300"
                     >
+                      <UserPlus className="w-4 h-4" />
                       추가
                     </Button>
                   </div>
@@ -512,8 +599,12 @@ const TeamProfileClient = () => {
             )}
 
             {searchTerm && searchResults.length === 0 && !searching && (
-              <div className="text-center py-8 text-gray-500">
-                <p>검색 결과가 없습니다.</p>
+              <div className="text-center py-12">
+                <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
+                  <Search className="w-8 h-8 text-gray-400" />
+                </div>
+                <p className="text-base font-medium text-gray-700">검색 결과가 없습니다</p>
+                <p className="text-sm text-gray-500 mt-1">다른 검색어로 시도해보세요.</p>
               </div>
             )}
           </div>
@@ -521,38 +612,60 @@ const TeamProfileClient = () => {
       </Dialog>
 
       {/* 진행중인 프로젝트 */}
-      <section className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold text-gray-900">진행중인 프로젝트</h2>
+      <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 sm:p-8">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center">
+              <Briefcase className="w-5 h-5 text-blue-600" />
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900">진행중인 프로젝트</h2>
+          </div>
           {isManager && (
-            <button
+            <Button
               onClick={editProject}
-              className="px-3 py-1 text-sm text-blue-600 hover:text-blue-700 font-medium"
+              variant="outline"
+              size="sm"
+              className="flex items-center gap-2 border-gray-200 hover:bg-gray-50 hover:border-gray-300"
             >
+              <Settings className="w-4 h-4" />
               프로젝트 관리
-            </button>
+            </Button>
           )}
         </div>
-        <div className="text-center py-8 text-gray-500">
-          <p>진행중인 프로젝트가 없습니다.</p>
+        <div className="text-center py-12">
+          <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
+            <Briefcase className="w-8 h-8 text-gray-400" />
+          </div>
+          <p className="text-base font-medium text-gray-700">진행중인 프로젝트가 없습니다</p>
         </div>
       </section>
 
       {/* 팀 경력 */}
-      <section className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold text-gray-900">팀 경력</h2>
+      <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 sm:p-8">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center">
+              <Award className="w-5 h-5 text-blue-600" />
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900">팀 경력</h2>
+          </div>
           {isManager && (
-            <button
+            <Button
               onClick={editCareer}
-              className="px-3 py-1 text-sm text-blue-600 hover:text-blue-700 font-medium"
+              variant="outline"
+              size="sm"
+              className="flex items-center gap-2 border-gray-200 hover:bg-gray-50 hover:border-gray-300"
             >
+              <Settings className="w-4 h-4" />
               경력 관리
-            </button>
+            </Button>
           )}
         </div>
-        <div className="text-center py-8 text-gray-500">
-          <p>팀 경력 정보가 없습니다.</p>
+        <div className="text-center py-12">
+          <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
+            <Award className="w-8 h-8 text-gray-400" />
+          </div>
+          <p className="text-base font-medium text-gray-700">팀 경력 정보가 없습니다</p>
         </div>
       </section>
         </>
