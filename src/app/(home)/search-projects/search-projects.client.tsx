@@ -3,7 +3,8 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { fetchAllCounsel } from '@/apis/counsel.service';
-import { Search, Briefcase, DollarSign, Tag, MapPin, ChevronRight, Clock } from 'lucide-react';
+import { Search, Briefcase, DollarSign, Tag, MapPin, ChevronRight, Clock, FileText } from 'lucide-react';
+import { createSupabaseBrowserClient } from '@/supabase/supabase-client';
 
 type Counsel = {
   counsel_id: number;
@@ -59,11 +60,13 @@ const transformCounselToProject = (counsel: Counsel): Project => {
 
 const SearchProjectsClient: React.FC = () => {
   const router = useRouter();
+  const supabase = createSupabaseBrowserClient();
   const [projects, setProjects] = useState<Project[]>([]);
   const [filteredProjects, setFilteredProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [estimateCounts, setEstimateCounts] = useState<{[key: number]: number}>({});
 
   useEffect(() => {
     const fetchData = async () => {
@@ -73,6 +76,25 @@ const SearchProjectsClient: React.FC = () => {
         const transformedData = counselData.map(transformCounselToProject);
         setProjects(transformedData);
         setFilteredProjects(transformedData);
+        
+        // 각 프로젝트의 견적서 개수 가져오기
+        const counts: {[key: number]: number} = {};
+        await Promise.all(
+          transformedData.map(async (project) => {
+            try {
+              const { count } = await supabase
+                .from('estimate')
+                .select('*', { count: 'exact', head: true })
+                .eq('counsel_id', project.id)
+                .in('estimate_status', ['pending', 'accept']);
+              counts[project.id] = count || 0;
+            } catch (error) {
+              console.warn(`견적서 개수 조회 실패 (프로젝트 ${project.id}):`, error);
+              counts[project.id] = 0;
+            }
+          })
+        );
+        setEstimateCounts(counts);
       } catch (error) {
         console.error('Error fetching projects:', error);
       } finally {
@@ -214,6 +236,7 @@ const SearchProjectsClient: React.FC = () => {
                   <ProjectMeta
                     key={project.id}
                     project={project}
+                    estimateCount={estimateCounts[project.id] || 0}
                     onClick={() => handleProjectClick(project.id)}
                   />
                 ))
@@ -228,9 +251,11 @@ const SearchProjectsClient: React.FC = () => {
 
 const ProjectMeta = ({
   project,
+  estimateCount,
   onClick,
 }: {
   project: Project;
+  estimateCount?: number;
   onClick: () => void;
 }) => {
   // 상태 변환 및 색상 설정
@@ -257,11 +282,20 @@ const ProjectMeta = ({
       <div className="p-6">
         <div className="flex flex-col gap-5">
           {/* 프로젝트 제목과 상태 */}
-          <div className="flex justify-between items-start gap-4">
-            <h3 className="font-bold text-xl text-gray-900 flex-1 leading-tight">
-              {project.title}
-            </h3>
-            <div className={`px-4 py-1.5 text-sm font-medium rounded-lg border ${statusInfo.color} whitespace-nowrap`}>
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4">
+            <div className="flex-1">
+              <h3 className="font-bold text-xl text-gray-900 leading-tight mb-2">
+                {project.title}
+              </h3>
+              {/* 견적서 개수 표시 */}
+              {estimateCount !== undefined && estimateCount > 0 && (
+                <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-sm font-semibold border border-blue-200">
+                  <FileText className="w-4 h-4" />
+                  <span>견적서 {estimateCount}개 제출됨</span>
+                </div>
+              )}
+            </div>
+            <div className={`px-4 py-1.5 text-sm font-medium rounded-lg border ${statusInfo.color} whitespace-nowrap self-start`}>
               {statusInfo.text}
             </div>
           </div>

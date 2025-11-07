@@ -33,9 +33,25 @@ export const submitMakerEstimate = async (estimateData: {
     .eq('maker_id', user.id)
     .maybeSingle()
 
-  // 테이블이 없는 경우 에러 처리
-  if (checkError && (checkError.code === '42P01' || checkError.message?.includes('Could not find the table') || checkError.message?.includes('relation') || checkError.message?.includes('does not exist'))) {
-    throw new Error('maker_estimates 테이블이 없습니다. 메이커 견적 기능을 사용할 수 없습니다.')
+  // 테이블이 없거나 RLS 정책에 의해 접근이 거부된 경우 에러 처리
+  if (checkError && (
+    checkError.code === '42P01' || 
+    checkError.code === 'PGRST301' ||
+    checkError.message?.includes('406') ||
+    checkError.message?.includes('Not Acceptable') ||
+    checkError.message?.includes('Could not find the table') || 
+    checkError.message?.includes('relation') || 
+    checkError.message?.includes('does not exist') ||
+    checkError.message?.includes('permission denied') ||
+    checkError.message?.includes('row-level security')
+  )) {
+    // 406 에러나 RLS 정책 문제는 테이블이 없거나 접근 권한이 없는 것으로 간주
+    if (checkError.code === 'PGRST301' || checkError.message?.includes('406') || checkError.message?.includes('Not Acceptable')) {
+      // RLS 정책 문제인 경우 조용히 처리 (테이블이 있지만 접근 권한이 없음)
+      // 이는 정상적인 상황일 수 있으므로 에러를 던지지 않음
+    } else {
+      throw new Error('maker_estimates 테이블이 없습니다. 메이커 견적 기능을 사용할 수 없습니다.')
+    }
   }
 
   if (existingEstimate) {
@@ -94,13 +110,26 @@ export const getMakerEstimate = async (counselId: number) => {
     .select('*')
     .eq('counsel_id', counselId)
     .eq('maker_id', user.id)
-    .single()
+    .maybeSingle()
 
-  // 테이블이 없거나 행이 없는 경우 null 반환 (에러 무시)
+  // 테이블이 없거나 행이 없거나 RLS 정책에 의해 접근이 거부된 경우 null 반환 (에러 무시)
   if (error) {
     // PGRST116: "no rows returned" 에러 (행이 없는 경우)
-    // 404 또는 테이블이 없는 경우도 조용히 처리
-    if (error.code === 'PGRST116' || error.code === '42P01' || error.message?.includes('Could not find the table') || error.message?.includes('relation') || error.message?.includes('does not exist')) {
+    // 42P01: 테이블이 없는 경우
+    // 406: Not Acceptable (RLS 정책에 의해 접근 거부)
+    // PGRST301: RLS 정책 위반
+    if (
+      error.code === 'PGRST116' || 
+      error.code === '42P01' || 
+      error.code === 'PGRST301' ||
+      error.message?.includes('406') ||
+      error.message?.includes('Not Acceptable') ||
+      error.message?.includes('Could not find the table') || 
+      error.message?.includes('relation') || 
+      error.message?.includes('does not exist') ||
+      error.message?.includes('permission denied') ||
+      error.message?.includes('row-level security')
+    ) {
       return null
     }
     // 기타 에러는 throw

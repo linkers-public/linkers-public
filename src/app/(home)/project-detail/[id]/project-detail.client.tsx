@@ -73,6 +73,7 @@ const ProjectDetailClient: React.FC = () => {
   const [teams, setTeams] = useState<any[]>([])
   const [selectedTeamId, setSelectedTeamId] = useState<number | null>(null)
   const [loadingTeams, setLoadingTeams] = useState(false)
+  const [estimateCount, setEstimateCount] = useState<number>(0)
   const router = useRouter()
   const params = useParams()
   const counselId = params?.id
@@ -180,6 +181,21 @@ const ProjectDetailClient: React.FC = () => {
             console.warn('견적 조회 실패 (무시):', error)
           }
         }
+
+        // 제출된 견적서 개수 조회
+        try {
+          const { count, error: countError } = await supabase
+            .from('estimate')
+            .select('*', { count: 'exact', head: true })
+            .eq('counsel_id', Number(counselId))
+            .in('estimate_status', ['pending', 'accept'])
+          
+          if (!countError && count !== null) {
+            setEstimateCount(count)
+          }
+        } catch (error) {
+          console.warn('견적서 개수 조회 실패 (무시):', error)
+        }
       } catch (error) {
         console.error('Error fetching project details:', error)
         toast({
@@ -241,6 +257,20 @@ const ProjectDetailClient: React.FC = () => {
       // 견적 정보 새로고침
       const estimate = await getMakerEstimate(Number(counselId))
       setExistingEstimate(estimate)
+      
+      // 견적서 개수 새로고침
+      try {
+        const { count } = await supabase
+          .from('estimate')
+          .select('*', { count: 'exact', head: true })
+          .eq('counsel_id', Number(counselId))
+          .in('estimate_status', ['pending', 'accept'])
+        if (count !== null) {
+          setEstimateCount(count)
+        }
+      } catch (error) {
+        console.warn('견적서 개수 조회 실패:', error)
+      }
     } catch (error) {
       console.error('Error submitting estimate:', error)
       toast({
@@ -318,6 +348,20 @@ const ProjectDetailClient: React.FC = () => {
       // 견적서 정보 새로고침
       const estimate = await getTeamEstimate(Number(counselId), selectedTeamId)
       setTeamEstimate(estimate)
+      
+      // 견적서 개수 새로고침
+      try {
+        const { count } = await supabase
+          .from('estimate')
+          .select('*', { count: 'exact', head: true })
+          .eq('counsel_id', Number(counselId))
+          .in('estimate_status', ['pending', 'accept'])
+        if (count !== null) {
+          setEstimateCount(count)
+        }
+      } catch (error) {
+        console.warn('견적서 개수 조회 실패:', error)
+      }
     } catch (error: any) {
       console.error('Error submitting team estimate:', error)
       toast({
@@ -400,7 +444,7 @@ const ProjectDetailClient: React.FC = () => {
         <div className="flex justify-between items-start mb-6">
           <div className="flex-1">
             <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-3">{counsel.title || '제목 없음'}</h1>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${
                 counsel.counsel_status === 'recruiting' 
                   ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
@@ -408,6 +452,12 @@ const ProjectDetailClient: React.FC = () => {
               }`}>
                 {counsel.counsel_status === 'recruiting' ? '모집중' : '대기중'}
               </span>
+              {estimateCount > 0 && (
+                <span className="inline-flex items-center gap-2 px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-sm font-medium border border-blue-200">
+                  <FileText className="w-4 h-4" />
+                  <span>견적서 {estimateCount}개 제출됨</span>
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -452,47 +502,6 @@ const ProjectDetailClient: React.FC = () => {
               </p>
             </div>
           </div>
-        </div>
-
-        {/* 팀 견적서 작성 버튼 */}
-        <div className="border-t border-gray-200 pt-6">
-          <div className="flex items-center gap-2 mb-4">
-            <FileText className="w-5 h-5 text-gray-600" />
-            <h3 className="text-lg font-semibold text-gray-900">팀으로 견적서 작성하기</h3>
-          </div>
-          <Button
-            onClick={() => setShowJoinModal(true)}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
-            size="lg"
-          >
-            견적서 작성하기
-          </Button>
-          {projectMembers.length > 0 && (
-            <div className="mt-6">
-              <div className="flex items-center gap-2 mb-3">
-                <Users className="w-4 h-4 text-gray-500" />
-                <p className="text-sm font-medium text-gray-700">참여 중인 멤버</p>
-                <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full text-xs font-medium">
-                  {projectMembers.length}명
-                </span>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {projectMembers.slice(0, 5).map((member) => (
-                  <span
-                    key={member.id}
-                    className="px-3 py-1.5 bg-gray-50 text-gray-700 rounded-lg text-sm border border-gray-200"
-                  >
-                    {member.profile?.username || '알 수 없음'} <span className="text-gray-500">({member.role === 'MAKER' ? '메이커' : '매니저'})</span>
-                  </span>
-                ))}
-                {projectMembers.length > 5 && (
-                  <span className="px-3 py-1.5 bg-gray-50 text-gray-700 rounded-lg text-sm border border-gray-200">
-                    +{projectMembers.length - 5}명 더
-                  </span>
-                )}
-              </div>
-            </div>
-          )}
         </div>
       </div>
 
