@@ -5,11 +5,15 @@ import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { selectAccount, useAccountStore } from '@/stores/useAccoutStore'
 import { useTeamProfileStore } from '@/stores/useTeamProfileStore'
-import { addTeamMember, removeTeamMember } from '@/apis/team.service'
+import { removeTeamMember, createDefaultTeam, updateTeam } from '@/apis/team.service'
 import { searchMakers } from '@/apis/search-maker.service'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
+import { propose } from '@/apis/proposal.service'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
+import { Input } from '@/components/ui/input'
 import { SearchMakerCard } from '@/components/SearchMakerCard'
+import { JOB_OPTIONS, EXPERTISE_OPTIONS } from '@/constants/job-options'
 import { 
   Plus, 
   Trash2, 
@@ -38,6 +42,19 @@ const TeamProfileClient = () => {
   const [searchTerm, setSearchTerm] = useState('')
   const [searchResults, setSearchResults] = useState<any[]>([])
   const [searching, setSearching] = useState(false)
+  const [selectedMaker, setSelectedMaker] = useState<{ makerId: string; makerUsername: string } | null>(null)
+  const [proposalMessage, setProposalMessage] = useState('')
+  const [isSendingProposal, setIsSendingProposal] = useState(false)
+  const [isCreatingTeam, setIsCreatingTeam] = useState(false)
+  const [showEditDialog, setShowEditDialog] = useState(false)
+  const [isUpdatingTeam, setIsUpdatingTeam] = useState(false)
+  const [editFormData, setEditFormData] = useState({
+    name: '',
+    bio: '',
+    specialty: [] as string[],
+    sub_specialty: [] as string[],
+    prefered: [] as string[],
+  })
   const { teamProfile, teams, selectedTeamId, fetchMyTeams, selectTeam, refreshTeam } = useTeamProfileStore()
   const account = useAccountStore(selectAccount)
 
@@ -141,7 +158,28 @@ const TeamProfileClient = () => {
   } = teamProfile || {}
 
   const editIntroduction = () => {}
-  const editProfile = () => {}
+  const editProfile = () => {
+    if (!isManager) {
+      toast({
+        variant: 'destructive',
+        title: '권한 없음',
+        description: '팀 매니저만 팀 정보를 수정할 수 있습니다.',
+      })
+      return
+    }
+    
+    if (!teamProfile) return
+    
+    // 현재 팀 정보로 폼 데이터 초기화
+    setEditFormData({
+      name: teamProfile.name || '',
+      bio: teamProfile.bio || '',
+      specialty: teamProfile.specialty || [],
+      sub_specialty: teamProfile.sub_specialty || [],
+      prefered: teamProfile.prefered || [],
+    })
+    setShowEditDialog(true)
+  }
   const editProject = () => {}
   const editCareer = () => {}
 
@@ -197,36 +235,109 @@ const TeamProfileClient = () => {
     }
   }
 
-  // 팀원 추가 (매니저만 가능)
-  const handleAddMember = async (profileId: string) => {
+  // 팀 제안 보내기 (매니저만 가능)
+  const handlePropose = (maker: any) => {
     if (!id) return
     
     if (!isManager) {
       toast({
         variant: 'destructive',
         title: '권한 없음',
-        description: '팀 매니저만 팀원을 추가할 수 있습니다.',
+        description: '팀 매니저만 팀 제안을 보낼 수 있습니다.',
       })
       return
     }
 
-    try {
-      await addTeamMember(id, profileId)
+    // 메이커의 user_id 확인 (accounts 테이블에서 가져온 데이터는 user_id를 포함)
+    if (!maker.user_id) {
       toast({
-        title: '팀원 추가 완료',
-        description: '팀원이 성공적으로 추가되었습니다.',
+        variant: 'destructive',
+        title: '오류',
+        description: '메이커 정보를 찾을 수 없습니다.',
       })
-      await refreshTeam(id)
+      return
+    }
+
+    setSelectedMaker({
+      makerId: maker.user_id,
+      makerUsername: maker.username || '메이커',
+    })
+    setProposalMessage('')
+  }
+
+  // 팀 제안 전송
+  const handleSendProposal = async () => {
+    if (!id || !selectedMaker) return
+
+    setIsSendingProposal(true)
+    try {
+      await propose(selectedMaker.makerId, {
+        teamId: id,
+        message: proposalMessage.trim() || null,
+      })
+      
+      toast({
+        title: '팀 제안 전송 완료',
+        description: `${selectedMaker.makerUsername}님에게 팀 제안을 보냈습니다.`,
+      })
+      
+      setSelectedMaker(null)
+      setProposalMessage('')
       setShowAddMemberDialog(false)
       setSearchTerm('')
       setSearchResults([])
+      await refreshTeam(id)
     } catch (err: any) {
-      console.error('팀원 추가 실패:', err)
+      console.error('팀 제안 전송 실패:', err)
       toast({
         variant: 'destructive',
-        title: '팀원 추가 실패',
-        description: err.message || '팀원을 추가하는 중 오류가 발생했습니다.',
+        title: '팀 제안 전송 실패',
+        description: err.message || '팀 제안을 보내는 중 오류가 발생했습니다.',
       })
+    } finally {
+      setIsSendingProposal(false)
+    }
+  }
+
+  // 팀 정보 업데이트 핸들러
+  const handleUpdateTeam = async () => {
+    if (!id) return
+
+    if (!editFormData.name.trim()) {
+      toast({
+        variant: 'destructive',
+        title: '입력 오류',
+        description: '팀 이름을 입력해주세요.',
+      })
+      return
+    }
+
+    setIsUpdatingTeam(true)
+    try {
+      await updateTeam(id, {
+        name: editFormData.name.trim(),
+        bio: editFormData.bio.trim() || null,
+        specialty: editFormData.specialty,
+        sub_specialty: editFormData.sub_specialty,
+        prefered: editFormData.prefered,
+      })
+
+      toast({
+        title: '팀 정보 수정 완료',
+        description: '팀 정보가 성공적으로 업데이트되었습니다.',
+      })
+
+      setShowEditDialog(false)
+      await refreshTeam(id)
+    } catch (err: any) {
+      console.error('팀 정보 수정 실패:', err)
+      toast({
+        variant: 'destructive',
+        title: '팀 정보 수정 실패',
+        description: err.message || '팀 정보를 수정하는 중 오류가 발생했습니다.',
+      })
+    } finally {
+      setIsUpdatingTeam(false)
     }
   }
 
@@ -287,10 +398,46 @@ const TeamProfileClient = () => {
     )
   }
 
+  // 팀 생성 핸들러
+  const handleCreateTeam = async () => {
+    setIsCreatingTeam(true)
+    try {
+      const { data, error } = await createDefaultTeam()
+      
+      if (error) {
+        throw error
+      }
+
+      if (data) {
+        toast({
+          title: '팀 생성 완료',
+          description: '기본 팀이 생성되었습니다.',
+        })
+        
+        // 팀 목록 다시 로드
+        await fetchMyTeams()
+        
+        // 생성된 팀 자동 선택
+        if (data.id) {
+          await selectTeam(data.id)
+        }
+      }
+    } catch (err: any) {
+      console.error('팀 생성 실패:', err)
+      toast({
+        variant: 'destructive',
+        title: '팀 생성 실패',
+        description: err.message || '팀을 생성하는데 실패했습니다.',
+      })
+    } finally {
+      setIsCreatingTeam(false)
+    }
+  }
+
   if (!teams || teams.length === 0) {
     return (
       <div className="flex justify-center items-center min-h-[60vh] px-4 w-full">
-        <div className="text-center space-y-4 w-full max-w-md mx-auto">
+        <div className="text-center space-y-6 w-full max-w-md mx-auto">
           <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center mx-auto">
             <Building2 className="w-8 h-8 text-gray-400" />
           </div>
@@ -298,6 +445,24 @@ const TeamProfileClient = () => {
             <p className="text-lg font-semibold text-gray-900 text-center">속한 팀이 없습니다</p>
             <p className="text-sm text-gray-500 text-center">팀에 가입하거나 팀을 생성해보세요.</p>
           </div>
+          <Button
+            onClick={handleCreateTeam}
+            disabled={isCreatingTeam}
+            size="lg"
+            className="flex items-center gap-2 mx-auto"
+          >
+            {isCreatingTeam ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                생성 중...
+              </>
+            ) : (
+              <>
+                <Plus className="w-5 h-5" />
+                팀 생성하기
+              </>
+            )}
+          </Button>
         </div>
       </div>
     )
@@ -596,10 +761,10 @@ const TeamProfileClient = () => {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <UserPlus className="w-5 h-5 text-blue-600" />
-              팀원 추가
+              팀 제안 보내기
             </DialogTitle>
             <DialogDescription>
-              메이커를 검색하여 팀에 추가하세요.
+              메이커를 검색하여 팀 제안을 보내세요.
             </DialogDescription>
           </DialogHeader>
           
@@ -654,13 +819,13 @@ const TeamProfileClient = () => {
                       <SearchMakerCard maker={maker} />
                     </div>
                     <Button
-                      onClick={() => handleAddMember(maker.profile_id)}
+                      onClick={() => handlePropose(maker)}
                       variant="outline"
                       size="sm"
                       className="ml-4 flex items-center gap-2 border-gray-200 hover:bg-gray-50 hover:border-gray-300"
                     >
                       <UserPlus className="w-4 h-4" />
-                      추가
+                      제안 보내기
                     </Button>
                   </div>
                 ))}
@@ -677,6 +842,214 @@ const TeamProfileClient = () => {
               </div>
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 팀 제안 메시지 입력 다이얼로그 */}
+      <Dialog open={!!selectedMaker} onOpenChange={(open) => !open && setSelectedMaker(null)}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>팀 제안 보내기</DialogTitle>
+            <DialogDescription>
+              {selectedMaker?.makerUsername}님에게 팀 제안을 보냅니다.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                메시지 내용 <span className="text-gray-400 font-normal">(선택사항)</span>
+              </label>
+              <Textarea
+                value={proposalMessage}
+                onChange={(e) => setProposalMessage(e.target.value)}
+                placeholder="팀 제안 내용을 입력해주세요... (선택사항)"
+                rows={6}
+                className="resize-none"
+                maxLength={1000}
+              />
+              <p className={`text-xs mt-2 ${
+                proposalMessage.length >= 1000 
+                  ? 'text-red-500' 
+                  : 'text-gray-500'
+              }`}>
+                {proposalMessage.length}/1000자
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setSelectedMaker(null)}
+              disabled={isSendingProposal}
+            >
+              취소
+            </Button>
+            <Button 
+              onClick={handleSendProposal}
+              disabled={isSendingProposal}
+            >
+              {isSendingProposal ? '전송 중...' : '제안 보내기'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 팀 정보 편집 다이얼로그 */}
+      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Edit className="w-5 h-5 text-blue-600" />
+              팀 정보 수정
+            </DialogTitle>
+            <DialogDescription>
+              팀 정보를 수정할 수 있습니다. 매니저만 수정 가능합니다.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-6 py-4">
+            {/* 팀 이름 */}
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                팀 이름 <span className="text-red-500">*</span>
+              </label>
+              <Input
+                value={editFormData.name}
+                onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+                placeholder="팀 이름을 입력하세요"
+                maxLength={100}
+              />
+            </div>
+
+            {/* 팀 소개 */}
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                팀 소개
+              </label>
+              <Textarea
+                value={editFormData.bio}
+                onChange={(e) => setEditFormData({ ...editFormData, bio: e.target.value })}
+                placeholder="팀에 대해 간단히 소개해주세요"
+                rows={5}
+                className="resize-none"
+                maxLength={1000}
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                {editFormData.bio.length}/1000자
+              </p>
+            </div>
+
+            {/* 전문분야 */}
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                전문분야
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {JOB_OPTIONS.map((job) => (
+                  <button
+                    key={job}
+                    type="button"
+                    onClick={() => {
+                      const newSpecialty = editFormData.specialty.includes(job)
+                        ? editFormData.specialty.filter((s) => s !== job)
+                        : [...editFormData.specialty, job]
+                      setEditFormData({ ...editFormData, specialty: newSpecialty })
+                    }}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      editFormData.specialty.includes(job)
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    {job}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 세부 전문분야 */}
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                세부 전문분야
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {EXPERTISE_OPTIONS.map((expertise) => (
+                  <button
+                    key={expertise}
+                    type="button"
+                    onClick={() => {
+                      const newSubSpecialty = editFormData.sub_specialty.includes(expertise)
+                        ? editFormData.sub_specialty.filter((s) => s !== expertise)
+                        : [...editFormData.sub_specialty, expertise]
+                      setEditFormData({ ...editFormData, sub_specialty: newSubSpecialty })
+                    }}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      editFormData.sub_specialty.includes(expertise)
+                        ? 'bg-purple-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    {expertise}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* 선호 프로젝트 유형 */}
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                선호 프로젝트 유형
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {JOB_OPTIONS.map((job) => (
+                  <button
+                    key={job}
+                    type="button"
+                    onClick={() => {
+                      const newPrefered = editFormData.prefered.includes(job)
+                        ? editFormData.prefered.filter((p) => p !== job)
+                        : [...editFormData.prefered, job]
+                      setEditFormData({ ...editFormData, prefered: newPrefered })
+                    }}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      editFormData.prefered.includes(job)
+                        ? 'bg-green-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    {job}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowEditDialog(false)}
+              disabled={isUpdatingTeam}
+            >
+              취소
+            </Button>
+            <Button 
+              onClick={handleUpdateTeam}
+              disabled={isUpdatingTeam}
+            >
+              {isUpdatingTeam ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  수정 중...
+                </>
+              ) : (
+                '수정 완료'
+              )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

@@ -466,3 +466,74 @@ export const createDefaultTeam = async () => {
 
   return { data: newTeam, error: null }
 }
+
+/**
+ * 팀 정보 업데이트 (매니저만 가능)
+ */
+export const updateTeam = async (
+  teamId: number,
+  data: {
+    name?: string
+    bio?: string | null
+    specialty?: string[]
+    sub_specialty?: string[]
+    prefered?: string[]
+  }
+) => {
+  const supabase = createSupabaseBrowserClient()
+
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser()
+  if (authError) throw authError
+  if (!user) throw new Error('Not authenticated')
+
+  // 팀의 매니저인지 확인
+  const { data: team, error: teamError } = await supabase
+    .from('teams')
+    .select('manager_profile_id')
+    .eq('id', teamId)
+    .single()
+
+  if (teamError) throw teamError
+
+  // 현재 사용자의 FREELANCER 프로필 조회
+  const { data: currentProfile, error: profileError } = await supabase
+    .from('accounts')
+    .select('profile_id')
+    .eq('user_id', user.id)
+    .eq('profile_type', 'FREELANCER')
+    .maybeSingle()
+
+  if (profileError || !currentProfile) {
+    throw new Error('프리랜서 프로필을 찾을 수 없습니다.')
+  }
+
+  // 매니저인지 확인
+  if ((team as any).manager_profile_id !== currentProfile.profile_id) {
+    throw new Error('팀 매니저만 팀 정보를 수정할 수 있습니다.')
+  }
+
+  // 업데이트할 데이터 준비
+  const updateData: any = {
+    updated_at: new Date().toISOString(),
+  }
+
+  if (data.name !== undefined) updateData.name = data.name
+  if (data.bio !== undefined) updateData.bio = data.bio
+  if (data.specialty !== undefined) updateData.specialty = data.specialty
+  if (data.sub_specialty !== undefined) updateData.sub_specialty = data.sub_specialty
+  if (data.prefered !== undefined) updateData.prefered = data.prefered
+
+  // 팀 정보 업데이트
+  const { data: updatedTeam, error } = await supabase
+    .from('teams')
+    .update(updateData)
+    .eq('id', teamId)
+    .select()
+    .single()
+
+  if (error) throw error
+  return updatedTeam
+}
