@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from '@/hooks/use-toast'
 import { fetchMyTeams } from '@/apis/team.service'
-import { Filter, SortAsc, Clock, DollarSign, FileText, Calendar, CheckCircle, XCircle, Search } from 'lucide-react'
+import { Filter, SortAsc, Clock, DollarSign, FileText, Calendar, CheckCircle, XCircle, Search, Plus, X } from 'lucide-react'
 
 interface CounselRequest {
   counsel_id: number
@@ -24,10 +24,9 @@ interface CounselRequest {
   start_date: string
   counsel_status: string
   skill: string[] | null
-  client?: {
+  company?: {
     user_id: string
-    company_name: string | null
-    email: string | null
+    username: string | null
   }
   estimate?: {
     estimate_id: number
@@ -57,6 +56,13 @@ export default function EstimateRequestsClient() {
     start_date: '',
     end_date: '',
     detail: '',
+    milestones: [] as Array<{
+      title: string
+      detail: string
+      paymentAmount: string
+      startDate: string
+      endDate: string
+    }>,
   })
   const [submitting, setSubmitting] = useState(false)
   const [teams, setTeams] = useState<any[]>([])
@@ -116,8 +122,7 @@ export default function EstimateRequestsClient() {
           skill,
           company:company_profile_id (
             user_id,
-            company_name,
-            email
+            username
           )
         `)
         .in('counsel_status', ['pending', 'recruiting'])
@@ -173,7 +178,7 @@ export default function EstimateRequestsClient() {
       filtered = filtered.filter(req =>
         req.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         req.outline?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        req.client?.company_name?.toLowerCase().includes(searchTerm.toLowerCase())
+        req.company?.username?.toLowerCase().includes(searchTerm.toLowerCase())
       )
     }
 
@@ -224,9 +229,10 @@ export default function EstimateRequestsClient() {
       start_date: '',
       end_date: '',
       detail: '',
+      milestones: [],
     })
     
-    // 팀 목록 로드
+    // 팀 목록 로드 (매니저인 팀만)
     setLoadingTeams(true)
     try {
       const { data: teamsData, error: teamsError } = await fetchMyTeams()
@@ -240,11 +246,24 @@ export default function EstimateRequestsClient() {
         return
       }
       
-      setTeams(teamsData)
+      // 매니저인 팀만 필터링
+      const managerTeams = teamsData.filter((team: any) => team.isManager === true)
+      
+      if (managerTeams.length === 0) {
+        toast({
+          variant: 'destructive',
+          title: '매니저 권한이 필요합니다',
+          description: '견적서를 작성하려면 매니저인 팀이 필요합니다.',
+        })
+        setLoadingTeams(false)
+        return
+      }
+      
+      setTeams(managerTeams)
       
       // 팀이 1개만 있으면 자동 선택
-      if (teamsData.length === 1) {
-        setSelectedTeamId(teamsData[0].id)
+      if (managerTeams.length === 1) {
+        setSelectedTeamId(managerTeams[0].id)
       } else {
         setSelectedTeamId(null)
       }
@@ -333,7 +352,7 @@ export default function EstimateRequestsClient() {
       if (estimateError) throw estimateError
 
       // 견적서 버전 생성
-      const { error: versionError } = await supabase
+      const { data: estimateVersion, error: versionError } = await supabase
         .from('estimate_version')
         .insert({
           estimate_id: estimateData.estimate_id,
@@ -342,8 +361,33 @@ export default function EstimateRequestsClient() {
           end_date: estimateForm.end_date || null,
           detail: estimateForm.detail || null,
         })
+        .select('estimate_version_id')
+        .single()
 
       if (versionError) throw versionError
+
+      // 마일스톤 추가 (있는 경우)
+      if (estimateForm.milestones && estimateForm.milestones.length > 0 && estimateVersion) {
+        const milestoneData = estimateForm.milestones.map((milestone) => ({
+          estimate_id: estimateData.estimate_id,
+          estimate_version_id: estimateVersion.estimate_version_id,
+          title: milestone.title,
+          detail: milestone.detail || null,
+          payment_amount: milestone.paymentAmount ? parseFloat(milestone.paymentAmount) : null,
+          milestone_start_date: milestone.startDate || null,
+          milestone_due_date: milestone.endDate || null,
+          progress: 0,
+        }))
+
+        const { error: milestoneError } = await supabase
+          .from('milestone')
+          .insert(milestoneData)
+
+        if (milestoneError) {
+          console.warn('마일스톤 생성 실패:', milestoneError)
+          // 마일스톤 오류는 치명적이지 않으므로 계속 진행
+        }
+      }
 
       toast({
         title: '견적서 제출 완료',
@@ -362,6 +406,38 @@ export default function EstimateRequestsClient() {
     } finally {
       setSubmitting(false)
     }
+  }
+
+  const addMilestone = () => {
+    setEstimateForm(prev => ({
+      ...prev,
+      milestones: [
+        ...prev.milestones,
+        {
+          title: '',
+          detail: '',
+          paymentAmount: '',
+          startDate: '',
+          endDate: '',
+        }
+      ]
+    }))
+  }
+
+  const removeMilestone = (index: number) => {
+    setEstimateForm(prev => ({
+      ...prev,
+      milestones: prev.milestones.filter((_, i) => i !== index)
+    }))
+  }
+
+  const updateMilestone = (index: number, field: string, value: string) => {
+    setEstimateForm(prev => ({
+      ...prev,
+      milestones: prev.milestones.map((m, i) => 
+        i === index ? { ...m, [field]: value } : m
+      )
+    }))
   }
 
   const formatCurrency = (amount: number | null) => {
@@ -497,8 +573,8 @@ export default function EstimateRequestsClient() {
                     <h3 className="font-semibold text-gray-900 mb-1 line-clamp-2">
                       {request.title || '제목 없음'}
                     </h3>
-                    {request.client?.company_name && (
-                      <p className="text-sm text-gray-600">{request.client.company_name}</p>
+                    {request.company?.username && (
+                      <p className="text-sm text-gray-600">{request.company.username}</p>
                     )}
                   </div>
                   {isUrgent && (
@@ -620,7 +696,7 @@ export default function EstimateRequestsClient() {
                     <SelectContent>
                       {teams.map((team) => (
                         <SelectItem key={team.id} value={team.id.toString()}>
-                          {team.name || `팀 #${team.id}`} {team.isManager ? '(매니저)' : '(팀원)'}
+                          {team.name || `팀 #${team.id}`}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -681,8 +757,78 @@ export default function EstimateRequestsClient() {
                   onChange={(e) => setEstimateForm(prev => ({ ...prev, detail: e.target.value }))}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   rows={8}
-                  placeholder="작업 범위, 마일스톤, 산출물 등을 상세히 작성해주세요..."
+                  placeholder="작업 범위, 산출물 등을 상세히 작성해주세요..."
                 />
+              </div>
+
+              {/* 마일스톤 섹션 */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-gray-700">마일스톤 (선택)</label>
+                  <Button
+                    type="button"
+                    onClick={addMilestone}
+                    variant="outline"
+                    size="sm"
+                    className="flex items-center gap-1"
+                  >
+                    <Plus className="w-4 h-4" />
+                    마일스톤 추가
+                  </Button>
+                </div>
+                {estimateForm.milestones.map((milestone, index) => (
+                  <div key={index} className="border rounded-lg p-4 mb-3 bg-gray-50">
+                    <div className="flex items-start justify-between mb-3">
+                      <h5 className="font-medium text-gray-900">마일스톤 {index + 1}</h5>
+                      <Button
+                        type="button"
+                        onClick={() => removeMilestone(index)}
+                        variant="ghost"
+                        size="sm"
+                        className="text-red-600 hover:text-red-700"
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                    <div className="space-y-3">
+                      <Input
+                        placeholder="마일스톤 제목"
+                        value={milestone.title}
+                        onChange={(e) => updateMilestone(index, 'title', e.target.value)}
+                      />
+                      <textarea
+                        placeholder="마일스톤 상세 설명"
+                        value={milestone.detail}
+                        onChange={(e) => updateMilestone(index, 'detail', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        rows={2}
+                      />
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <Input
+                          type="number"
+                          placeholder="지급 금액 (원)"
+                          value={milestone.paymentAmount}
+                          onChange={(e) => updateMilestone(index, 'paymentAmount', e.target.value)}
+                        />
+                        <Input
+                          type="date"
+                          placeholder="시작일"
+                          value={milestone.startDate}
+                          onChange={(e) => updateMilestone(index, 'startDate', e.target.value)}
+                        />
+                        <Input
+                          type="date"
+                          placeholder="종료일"
+                          value={milestone.endDate}
+                          onChange={(e) => updateMilestone(index, 'endDate', e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                {estimateForm.milestones.length === 0 && (
+                  <p className="text-xs text-gray-500 mt-1">마일스톤을 추가하여 프로젝트 단계별 계획을 세울 수 있습니다.</p>
+                )}
               </div>
             </div>
           )}

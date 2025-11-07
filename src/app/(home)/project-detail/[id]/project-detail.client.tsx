@@ -115,25 +115,32 @@ const ProjectDetailClient: React.FC = () => {
               const { data: teamsData, error: teamsError } = await fetchMyTeams()
               
               if (teamsData && teamsData.length > 0) {
-                setIsManager(true)
-                setTeams(teamsData)
+                // 매니저인 팀만 필터링
+                const managerTeams = teamsData.filter((team: any) => team.isManager === true)
                 
-                // 팀이 1개만 있으면 자동 선택
-                if (teamsData.length === 1) {
-                  setSelectedTeamId(teamsData[0].id)
+                if (managerTeams.length > 0) {
+                  setIsManager(true)
+                  setTeams(managerTeams)
                   
-                  // 팀 견적서 조회
-                  const estimate = await getTeamEstimate(Number(counselId), teamsData[0].id)
-                  setTeamEstimate(estimate)
-                  if (estimate?.estimate_version) {
-                    setTeamEstimateForm(prev => ({
-                      ...prev,
-                      totalAmount: estimate.estimate_version?.total_amount?.toString() || '',
-                      startDate: estimate.estimate_version?.start_date || '',
-                      endDate: estimate.estimate_version?.end_date || '',
-                      detail: estimate.estimate_version?.detail || '',
-                    }))
+                  // 팀이 1개만 있으면 자동 선택
+                  if (managerTeams.length === 1) {
+                    setSelectedTeamId(managerTeams[0].id)
+                    
+                    // 팀 견적서 조회
+                    const estimate = await getTeamEstimate(Number(counselId), managerTeams[0].id)
+                    setTeamEstimate(estimate)
+                    if (estimate?.estimate_version) {
+                      setTeamEstimateForm(prev => ({
+                        ...prev,
+                        totalAmount: estimate.estimate_version?.total_amount?.toString() || '',
+                        startDate: estimate.estimate_version?.start_date || '',
+                        endDate: estimate.estimate_version?.end_date || '',
+                        detail: estimate.estimate_version?.detail || '',
+                      }))
+                    }
                   }
+                } else {
+                  setIsManager(false)
                 }
               } else {
                 setIsManager(false)
@@ -167,8 +174,8 @@ const ProjectDetailClient: React.FC = () => {
           }
         } catch (error: any) {
           // maker_estimates 테이블이 없는 경우 등 에러 무시
-          if (error?.message?.includes('Could not find the table')) {
-            console.log('maker_estimates 테이블이 없습니다. 메이커 견적 기능을 사용할 수 없습니다.')
+          if (error?.message?.includes('Could not find the table') || error?.message?.includes('maker_estimates 테이블이 없습니다')) {
+            // 테이블이 없는 경우 조용히 처리 (콘솔 로그 제거)
           } else {
             console.warn('견적 조회 실패 (무시):', error)
           }
@@ -638,7 +645,7 @@ const ProjectDetailClient: React.FC = () => {
                       <SelectContent>
                         {teams.map((team) => (
                           <SelectItem key={team.id} value={team.id.toString()}>
-                            {team.name || `팀 #${team.id}`} {team.isManager ? '(매니저)' : '(팀원)'}
+                            {team.name || `팀 #${team.id}`}
                           </SelectItem>
                         ))}
                       </SelectContent>

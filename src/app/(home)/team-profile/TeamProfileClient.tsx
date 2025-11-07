@@ -14,6 +14,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
 import { SearchMakerCard } from '@/components/SearchMakerCard'
 import { JOB_OPTIONS, EXPERTISE_OPTIONS } from '@/constants/job-options'
+import { useToast } from '@/hooks/use-toast'
 import { 
   Plus, 
   Trash2, 
@@ -30,7 +31,16 @@ import {
   Loader2,
   AlertCircle
 } from 'lucide-react'
-import { useToast } from '@/hooks/use-toast'
+
+// team_specialty enum 값들 (데이터베이스 enum과 일치해야 함)
+const TEAM_SPECIALTY_OPTIONS = [
+  '웹 및 모바일 개발',
+  '데이터 및 인공지능',
+  '클라우드 및 인프라',
+  '보안 및 테스트',
+  '비즈니스 프로세스 관리',
+  '기타',
+] as const
 
 const TeamProfileClient = () => {
   const router = useRouter()
@@ -948,23 +958,23 @@ const TeamProfileClient = () => {
                 전문분야
               </label>
               <div className="flex flex-wrap gap-2">
-                {JOB_OPTIONS.map((job) => (
+                {TEAM_SPECIALTY_OPTIONS.map((specialty) => (
                   <button
-                    key={job}
+                    key={specialty}
                     type="button"
                     onClick={() => {
-                      const newSpecialty = editFormData.specialty.includes(job)
-                        ? editFormData.specialty.filter((s) => s !== job)
-                        : [...editFormData.specialty, job]
+                      const newSpecialty = editFormData.specialty.includes(specialty)
+                        ? editFormData.specialty.filter((s) => s !== specialty)
+                        : [...editFormData.specialty, specialty]
                       setEditFormData({ ...editFormData, specialty: newSpecialty })
                     }}
                     className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      editFormData.specialty.includes(job)
+                      editFormData.specialty.includes(specialty)
                         ? 'bg-blue-600 text-white'
                         : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                     }`}
                   >
-                    {job}
+                    {specialty}
                   </button>
                 ))}
               </div>
