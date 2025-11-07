@@ -58,24 +58,32 @@ const Header = () => {
 
   const loadNotifications = async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+      const { data: { user }, error: authError } = await supabase.auth.getUser()
+      
+      // 인증 오류 발생 시 (403 등) 알림 로드 중단
+      if (authError || !user) {
+        if (authError?.status === 403 || authError?.message?.includes('403')) {
+          console.warn('인증 오류로 인해 알림을 불러올 수 없습니다:', authError.message)
+        }
+        setUnreadCount(0)
+        return
+      }
 
       let count = 0
 
       // 팀 초대 조회 (읽지 않은 것만)
-      const { data: invites } = await supabase
+      const { data: invites, error: invitesError } = await supabase
         .from('team_members')
         .select('id, status')
         .eq('maker_id', user.id)
         .is('status', null)
 
-      if (invites) {
+      if (!invitesError && invites) {
         count += invites.length
       }
 
       // 기업 제안 조회 (읽지 않은 것만)
-      const { data: profile } = await supabase
+      const { data: profile, error: profileError } = await supabase
         .from('accounts')
         .select('profile_id')
         .eq('user_id', user.id)
@@ -83,14 +91,14 @@ const Header = () => {
         .is('deleted_at', null)
         .single()
 
-      if (profile) {
-        const { data: proposals } = await supabase
+      if (!profileError && profile) {
+        const { data: proposals, error: proposalsError } = await supabase
           .from('project_members')
           .select('id, status')
           .eq('profile_id', profile.profile_id)
           .is('status', null)
 
-        if (proposals) {
+        if (!proposalsError && proposals) {
           count += proposals.length
         }
       }
@@ -98,20 +106,56 @@ const Header = () => {
       setUnreadCount(count)
     } catch (error) {
       console.error('알람 로드 실패:', error)
+      setUnreadCount(0)
     }
   }
 
   useEffect(() => {
     const getUserInfo = async () => {
-      const result = await supabase.auth.getUser()
-      if (result?.data?.user) {
-        setUser(result?.data?.user)
-        await loadActiveProfile()
-        await loadNotifications()
-        // 마이페이지인 경우 프로필 데이터 로드
-        if (isMyPage && (!account || !account.role)) {
-          await fetchMyProfileData()
+      try {
+        // 사용자 정보 조회
+        const result = await supabase.auth.getUser()
+        
+        if (result?.data?.user) {
+          setUser(result?.data?.user)
+          await loadActiveProfile()
+          await loadNotifications()
+          // 마이페이지인 경우 프로필 데이터 로드
+          if (isMyPage && (!account || !account.role)) {
+            await fetchMyProfileData()
+          }
+        } else if (result?.error) {
+          // 토큰 손상 오류 (missing sub claim 등) 발생 시 세션 정리
+          const isTokenCorrupted = result.error.message?.includes('missing sub claim') || 
+                                   result.error.message?.includes('invalid claim') ||
+                                   result.error.message?.includes('JWT') ||
+                                   result.error.status === 403
+          
+          if (isTokenCorrupted) {
+            console.warn('토큰 손상 감지, 세션 정리 중:', result.error.message)
+            try {
+              // 손상된 세션 정리
+              await supabase.auth.signOut({ scope: 'local' })
+              // 로컬 스토리지의 세션 정보도 정리
+              if (typeof window !== 'undefined') {
+                const keys = Object.keys(localStorage)
+                keys.forEach(key => {
+                  if (key.includes('supabase') || key.includes('auth')) {
+                    localStorage.removeItem(key)
+                  }
+                })
+              }
+            } catch (signOutError) {
+              console.error('로그아웃 처리 실패:', signOutError)
+            }
+          } else {
+            console.warn('인증 오류:', result.error.message)
+          }
+          setUser(null)
         }
+      } catch (error) {
+        console.error('사용자 정보 조회 실패:', error)
+        setUser(null)
       }
     }
 

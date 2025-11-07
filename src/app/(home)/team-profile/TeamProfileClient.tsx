@@ -64,8 +64,16 @@ const TeamProfileClient = () => {
   // 현재 사용자가 이 팀의 매니저인지 확인
   const isManager = isTeamManager === true
 
-  // 팀원 추가 모달 열기
+  // 팀원 추가 모달 열기 (매니저만 가능)
   const editTeam = () => {
+    if (!isManager) {
+      toast({
+        variant: 'destructive',
+        title: '권한 없음',
+        description: '팀 매니저만 팀원을 추가할 수 있습니다.',
+      })
+      return
+    }
     setShowAddMemberDialog(true)
     setSearchTerm('')
     setSearchResults([])
@@ -105,9 +113,18 @@ const TeamProfileClient = () => {
     }
   }
 
-  // 팀원 추가
+  // 팀원 추가 (매니저만 가능)
   const handleAddMember = async (profileId: string) => {
     if (!id) return
+    
+    if (!isManager) {
+      toast({
+        variant: 'destructive',
+        title: '권한 없음',
+        description: '팀 매니저만 팀원을 추가할 수 있습니다.',
+      })
+      return
+    }
 
     try {
       await addTeamMember(id, profileId)
@@ -129,9 +146,18 @@ const TeamProfileClient = () => {
     }
   }
 
-  // 팀원 제거
+  // 팀원 제거 (매니저만 가능)
   const handleRemoveMember = async (memberId: number) => {
     if (!id) return
+
+    if (!isManager) {
+      toast({
+        variant: 'destructive',
+        title: '권한 없음',
+        description: '팀 매니저만 팀원을 제거할 수 있습니다.',
+      })
+      return
+    }
 
     if (!confirm('정말 이 팀원을 제거하시겠습니까?')) {
       return
@@ -212,7 +238,7 @@ const TeamProfileClient = () => {
                 <div className="flex-1">
                   <h3 className="font-semibold text-gray-900">{team.name || '팀 이름 없음'}</h3>
                   {team.isManager && (
-                    <span className="text-xs px-2 py-1 rounded-full bg-blue-100 text-blue-700 font-medium">
+                    <span className="inline-block mt-1 text-xs px-2 py-1 rounded-full bg-blue-100 text-blue-700 font-medium">
                       매니저
                     </span>
                   )}
@@ -346,14 +372,16 @@ const TeamProfileClient = () => {
       <section className="bg-white rounded-xl shadow-lg border border-gray-200 p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold text-gray-900">팀 멤버</h2>
-          {isManager && (
+          {isManager ? (
             <button
               onClick={editTeam}
-              className="px-3 py-1 text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
+              className="px-3 py-1 text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1 transition-colors"
             >
               <Plus className="w-4 h-4" />
               멤버 추가
             </button>
+          ) : (
+            <p className="text-xs text-gray-500">매니저만 팀원을 관리할 수 있습니다.</p>
           )}
         </div>
         
