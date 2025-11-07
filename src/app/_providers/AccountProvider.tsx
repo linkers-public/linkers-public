@@ -22,7 +22,7 @@ export default function AccountProvider() {
                                    authError?.message?.includes('JWT') ||
                                    authError?.status === 403
           
-          if (isTokenCorrupted) {
+          if (isTokenCorrupted && authError) {
             console.warn('토큰 손상 감지, 세션 정리 중:', authError.message)
             try {
               // 손상된 세션 정리

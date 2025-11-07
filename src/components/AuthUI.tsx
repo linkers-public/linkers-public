@@ -5,12 +5,13 @@ import { createSupabaseBrowserClient } from '@/supabase/supabase-client'
 import useHydration from '@/hooks/use-hydrate'
 import { Database } from '@/types/supabase'
 import { getSiteUrl } from '@/lib/utils'
+import type { User } from '@supabase/supabase-js'
 
 type ProfileType = Database['public']['Enums']['profile_type']
 
 const AuthUI = ({ role }: { role: string }) => {
   const isMounted = useHydration()
-  const [user, setUser] = useState()
+  const [user, setUser] = useState<User | null>(null)
   const [profileType, setProfileType] = useState<ProfileType | null>(null)
   const [hasExistingProfile, setHasExistingProfile] = useState<boolean | null>(null)
   const [checkingProfile, setCheckingProfile] = useState(true)
