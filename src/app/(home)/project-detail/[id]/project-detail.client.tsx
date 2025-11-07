@@ -447,18 +447,18 @@ const ProjectDetailClient: React.FC = () => {
           </div>
         </div>
 
-        {/* 프로젝트 참여 버튼 */}
+        {/* 팀 견적서 작성 버튼 */}
         <div className="border-t border-gray-200 pt-6">
           <div className="flex items-center gap-2 mb-4">
-            <Users className="w-5 h-5 text-gray-600" />
-            <h3 className="text-lg font-semibold text-gray-900">프로젝트 참여하기</h3>
+            <FileText className="w-5 h-5 text-gray-600" />
+            <h3 className="text-lg font-semibold text-gray-900">팀으로 견적서 작성하기</h3>
           </div>
           <Button
             onClick={() => setShowJoinModal(true)}
             className="w-full bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
             size="lg"
           >
-            프로젝트 참여 신청
+            견적서 작성하기
           </Button>
           {projectMembers.length > 0 && (
             <div className="mt-6">

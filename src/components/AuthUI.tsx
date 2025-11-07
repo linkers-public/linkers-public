@@ -148,7 +148,7 @@ const AuthUI = ({ role }: { role: string }) => {
             <p className="text-sm text-gray-600">확인 중...</p>
           </div>
         ) : (
-          <div className="mb-8">
+        <div className="mb-8">
             {hasExistingProfile ? (
               <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
                 <p className="text-sm text-blue-800 text-center">
@@ -159,9 +159,9 @@ const AuthUI = ({ role }: { role: string }) => {
                 </p>
               </div>
             ) : (
-              <h2 className="text-lg font-semibold text-gray-900 mb-4 text-center">
-                어떤 프로필로 시작하시나요?
-              </h2>
+          <h2 className="text-lg font-semibold text-gray-900 mb-4 text-center">
+            어떤 프로필로 시작하시나요?
+          </h2>
             )}
           <div className="grid grid-cols-2 gap-3">
             <button
@@ -204,9 +204,9 @@ const AuthUI = ({ role }: { role: string }) => {
           </div>
           
           {!hasExistingProfile && (
-            <p className="text-xs text-gray-500 text-center mt-3">
-              나중에 다른 프로필 타입도 추가할 수 있습니다
-            </p>
+          <p className="text-xs text-gray-500 text-center mt-3">
+            나중에 다른 프로필 타입도 추가할 수 있습니다
+          </p>
           )}
         </div>
         )}
