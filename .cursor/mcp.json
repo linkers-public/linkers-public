@@ -1,13 +1,13 @@
 {
   "mcpServers": {
-    "supabase": {
+    "supabase-linkers": {
       "url": "https://mcp.supabase.com/mcp?project_ref=zmxxbdrfwhavwxizdfyz"
     },
-    "vercel": {
+    "vercel-linkers": {
       "url": "https://mcp.vercel.com",
       "headers": {}
     },
-    "portone-mcp-server": {
+    "portone-mcp-server-linkers": {
       "command": "npx",
       "args": [
         "-y",

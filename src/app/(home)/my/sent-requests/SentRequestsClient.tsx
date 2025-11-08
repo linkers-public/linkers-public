@@ -199,7 +199,7 @@ export default function SentRequestsClient() {
                 .eq('request_type', 'invite')
                 .maybeSingle()
 
-              if (teamMember) {
+              if (teamMember && teamMember.status) {
                 status = teamMember.status
               }
             }
