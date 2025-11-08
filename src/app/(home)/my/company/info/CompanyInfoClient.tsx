@@ -6,7 +6,6 @@ import { createSupabaseBrowserClient } from '@/supabase/supabase-client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Building2, User, Phone, Mail } from 'lucide-react'
 import { toast } from '@/hooks/use-toast'
 
 interface CompanyInfo {
@@ -222,43 +221,42 @@ export default function CompanyInfoClient() {
 
   return (
     <div className="w-full md:py-6">
-      <div className="mb-6">
-        <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-2">내 정보 / 회사 정보 수정</h1>
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">내 정보 / 회사 정보 수정</h1>
         <p className="text-gray-600">회사명·담당자·연락처 등을 수정하세요</p>
       </div>
 
-      <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-sm border p-4 md:p-6">
+      <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 md:p-8">
         <div className="space-y-6">
           <div>
-            <Label htmlFor="company_name" className="flex items-center gap-2 mb-2">
-              <Building2 className="w-4 h-4" />
-              회사명
+            <Label htmlFor="company_name" className="text-sm font-semibold text-gray-900 mb-2 block">
+              회사명 <span className="text-red-500">*</span>
             </Label>
             <Input
               id="company_name"
               value={companyInfo.company_name}
               onChange={(e) => setCompanyInfo({ ...companyInfo, company_name: e.target.value })}
               required
+              className="border-gray-300 focus:ring-2 focus:ring-blue-500"
             />
           </div>
 
           <div>
-            <Label htmlFor="contact_person" className="flex items-center gap-2 mb-2">
-              <User className="w-4 h-4" />
-              담당자명
+            <Label htmlFor="contact_person" className="text-sm font-semibold text-gray-900 mb-2 block">
+              담당자명 <span className="text-red-500">*</span>
             </Label>
             <Input
               id="contact_person"
               value={companyInfo.contact_person}
               onChange={(e) => setCompanyInfo({ ...companyInfo, contact_person: e.target.value })}
               required
+              className="border-gray-300 focus:ring-2 focus:ring-blue-500"
             />
           </div>
 
           <div>
-            <Label htmlFor="contact_phone" className="flex items-center gap-2 mb-2">
-              <Phone className="w-4 h-4" />
-              연락처
+            <Label htmlFor="contact_phone" className="text-sm font-semibold text-gray-900 mb-2 block">
+              연락처 <span className="text-red-500">*</span>
             </Label>
             <Input
               id="contact_phone"
@@ -266,12 +264,13 @@ export default function CompanyInfoClient() {
               value={companyInfo.contact_phone}
               onChange={(e) => setCompanyInfo({ ...companyInfo, contact_phone: e.target.value })}
               required
+              className="border-gray-300 focus:ring-2 focus:ring-blue-500"
+              placeholder="010-1234-5678"
             />
           </div>
 
           <div>
-            <Label htmlFor="contact_email" className="flex items-center gap-2 mb-2">
-              <Mail className="w-4 h-4" />
+            <Label htmlFor="contact_email" className="text-sm font-semibold text-gray-900 mb-2 block">
               이메일
             </Label>
             <Input
@@ -279,34 +278,45 @@ export default function CompanyInfoClient() {
               type="email"
               value={companyInfo.contact_email}
               disabled
-              className="bg-gray-50"
+              className="bg-gray-50 border-gray-300"
             />
-            <p className="text-xs text-gray-500 mt-1">이메일은 로그인/보안 페이지에서 변경할 수 있습니다.</p>
+            <p className="text-xs text-gray-500 mt-2">이메일은 로그인/보안 페이지에서 변경할 수 있습니다.</p>
           </div>
 
           <div>
-            <Label htmlFor="address">주소</Label>
+            <Label htmlFor="address" className="text-sm font-semibold text-gray-900 mb-2 block">
+              주소
+            </Label>
             <Input
               id="address"
               value={companyInfo.address || ''}
               onChange={(e) => setCompanyInfo({ ...companyInfo, address: e.target.value })}
+              className="border-gray-300 focus:ring-2 focus:ring-blue-500"
+              placeholder="서울시 강남구..."
             />
           </div>
 
           <div>
-            <Label htmlFor="website">웹사이트</Label>
+            <Label htmlFor="website" className="text-sm font-semibold text-gray-900 mb-2 block">
+              웹사이트
+            </Label>
             <Input
               id="website"
               type="url"
               value={companyInfo.website || ''}
               onChange={(e) => setCompanyInfo({ ...companyInfo, website: e.target.value })}
               placeholder="https://example.com"
+              className="border-gray-300 focus:ring-2 focus:ring-blue-500"
             />
           </div>
         </div>
 
-        <div className="mt-6 pt-6 border-t">
-          <Button type="submit" disabled={saving} className="w-full md:w-auto">
+        <div className="mt-8 pt-6 border-t border-gray-200">
+          <Button 
+            type="submit" 
+            disabled={saving} 
+            className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-6 py-2.5 shadow-sm hover:shadow-md transition-all"
+          >
             {saving ? '저장 중...' : '저장하기'}
           </Button>
         </div>

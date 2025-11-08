@@ -1,93 +1,228 @@
-# 마이페이지 구현 검토 결과
+# 마이페이지 전체 검토 보고서
 
-## ❌ 미구현 기능 목록
+## 📋 개요
+마이페이지의 구조, 일관성, 사용성, 기능을 전반적으로 검토하고 개선점을 제안합니다.
 
-### 1. 프로필 이미지 업로드 기능
-**위치**: `src/app/(home)/my/update/ProfileUpdateClient.tsx`
-- **현재 상태**: 프로필 이미지 업로드 UI 및 기능이 없음
-- **필요 작업**: 
-  - 이미지 업로드 컴포넌트 추가
-  - `profile_image_url` 필드 저장 기능
-  - Supabase Storage 연동
+## 🔍 현재 구조
 
-### 2. 학력 태그 기능
-**위치**: 
-- `src/app/(home)/my/profile/educations/create/EducationCreateClient .tsx`
-- `src/app/(home)/my/profile/educations/[id]/update/EducationUpdateClient.tsx`
-- **현재 상태**: 학력 태그 선택 기능 없음 (고교/대학/대학원)
-- **필요 작업**: 
-  - 학력 레벨 선택 드롭다운/라디오 버튼 추가
-  - 데이터베이스 스키마에 `education_level` 필드 추가 필요 여부 확인
+### 1. 레이아웃 구조
+- **레이아웃 파일**: `src/app/(home)/my/layout.tsx`
+- **사이드 네비게이션**: `src/components/SideNavigator.jsx`
+- **레이아웃 특징**:
+  - 데스크톱: 좌측 사이드바 (200px) + 메인 컨텐츠
+  - 모바일: 사이드바 숨김, 메인 컨텐츠만 표시
 
-### 3. 자격증 추가/수정 기능
-**위치**: `src/components/ProfileClient.jsx` (LicenseMeta 컴포넌트)
-- **현재 상태**: 
-  - "추가하기" 버튼이 있지만 클릭 이벤트 없음
-  - 수정 버튼이 있지만 클릭 이벤트 없음
-- **필요 작업**:
-  - 자격증 추가 페이지 생성 (`/my/profile/licenses/create`)
-  - 자격증 수정 페이지 생성 (`/my/profile/licenses/[id]/update`)
-  - 버튼에 라우팅 연결
-  - `updateLicense` API 함수 구현 (현재 빈 함수)
+### 2. 페이지 분류
 
-### 4. 팀 제안 기능
-**위치**: `src/app/(home)/my/team-proposal/TeamProposalClient.tsx`
-- **현재 상태**: `handlePropose` 함수가 비어있음
-- **필요 작업**: 
-  - 팀 제안 API 연동
-  - 제안 다이얼로그/모달 구현
+#### 기업 프로필 (COMPANY)
+1. **회사 계정**
+   - `/my/company/info` - 내 정보 / 회사 정보 수정
+   - `/my/company/team-members` - 팀 멤버 관리
 
-### 5. 팀 포트폴리오 기능
-**위치**: `src/app/(home)/team-profile/TeamProfileClient.tsx`
-- **현재 상태**: 팀 포트폴리오 관리 기능 없음
-- **필요 작업**: 
-  - 팀 포트폴리오 추가/수정/삭제 기능
-  - 팀 프로젝트 포트폴리오 표시
+2. **프로젝트**
+   - `/my/company/projects` - 내 프로젝트 ✅ (최근 개선됨)
+   - `/my/company/estimates` - 받은 견적서 ✅ (최근 개선됨)
 
-### 6. 프로필 업데이트 페이지 상단 여백
-**위치**: `src/app/(home)/my/update/ProfileUpdateClient.tsx`
-- **현재 상태**: 상단 여백 제거 필요 (다른 페이지와 일관성)
-- **필요 작업**: `-mt-4 md:-mt-8` 클래스 추가
+3. **결제 / 구독**
+   - `/my/subscription` - 구독 관리
+   - `/my/payments` - 결제 내역
+   - `/my/contact-history` - 연락처 열람 기록
 
-## ⚠️ 부분 구현된 기능
+4. **프로젝트 기록**
+   - `/my/project-history` - 진행 이력
+   - `/my/completed-projects` - 완료 프로젝트 저장함
 
-### 1. 자격증 API
-**위치**: `src/apis/profile.service.ts`
-- `createLicense`: ✅ 구현됨
-- `updateLicense`: ❌ 빈 함수
-- `deleteLicense`: ❌ 빈 함수
+5. **설정**
+   - `/my/account/notifications` - 알림 설정
+   - `/my/account/security` - 계정 보안
+   - `/my/account/delete` - 회원 탈퇴
 
-### 2. 메이커 검색 배지 필터
-**위치**: `/search-makers` 페이지
-- **현재 상태**: 배지 필터 기능 없음
-- **필요 작업**: 배지 필터 추가
+#### 프리랜서 프로필 (FREELANCER)
+1. **내 프로필**
+   - `/my/profile` - 프로필 보기/수정
+   - `/my/team-profile` - 팀 프로필 조회
+   - `/my/team-projects` - 팀 프로젝트 확인
 
-## 📋 우선순위별 구현 필요 사항
+2. **관심항목**
+   - `/my/bookmarked-projects` - 관심 프로젝트
+   - `/my/bookmarked-makers` - 관심 메이커
 
-### 높은 우선순위
-1. **자격증 추가/수정 기능** - UI는 있지만 기능이 연결되지 않음
-2. **프로필 이미지 업로드** - 기본 기능으로 중요
-3. **프로필 업데이트 페이지 상단 여백 제거** - UI 일관성
+3. **내 히스토리**
+   - `/my/received-proposals` - 받은 제안 목록
+   - `/my/sent-requests` - 보낸 요청 목록
 
-### 중간 우선순위
-4. **학력 태그 기능** - 사용성 개선
-5. **팀 제안 기능** - 핵심 기능
+4. **계정관리**
+   - `/my/account/security` - 로그인/보안
+   - `/my/account/notifications` - 알림 설정
 
-### 낮은 우선순위
-6. **팀 포트폴리오 기능** - 추가 기능
-7. **메이커 검색 배지 필터** - 필터링 개선
+## ⚠️ 발견된 문제점
 
-## 🔍 추가 확인 필요 사항
+### 1. UI/UX 일관성 문제
 
-1. **데이터베이스 스키마 확인**
-   - `accounts` 테이블에 `profile_image_url` 필드 존재 여부
-   - `account_educations` 테이블에 `education_level` 필드 존재 여부
+#### 문제 1: 헤더 스타일 불일치
+- **받은 견적서** (`/my/company/estimates`): ✅ 현대적 UI (최근 개선)
+- **내 프로젝트** (`/my/company/projects`): ✅ 현대적 UI (최근 개선)
+- **진행 이력** (`/my/project-history`): ❌ 기본 스타일
+- **완료 프로젝트** (`/my/completed-projects`): ❌ 기본 스타일
+- **회사 정보 수정** (`/my/company/info`): ❌ 기본 스타일
 
-2. **API 엔드포인트 확인**
-   - 자격증 수정/삭제 API 구현 상태
-   - 팀 제안 API 존재 여부
+**개선 필요**: 모든 페이지에 일관된 헤더 스타일 적용
 
-3. **라우팅 확인**
-   - 자격증 관련 페이지 라우트 설정 여부
-   - 팀 프로필 페이지 접근 경로 (`/my/team-profile` vs `/team-profile`)
+#### 문제 2: 빈 상태 메시지 불일치
+- 일부 페이지: 아이콘 + 메시지 ✅
+- 일부 페이지: 텍스트만 ❌
 
+#### 문제 3: 로딩 상태 불일치
+- 일부 페이지: 스피너 + 메시지 ✅
+- 일부 페이지: 스피너만 ❌
+
+### 2. 기능적 문제점
+
+#### 문제 1: 프로젝트 이력 페이지
+- **파일**: `src/app/(home)/my/project-history/ProjectHistoryClient.tsx`
+- **문제**: 
+  - `deleted_at` 필터링 없음 (삭제된 프로젝트도 표시될 수 있음)
+  - 잘못 생성된 counsel도 표시될 수 있음
+- **개선 필요**: `getCompanyCounsels()`와 동일한 필터링 로직 적용
+
+#### 문제 2: 완료 프로젝트 페이지
+- **파일**: `src/app/(home)/my/completed-projects/CompletedProjectsClient.tsx`
+- **문제**:
+  - `deleted_at` 필터링 없음
+  - 잘못 생성된 counsel도 표시될 수 있음
+- **개선 필요**: `getCompanyCounsels()`와 동일한 필터링 로직 적용
+
+#### 문제 3: 회사 정보 수정 페이지
+- **파일**: `src/app/(home)/my/company/info/CompanyInfoClient.tsx`
+- **문제**:
+  - 불필요한 아이콘 사용 (Building2, User, Phone, Mail)
+  - UI가 구식 스타일
+- **개선 필요**: 현대적 UI로 개선, 아이콘 최소화
+
+### 3. 네비게이션 구조 문제
+
+#### 문제 1: 메뉴 그룹화 불일치
+- 기업 프로필: "회사 계정", "프로젝트", "결제 / 구독", "프로젝트 기록", "설정"
+- 프리랜서 프로필: "내 프로필", "관심항목", "내 히스토리", "계정관리"
+- **문제**: 그룹명이 일관되지 않음
+
+#### 문제 2: 활성 상태 표시
+- 현재: 텍스트 색상만 변경
+- **개선 필요**: 더 명확한 활성 상태 표시 (배경색, 아이콘 등)
+
+### 4. 데이터 필터링 문제
+
+#### 문제 1: 중복 필터링 로직
+- `getCompanyCounsels()`: 잘못된 counsel 필터링 ✅
+- `ProjectHistoryClient`: 필터링 없음 ❌
+- `CompletedProjectsClient`: 필터링 없음 ❌
+
+**개선 필요**: 공통 필터링 로직을 유틸 함수로 분리
+
+## ✅ 개선 제안
+
+### 1. 즉시 개선 (High Priority)
+
+#### 1.1 프로젝트 이력/완료 프로젝트 페이지 필터링 개선
+```typescript
+// 공통 필터링 로직 추가
+const filterValidCounsels = (counsels: any[]) => {
+  return counsels.filter((counsel) => {
+    // deleted_at 체크
+    if (counsel.deleted_at) return false
+    
+    // 잘못 생성된 counsel 제외
+    if (counsel.title && (
+      counsel.title.includes('팀 견적 요청') || 
+      counsel.title.includes('팀 팀 견적 요청')
+    )) {
+      return false
+    }
+    
+    if (counsel.outline && (
+      counsel.outline.includes('팀 견적을 요청') ||
+      counsel.outline.includes('팀 견적 요청') ||
+      counsel.outline.includes('프젝에 참여')
+    )) {
+      return false
+    }
+    
+    return true
+  })
+}
+```
+
+#### 1.2 UI 일관성 개선
+- 모든 페이지에 동일한 헤더 스타일 적용
+- 빈 상태 메시지 통일
+- 로딩 상태 통일
+
+#### 1.3 회사 정보 수정 페이지 현대화
+- 불필요한 아이콘 제거
+- 현대적 폼 디자인 적용
+
+### 2. 중기 개선 (Medium Priority)
+
+#### 2.1 공통 컴포넌트 생성
+- `EmptyState` 컴포넌트
+- `LoadingState` 컴포넌트
+- `PageHeader` 컴포넌트
+
+#### 2.2 네비게이션 개선
+- 활성 상태 표시 개선
+- 그룹명 일관성 확보
+
+### 3. 장기 개선 (Low Priority)
+
+#### 3.1 성능 최적화
+- 데이터 페칭 최적화
+- 무한 스크롤 고려
+
+#### 3.2 접근성 개선
+- 키보드 네비게이션
+- 스크린 리더 지원
+
+## 📊 우선순위별 작업 목록
+
+### 🔴 긴급 (이번 주)
+1. 프로젝트 이력/완료 프로젝트 페이지 필터링 개선
+2. 회사 정보 수정 페이지 UI 현대화
+3. 빈 상태/로딩 상태 일관성 개선
+
+### 🟡 중요 (다음 주)
+1. 공통 컴포넌트 생성
+2. 네비게이션 활성 상태 개선
+3. 모든 페이지 헤더 스타일 통일
+
+### 🟢 개선 (향후)
+1. 성능 최적화
+2. 접근성 개선
+3. 모바일 UX 개선
+
+## 📝 체크리스트
+
+### 기업 프로필 페이지
+- [x] `/my/company/projects` - 내 프로젝트 ✅
+- [x] `/my/company/estimates` - 받은 견적서 ✅
+- [ ] `/my/company/info` - 회사 정보 수정 ⚠️
+- [ ] `/my/company/team-members` - 팀 멤버 관리 ⚠️
+- [ ] `/my/project-history` - 진행 이력 ⚠️
+- [ ] `/my/completed-projects` - 완료 프로젝트 ⚠️
+- [ ] `/my/subscription` - 구독 관리 ❓
+- [ ] `/my/payments` - 결제 내역 ❓
+- [ ] `/my/contact-history` - 연락처 열람 기록 ❓
+
+### 프리랜서 프로필 페이지
+- [ ] `/my/profile` - 프로필 보기/수정 ❓
+- [ ] `/my/team-profile` - 팀 프로필 조회 ❓
+- [ ] `/my/team-projects` - 팀 프로젝트 확인 ❓
+- [ ] `/my/bookmarked-projects` - 관심 프로젝트 ❓
+- [ ] `/my/bookmarked-makers` - 관심 메이커 ❓
+- [ ] `/my/received-proposals` - 받은 제안 목록 ❓
+- [ ] `/my/sent-requests` - 보낸 요청 목록 ❓
+
+## 🎯 다음 단계
+
+1. **즉시 개선**: 프로젝트 이력/완료 프로젝트 필터링
+2. **UI 통일**: 모든 페이지에 일관된 스타일 적용
+3. **공통 컴포넌트**: 재사용 가능한 컴포넌트 생성

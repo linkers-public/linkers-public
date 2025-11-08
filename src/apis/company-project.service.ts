@@ -9,21 +9,7 @@ export const getCompanyCounsels = async () => {
     throw new Error('로그인이 필요합니다.')
   }
 
-  // 활성 기업 프로필 확인
-  const { data: profile } = await supabase
-    .from('accounts')
-    .select('profile_id')
-    .eq('user_id', user.id)
-    .eq('is_active', true)
-    .eq('profile_type', 'COMPANY')
-    .is('deleted_at', null)
-    .maybeSingle()
-
-  if (!profile) {
-    throw new Error('기업 프로필을 찾을 수 없습니다.')
-  }
-
-  // client 테이블에서 user_id 조회
+  // client 테이블에서 user_id 조회 (기업이 직접 등록한 프로젝트 확인용)
   const { data: client } = await supabase
     .from('client')
     .select('user_id')
@@ -34,17 +20,44 @@ export const getCompanyCounsels = async () => {
     return []
   }
 
+  // 기업이 직접 등록한 프로젝트만 조회
+  // client_id만으로 필터링 (company_profile_id 의존 제거)
+  // deleted_at이 NULL인 것만 조회 (삭제되지 않은 프로젝트)
   const { data, error } = await supabase
     .from('counsel')
     .select('*')
     .eq('client_id', client.user_id)
+    .is('deleted_at', null)
     .order('counsel_id', { ascending: false })
 
   if (error) {
     throw new Error(`상담 목록 조회 실패: ${error.message}`)
   }
 
-  return data || []
+  // 잘못 생성된 counsel 필터링
+  // 팀이 기업에게 견적 요청할 때 생성된 잘못된 counsel 제외
+  const validCounsels = (data || []).filter((counsel: any) => {
+    // 제목에 "팀 견적 요청" 패턴이 있는 경우 제외
+    if (counsel.title && (
+      counsel.title.includes('팀 견적 요청') || 
+      counsel.title.includes('팀 팀 견적 요청')
+    )) {
+      return false
+    }
+    
+    // outline에 "팀 견적을 요청" 패턴이 있는 경우 제외
+    if (counsel.outline && (
+      counsel.outline.includes('팀 견적을 요청') ||
+      counsel.outline.includes('팀 견적 요청') ||
+      counsel.outline.includes('프젝에 참여')
+    )) {
+      return false
+    }
+
+    return true
+  })
+
+  return validCounsels
 }
 
 // 견적(estimate) 조회 - 상태별 필터링
@@ -128,10 +141,22 @@ export const getEstimateDetail = async (estimateId: number) => {
     .from('estimate')
     .select(`
       *,
-      teams:teams!team_id (
+      team:teams!team_id (
         id,
         name,
-        manager_id
+        manager_id,
+        manager_profile_id
+      ),
+      counsel:counsel_id (
+        counsel_id,
+        title,
+        outline,
+        counsel_status,
+        start_date,
+        due_date,
+        cost,
+        period,
+        feild
       ),
       estimate_version:estimate_version (
         estimate_version_id,
@@ -163,6 +188,40 @@ export const getEstimateDetail = async (estimateId: number) => {
     `)
     .eq('estimate_id', estimateId)
     .maybeSingle()
+
+  if (data && data.team) {
+    // 팀 정보가 배열인 경우 첫 번째 요소 사용
+    const team = Array.isArray(data.team) ? data.team[0] : data.team
+    
+    // 매니저의 연락처 정보 조회 (FREELANCER 프로필)
+    if (team.manager_id) {
+      const { data: managerAccount } = await supabase
+        .from('accounts')
+        .select('contact_phone, contact_email, contact_website')
+        .eq('user_id', team.manager_id)
+        .eq('profile_type', 'FREELANCER')
+        .maybeSingle()
+      
+      if (managerAccount) {
+        // 팀 객체에 연락처 정보 추가
+        if (Array.isArray(data.team)) {
+          data.team[0] = {
+            ...team,
+            contact_phone: managerAccount.contact_phone,
+            contact_email: managerAccount.contact_email,
+            contact_website: managerAccount.contact_website,
+          }
+        } else {
+          data.team = {
+            ...team,
+            contact_phone: managerAccount.contact_phone,
+            contact_email: managerAccount.contact_email,
+            contact_website: managerAccount.contact_website,
+          }
+        }
+      }
+    }
+  }
 
   if (error) {
     throw new Error(`견적 상세 조회 실패: ${error.message}`)
@@ -216,10 +275,22 @@ export const getReceivedEstimates = async () => {
       estimate_start_date,
       estimate_due_date,
       estimate_date,
-      teams:teams!team_id (
+      team:teams!team_id (
         id,
         name,
-        manager_id
+        manager_id,
+        manager_profile_id
+      ),
+      counsel:counsel_id (
+        counsel_id,
+        title,
+        outline,
+        counsel_status,
+        start_date,
+        due_date,
+        cost,
+        period,
+        feild
       ),
       estimate_version:estimate_version (
         estimate_version_id,
@@ -235,6 +306,42 @@ export const getReceivedEstimates = async () => {
 
   if (error) {
     throw new Error(`받은 견적서 목록 조회 실패: ${error.message}`)
+  }
+
+  // 각 견적서의 팀 연락처 정보 조회
+  if (data) {
+    for (const estimate of data) {
+      if (estimate.team) {
+        const team = Array.isArray(estimate.team) ? estimate.team[0] : estimate.team
+        
+        if (team.manager_id) {
+          const { data: managerAccount } = await supabase
+            .from('accounts')
+            .select('contact_phone, contact_email, contact_website')
+            .eq('user_id', team.manager_id)
+            .eq('profile_type', 'FREELANCER')
+            .maybeSingle()
+          
+          if (managerAccount) {
+            if (Array.isArray(estimate.team)) {
+              estimate.team[0] = {
+                ...team,
+                contact_phone: managerAccount.contact_phone,
+                contact_email: managerAccount.contact_email,
+                contact_website: managerAccount.contact_website,
+              }
+            } else {
+              estimate.team = {
+                ...team,
+                contact_phone: managerAccount.contact_phone,
+                contact_email: managerAccount.contact_email,
+                contact_website: managerAccount.contact_website,
+              }
+            }
+          }
+        }
+      }
+    }
   }
 
   return data || []
@@ -265,32 +372,17 @@ export const updateEstimateStatus = async (estimateId: number, status: "pending"
   return data
 }
 
-// 견적 요청 (팀에게 견적 요청)
-export const requestEstimate = async (teamId: number, projectInfo: {
-  title: string
-  outline: string
-  start_date: string
-  due_date: string
-}) => {
+// 견적 요청 (기존 프로젝트에 특정 팀 지정)
+export const requestEstimateToTeam = async (
+  counselId: number,
+  teamId: number,
+  message?: string
+) => {
   const supabase = createSupabaseBrowserClient()
   
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
     throw new Error('로그인이 필요합니다.')
-  }
-
-  // 활성 기업 프로필 확인
-  const { data: profile } = await supabase
-    .from('accounts')
-    .select('profile_id')
-    .eq('user_id', user.id)
-    .eq('is_active', true)
-    .eq('profile_type', 'COMPANY')
-    .is('deleted_at', null)
-    .maybeSingle()
-
-  if (!profile) {
-    throw new Error('기업 프로필을 찾을 수 없습니다.')
   }
 
   // client 테이블에서 user_id 조회
@@ -304,47 +396,100 @@ export const requestEstimate = async (teamId: number, projectInfo: {
     throw new Error('클라이언트 정보를 찾을 수 없습니다.')
   }
 
-  // counsel 생성 (프로젝트 정보) - 견적 요청만, estimate는 매니저가 견적서 작성 시 생성
+  // 기존 counsel이 본인의 것인지 확인
+  const { data: existingCounsel, error: checkError } = await supabase
+    .from('counsel')
+    .select('counsel_id, client_id')
+    .eq('counsel_id', counselId)
+    .eq('client_id', client.user_id)
+    .is('deleted_at', null)
+    .maybeSingle()
+
+  if (checkError || !existingCounsel) {
+    throw new Error('프로젝트를 찾을 수 없거나 권한이 없습니다.')
+  }
+
+  // 기존 counsel 업데이트 (requested_team_id 설정)
+  const { data: updatedCounsel, error: updateError } = await supabase
+    .from('counsel')
+    .update({
+      requested_team_id: teamId,
+      counsel_status: 'recruiting'
+    })
+    .eq('counsel_id', counselId)
+    .select()
+    .single()
+
+  if (updateError) {
+    throw new Error(`프로젝트 업데이트 실패: ${updateError.message}`)
+  }
+
+  // 알림 생성
+  const { createClientToTeamEstimateRequest } = await import('./notification.service')
+  await createClientToTeamEstimateRequest(
+    client.user_id,
+    teamId,
+    counselId,
+    { message }
+  )
+
+  return updatedCounsel
+}
+
+// 새 프로젝트 생성 및 특정 팀에게 견적 요청
+export const createProjectAndRequestEstimate = async (
+  teamId: number,
+  projectInfo: {
+    title: string
+    outline: string
+    start_date: string
+    due_date: string
+  }
+) => {
+  const supabase = createSupabaseBrowserClient()
+  
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) {
+    throw new Error('로그인이 필요합니다.')
+  }
+
+  // client 테이블에서 user_id 조회
+  const { data: client } = await supabase
+    .from('client')
+    .select('user_id')
+    .eq('user_id', user.id)
+    .maybeSingle()
+
+  if (!client) {
+    throw new Error('클라이언트 정보를 찾을 수 없습니다.')
+  }
+
+  // 새 counsel 생성
   const { data: counselData, error: counselError } = await supabase
     .from('counsel')
     .insert({
       client_id: client.user_id,
-      company_profile_id: profile.profile_id,
       title: projectInfo.title,
       outline: projectInfo.outline,
-      counsel_status: 'recruiting', // 견적 요청 상태
+      counsel_status: 'recruiting',
       start_date: projectInfo.start_date,
       due_date: projectInfo.due_date,
-      requested_team_id: teamId, // 특정 팀에게 견적 요청 (마이그레이션 후 사용)
+      requested_team_id: teamId,
     })
     .select()
     .single()
 
   if (counselError) {
-    // requested_team_id 컬럼이 없을 수 있으므로, 에러 확인 후 재시도
-    if (counselError.message?.includes('requested_team_id') || counselError.message?.includes('column')) {
-      // requested_team_id 없이 재시도
-      const { data: retryData, error: retryError } = await supabase
-        .from('counsel')
-        .insert({
-          client_id: client.user_id,
-          company_profile_id: profile.profile_id,
-          title: projectInfo.title,
-          outline: projectInfo.outline,
-          counsel_status: 'recruiting',
-          start_date: projectInfo.start_date,
-          due_date: projectInfo.due_date,
-        })
-        .select()
-        .single()
-      
-      if (retryError) {
-        throw new Error(`프로젝트 생성 실패: ${retryError.message}`)
-      }
-      return retryData
-    }
     throw new Error(`프로젝트 생성 실패: ${counselError.message}`)
   }
+
+  // 알림 생성
+  const { createClientToTeamEstimateRequest } = await import('./notification.service')
+  await createClientToTeamEstimateRequest(
+    client.user_id,
+    teamId,
+    counselData.counsel_id
+  )
 
   return counselData
 }

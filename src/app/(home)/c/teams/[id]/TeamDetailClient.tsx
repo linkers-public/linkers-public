@@ -119,62 +119,35 @@ const TeamDetailClient: React.FC<TeamDetailClientProps> = ({ teamId }) => {
         throw new Error('로그인이 필요합니다.')
       }
 
-      // counsel 생성 (프로젝트 정보) - 견적 요청만
-      // estimate는 매니저가 견적서를 작성할 때 생성됨
-      const counselInsertData: any = {
-        client_id: user.id,
-        company_profile_id: companyProfile.profile_id,
-        title: `${teamData.name} 팀 견적 요청`,
-        outline: proposalMessage || '팀 견적을 요청합니다.',
-        counsel_status: 'recruiting', // 견적 요청 상태
-        start_date: new Date().toISOString().split('T')[0],
-        due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        requested_team_id: teamData.id, // 특정 팀에게 견적 요청 (마이그레이션 후 사용)
+      // 기업의 client_id 조회 (companyProfile.user_id 사용)
+      const { data: clientData } = await supabase
+        .from('client')
+        .select('user_id')
+        .eq('user_id', companyProfile.user_id)
+        .maybeSingle()
+
+      if (!clientData) {
+        throw new Error('기업 정보를 찾을 수 없습니다.')
       }
 
-      const { data: counselData, error: counselError } = await supabase
-        .from('counsel')
-        .insert(counselInsertData)
-        .select()
-        .single()
-
-      // requested_team_id 컬럼이 없을 수 있으므로, 에러 확인 후 재시도
-      if (counselError) {
-        if (counselError.message?.includes('requested_team_id') || counselError.message?.includes('column')) {
-          // requested_team_id 없이 재시도
-          delete counselInsertData.requested_team_id
-          const { data: retryData, error: retryError } = await supabase
-            .from('counsel')
-            .insert(counselInsertData)
-            .select()
-            .single()
-          
-          if (retryError) throw retryError
-          
-          toast({
-            title: '견적 요청 완료',
-            description: `${teamData.name} 팀에 견적을 요청했습니다.`,
-          })
-          
-          setShowProposalDialog(false)
-          setProposalMessage('')
-          router.push('/enterprise/my-counsel')
-          return
+      // counsel 생성 제거 → 알림만 생성
+      const { createTeamToClientEstimateRequest } = await import('@/apis/notification.service')
+      
+      await createTeamToClientEstimateRequest(
+        teamData.id,
+        clientData.user_id,
+        {
+          note: proposalMessage || '팀 견적을 요청합니다.',
         }
-        throw counselError
-      }
-
-      // counsel만 생성하고, estimate는 매니저가 견적서 작성 시 생성
-      // 매니저가 /my/estimate-requests에서 이 counsel을 보고 견적서 작성
+      )
 
       toast({
         title: '견적 요청 완료',
-        description: `${teamData.name} 팀에 견적을 요청했습니다.`,
+        description: `${teamData.name} 팀이 기업에게 견적 요청을 보냈습니다.`,
       })
 
       setShowProposalDialog(false)
       setProposalMessage('')
-      router.push('/enterprise/my-counsel')
     } catch (err: any) {
       console.error('견적 요청 실패:', err)
       toast({

@@ -10,6 +10,8 @@ import { updateAvailabilityStatus } from '@/apis/availability.service'
 import { ProposalDialog } from '@/components/ProposalDialog'
 import { createSupabaseBrowserClient } from '@/supabase/supabase-client'
 import { submitCareerVerification } from '@/apis/career-verification.service'
+import { bookmark, unbookmark, checkBookmarked } from '@/apis/bookmark.service'
+import { toast } from '@/hooks/use-toast'
 import { XCircle, FileText, CheckCircle, Pause, Star, Trophy, Briefcase, Calendar, Paperclip, Edit, GraduationCap, FolderOpen, MessageCircle } from 'lucide-react'
 
 export const ProfileClient = ({ username, isOwner = false }) => {
@@ -55,8 +57,59 @@ export const ProfileClient = ({ username, isOwner = false }) => {
   } = profile || {}
 
   const [showProposalDialog, setShowProposalDialog] = useState(false)
+  const [isBookmarked, setIsBookmarked] = useState(false)
+  const [isBookmarkLoading, setIsBookmarkLoading] = useState(false)
 
-  const onclickBookmark = () => {}
+  // 북마크 상태 확인
+  useEffect(() => {
+    const checkBookmarkStatus = async () => {
+      if (isOwner || !profile?.user_id) return
+      
+      try {
+        const bookmarked = await checkBookmarked(profile.user_id)
+        setIsBookmarked(bookmarked)
+      } catch (error) {
+        console.error('Failed to check bookmark status:', error)
+      }
+    }
+
+    if (profile?.user_id) {
+      checkBookmarkStatus()
+    }
+  }, [profile?.user_id, isOwner])
+
+  const onclickBookmark = async () => {
+    if (!profile?.user_id) return
+    
+    setIsBookmarkLoading(true)
+    try {
+      if (isBookmarked) {
+        await unbookmark(profile.user_id)
+        setIsBookmarked(false)
+        toast({
+          title: '찜 취소 완료',
+          description: '메이커 찜이 취소되었습니다.',
+        })
+      } else {
+        await bookmark(profile.user_id)
+        setIsBookmarked(true)
+        toast({
+          title: '찜 추가 완료',
+          description: '메이커가 찜 목록에 추가되었습니다.',
+        })
+      }
+    } catch (error) {
+      console.error('Bookmark error:', error)
+      toast({
+        variant: 'destructive',
+        title: '에러 발생',
+        description: error.message || '북마크 작업 중 문제가 발생했습니다.',
+      })
+    } finally {
+      setIsBookmarkLoading(false)
+    }
+  }
+  
   const onclickProposal = () => {
     setShowProposalDialog(true)
   }
@@ -161,6 +214,8 @@ export const ProfileClient = ({ username, isOwner = false }) => {
         onEditProfile={navigateToEditProfile}
         onToggleAvailability={handleToggleAvailability}
         isOwner={isOwner}
+        isBookmarked={isBookmarked}
+        isBookmarkLoading={isBookmarkLoading}
       />
 
       {/* 제안하기 다이얼로그 */}
@@ -236,6 +291,8 @@ const ProfileMeta = ({
   onEditProfile,
   onToggleAvailability,
   isOwner,
+  isBookmarked = false,
+  isBookmarkLoading = false,
 }) => {
   const getProfileTypeLabel = (type) => {
     if (!type) return null
@@ -351,9 +408,14 @@ const ProfileMeta = ({
               ) : (
                 profileType !== 'COMPANY' && (
                   <>
-                    <Button onClick={onClickBookmark} variant="outline" className="flex items-center gap-2">
-                      <Star className="w-4 h-4" />
-                      북마크
+                    <Button 
+                      onClick={onClickBookmark} 
+                      variant={isBookmarked ? "default" : "outline"}
+                      disabled={isBookmarkLoading}
+                      className={`flex items-center gap-2 ${isBookmarked ? 'bg-yellow-500 hover:bg-yellow-600 text-white' : ''}`}
+                    >
+                      <Star className={`w-4 h-4 ${isBookmarked ? 'fill-current' : ''}`} />
+                      {isBookmarkLoading ? '처리 중...' : isBookmarked ? '찜 해제' : '찜하기'}
                     </Button>
                     <Button onClick={onClickProposal} className="flex items-center gap-2">
                       <MessageCircle className="w-4 h-4" />

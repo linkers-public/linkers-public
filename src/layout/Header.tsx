@@ -472,7 +472,6 @@ const Header = () => {
         const subscriptionRoutes = [
           { label: '구독 관리', href: '/my/subscription', group: '결제 / 구독' },
           { label: '결제 내역', href: '/my/payments', group: '결제 / 구독' },
-          { label: '연락처 열람 기록', href: '/my/contact-history', group: '결제 / 구독' },
         ]
         const projectHistoryRoutes = [
           { label: '진행 이력', href: '/my/project-history', group: '프로젝트 기록' },

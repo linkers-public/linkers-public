@@ -89,10 +89,10 @@ const SideNavigator = () => {
         },
         {
           icon: '',
-          label: '연락처 열람 기록',
+          label: '견적서 열람 기록',
           type: 'subscription',
-          isActive: pathname === '/my/contact-history',
-          href: '/my/contact-history',
+          isActive: pathname === '/my/estimate-view-history',
+          href: '/my/estimate-view-history',
         },
       ]
 

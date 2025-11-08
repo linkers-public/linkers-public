@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { createSupabaseBrowserClient } from '@/supabase/supabase-client'
 import { Button } from '@/components/ui/button'
@@ -8,71 +8,22 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { 
-  getCompanyEstimates, 
-  getEstimateDetail,
-  updateEstimateStatus,
-  approveMilestone,
-  requestEstimate
+  createProjectAndRequestEstimate,
+  requestEstimateToTeam,
+  getCompanyCounsels
 } from '@/apis/company-project.service'
 import { searchTeams } from '@/apis/team.service'
 import { toast } from '@/hooks/use-toast'
 import { 
   FileText, 
-  CheckCircle, 
-  Eye,
   DollarSign,
   Calendar,
   Users,
   Plus,
   Search,
-  Loader2
+  Loader2,
+  Clock
 } from 'lucide-react'
-
-type TabType = 'estimate' | 'milestone'
-
-interface Estimate {
-  estimate_id: number
-  team_id: number
-  counsel_id: number | null
-  client_id: string
-  estimate_status: string
-  estimate_start_date: string | null
-  estimate_due_date: string | null
-  created_at?: string
-  teams?: Array<{
-    id: number
-    name: string
-    manager_id: string
-  }>
-  estimate_version?: Array<{
-    estimate_version_id: number
-    total_amount: number | null
-    detail: string | null
-    start_date: string | null
-    end_date: string | null
-    version_date: string | null
-  }>
-}
-
-interface Milestone {
-  milestone_id: number
-  estimate_id: number | null
-  estimate_version_id: number | null
-  title: string | null
-  detail: string | null
-  payment_amount: number | null
-  milestone_start_date: string | null
-  milestone_due_date: string | null
-  milestone_status: string | null
-  progress: number
-  payment?: Array<{
-    payment_id: number
-    payment_amount: string | null
-    payment_date: string | null
-    payment_method: string | null
-    payment_status: string | null
-  }>
-}
 
 interface Team {
   id: number
@@ -84,13 +35,26 @@ interface Team {
   } | null | any
 }
 
+interface Project {
+  counsel_id: number
+  title: string | null
+  outline: string | null
+  counsel_status: string
+  start_date: string
+  due_date: string
+  cost?: string | null
+  period?: string | null
+  feild?: string | null
+  created_at?: string
+  estimate_count?: number
+}
+
 export default function CompanyProjectsClient() {
   const router = useRouter()
-  const [activeTab, setActiveTab] = useState<TabType>('estimate')
   const [loading, setLoading] = useState(true)
-  const [estimates, setEstimates] = useState<Estimate[]>([])
-  const [milestones, setMilestones] = useState<Milestone[]>([])
-  const [selectedEstimate, setSelectedEstimate] = useState<number | null>(null)
+  const [projects, setProjects] = useState<Project[]>([])
+  const [statusFilter, setStatusFilter] = useState<'all' | 'with_estimates' | 'without_estimates'>('all')
+  const [filteredProjects, setFilteredProjects] = useState<Project[]>([])
   
   // 견적 요청 관련
   const [showRequestDialog, setShowRequestDialog] = useState(false)
@@ -98,6 +62,7 @@ export default function CompanyProjectsClient() {
   const [teamSearchTerm, setTeamSearchTerm] = useState('')
   const [teamResults, setTeamResults] = useState<Team[]>([])
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null)
+  const [selectedProjectForRequest, setSelectedProjectForRequest] = useState<number | null>(null)
   const [requestForm, setRequestForm] = useState({
     title: '',
     outline: '',
@@ -105,26 +70,29 @@ export default function CompanyProjectsClient() {
     due_date: ''
   })
   const [submittingRequest, setSubmittingRequest] = useState(false)
+  const [submittingToExistingProject, setSubmittingToExistingProject] = useState(false)
   
   const supabase = createSupabaseBrowserClient()
 
-  useEffect(() => {
-    loadData()
-  }, [activeTab, selectedEstimate])
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true)
       
-      if (activeTab === 'estimate') {
-        const data = await getCompanyEstimates(['pending', 'accept', 'in_progress'])
-        setEstimates(data)
-      } else if (activeTab === 'milestone' && selectedEstimate) {
-        const data = await getEstimateDetail(selectedEstimate)
-        if (data?.milestone) {
-          setMilestones(data.milestone)
-        }
-      }
+      const data = await getCompanyCounsels()
+      // 각 프로젝트의 견적서 개수 가져오기
+      const projectsWithCounts = await Promise.all(
+        (data || []).map(async (project: any) => {
+          const { count } = await supabase
+            .from('estimate')
+            .select('*', { count: 'exact', head: true })
+            .eq('counsel_id', project.counsel_id)
+          return {
+            ...project,
+            estimate_count: count || 0
+          }
+        })
+      )
+      setProjects(projectsWithCounts)
     } catch (error: any) {
       console.error('데이터 로드 실패:', error)
       toast({
@@ -135,7 +103,26 @@ export default function CompanyProjectsClient() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [supabase])
+
+  useEffect(() => {
+    loadData()
+  }, [loadData])
+
+  // 프로젝트 필터링 (견적서 개수 기준)
+  useEffect(() => {
+    if (statusFilter === 'all') {
+      setFilteredProjects(projects)
+    } else if (statusFilter === 'with_estimates') {
+      setFilteredProjects(projects.filter(project => 
+        (project.estimate_count || 0) > 0
+      ))
+    } else if (statusFilter === 'without_estimates') {
+      setFilteredProjects(projects.filter(project => 
+        (project.estimate_count || 0) === 0
+      ))
+    }
+  }, [projects, statusFilter])
 
   const handleSearchTeams = async () => {
     if (!teamSearchTerm.trim()) {
@@ -170,6 +157,35 @@ export default function CompanyProjectsClient() {
       return
     }
 
+    // 기존 프로젝트에 견적 요청하는 경우
+    if (selectedProjectForRequest) {
+      setSubmittingToExistingProject(true)
+      try {
+        await requestEstimateToTeam(selectedProjectForRequest, selectedTeam.id)
+        toast({
+          title: '견적 요청 완료',
+          description: `${selectedTeam.name} 팀에 견적을 요청했습니다.`,
+        })
+        setShowRequestDialog(false)
+        setSelectedTeam(null)
+        setSelectedProjectForRequest(null)
+        setTeamSearchTerm('')
+        setTeamResults([])
+        loadData()
+      } catch (error: any) {
+        console.error('견적 요청 실패:', error)
+        toast({
+          variant: 'destructive',
+          title: '견적 요청 실패',
+          description: error.message,
+        })
+      } finally {
+        setSubmittingToExistingProject(false)
+      }
+      return
+    }
+
+    // 새 프로젝트 생성하는 경우
     if (!requestForm.title || !requestForm.outline || !requestForm.start_date || !requestForm.due_date) {
       toast({
         variant: 'destructive',
@@ -180,7 +196,7 @@ export default function CompanyProjectsClient() {
 
     setSubmittingRequest(true)
     try {
-      await requestEstimate(selectedTeam.id, {
+      await createProjectAndRequestEstimate(selectedTeam.id, {
         title: requestForm.title,
         outline: requestForm.outline,
         start_date: requestForm.start_date,
@@ -215,41 +231,11 @@ export default function CompanyProjectsClient() {
     }
   }
 
-  const handleEstimateCompare = (estimateId: number) => {
-    router.push(`/my/company/estimates?compare=${estimateId}`)
-  }
-
-  const handleEstimateConfirm = async (estimateId: number) => {
-    try {
-      await updateEstimateStatus(estimateId, 'in_progress')
-      toast({
-        title: '계약이 확정되었습니다',
-      })
-      loadData()
-    } catch (error: any) {
-      toast({
-        variant: 'destructive',
-        title: '계약 확정 실패',
-        description: error.message,
-      })
+  const handleRequestEstimateToExistingProject = (counselId: number) => {
+    setSelectedProjectForRequest(counselId)
+    setShowRequestDialog(true)
     }
-  }
 
-  const handleMilestoneApprove = async (milestoneId: number) => {
-    try {
-      await approveMilestone(milestoneId)
-      toast({
-        title: '마일스톤이 승인되었습니다',
-      })
-      loadData()
-    } catch (error: any) {
-      toast({
-        variant: 'destructive',
-        title: '마일스톤 승인 실패',
-        description: error.message,
-      })
-    }
-  }
 
   const getStatusBadge = (status: string) => {
     const statusMap: Record<string, { label: string; className: string }> = {
@@ -257,6 +243,8 @@ export default function CompanyProjectsClient() {
       accept: { label: '수락', className: 'bg-green-100 text-green-800' },
       in_progress: { label: '진행중', className: 'bg-blue-100 text-blue-800' },
       completed: { label: '완료', className: 'bg-gray-100 text-gray-800' },
+      recruiting: { label: '모집중', className: 'bg-blue-100 text-blue-800' },
+      end: { label: '종료', className: 'bg-gray-100 text-gray-800' },
     }
     
     const statusInfo = statusMap[status] || { label: status, className: 'bg-gray-100 text-gray-800' }
@@ -268,7 +256,11 @@ export default function CompanyProjectsClient() {
     )
   }
 
-  if (loading && estimates.length === 0) {
+  const handleProjectClick = (counselId: number) => {
+    router.push(`/enterprise/counsel-detail/${counselId}`)
+  }
+
+  if (loading && projects.length === 0) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
@@ -284,7 +276,7 @@ export default function CompanyProjectsClient() {
       <div className="mb-6 flex justify-between items-center">
         <div>
           <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-2">내 프로젝트</h1>
-          <p className="text-gray-600">견적 요청과 마일스톤을 관리하세요</p>
+          <p className="text-gray-600">프로젝트와 견적 요청을 관리하세요</p>
         </div>
         <Dialog open={showRequestDialog} onOpenChange={setShowRequestDialog}>
           <DialogTrigger asChild>
@@ -295,9 +287,34 @@ export default function CompanyProjectsClient() {
           </DialogTrigger>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>프리랜서팀에게 견적 요청</DialogTitle>
+              <DialogTitle>
+                {selectedProjectForRequest ? '기존 프로젝트에 견적 요청' : '프리랜서팀에게 견적 요청'}
+              </DialogTitle>
             </DialogHeader>
             <div className="space-y-4 mt-4">
+              {selectedProjectForRequest && (
+                <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
+                  <p className="text-sm text-blue-900">
+                    기존 프로젝트에 특정 팀을 지정하여 견적을 요청합니다.
+                  </p>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setSelectedProjectForRequest(null)
+                      setRequestForm({
+                        title: '',
+                        outline: '',
+                        start_date: '',
+                        due_date: ''
+                      })
+                    }}
+                    className="mt-2"
+                  >
+                    새 프로젝트로 변경
+                  </Button>
+                </div>
+              )}
               {/* 팀 검색 */}
               <div>
                 <Label>팀 검색</Label>
@@ -359,7 +376,9 @@ export default function CompanyProjectsClient() {
                 )}
               </div>
 
-              {/* 프로젝트 정보 입력 */}
+              {/* 프로젝트 정보 입력 (새 프로젝트인 경우만) */}
+              {!selectedProjectForRequest && (
+                <>
               <div>
                 <Label htmlFor="title">프로젝트 제목 *</Label>
                 <Input
@@ -405,6 +424,8 @@ export default function CompanyProjectsClient() {
                   />
                 </div>
               </div>
+                </>
+              )}
 
               <div className="flex justify-end gap-2 pt-4">
                 <Button
@@ -412,6 +433,7 @@ export default function CompanyProjectsClient() {
                   onClick={() => {
                     setShowRequestDialog(false)
                     setSelectedTeam(null)
+                    setSelectedProjectForRequest(null)
                     setRequestForm({
                       title: '',
                       outline: '',
@@ -426,15 +448,15 @@ export default function CompanyProjectsClient() {
                 </Button>
                 <Button
                   onClick={handleRequestEstimate}
-                  disabled={submittingRequest || !selectedTeam}
+                  disabled={(submittingRequest || submittingToExistingProject) || !selectedTeam}
                 >
-                  {submittingRequest ? (
+                  {(submittingRequest || submittingToExistingProject) ? (
                     <>
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                       요청 중...
                     </>
                   ) : (
-                    '견적 요청하기'
+                    selectedProjectForRequest ? '기존 프로젝트에 견적 요청' : '견적 요청하기'
                   )}
                 </Button>
               </div>
@@ -443,188 +465,135 @@ export default function CompanyProjectsClient() {
         </Dialog>
       </div>
 
-      {/* 탭 네비게이션 */}
-      <div className="flex gap-2 mb-6 border-b">
+      {/* 프로젝트 목록 */}
+      <div className="space-y-4">
+        {/* 필터 */}
+          <div className="flex flex-wrap gap-3 mb-4">
+            <button
+              onClick={() => setStatusFilter('all')}
+              className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 ${
+                statusFilter === 'all'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              전체 ({projects.length})
+            </button>
         <button
-          onClick={() => setActiveTab('estimate')}
-          className={`px-4 py-2 font-medium transition-colors ${
-            activeTab === 'estimate'
-              ? 'text-blue-600 border-b-2 border-blue-600'
-              : 'text-gray-600 hover:text-gray-900'
+              onClick={() => setStatusFilter('with_estimates')}
+              className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 ${
+                statusFilter === 'with_estimates'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
           }`}
         >
-          견적 진행
+              견적서 있음 ({projects.filter(p => (p.estimate_count || 0) > 0).length})
         </button>
         <button
-          onClick={() => {
-            if (estimates.length > 0) {
-              setSelectedEstimate(estimates[0].estimate_id)
-              setActiveTab('milestone')
-            }
-          }}
-          className={`px-4 py-2 font-medium transition-colors ${
-            activeTab === 'milestone'
-              ? 'text-blue-600 border-b-2 border-blue-600'
-              : 'text-gray-600 hover:text-gray-900'
+              onClick={() => setStatusFilter('without_estimates')}
+              className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-all duration-200 ${
+                statusFilter === 'without_estimates'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
           }`}
         >
-          마일스톤/지급
+              견적서 없음 ({projects.filter(p => (p.estimate_count || 0) === 0).length})
         </button>
       </div>
 
-      {/* 견적 진행 탭 */}
-      {activeTab === 'estimate' && (
-        <div className="space-y-4">
-          {estimates.length === 0 ? (
+          {filteredProjects.length === 0 ? (
             <div className="text-center py-12 bg-gray-50 rounded-lg">
               <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-600 mb-4">진행 중인 견적이 없습니다</p>
-              <Button onClick={() => setShowRequestDialog(true)}>
+              <p className="text-gray-600 mb-4">프로젝트가 없습니다</p>
+              <Button onClick={() => router.push('/enterprise/counsel-form')}>
                 <Plus className="w-4 h-4 mr-2" />
-                견적 요청하기
+                프로젝트 등록하기
               </Button>
             </div>
           ) : (
-            estimates.map((estimate) => (
-              <div key={estimate.estimate_id} className="bg-white rounded-lg shadow-sm border p-4 md:p-6">
+            filteredProjects.map((project) => (
+              <div
+                key={project.counsel_id}
+                className="bg-white rounded-lg shadow-sm border p-4 md:p-6 hover:shadow-md transition-shadow"
+              >
                 <div className="flex justify-between items-start mb-4">
-                  <div>
+                  <div 
+                    className="flex-1 cursor-pointer"
+                    onClick={() => handleProjectClick(project.counsel_id)}
+                  >
                     <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                      {estimate.teams?.[0]?.name || '팀명 없음'}
+                      {project.title || '제목 없음'}
                     </h3>
-                    {getStatusBadge(estimate.estimate_status)}
+                    {getStatusBadge(project.counsel_status)}
                   </div>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleEstimateCompare(estimate.estimate_id)}
-                    >
-                      <Eye className="w-4 h-4 mr-1" />
-                      비교
-                    </Button>
-                    {estimate.estimate_status === 'accept' && (
-                      <Button
-                        size="sm"
-                        onClick={() => handleEstimateConfirm(estimate.estimate_id)}
-                      >
-                        계약 확정
-                      </Button>
-                    )}
+                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                    <FileText className="w-4 h-4" />
+                    <span>견적서 {project.estimate_count || 0}개</span>
                   </div>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600 mb-4">
-                  <div className="flex items-center gap-2">
-                    <Users className="w-4 h-4" />
-                    <span>담당 매니저: {estimate.teams?.[0]?.manager_id || '없음'}</span>
-                  </div>
-                  {estimate.estimate_version && estimate.estimate_version.length > 0 && (
-                    <>
-                      <div className="flex items-center gap-2">
-                        <DollarSign className="w-4 h-4" />
-                        <span>총액: {estimate.estimate_version[0].total_amount?.toLocaleString()}원</span>
-                      </div>
+                
+                {project.outline && (
+                  <p 
+                    className="text-sm text-gray-700 mb-4 line-clamp-2 cursor-pointer"
+                    onClick={() => handleProjectClick(project.counsel_id)}
+                  >
+                    {project.outline}
+                  </p>
+                )}
+
+                <div 
+                  className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-gray-600 cursor-pointer"
+                  onClick={() => handleProjectClick(project.counsel_id)}
+                >
                       <div className="flex items-center gap-2">
                         <Calendar className="w-4 h-4" />
                         <span>
-                          기간: {estimate.estimate_version[0].start_date} ~ {estimate.estimate_version[0].end_date}
+                      기간: {project.start_date} ~ {project.due_date}
                         </span>
-                      </div>
-                      <div>
-                        <span className="font-medium">버전:</span> {estimate.estimate_version.length}개
-                      </div>
-                    </>
-                  )}
-                </div>
-                {estimate.estimate_version && estimate.estimate_version[0]?.detail && (
-                  <div className="mt-4 pt-4 border-t">
-                    <p className="text-sm text-gray-700">{estimate.estimate_version[0].detail}</p>
                   </div>
-                )}
+                  {project.cost && (
+                    <div className="flex items-center gap-2">
+                      <DollarSign className="w-4 h-4" />
+                      <span>예산: {project.cost}</span>
+                    </div>
+                  )}
+                  {project.period && (
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-4 h-4" />
+                      <span>기간: {project.period}</span>
+                    </div>
+                  )}
+                        </div>
+
+                {project.feild && (
+                  <div 
+                    className="mt-4 pt-4 border-t cursor-pointer"
+                    onClick={() => handleProjectClick(project.counsel_id)}
+                  >
+                    <span className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded">
+                      {project.feild}
+                    </span>
+                    </div>
+                  )}
+
+                {/* 기존 프로젝트에 견적 요청 버튼 */}
+                <div className="mt-4 pt-4 border-t flex justify-end">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleRequestEstimateToExistingProject(project.counsel_id)
+                    }}
+                  >
+                    <Users className="w-4 h-4 mr-2" />
+                    팀에게 견적 요청
+                  </Button>
+                </div>
               </div>
             ))
           )}
         </div>
-      )}
-
-      {/* 마일스톤/지급 탭 */}
-      {activeTab === 'milestone' && (
-        <div className="space-y-4">
-          {!selectedEstimate ? (
-            <div className="text-center py-12 bg-gray-50 rounded-lg">
-              <p className="text-gray-600 mb-4">견적을 선택해주세요</p>
-              <Button onClick={() => setActiveTab('estimate')}>
-                견적 진행 탭으로 이동
-              </Button>
-            </div>
-          ) : milestones.length === 0 ? (
-            <div className="text-center py-12 bg-gray-50 rounded-lg">
-              <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-600">마일스톤이 없습니다</p>
-            </div>
-          ) : (
-            <>
-              <div className="mb-4">
-                <Button
-                  variant="outline"
-                  onClick={() => setActiveTab('estimate')}
-                >
-                  견적 선택으로 돌아가기
-                </Button>
-              </div>
-              {milestones.map((milestone) => (
-                <div key={milestone.milestone_id} className="bg-white rounded-lg shadow-sm border p-4 md:p-6">
-                  <div className="flex justify-between items-start mb-4">
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-900 mb-2">{milestone.title}</h3>
-                      {milestone.milestone_status && getStatusBadge(milestone.milestone_status)}
-                    </div>
-                      {milestone.milestone_status !== 'task_completed' && (
-                      <Button
-                        size="sm"
-                        onClick={() => handleMilestoneApprove(milestone.milestone_id)}
-                      >
-                        <CheckCircle className="w-4 h-4 mr-1" />
-                        승인
-                      </Button>
-                    )}
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600 mb-4">
-                    <div className="flex items-center gap-2">
-                      <DollarSign className="w-4 h-4" />
-                      <span>금액: {milestone.payment_amount?.toLocaleString()}원</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Calendar className="w-4 h-4" />
-                      <span>
-                        기간: {milestone.milestone_start_date} ~ {milestone.milestone_due_date}
-                      </span>
-                    </div>
-                  </div>
-                  {milestone.detail && (
-                    <div className="mt-4 pt-4 border-t">
-                      <p className="text-sm text-gray-700">{milestone.detail}</p>
-                    </div>
-                  )}
-                  {milestone.payment && milestone.payment.length > 0 && (
-                    <div className="mt-4 pt-4 border-t">
-                      <h4 className="font-medium mb-2">지급 내역</h4>
-                      {milestone.payment.map((pay) => (
-                        <div key={pay.payment_id} className="text-sm text-gray-600">
-                          <div>금액: {pay.payment_amount}원</div>
-                          <div>일자: {pay.payment_date}</div>
-                          <div>방법: {pay.payment_method}</div>
-                          <div>상태: {pay.payment_status}</div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </>
-          )}
-        </div>
-      )}
     </div>
   )
 }
