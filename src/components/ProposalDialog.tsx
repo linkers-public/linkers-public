@@ -220,7 +220,7 @@ export const ProposalDialog = ({
                       >
                         {isCreatingTeam ? '생성 중...' : '기본 팀 생성하기'}
                       </Button>
-                      <Link href="/team-profile" onClick={() => onOpenChange(false)}>
+                      <Link href="/my/team-profile" onClick={() => onOpenChange(false)}>
                         <Button 
                           type="button"
                           variant="outline"

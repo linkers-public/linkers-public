@@ -2,7 +2,9 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
-import { UserCircleIcon, Bell, LogOut, User, Settings, Menu, X, Mail } from 'lucide-react'
+import { UserCircleIcon, Bell, LogOut, User, Settings, Menu, X, Users, UserPlus, MessageSquare, CheckCircle, XCircle, Clock, Mail, Handshake, ArrowRight, Inbox } from 'lucide-react'
+import { toast } from '@/hooks/use-toast'
+import { acceptTeamProposal, declineTeamProposal } from '@/apis/proposal.service'
 import { Button } from '@/components/ui/button'
 import { createSupabaseBrowserClient } from '@/supabase/supabase-client'
 import { User as SupabaseUser } from '@supabase/supabase-js'
@@ -23,9 +25,24 @@ const Header = () => {
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [showMobileMenu, setShowMobileMenu] = useState(false)
   const [showNotificationMenu, setShowNotificationMenu] = useState(false)
+  const [isNotificationMenuPinned, setIsNotificationMenuPinned] = useState(false) // 클릭으로 고정된 상태
   const [activeProfileType, setActiveProfileType] = useState<ProfileType | null>(null)
   const [activeRole, setActiveRole] = useState<'MAKER' | 'MANAGER' | 'NONE' | null>(null)
   const [unreadCount, setUnreadCount] = useState(0)
+  const [recentMessages, setRecentMessages] = useState<Array<{
+    id: string | number
+    type: string
+    title: string
+    content: string
+    created_at: string
+    status?: string | null
+    team_id?: number
+    team_member_id?: number
+    proposal_id?: number
+    canAccept?: boolean
+    canDecline?: boolean
+  }>>([])
+  const [loadingMessages, setLoadingMessages] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   const mobileMenuRef = useRef<HTMLDivElement>(null)
   const notificationMenuRef = useRef<HTMLDivElement>(null)
@@ -66,47 +83,269 @@ const Header = () => {
           console.warn('인증 오류로 인해 알림을 불러올 수 없습니다:', authError.message)
         }
         setUnreadCount(0)
+        setRecentMessages([])
         return
       }
 
       let count = 0
+      const messages: Array<{
+        id: string | number
+        type: string
+        title: string
+        content: string
+        created_at: string
+        status?: string | null
+        team_id?: number
+        team_member_id?: number
+        proposal_id?: number
+        canAccept?: boolean
+        canDecline?: boolean
+      }> = []
 
-      // 팀 초대 조회 (읽지 않은 것만)
-      const { data: invites, error: invitesError } = await supabase
-        .from('team_members')
-        .select('id, status')
-        .eq('maker_id', user.id)
-        .is('status', null)
-
-      if (!invitesError && invites) {
-        count += invites.length
-      }
-
-      // 기업 제안 조회 (읽지 않은 것만)
+      // 현재 프로필 확인
       const { data: profile, error: profileError } = await supabase
         .from('accounts')
-        .select('profile_id')
+        .select('profile_id, profile_type, role')
         .eq('user_id', user.id)
         .eq('is_active', true)
         .is('deleted_at', null)
-        .single()
+        .maybeSingle()
 
-      if (!profileError && profile) {
-        const { data: proposals, error: proposalsError } = await supabase
-          .from('project_members')
-          .select('id, status')
+      if (!profile || profile.profile_type !== 'FREELANCER') {
+        setUnreadCount(0)
+        setRecentMessages([])
+        return
+      }
+
+      // 1. 팀 초대 조회 (받은 초대)
+      const { data: invites, error: invitesError } = await supabase
+        .from('team_members')
+        .select(`
+          id,
+          team_id,
+          status,
+          request_type,
+          created_at,
+          teams:team_id (
+            name,
+            manager_profile_id
+          )
+        `)
           .eq('profile_id', profile.profile_id)
-          .is('status', null)
+        .eq('request_type', 'invite')
+        .order('created_at', { ascending: false })
+        .limit(5)
 
-        if (!proposalsError && proposals) {
-          count += proposals.length
+      if (!invitesError && invites) {
+        const unreadInvites = invites.filter((inv: any) => !inv.status)
+        count += unreadInvites.length
+
+        // 매니저 정보 조회
+        const managerProfileIds = invites
+          .map((inv: any) => inv.teams?.manager_profile_id)
+          .filter(Boolean) || []
+        
+        const managerInfo: Record<string, any> = {}
+        if (managerProfileIds.length > 0) {
+          const { data: managers } = await supabase
+            .from('accounts')
+            .select('profile_id, username')
+            .in('profile_id', managerProfileIds)
+
+          if (managers) {
+            managers.forEach((m: any) => {
+              managerInfo[m.profile_id] = m
+            })
+          }
+        }
+
+        invites.forEach((invite: any) => {
+          const manager = invite.teams?.manager_profile_id 
+            ? managerInfo[invite.teams.manager_profile_id]
+            : null
+          
+          messages.push({
+            id: `invite-${invite.id}`,
+            type: 'team_invite',
+            title: '팀 초대',
+            content: `${manager?.username || '매니저'}님이 ${invite.teams?.name || '팀'}에 초대했습니다.`,
+            created_at: invite.created_at,
+            status: invite.status,
+            team_id: invite.team_id,
+            team_member_id: invite.id,
+            canAccept: !invite.status, // status가 null이면 수락 가능
+            canDecline: !invite.status, // status가 null이면 거절 가능
+          })
+        })
+      }
+
+      // 2. 팀 제안 조회 (받은 제안)
+      const { data: proposals, error: teamProposalsError } = await supabase
+        .from('team_proposals')
+        .select('id, team_id, manager_id, message, created_at')
+        .eq('maker_id', user.id)
+        .order('created_at', { ascending: false })
+        .limit(5)
+
+      if (!teamProposalsError && proposals) {
+        const teamIds = proposals.map((p: any) => p.team_id).filter((id: any) => id !== null) as number[]
+        const managerIds = proposals.map((p: any) => p.manager_id).filter(Boolean) || []
+
+        const teamInfo: Record<number, any> = {}
+        if (teamIds.length > 0) {
+          const { data: teams } = await supabase
+            .from('teams')
+            .select('id, name')
+            .in('id', teamIds)
+
+          if (teams) {
+            teams.forEach((team: any) => {
+              teamInfo[team.id] = team
+            })
+          }
+        }
+
+        const managerInfo: Record<string, any> = {}
+        if (managerIds.length > 0) {
+          const { data: managers } = await supabase
+            .from('accounts')
+            .select('user_id, username')
+            .in('user_id', managerIds)
+
+          if (managers) {
+            managers.forEach((m: any) => {
+              managerInfo[m.user_id] = m
+            })
+          }
+        }
+
+        proposals.forEach((proposal: any) => {
+          const team = proposal.team_id ? teamInfo[proposal.team_id] : null
+          const manager = managerInfo[proposal.manager_id]
+          
+          messages.push({
+            id: `proposal-${proposal.id}`,
+            type: 'team_proposal',
+            title: '팀 제안',
+            content: `${manager?.username || '매니저'}님이 ${team?.name || '팀'}에 합류를 제안했습니다.`,
+            created_at: proposal.created_at,
+            proposal_id: proposal.id,
+            canAccept: true, // 팀 제안은 항상 수락/거절 가능
+            canDecline: true,
+          })
+        })
+      }
+
+      // 3. 받은 합류 요청 조회 (매니저인 경우)
+      // manager_profile_id로 팀을 찾아서, 해당 팀에 대한 합류 요청 조회
+      // role 조건 없이 manager_profile_id로만 조회 (프로젝트마다 역할이 다를 수 있음)
+      const { data: managedTeams } = await supabase
+        .from('teams')
+        .select('id, name')
+        .eq('manager_profile_id', profile.profile_id)
+
+      if (managedTeams && managedTeams.length > 0) {
+        const teamIds = managedTeams.map((t: any) => t.id)
+        
+        const { data: joinRequests, error: joinRequestsError } = await supabase
+          .from('team_members')
+          .select(`
+            id,
+            team_id,
+            profile_id,
+            maker_id,
+            status,
+            created_at
+          `)
+          .in('team_id', teamIds)
+          .eq('status', 'pending')
+          .eq('request_type', 'request')
+          .order('created_at', { ascending: false })
+          .limit(5)
+
+        if (!joinRequestsError && joinRequests) {
+          count += joinRequests.length
+
+          const makerIds = joinRequests.map((r: any) => r.maker_id).filter(Boolean) || []
+          const makerInfo: Record<string, any> = {}
+
+          if (makerIds.length > 0) {
+            const { data: makers } = await supabase
+              .from('accounts')
+              .select('user_id, username')
+              .in('user_id', makerIds)
+
+            if (makers) {
+              makers.forEach((m: any) => {
+                makerInfo[m.user_id] = m
+              })
+            }
+          }
+
+          joinRequests.forEach((request: any) => {
+            const team = managedTeams.find((t: any) => t.id === request.team_id)
+            const maker = makerInfo[request.maker_id]
+            
+            messages.push({
+              id: `join-${request.id}`,
+              type: 'join_request',
+              title: '합류 요청',
+              content: `${maker?.username || '메이커'}님이 ${team?.name || '팀'}에 합류를 요청했습니다.`,
+              created_at: request.created_at,
+              status: request.status,
+              team_id: request.team_id,
+              team_member_id: request.id,
+              canAccept: request.status === 'pending', // pending 상태면 수락 가능
+              canDecline: request.status === 'pending', // pending 상태면 거절 가능
+            })
+          })
         }
       }
 
+      // 4. 보낸 합류 신청 조회 (메이커가 보낸 합류 신청)
+      const { data: sentJoinRequests, error: sentJoinRequestsError } = await supabase
+        .from('team_members')
+        .select(`
+          id,
+          team_id,
+          status,
+          created_at,
+          teams:team_id (
+            name,
+            manager_profile_id
+          )
+        `)
+        .eq('profile_id', profile.profile_id)
+        .eq('status', 'pending')
+        .eq('request_type', 'request')
+        .order('created_at', { ascending: false })
+        .limit(5)
+
+      if (!sentJoinRequestsError && sentJoinRequests) {
+        sentJoinRequests.forEach((request: any) => {
+          messages.push({
+            id: `sent-join-${request.id}`,
+            type: 'sent_join_request',
+            title: '보낸 합류 신청',
+            content: `${request.teams?.name || '팀'}에 합류를 신청했습니다.`,
+            created_at: request.created_at,
+            status: request.status,
+            team_id: request.team_id,
+            team_member_id: request.id,
+            canAccept: false, // 보낸 신청은 수락/거절 불가 (매니저가 처리)
+            canDecline: false,
+          })
+        })
+      }
+
+      // 최신순으로 정렬하고 최대 5개만 표시
+      messages.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      setRecentMessages(messages.slice(0, 5))
       setUnreadCount(count)
     } catch (error) {
       console.error('알람 로드 실패:', error)
       setUnreadCount(0)
+      setRecentMessages([])
     }
   }
 
@@ -193,6 +432,7 @@ const Header = () => {
       }
       if (notificationMenuRef.current && !notificationMenuRef.current.contains(event.target as Node)) {
         setShowNotificationMenu(false)
+        setIsNotificationMenuPinned(false) // 외부 클릭 시 고정 해제
       }
     }
 
@@ -254,12 +494,11 @@ const Header = () => {
       if (isFreelancer) {
         const profileRoutes = [
           { label: '프로필 보기/수정', href: '/my/profile', group: '내 프로필' },
-          { label: '쪽지함', href: '/my/messages', group: '내 프로필' },
         ]
-        const proposalRoutes = [
-          { label: '받은 프로젝트 제안', href: '/my/project-proposals', group: '제안 & 메시지' },
-          { label: '보낸 견적서 (매니저)', href: '/my/estimates-dashboard', group: '제안 & 메시지' },
-        ]
+        // const proposalRoutes = [
+        //   { label: '받은 프로젝트 제안', href: '/my/project-proposals', group: '제안 & 메시지' },
+        //   { label: '보낸 견적서 (매니저)', href: '/my/estimates-dashboard', group: '제안 & 메시지' },
+        // ]
         const interestRoutes = [
           { label: '관심 프로젝트', href: '/my/bookmarked-projects', group: '관심항목' },
           { label: '관심 기업', href: '/my/bookmarked-companies', group: '관심항목' },
@@ -271,13 +510,13 @@ const Header = () => {
         const teamRoutes = []
         if (account?.role === 'MANAGER') {
           teamRoutes.push(
-            { label: '팀 프로필 조회', href: '/team-profile', group: '팀' },
-            { label: '팀 프로젝트 확인', href: '/team-projects', group: '팀' }
+            { label: '팀 프로필 조회', href: '/my/team-profile', group: '팀' },
+            { label: '팀 프로젝트 확인', href: '/my/team-projects', group: '팀' }
           )
         }
         return [
           ...profileRoutes,
-          ...proposalRoutes,
+          // ...proposalRoutes,
           ...interestRoutes,
           ...accountRoutes,
           ...teamRoutes,
@@ -305,8 +544,8 @@ const Header = () => {
       )
       if (activeRole === 'MANAGER') {
         freelancerRoutes.push(
-          { label: '팀 프로필 조회', href: '/team-profile' },
-          { label: '팀 프로젝트 확인', href: '/team-projects' }
+          { label: '팀 프로필 조회', href: '/my/team-profile' },
+          { label: '팀 프로젝트 확인', href: '/my/team-projects' }
         )
       }
     }
@@ -337,45 +576,256 @@ const Header = () => {
                   <ProfileSwitchButton />
                 </div>
                 {/* 알림 아이콘 - 모바일에서 숨김 */}
-                <div className="hidden md:block relative" ref={notificationMenuRef}>
+                <div
+                  className="hidden md:block relative"
+                  ref={notificationMenuRef}
+                  onMouseEnter={() => {
+                    setShowNotificationMenu(true)
+                    setShowUserMenu(false)
+                    // 메시지 로드 (호버 시에만)
+                    if (recentMessages.length === 0 && !loadingMessages) {
+                      loadNotifications()
+                    }
+                  }}
+                  onMouseLeave={() => {
+                    // 클릭으로 고정된 경우에만 유지, 그 외에는 닫기
+                    if (!isNotificationMenuPinned) {
+                      setShowNotificationMenu(false)
+                    }
+                  }}
+                >
                   <Bell
                     size={24}
                     color="#4a4a4a"
                     strokeWidth={1.5}
                     className="cursor-pointer"
                     onClick={() => {
-                      setShowNotificationMenu(!showNotificationMenu)
+                      const newState = !showNotificationMenu
+                      setShowNotificationMenu(newState)
+                      setIsNotificationMenuPinned(newState) // 클릭 시 고정 상태 토글
                       setShowUserMenu(false)
+                      // 클릭 시 메시지 로드
+                      if (newState && recentMessages.length === 0 && !loadingMessages) {
+                        loadNotifications()
+                      }
                     }}
                   />
                   {unreadCount > 0 && (
                   <div className="absolute top-0 right-0 w-[10px] h-[10px] bg-palette-blue-50 rounded-full border-2 border-white"></div>
                   )}
                   {showNotificationMenu && (
-                    <div className="absolute right-0 mt-2 w-80 bg-white rounded-lg shadow-lg border border-gray-200 py-2 z-50 max-h-96 overflow-y-auto">
-                      <div className="px-4 py-2 border-b border-gray-200">
-                        <h3 className="text-xs font-semibold text-gray-900">알림</h3>
+                    <div 
+                      className="absolute right-0 top-full mt-1 w-96 bg-white rounded-xl shadow-xl border border-gray-100 overflow-hidden z-50"
+                      onMouseEnter={() => {
+                        // 메뉴 영역에 호버하면 계속 유지
+                        setShowNotificationMenu(true)
+                      }}
+                      onMouseLeave={() => {
+                        // 메뉴 영역에서 벗어나면 닫기 (단, 클릭으로 고정된 경우는 제외)
+                        if (!isNotificationMenuPinned) {
+                          setShowNotificationMenu(false)
+                        }
+                      }}
+                    >
+                      {/* 헤더 */}
+                      <div className="px-5 py-4 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-gray-100">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+                              <Bell className="w-4 h-4 text-blue-600" />
+                            </div>
+                            <h3 className="text-sm font-semibold text-gray-900">알림</h3>
+                            {unreadCount > 0 && (
+                              <span className="px-2 py-0.5 text-xs font-medium bg-blue-600 text-white rounded-full">
+                                {unreadCount}
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </div>
-                      <div className="py-2">
+                      
+                      {/* 최근 메시지 목록 */}
+                      {recentMessages.length > 0 ? (
+                        <div className="max-h-[400px] overflow-y-auto">
+                          {recentMessages.map((message) => {
+                            const handleMessageAction = async (action: 'accept' | 'decline') => {
+                              try {
+                                if (message.type === 'team_invite' && message.team_member_id) {
+                                  // 팀 초대 수락/거절
+                                  const { error } = await supabase
+                                    .from('team_members')
+                                    .update({
+                                      status: action === 'accept' ? 'active' : 'declined',
+                                      updated_at: new Date().toISOString(),
+                                    })
+                                    .eq('id', message.team_member_id)
+
+                                  if (error) throw error
+
+                                  toast({
+                                    title: action === 'accept' ? '팀 초대를 수락했습니다' : '팀 초대를 거절했습니다',
+                                  })
+                                } else if (message.type === 'team_proposal' && message.proposal_id) {
+                                  // 팀 제안 수락/거절
+                                  if (action === 'accept') {
+                                    await acceptTeamProposal(message.proposal_id)
+                                    toast({
+                                      title: '팀 제안을 수락했습니다',
+                                    })
+                                  } else {
+                                    await declineTeamProposal(message.proposal_id)
+                                    toast({
+                                      title: '팀 제안을 거절했습니다',
+                                    })
+                                  }
+                                } else if (message.type === 'join_request' && message.team_member_id) {
+                                  // 합류 요청 수락/거절 (매니저)
+                                  const { error } = await supabase
+                                    .from('team_members')
+                                    .update({
+                                      status: action === 'accept' ? 'active' : 'declined',
+                                      updated_at: new Date().toISOString(),
+                                    })
+                                    .eq('id', message.team_member_id)
+
+                                  if (error) throw error
+
+                                  toast({
+                                    title: action === 'accept' ? '합류 신청을 수락했습니다' : '합류 신청을 거절했습니다',
+                                  })
+                                }
+
+                                // 메시지 목록 새로고침
+                                await loadNotifications()
+                              } catch (error: any) {
+                                console.error('메시지 처리 실패:', error)
+                                toast({
+                                  variant: 'destructive',
+                                  title: '처리에 실패했습니다',
+                                  description: error.message,
+                                })
+                              }
+                            }
+
+                            // 메시지 타입별 아이콘 및 색상
+                            const getMessageIcon = () => {
+                              switch (message.type) {
+                                case 'team_invite':
+                                  return <UserPlus className="w-5 h-5 text-blue-500" />
+                                case 'team_proposal':
+                                  return <Users className="w-5 h-5 text-purple-500" />
+                                case 'join_request':
+                                  return <Users className="w-5 h-5 text-green-500" />
+                                case 'sent_join_request':
+                                  return <Clock className="w-5 h-5 text-amber-500" />
+                                default:
+                                  return <Mail className="w-5 h-5 text-gray-400" />
+                              }
+                            }
+
+                            const getMessageBgColor = () => {
+                              switch (message.type) {
+                                case 'team_invite':
+                                  return 'bg-blue-50'
+                                case 'team_proposal':
+                                  return 'bg-purple-50'
+                                case 'join_request':
+                                  return 'bg-green-50'
+                                case 'sent_join_request':
+                                  return 'bg-amber-50'
+                                default:
+                                  return 'bg-gray-50'
+                              }
+                            }
+
+                            return (
+                              <div
+                                key={message.id}
+                                className="px-5 py-4 border-b border-gray-100 last:border-b-0 hover:bg-gray-50/50 transition-colors"
+                              >
+                                <div className="flex items-start gap-3">
+                                  {/* 아이콘 */}
+                                  <div className={`w-10 h-10 ${getMessageBgColor()} rounded-lg flex items-center justify-center flex-shrink-0`}>
+                                    {getMessageIcon()}
+                                  </div>
+                                  
+                                  {/* 내용 */}
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-start justify-between gap-2 mb-1">
+                                      <p className="text-sm font-semibold text-gray-900">{message.title}</p>
+                                      <span className="text-[10px] text-gray-400 whitespace-nowrap">
+                                        {new Date(message.created_at).toLocaleDateString('ko-KR', {
+                                          month: 'short',
+                                          day: 'numeric',
+                                          hour: '2-digit',
+                                          minute: '2-digit',
+                                        })}
+                                      </span>
+                                    </div>
+                                    <p className="text-xs text-gray-600 leading-relaxed mb-3 line-clamp-2">
+                                      {message.content}
+                                    </p>
+                                    
+                                    {/* 수락/거절 버튼 */}
+                                    {(message.canAccept || message.canDecline) && (
+                                      <div className="flex gap-2 mb-2">
+                                        {message.canAccept && (
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              handleMessageAction('accept')
+                                            }}
+                                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors shadow-sm"
+                                          >
+                                            <CheckCircle className="w-3.5 h-3.5" />
+                                            수락
+                                          </button>
+                                        )}
+                                        {message.canDecline && (
+                                          <button
+                                            onClick={(e) => {
+                                              e.stopPropagation()
+                                              handleMessageAction('decline')
+                                            }}
+                                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
+                                          >
+                                            <XCircle className="w-3.5 h-3.5" />
+                                            거절
+                                          </button>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      ) : (
+                        <div className="px-5 py-12 text-center">
+                          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                            <Inbox className="w-8 h-8 text-gray-400" />
+                          </div>
+                          <p className="text-sm font-medium text-gray-900 mb-1">새로운 알림이 없습니다</p>
+                          <p className="text-xs text-gray-500">새로운 메시지가 도착하면 여기에 표시됩니다</p>
+                        </div>
+                      )}
+
+                      {/* 모든 메시지 보기 버튼 */}
+                      <div className="px-5 py-3 bg-gray-50 border-t border-gray-100">
                         <button
                           onClick={() => {
                             router.push('/my/messages')
                             setShowNotificationMenu(false)
+                            setIsNotificationMenuPinned(false)
                           }}
-                          className="w-full px-4 py-3 text-left text-xs text-gray-700 hover:bg-gray-50 flex items-center gap-3"
+                          className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 rounded-lg transition-colors border border-gray-200 shadow-sm"
                         >
-                          <Mail className="w-4 h-4 text-gray-400" />
-                          <div className="flex-1">
-                            <p className="font-medium">모든 메시지 보기</p>
-                            <p className="text-xs text-gray-500 mt-1">팀 초대 및 기업 제안 확인</p>
-                          </div>
+                          <Inbox className="w-4 h-4" />
+                          모든 메시지 보기
+                          <ArrowRight className="w-4 h-4" />
                         </button>
                       </div>
-                      {unreadCount === 0 && (
-                        <div className="px-4 py-8 text-center text-xs text-gray-500">
-                          새로운 알림이 없습니다
-                        </div>
-                      )}
                     </div>
                   )}
                 </div>
@@ -511,16 +961,8 @@ const Header = () => {
                     generalRoutes = [
                       { label: '프로젝트 찾기', href: '/search-projects' },
                       { label: '메이커 검색', href: '/search-makers' },
+                      { label: '팀 검색', href: '/search-teams' },
                     ]
-                    
-                    // 프리랜서 프로필일 경우 팀 메뉴 추가 (Navigator 컴포넌트와 동일한 로직)
-                    if (activeProfileType === 'FREELANCER') {
-                      generalRoutes.push(
-                        { label: '팀 검색', href: '/search-teams' },
-                        { label: '팀 프로필 조회', href: '/team-profile' },
-                        { label: '팀 프로젝트 확인', href: '/team-projects' }
-                      )
-                    }
                   }
                   
                   return (

@@ -1,13 +1,13 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createSupabaseBrowserClient } from '@/supabase/supabase-client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { toast } from '@/hooks/use-toast'
-import { Filter, SortAsc, SortDesc, Clock, DollarSign, Users, FileText, Calendar, Phone, Mail, CreditCard } from 'lucide-react'
+import { Filter, SortAsc, SortDesc, Clock, DollarSign, Users, FileText, Calendar, Phone, Mail, CreditCard, ArrowLeft } from 'lucide-react'
 
 interface Estimate {
   estimate_id: number
@@ -57,6 +57,7 @@ type SortBy = 'newest' | 'oldest' | 'cost_high' | 'cost_low' | 'deadline_soon'
 
 export default function EstimatesDashboardClient() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const supabase = createSupabaseBrowserClient()
   const [estimates, setEstimates] = useState<Estimate[]>([])
   const [filteredEstimates, setFilteredEstimates] = useState<Estimate[]>([])
@@ -69,6 +70,7 @@ export default function EstimatesDashboardClient() {
   const [sortBy, setSortBy] = useState<SortBy>('newest')
   const [deadlineFilter, setDeadlineFilter] = useState(false)
   const [profileType, setProfileType] = useState<'COMPANY' | 'FREELANCER' | null>(null)
+  const [detailViewMode, setDetailViewMode] = useState(false) // estimate_id가 있을 때 상세 보기 모드
 
   useEffect(() => {
     loadEstimates()
@@ -77,6 +79,20 @@ export default function EstimatesDashboardClient() {
   useEffect(() => {
     applyFiltersAndSort()
   }, [estimates, fieldFilter, sortBy, deadlineFilter])
+
+  // estimate_id 쿼리 파라미터가 있으면 해당 견적서 상세 보기
+  useEffect(() => {
+    const estimateIdParam = searchParams.get('estimate_id')
+    if (estimateIdParam && estimates.length > 0) {
+      const estimateId = parseInt(estimateIdParam, 10)
+      const foundEstimate = estimates.find(e => e.estimate_id === estimateId)
+      if (foundEstimate) {
+        setSelectedEstimate(foundEstimate)
+        setShowDetailDialog(true)
+        setDetailViewMode(true)
+      }
+    }
+  }, [searchParams, estimates])
 
   const loadEstimates = async () => {
     try {
@@ -355,6 +371,188 @@ export default function EstimatesDashboardClient() {
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-lg text-gray-600">견적서를 불러오는 중...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // estimate_id가 있고 상세 보기 모드일 때
+  const estimateIdParam = searchParams.get('estimate_id')
+  if (estimateIdParam && selectedEstimate && showDetailDialog) {
+    return (
+      <div className="w-full md:py-6">
+        <div className="mb-6">
+          <Button
+            variant="ghost"
+            onClick={() => {
+              router.push('/my/estimates-dashboard')
+              setShowDetailDialog(false)
+              setDetailViewMode(false)
+            }}
+            className="mb-4"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            목록으로 돌아가기
+          </Button>
+          <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-2">견적서 상세</h1>
+          <p className="text-gray-600">
+            {selectedEstimate.counsel?.title || `견적서 #${selectedEstimate.estimate_id}`}
+          </p>
+        </div>
+
+        {/* 상세 정보를 페이지 전체에 표시 */}
+        <div className="bg-white rounded-lg shadow-sm border p-6 space-y-6">
+          {/* 기본 정보 */}
+          <div>
+            <h3 className="font-semibold text-gray-900 mb-3 text-lg">기본 정보</h3>
+            <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+              <div className="flex justify-between">
+                <span className="text-gray-600">프로젝트명</span>
+                <span className="font-medium">{selectedEstimate.counsel?.title || '-'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">분야</span>
+                <span>{selectedEstimate.counsel?.feild || '-'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">상태</span>
+                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                  selectedEstimate.estimate_status === 'accept'
+                    ? 'bg-green-100 text-green-700'
+                    : selectedEstimate.estimate_status === 'in_progress'
+                    ? 'bg-blue-100 text-blue-700'
+                    : 'bg-gray-100 text-gray-700'
+                }`}>
+                  {selectedEstimate.estimate_status === 'accept' ? '승인됨' :
+                   selectedEstimate.estimate_status === 'in_progress' ? '진행중' : '대기중'}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">견적서 작성일</span>
+                <span>{formatDate(selectedEstimate.estimate_date)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* 팀 구성 */}
+          {selectedEstimate.team && (
+            <div>
+              <h3 className="font-semibold text-gray-900 mb-3 text-lg flex items-center gap-2">
+                <Users className="w-5 h-5" />
+                팀 구성
+              </h3>
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="mb-2">
+                  <span className="font-medium text-lg">{selectedEstimate.team.name}</span>
+                  {selectedEstimate.team.bio && (
+                    <p className="text-sm text-gray-600 mt-1">{selectedEstimate.team.bio}</p>
+                  )}
+                </div>
+                {selectedEstimate.team.specialty && selectedEstimate.team.specialty.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {selectedEstimate.team.specialty.map((spec, idx) => (
+                      <span key={idx} className="px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-full">
+                        {spec}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {selectedEstimate.team_members && selectedEstimate.team_members.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-gray-200">
+                    <p className="text-sm font-medium text-gray-700 mb-2">팀원</p>
+                    <div className="space-y-1">
+                      {selectedEstimate.team_members.map((member, idx) => (
+                        <div key={idx} className="text-sm text-gray-600">
+                          {member.accounts?.username || `프로필 ${idx + 1}`}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* 작업 범위 및 추가 옵션 */}
+          {selectedEstimate.estimate_version && (
+            <div>
+              <h3 className="font-semibold text-gray-900 mb-3 text-lg">작업 범위</h3>
+              <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+                {selectedEstimate.estimate_version.detail && (
+                  <div>
+                    <p className="text-gray-700 whitespace-pre-wrap">
+                      {selectedEstimate.estimate_version.detail}
+                    </p>
+                  </div>
+                )}
+                {selectedEstimate.milestone && selectedEstimate.milestone.length > 0 && (
+                  <div className="mt-4">
+                    <p className="font-medium text-gray-700 mb-2">마일스톤</p>
+                    <div className="space-y-2">
+                      {selectedEstimate.milestone.map((ms) => (
+                        <div key={ms.milestone_id} className="bg-white rounded p-3">
+                          <div className="font-medium text-gray-900">{ms.title || '제목 없음'}</div>
+                          {ms.detail && (
+                            <p className="text-sm text-gray-600 mt-1">{ms.detail}</p>
+                          )}
+                          {ms.payment_amount && (
+                            <p className="text-sm text-blue-600 mt-1">
+                              {formatCurrency(ms.payment_amount)}
+                            </p>
+                          )}
+                          {ms.milestone_start_date && ms.milestone_due_date && (
+                            <p className="text-xs text-gray-500 mt-1">
+                              {formatDate(ms.milestone_start_date)} ~ {formatDate(ms.milestone_due_date)}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* 비용 및 기간 */}
+          <div>
+            <h3 className="font-semibold text-gray-900 mb-3 text-lg">비용 및 기간</h3>
+            <div className="bg-gray-50 rounded-lg p-4 grid grid-cols-2 gap-4">
+              <div>
+                <span className="text-gray-600 text-sm">총 비용</span>
+                <p className="text-xl font-bold text-blue-600 mt-1">
+                  {selectedEstimate.estimate_version?.total_amount
+                    ? formatCurrency(selectedEstimate.estimate_version.total_amount)
+                    : '비용 미정'}
+                </p>
+              </div>
+              <div>
+                <span className="text-gray-600 text-sm">기간</span>
+                <p className="text-lg font-medium mt-1">
+                  {selectedEstimate.estimate_version?.start_date && selectedEstimate.estimate_version?.end_date
+                    ? `${formatDate(selectedEstimate.estimate_version.start_date)} ~ ${formatDate(selectedEstimate.estimate_version.end_date)}`
+                    : '기간 미정'}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* 액션 버튼 */}
+          {profileType === 'COMPANY' && (
+            <div className="flex gap-3 pt-4 border-t">
+              <Button
+                onClick={() => {
+                  if (selectedEstimate) {
+                    handleViewContact(selectedEstimate.estimate_id)
+                  }
+                }}
+                className="flex-1 flex items-center justify-center gap-2"
+              >
+                <Phone className="w-4 h-4" />
+                연락처 열람 (소액 과금)
+              </Button>
+            </div>
+          )}
         </div>
       </div>
     )

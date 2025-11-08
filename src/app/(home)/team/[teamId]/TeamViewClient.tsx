@@ -185,7 +185,7 @@ const TeamViewClient: React.FC<TeamViewClientProps> = ({ teamId }) => {
         description: '팀 제안을 수락했습니다. 이제 팀원으로 활동할 수 있습니다.',
       })
       // 팀 프로필 페이지로 이동
-      router.push('/team-profile')
+      router.push('/my/team-profile')
     } catch (error: any) {
       console.error('팀 제안 수락 실패:', error)
       toast({

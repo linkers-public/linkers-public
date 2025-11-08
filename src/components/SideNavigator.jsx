@@ -155,31 +155,42 @@ const SideNavigator = () => {
           isActive: pathname === '/my/profile' || pathname === '/my/update',
           href: '/my/profile',
         },
-        {
-          icon: '',
-          label: '쪽지함',
-          type: 'profile',
-          isActive: pathname === '/my/messages',
-          href: '/my/messages',
-        },
       ]
 
-      const proposalRoutes = [
+      // 프리랜서 프로필인 경우 팀 관련 메뉴를 내 프로필 그룹에 추가
+      profileRoutes.push(
         {
           icon: '',
-          label: '받은 프로젝트 제안',
-          type: 'proposal',
-          isActive: pathname === '/my/project-proposals',
-          href: '/my/project-proposals',
+          label: '팀 프로필 조회',
+          type: 'profile',
+          isActive: pathname === '/my/team-profile',
+          href: '/my/team-profile',
         },
         {
           icon: '',
-          label: '보낸 견적서 (매니저)',
-          type: 'proposal',
-          isActive: pathname === '/my/estimates-dashboard',
-          href: '/my/estimates-dashboard',
-        },
-      ]
+          label: '팀 프로젝트 확인',
+          type: 'profile',
+          isActive: pathname === '/my/team-projects',
+          href: '/my/team-projects',
+        }
+      )
+
+      // const proposalRoutes = [
+      //   {
+      //     icon: '',
+      //     label: '받은 프로젝트 제안',
+      //     type: 'proposal',
+      //     isActive: pathname === '/my/project-proposals',
+      //     href: '/my/project-proposals',
+      //   },
+      //   {
+      //     icon: '',
+      //     label: '보낸 견적서 (매니저)',
+      //     type: 'proposal',
+      //     isActive: pathname === '/my/estimates-dashboard',
+      //     href: '/my/estimates-dashboard',
+      //   },
+      // ]
 
       const interestRoutes = [
         {
@@ -191,10 +202,10 @@ const SideNavigator = () => {
         },
         {
           icon: '',
-          label: '관심 기업',
+          label: '관심 메이커',
           type: 'interest',
-          isActive: pathname === '/my/bookmarked-companies',
-          href: '/my/bookmarked-companies',
+          isActive: pathname === '/my/bookmarked-makers',
+          href: '/my/bookmarked-makers',
         },
       ]
 
@@ -215,33 +226,29 @@ const SideNavigator = () => {
         },
       ]
 
-      // 매니저 역할인 경우 팀 관련 메뉴 추가
-      const teamRoutes = []
-      if (account?.role === 'MANAGER') {
-        teamRoutes.push(
-          {
-            icon: '',
-            label: '팀 프로필 조회',
-            type: 'team',
-            isActive: pathname === '/team-profile',
-            href: '/team-profile',
-          },
-          {
-            icon: '',
-            label: '팀 프로젝트 확인',
-            type: 'team',
-            isActive: pathname === '/team-projects',
-            href: '/team-projects',
-          }
-        )
-      }
+      const historyRoutes = [
+        {
+          icon: '',
+          label: '받은 제안 목록',
+          type: 'history',
+          isActive: pathname === '/my/received-proposals',
+          href: '/my/received-proposals',
+        },
+        {
+          icon: '',
+          label: '보낸 요청 목록',
+          type: 'history',
+          isActive: pathname === '/my/sent-requests',
+          href: '/my/sent-requests',
+        },
+      ]
 
       return [
         ...profileRoutes,
-        ...proposalRoutes,
+        // ...proposalRoutes,
         ...interestRoutes,
+        ...historyRoutes,
         ...accountRoutes,
-        ...teamRoutes,
       ]
     }
 
@@ -251,10 +258,10 @@ const SideNavigator = () => {
 
   // 로딩 중이거나 라우트가 없어도 최소한 기본 메뉴는 표시
   const profileRoutes = routes.filter((route) => route.type === 'profile')
-  const proposalRoutes = routes.filter((route) => route.type === 'proposal')
+  // const proposalRoutes = routes.filter((route) => route.type === 'proposal')
   const interestRoutes = routes.filter((route) => route.type === 'interest')
+  const historyRoutes = routes.filter((route) => route.type === 'history')
   const accountRoutes = routes.filter((route) => route.type === 'account')
-  const teamRoutes = routes.filter((route) => route.type === 'team')
   const myRoutes = routes.filter((route) => route.type === 'my') // 기업용 (레거시)
   const companyAccountRoutes = routes.filter((route) => route.type === 'company_account')
   const subscriptionRoutes = routes.filter((route) => route.type === 'subscription')
@@ -292,10 +299,10 @@ const SideNavigator = () => {
   return (
     <>
       {profileRoutes.length > 0 && renderRouteGroup(profileRoutes, '내 프로필')}
-      {proposalRoutes.length > 0 && renderRouteGroup(proposalRoutes, '제안 & 메시지')}
+      {/* {proposalRoutes.length > 0 && renderRouteGroup(proposalRoutes, '제안 & 메시지')} */}
       {interestRoutes.length > 0 && renderRouteGroup(interestRoutes, '관심항목')}
+      {historyRoutes.length > 0 && renderRouteGroup(historyRoutes, '내 히스토리')}
       {accountRoutes.length > 0 && renderRouteGroup(accountRoutes, '계정관리')}
-      {teamRoutes.length > 0 && renderRouteGroup(teamRoutes, '팀')}
       {companyAccountRoutes.length > 0 && renderRouteGroup(companyAccountRoutes, '회사 계정')}
       {subscriptionRoutes.length > 0 && renderRouteGroup(subscriptionRoutes, '결제 / 구독')}
       {projectHistoryRoutes.length > 0 && renderRouteGroup(projectHistoryRoutes, '프로젝트 기록')}

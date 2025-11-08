@@ -75,24 +75,13 @@ const Navigator = ({ profileType, role }: NavigatorProps) => {
         isActive: pathname === '/search-makers',
         href: '/search-makers',
       },
-    ]
-
-    // 프리랜서 프로필일 경우 팀 메뉴 추가
-    if (profileType === 'FREELANCER') {
-      freelancerRoutes.push({
+      {
         icon: '',
         label: '팀 검색',
         isActive: pathname === '/search-teams',
         href: '/search-teams',
-      })
-      freelancerRoutes.push({
-        icon: '',
-        label: '팀',
-        isActive: pathname === '/team-profile' || pathname === '/team-projects',
-        href: '#',
-        isDropdown: true,
-      })
-    }
+      },
+    ]
 
     return freelancerRoutes
   }, [pathname, profileType, role])
@@ -121,10 +110,10 @@ const Navigator = ({ profileType, role }: NavigatorProps) => {
               {showTeamMenu && (
                 <div className="absolute left-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
                   <Link
-                    href="/team-profile"
+                    href="/my/team-profile"
                     onClick={() => setShowTeamMenu(false)}
                     className={`block px-4 py-2 text-xs transition-colors ${
-                      pathname === '/team-profile'
+                      pathname === '/my/team-profile'
                         ? 'bg-gray-100 text-palette-coolNeutral-20'
                         : 'text-gray-700 hover:bg-gray-100'
                     }`}
@@ -132,10 +121,10 @@ const Navigator = ({ profileType, role }: NavigatorProps) => {
                     팀 프로필 조회
                   </Link>
                   <Link
-                    href="/team-projects"
+                    href="/my/team-projects"
                     onClick={() => setShowTeamMenu(false)}
                     className={`block px-4 py-2 text-xs transition-colors ${
-                      pathname === '/team-projects'
+                      pathname === '/my/team-projects'
                         ? 'bg-gray-100 text-palette-coolNeutral-20'
                         : 'text-gray-700 hover:bg-gray-100'
                     }`}
