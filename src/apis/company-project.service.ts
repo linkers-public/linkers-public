@@ -241,7 +241,7 @@ export const getReceivedEstimates = async () => {
 }
 
 // 견적 상태 업데이트 (수락/보류/계약 진행)
-export const updateEstimateStatus = async (estimateId: number, status: string) => {
+export const updateEstimateStatus = async (estimateId: number, status: "pending" | "accept" | "in_progress") => {
   const supabase = createSupabaseBrowserClient()
   
   const { data: { user } } = await supabase.auth.getUser()
@@ -361,7 +361,7 @@ export const approveMilestone = async (milestoneId: number) => {
   const { data, error } = await supabase
     .from('milestone')
     .update({ 
-      milestone_status: 'approved'
+      milestone_status: 'task_completed'
     })
     .eq('milestone_id', milestoneId)
     .select()

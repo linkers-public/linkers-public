@@ -579,7 +579,7 @@ export default function CompanyProjectsClient() {
                       <h3 className="text-lg font-semibold text-gray-900 mb-2">{milestone.title}</h3>
                       {milestone.milestone_status && getStatusBadge(milestone.milestone_status)}
                     </div>
-                      {milestone.milestone_status !== 'approved' && (
+                      {milestone.milestone_status !== 'task_completed' && (
                       <Button
                         size="sm"
                         onClick={() => handleMilestoneApprove(milestone.milestone_id)}
