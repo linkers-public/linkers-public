@@ -13,7 +13,7 @@ export default function EnterpriseLayout({
   return (
     <>
       <Header />
-      <main className="flex w-full h-full min-h-[calc(100vh-64px)] pt-1">
+      <main className="flex w-full h-full min-h-[calc(100vh-64px)] pt-[64px] md:pt-[65px]">
         <div className="flex w-full px-4 md:px-6">{children}</div>
       </main>
     </>

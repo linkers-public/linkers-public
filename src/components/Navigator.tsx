@@ -23,7 +23,9 @@ interface Route {
 const Navigator = ({ profileType, role }: NavigatorProps) => {
   const pathname = usePathname()
   const [showTeamMenu, setShowTeamMenu] = useState(false)
+  const [showProjectMenu, setShowProjectMenu] = useState(false)
   const teamMenuRef = useRef<HTMLDivElement>(null)
+  const projectMenuRef = useRef<HTMLDivElement>(null)
 
   // 외부 클릭 시 메뉴 닫기 (드롭다운 메뉴가 있을 때만)
   useEffect(() => {
@@ -31,16 +33,19 @@ const Navigator = ({ profileType, role }: NavigatorProps) => {
       if (teamMenuRef.current && !teamMenuRef.current.contains(event.target as Node)) {
         setShowTeamMenu(false)
       }
+      if (projectMenuRef.current && !projectMenuRef.current.contains(event.target as Node)) {
+        setShowProjectMenu(false)
+      }
     }
 
-    if (showTeamMenu) {
+    if (showTeamMenu || showProjectMenu) {
       document.addEventListener('mousedown', handleClickOutside)
     }
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)
     }
-  }, [showTeamMenu])
+  }, [showTeamMenu, showProjectMenu])
 
   const routes = useMemo(() => {
     // 기업 프로필일 때
@@ -48,15 +53,16 @@ const Navigator = ({ profileType, role }: NavigatorProps) => {
       return [
         {
           icon: '',
-          label: '내 프로젝트 목록',
-          isActive: pathname === '/enterprise/my-counsel',
-          href: '/enterprise/my-counsel',
+          label: '프로젝트',
+          isActive: pathname === '/enterprise/my-counsel' || pathname === '/enterprise/counsel-form',
+          href: null,
+          isDropdown: true,
         },
         {
           icon: '',
-          label: '프로젝트 상담 신청',
-          isActive: pathname === '/enterprise/counsel-form',
-          href: '/enterprise/counsel-form',
+          label: '팀 검색',
+          isActive: pathname === '/c/teams',
+          href: '/c/teams',
         },
       ]
     }
@@ -90,6 +96,56 @@ const Navigator = ({ profileType, role }: NavigatorProps) => {
     <nav className="flex space-x-10">
       {routes.map((route) => {
         if ('isDropdown' in route && route.isDropdown) {
+          // 기업 프로필의 프로젝트 드롭다운
+          if (profileType === 'COMPANY' && route.label === '프로젝트') {
+            return (
+              <div
+                key={route.label}
+                ref={projectMenuRef}
+                className="relative"
+              >
+                <button
+                  onClick={() => setShowProjectMenu(!showProjectMenu)}
+                  className={`text-sm font-semibold transition-colors duration-200 flex items-center gap-1 ${
+                    route.isActive
+                      ? 'text-palette-coolNeutral-20'
+                      : 'text-palette-coolNeutral-70 hover:text-palette-coolNeutral-20'
+                  }`}
+                >
+                  {route.label}
+                  <ChevronDown className={`w-4 h-4 transition-transform ${showProjectMenu ? 'rotate-180' : ''}`} />
+                </button>
+                {showProjectMenu && (
+                  <div className="absolute left-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                    <Link
+                      href="/enterprise/counsel-form"
+                      onClick={() => setShowProjectMenu(false)}
+                      className={`block px-4 py-2 text-xs transition-colors ${
+                        pathname === '/enterprise/counsel-form'
+                          ? 'bg-gray-100 text-palette-coolNeutral-20'
+                          : 'text-gray-700 hover:bg-gray-100'
+                      }`}
+                    >
+                      상담 신청
+                    </Link>
+                    <Link
+                      href="/enterprise/my-counsel"
+                      onClick={() => setShowProjectMenu(false)}
+                      className={`block px-4 py-2 text-xs transition-colors ${
+                        pathname === '/enterprise/my-counsel'
+                          ? 'bg-gray-100 text-palette-coolNeutral-20'
+                          : 'text-gray-700 hover:bg-gray-100'
+                      }`}
+                    >
+                      전체 프로젝트
+                    </Link>
+                  </div>
+                )}
+              </div>
+            )
+          }
+          
+          // 프리랜서 프로필의 팀 드롭다운
           return (
             <div
               key={route.label}

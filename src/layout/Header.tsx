@@ -527,8 +527,9 @@ const Header = () => {
     // 마이페이지가 아닌 경우 기본 네비게이션 메뉴
     if (activeProfileType === 'COMPANY') {
       return [
-        { label: '내 프로젝트 목록', href: '/enterprise/my-counsel' },
-        { label: '프로젝트 상담 신청', href: '/enterprise/counsel-form' },
+        { label: '상담 신청', href: '/enterprise/counsel-form', group: '프로젝트' },
+        { label: '전체 프로젝트', href: '/enterprise/my-counsel', group: '프로젝트' },
+        { label: '팀 검색', href: '/c/teams' },
       ]
     }
     
@@ -950,12 +951,13 @@ const Header = () => {
                 {/* 일반 네비게이션 메뉴 (항상 표시) */}
                 {(() => {
                   // Navigator 컴포넌트와 동일한 로직으로 일반 네비게이션 메뉴 생성
-                  let generalRoutes: Array<{ label: string; href: string }> = []
+                  let generalRoutes: Array<{ label: string; href: string; group?: string }> = []
                   
                   if (activeProfileType === 'COMPANY') {
                     generalRoutes = [
-                      { label: '내 프로젝트 목록', href: '/enterprise/my-counsel' },
-                      { label: '프로젝트 상담 신청', href: '/enterprise/counsel-form' },
+                      { label: '상담 신청', href: '/enterprise/counsel-form', group: '프로젝트' },
+                      { label: '전체 프로젝트', href: '/enterprise/my-counsel', group: '프로젝트' },
+                      { label: '팀 검색', href: '/c/teams' },
                     ]
                   } else {
                     generalRoutes = [
@@ -965,11 +967,21 @@ const Header = () => {
                     ]
                   }
                   
-                  return (
-                    <div className="mb-6">
-                      <h3 className="text-xs font-semibold text-gray-900 mb-2 px-4">메뉴</h3>
+                  // 그룹별로 분류
+                  const groupedRoutes = generalRoutes.reduce((acc, route) => {
+                    const group = route.group || '메뉴'
+                    if (!acc[group]) {
+                      acc[group] = []
+                    }
+                    acc[group].push(route)
+                    return acc
+                  }, {} as Record<string, typeof generalRoutes>)
+                  
+                  return Object.entries(groupedRoutes).map(([groupName, groupRoutes]) => (
+                    <div key={groupName} className="mb-6">
+                      <h3 className="text-xs font-semibold text-gray-900 mb-2 px-4">{groupName}</h3>
                       <div className="space-y-1">
-                        {generalRoutes.map((route) => (
+                        {groupRoutes.map((route) => (
                           <Link
                             key={route.href}
                             href={route.href}
@@ -985,7 +997,7 @@ const Header = () => {
                         ))}
                       </div>
                     </div>
-                  )
+                  ))
                 })()}
 
                 {/* 마이페이지 세부 메뉴 (마이페이지일 때만 표시) */}

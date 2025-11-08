@@ -96,6 +96,23 @@ const SideNavigator = () => {
         },
       ]
 
+      const projectRoutes = [
+        {
+          icon: '',
+          label: '내 프로젝트',
+          type: 'project',
+          isActive: pathname === '/my/company/projects',
+          href: '/my/company/projects',
+        },
+        {
+          icon: '',
+          label: '받은 견적서',
+          type: 'project',
+          isActive: pathname === '/my/company/estimates',
+          href: '/my/company/estimates',
+        },
+      ]
+
       const projectHistoryRoutes = [
         {
           icon: '',
@@ -139,6 +156,7 @@ const SideNavigator = () => {
 
       return [
         ...companyAccountRoutes,
+        ...projectRoutes,
         ...subscriptionRoutes,
         ...projectHistoryRoutes,
         ...settingsRoutes,
@@ -264,6 +282,7 @@ const SideNavigator = () => {
   const accountRoutes = routes.filter((route) => route.type === 'account')
   const myRoutes = routes.filter((route) => route.type === 'my') // 기업용 (레거시)
   const companyAccountRoutes = routes.filter((route) => route.type === 'company_account')
+  const projectRoutes = routes.filter((route) => route.type === 'project')
   const subscriptionRoutes = routes.filter((route) => route.type === 'subscription')
   const projectHistoryRoutes = routes.filter((route) => route.type === 'project_history')
   const settingsRoutes = routes.filter((route) => route.type === 'settings')
@@ -304,6 +323,7 @@ const SideNavigator = () => {
       {historyRoutes.length > 0 && renderRouteGroup(historyRoutes, '내 히스토리')}
       {accountRoutes.length > 0 && renderRouteGroup(accountRoutes, '계정관리')}
       {companyAccountRoutes.length > 0 && renderRouteGroup(companyAccountRoutes, '회사 계정')}
+      {projectRoutes.length > 0 && renderRouteGroup(projectRoutes, '프로젝트')}
       {subscriptionRoutes.length > 0 && renderRouteGroup(subscriptionRoutes, '결제 / 구독')}
       {projectHistoryRoutes.length > 0 && renderRouteGroup(projectHistoryRoutes, '프로젝트 기록')}
       {settingsRoutes.length > 0 && renderRouteGroup(settingsRoutes, '설정')}
