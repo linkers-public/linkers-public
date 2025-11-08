@@ -163,7 +163,7 @@ export default function ReceivedProposalsClient() {
             )
 
             // null 값 제거 (이미 견적서를 제출한 것들)
-            const filteredRequests = requestsWithEstimates.filter((req): req is EstimateRequest => req !== null)
+            const filteredRequests = requestsWithEstimates.filter((req) => req !== null) as EstimateRequest[]
             setEstimateRequests(filteredRequests)
           }
         }

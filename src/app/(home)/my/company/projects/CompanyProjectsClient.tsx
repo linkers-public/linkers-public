@@ -33,38 +33,38 @@ type TabType = 'estimate' | 'milestone'
 interface Estimate {
   estimate_id: number
   team_id: number
-  counsel_id: number
+  counsel_id: number | null
   client_id: string
   estimate_status: string
   estimate_start_date: string | null
   estimate_due_date: string | null
-  created_at: string
-  teams?: {
+  created_at?: string
+  teams?: Array<{
     id: number
     name: string
     manager_id: string
-  }
+  }>
   estimate_version?: Array<{
     estimate_version_id: number
     total_amount: number | null
     detail: string | null
     start_date: string | null
     end_date: string | null
-    version_date: string
+    version_date: string | null
   }>
 }
 
 interface Milestone {
   milestone_id: number
-  estimate_id: number
-  estimate_version_id: number
-  title: string
+  estimate_id: number | null
+  estimate_version_id: number | null
+  title: string | null
   detail: string | null
   payment_amount: number | null
   milestone_start_date: string | null
   milestone_due_date: string | null
   milestone_status: string | null
-  progress: number | null
+  progress: number
   payment?: Array<{
     payment_id: number
     payment_amount: string | null
@@ -77,11 +77,11 @@ interface Milestone {
 interface Team {
   id: number
   name: string
-  bio: string | null
-  specialty: string[] | null
-  manager: {
+  bio?: string | null
+  specialty?: string[] | null
+  manager?: {
     username: string
-  } | null
+  } | null | any
 }
 
 export default function CompanyProjectsClient() {
@@ -490,7 +490,7 @@ export default function CompanyProjectsClient() {
                 <div className="flex justify-between items-start mb-4">
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                      {estimate.teams?.name || '팀명 없음'}
+                      {estimate.teams?.[0]?.name || '팀명 없음'}
                     </h3>
                     {getStatusBadge(estimate.estimate_status)}
                   </div>
@@ -516,7 +516,7 @@ export default function CompanyProjectsClient() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600 mb-4">
                   <div className="flex items-center gap-2">
                     <Users className="w-4 h-4" />
-                    <span>담당 매니저: {estimate.teams?.manager_id || '없음'}</span>
+                    <span>담당 매니저: {estimate.teams?.[0]?.manager_id || '없음'}</span>
                   </div>
                   {estimate.estimate_version && estimate.estimate_version.length > 0 && (
                     <>

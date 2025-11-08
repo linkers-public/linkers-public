@@ -27,38 +27,38 @@ import {
 interface Estimate {
   estimate_id: number
   team_id: number
-  counsel_id: number
+  counsel_id: number | null
   client_id: string
   estimate_status: string
   estimate_start_date: string | null
   estimate_due_date: string | null
-  created_at: string
-  teams?: {
+  created_at?: string
+  teams?: Array<{
     id: number
     name: string
     manager_id: string
-  }
+  }>
   estimate_version?: Array<{
     estimate_version_id: number
     total_amount: number | null
     detail: string | null
     start_date: string | null
     end_date: string | null
-    version_date: string
+    version_date: string | null
   }>
 }
 
 interface EstimateDetail extends Estimate {
   milestone?: Array<{
     milestone_id: number
-    estimate_id: number
-    estimate_version_id: number
-    title: string
+    estimate_id: number | null
+    estimate_version_id: number | null
+    title: string | null
     detail: string | null
     payment_amount: number | null
     milestone_start_date: string | null
     milestone_due_date: string | null
-    progress: string | null
+    progress: number
   }>
 }
 
@@ -241,11 +241,11 @@ export default function CompanyEstimatesClient() {
                     }`}
                   >
                     <div className="flex justify-between items-start mb-2">
-                      <h3 className="font-medium text-sm">{estimate.teams?.name || '팀명 없음'}</h3>
+                      <h3 className="font-medium text-sm">{estimate.teams?.[0]?.name || '팀명 없음'}</h3>
                       {getStatusBadge(estimate.estimate_status)}
                     </div>
                     <div className="text-xs text-gray-600 space-y-1">
-                      <div>매니저: {estimate.teams?.manager_id || '없음'}</div>
+                      <div>매니저: {estimate.teams?.[0]?.manager_id || '없음'}</div>
                       {estimate.estimate_version && estimate.estimate_version.length > 0 && (
                         <>
                           <div>총액: {estimate.estimate_version[0].total_amount?.toLocaleString()}원</div>
@@ -267,7 +267,7 @@ export default function CompanyEstimatesClient() {
               <div className="flex justify-between items-start mb-6">
                 <div>
                   <h2 className="text-xl font-bold text-gray-900 mb-2">
-                    {selectedEstimate.teams?.name || '팀명 없음'}
+                    {selectedEstimate.teams?.[0]?.name || '팀명 없음'}
                   </h2>
                   {getStatusBadge(selectedEstimate.estimate_status)}
                 </div>
@@ -298,7 +298,7 @@ export default function CompanyEstimatesClient() {
                   <div>
                     <div className="text-sm text-gray-600">담당 매니저</div>
                     <div className="font-medium">
-                      {selectedEstimate.teams?.manager_id || '없음'}
+                      {selectedEstimate.teams?.[0]?.manager_id || '없음'}
                     </div>
                   </div>
                 </div>
