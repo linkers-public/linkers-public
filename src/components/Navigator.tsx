@@ -54,7 +54,7 @@ const Navigator = ({ profileType, role }: NavigatorProps) => {
         {
           icon: '',
           label: '프로젝트',
-          isActive: pathname === '/enterprise/my-counsel' || pathname === '/enterprise/counsel-form',
+          isActive: pathname === '/enterprise/my-counsel' || pathname === '/enterprise/counsel-form' || pathname === '/enterprise/all-projects',
           href: null,
           isDropdown: true,
         },
@@ -129,6 +129,17 @@ const Navigator = ({ profileType, role }: NavigatorProps) => {
                       상담 신청
                     </Link>
                     <Link
+                      href="/enterprise/all-projects"
+                      onClick={() => setShowProjectMenu(false)}
+                      className={`block px-4 py-2 text-xs transition-colors ${
+                        pathname === '/enterprise/all-projects'
+                          ? 'bg-gray-100 text-palette-coolNeutral-20'
+                          : 'text-gray-700 hover:bg-gray-100'
+                      }`}
+                    >
+                      전체 프로젝트
+                    </Link>
+                    <Link
                       href="/enterprise/my-counsel"
                       onClick={() => setShowProjectMenu(false)}
                       className={`block px-4 py-2 text-xs transition-colors ${
@@ -137,7 +148,7 @@ const Navigator = ({ profileType, role }: NavigatorProps) => {
                           : 'text-gray-700 hover:bg-gray-100'
                       }`}
                     >
-                      전체 프로젝트
+                      내 프로젝트
                     </Link>
                   </div>
                 )}

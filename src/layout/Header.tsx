@@ -955,7 +955,8 @@ const Header = () => {
                   if (activeProfileType === 'COMPANY') {
                     generalRoutes = [
                       { label: '상담 신청', href: '/enterprise/counsel-form', group: '프로젝트' },
-                      { label: '전체 프로젝트', href: '/enterprise/my-counsel', group: '프로젝트' },
+                      { label: '전체 프로젝트', href: '/enterprise/all-projects', group: '프로젝트' },
+                      { label: '내 프로젝트', href: '/enterprise/my-counsel', group: '프로젝트' },
                       { label: '팀 검색', href: '/c/teams' },
                     ]
                   } else {
