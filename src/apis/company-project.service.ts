@@ -265,8 +265,13 @@ export const updateEstimateStatus = async (estimateId: number, status: string) =
   return data
 }
 
-// 상담 상태 업데이트 (마감)
-export const updateCounselStatus = async (counselId: number, status: string) => {
+// 견적 요청 (팀에게 견적 요청)
+export const requestEstimate = async (teamId: number, projectInfo: {
+  title: string
+  outline: string
+  start_date: string
+  due_date: string
+}) => {
   const supabase = createSupabaseBrowserClient()
   
   const { data: { user } } = await supabase.auth.getUser()
@@ -274,20 +279,74 @@ export const updateCounselStatus = async (counselId: number, status: string) => 
     throw new Error('로그인이 필요합니다.')
   }
 
-  const { data, error } = await supabase
+  // 활성 기업 프로필 확인
+  const { data: profile } = await supabase
+    .from('accounts')
+    .select('profile_id')
+    .eq('user_id', user.id)
+    .eq('is_active', true)
+    .eq('profile_type', 'COMPANY')
+    .is('deleted_at', null)
+    .maybeSingle()
+
+  if (!profile) {
+    throw new Error('기업 프로필을 찾을 수 없습니다.')
+  }
+
+  // client 테이블에서 user_id 조회
+  const { data: client } = await supabase
+    .from('client')
+    .select('user_id')
+    .eq('user_id', user.id)
+    .maybeSingle()
+
+  if (!client) {
+    throw new Error('클라이언트 정보를 찾을 수 없습니다.')
+  }
+
+  // counsel 생성 (프로젝트 정보) - 견적 요청만, estimate는 매니저가 견적서 작성 시 생성
+  const { data: counselData, error: counselError } = await supabase
     .from('counsel')
-    .update({ 
-      counsel_status: status
+    .insert({
+      client_id: client.user_id,
+      company_profile_id: profile.profile_id,
+      title: projectInfo.title,
+      outline: projectInfo.outline,
+      counsel_status: 'recruiting', // 견적 요청 상태
+      start_date: projectInfo.start_date,
+      due_date: projectInfo.due_date,
+      requested_team_id: teamId, // 특정 팀에게 견적 요청 (마이그레이션 후 사용)
     })
-    .eq('counsel_id', counselId)
     .select()
     .single()
 
-  if (error) {
-    throw new Error(`상담 상태 업데이트 실패: ${error.message}`)
+  if (counselError) {
+    // requested_team_id 컬럼이 없을 수 있으므로, 에러 확인 후 재시도
+    if (counselError.message?.includes('requested_team_id') || counselError.message?.includes('column')) {
+      // requested_team_id 없이 재시도
+      const { data: retryData, error: retryError } = await supabase
+        .from('counsel')
+        .insert({
+          client_id: client.user_id,
+          company_profile_id: profile.profile_id,
+          title: projectInfo.title,
+          outline: projectInfo.outline,
+          counsel_status: 'recruiting',
+          start_date: projectInfo.start_date,
+          due_date: projectInfo.due_date,
+        })
+        .select()
+        .single()
+      
+      if (retryError) {
+        throw new Error(`프로젝트 생성 실패: ${retryError.message}`)
+      }
+      return retryData
+    }
+    throw new Error(`프로젝트 생성 실패: ${counselError.message}`)
   }
 
-  return data
+  return counselData
 }
 
 // 마일스톤 승인

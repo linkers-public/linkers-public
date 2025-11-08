@@ -4,43 +4,31 @@ import React, { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createSupabaseBrowserClient } from '@/supabase/supabase-client'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { 
-  getCompanyCounsels, 
   getCompanyEstimates, 
   getEstimateDetail,
-  updateCounselStatus,
   updateEstimateStatus,
-  approveMilestone
+  approveMilestone,
+  requestEstimate
 } from '@/apis/company-project.service'
+import { searchTeams } from '@/apis/team.service'
 import { toast } from '@/hooks/use-toast'
 import { 
   FileText, 
   CheckCircle, 
-  Clock, 
-  XCircle, 
-  Edit, 
   Eye,
   DollarSign,
   Calendar,
   Users,
-  MessageSquare
+  Plus,
+  Search,
+  Loader2
 } from 'lucide-react'
 
-type TabType = 'counsel' | 'estimate' | 'milestone'
-
-interface Counsel {
-  counsel_id: number
-  title: string
-  outline: string
-  period: string
-  cost: string
-  feild: string
-  skill: string
-  output: string
-  counsel_status: string
-  created_at: string
-  updated_at: string
-}
+type TabType = 'estimate' | 'milestone'
 
 interface Estimate {
   estimate_id: number
@@ -86,14 +74,38 @@ interface Milestone {
   }>
 }
 
+interface Team {
+  id: number
+  name: string
+  bio: string | null
+  specialty: string[] | null
+  manager: {
+    username: string
+  } | null
+}
+
 export default function CompanyProjectsClient() {
   const router = useRouter()
-  const [activeTab, setActiveTab] = useState<TabType>('counsel')
+  const [activeTab, setActiveTab] = useState<TabType>('estimate')
   const [loading, setLoading] = useState(true)
-  const [counsels, setCounsels] = useState<Counsel[]>([])
   const [estimates, setEstimates] = useState<Estimate[]>([])
   const [milestones, setMilestones] = useState<Milestone[]>([])
   const [selectedEstimate, setSelectedEstimate] = useState<number | null>(null)
+  
+  // 견적 요청 관련
+  const [showRequestDialog, setShowRequestDialog] = useState(false)
+  const [searchingTeams, setSearchingTeams] = useState(false)
+  const [teamSearchTerm, setTeamSearchTerm] = useState('')
+  const [teamResults, setTeamResults] = useState<Team[]>([])
+  const [selectedTeam, setSelectedTeam] = useState<Team | null>(null)
+  const [requestForm, setRequestForm] = useState({
+    title: '',
+    outline: '',
+    start_date: '',
+    due_date: ''
+  })
+  const [submittingRequest, setSubmittingRequest] = useState(false)
+  
   const supabase = createSupabaseBrowserClient()
 
   useEffect(() => {
@@ -104,10 +116,7 @@ export default function CompanyProjectsClient() {
     try {
       setLoading(true)
       
-      if (activeTab === 'counsel') {
-        const data = await getCompanyCounsels()
-        setCounsels(data)
-      } else if (activeTab === 'estimate') {
+      if (activeTab === 'estimate') {
         const data = await getCompanyEstimates(['pending', 'accept', 'in_progress'])
         setEstimates(data)
       } else if (activeTab === 'milestone' && selectedEstimate) {
@@ -128,28 +137,85 @@ export default function CompanyProjectsClient() {
     }
   }
 
-  const handleCounselEdit = (counselId: number) => {
-    router.push(`/enterprise/counsel-form?counsel_id=${counselId}`)
-  }
+  const handleSearchTeams = async () => {
+    if (!teamSearchTerm.trim()) {
+      setTeamResults([])
+      return
+    }
 
-  const handleCounselClose = async (counselId: number) => {
+    setSearchingTeams(true)
     try {
-      await updateCounselStatus(counselId, 'closed')
-      toast({
-        title: '상담이 마감되었습니다',
+      const { data } = await searchTeams({
+        searchTerm: teamSearchTerm.trim()
       })
-      loadData()
+      setTeamResults(data || [])
     } catch (error: any) {
+      console.error('팀 검색 실패:', error)
       toast({
         variant: 'destructive',
-        title: '상담 마감 실패',
+        title: '팀 검색 실패',
         description: error.message,
       })
+    } finally {
+      setSearchingTeams(false)
+    }
+  }
+
+  const handleRequestEstimate = async () => {
+    if (!selectedTeam) {
+      toast({
+        variant: 'destructive',
+        title: '팀을 선택해주세요',
+      })
+      return
+    }
+
+    if (!requestForm.title || !requestForm.outline || !requestForm.start_date || !requestForm.due_date) {
+      toast({
+        variant: 'destructive',
+        title: '모든 필드를 입력해주세요',
+      })
+      return
+    }
+
+    setSubmittingRequest(true)
+    try {
+      await requestEstimate(selectedTeam.id, {
+        title: requestForm.title,
+        outline: requestForm.outline,
+        start_date: requestForm.start_date,
+        due_date: requestForm.due_date,
+      })
+
+      toast({
+        title: '견적 요청 완료',
+        description: `${selectedTeam.name} 팀에 견적을 요청했습니다.`,
+      })
+
+      setShowRequestDialog(false)
+      setSelectedTeam(null)
+      setRequestForm({
+        title: '',
+        outline: '',
+        start_date: '',
+        due_date: ''
+      })
+      setTeamSearchTerm('')
+      setTeamResults([])
+      loadData()
+    } catch (error: any) {
+      console.error('견적 요청 실패:', error)
+      toast({
+        variant: 'destructive',
+        title: '견적 요청 실패',
+        description: error.message,
+      })
+    } finally {
+      setSubmittingRequest(false)
     }
   }
 
   const handleEstimateCompare = (estimateId: number) => {
-    // 견적 비교 페이지로 이동 (추후 구현)
     router.push(`/my/company/estimates?compare=${estimateId}`)
   }
 
@@ -187,8 +253,6 @@ export default function CompanyProjectsClient() {
 
   const getStatusBadge = (status: string) => {
     const statusMap: Record<string, { label: string; className: string }> = {
-      recruiting: { label: '모집중', className: 'bg-blue-100 text-blue-800' },
-      closed: { label: '마감', className: 'bg-gray-100 text-gray-800' },
       pending: { label: '대기중', className: 'bg-yellow-100 text-yellow-800' },
       accept: { label: '수락', className: 'bg-green-100 text-green-800' },
       in_progress: { label: '진행중', className: 'bg-blue-100 text-blue-800' },
@@ -204,7 +268,7 @@ export default function CompanyProjectsClient() {
     )
   }
 
-  if (loading && counsels.length === 0 && estimates.length === 0) {
+  if (loading && estimates.length === 0) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
@@ -217,23 +281,170 @@ export default function CompanyProjectsClient() {
 
   return (
     <div className="w-full md:py-6">
-      <div className="mb-6">
-        <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-2">내 프로젝트</h1>
-        <p className="text-gray-600">상담, 견적, 마일스톤을 관리하세요</p>
+      <div className="mb-6 flex justify-between items-center">
+        <div>
+          <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-2">내 프로젝트</h1>
+          <p className="text-gray-600">견적 요청과 마일스톤을 관리하세요</p>
+        </div>
+        <Dialog open={showRequestDialog} onOpenChange={setShowRequestDialog}>
+          <DialogTrigger asChild>
+            <Button>
+              <Plus className="w-4 h-4 mr-2" />
+              견적 요청
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>프리랜서팀에게 견적 요청</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 mt-4">
+              {/* 팀 검색 */}
+              <div>
+                <Label>팀 검색</Label>
+                <div className="flex gap-2 mt-1">
+                  <Input
+                    placeholder="팀명 또는 매니저명으로 검색"
+                    value={teamSearchTerm}
+                    onChange={(e) => setTeamSearchTerm(e.target.value)}
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') {
+                        handleSearchTeams()
+                      }
+                    }}
+                  />
+                  <Button onClick={handleSearchTeams} disabled={searchingTeams}>
+                    {searchingTeams ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Search className="w-4 h-4" />
+                    )}
+                  </Button>
+                </div>
+                
+                {/* 팀 검색 결과 */}
+                {teamResults.length > 0 && (
+                  <div className="mt-2 border rounded-lg max-h-48 overflow-y-auto">
+                    {teamResults.map((team) => (
+                      <div
+                        key={team.id}
+                        onClick={() => setSelectedTeam(team)}
+                        className={`p-3 cursor-pointer hover:bg-gray-50 border-b last:border-b-0 ${
+                          selectedTeam?.id === team.id ? 'bg-blue-50 border-blue-200' : ''
+                        }`}
+                      >
+                        <div className="font-medium">{team.name}</div>
+                        <div className="text-sm text-gray-600">
+                          매니저: {team.manager?.username || '없음'}
+                        </div>
+                        {team.bio && (
+                          <div className="text-xs text-gray-500 mt-1">{team.bio}</div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {selectedTeam && (
+                  <div className="mt-2 p-3 bg-blue-50 rounded-lg">
+                    <div className="font-medium text-blue-900">선택된 팀: {selectedTeam.name}</div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setSelectedTeam(null)}
+                      className="mt-1"
+                    >
+                      선택 취소
+                    </Button>
+                  </div>
+                )}
+              </div>
+
+              {/* 프로젝트 정보 입력 */}
+              <div>
+                <Label htmlFor="title">프로젝트 제목 *</Label>
+                <Input
+                  id="title"
+                  value={requestForm.title}
+                  onChange={(e) => setRequestForm({ ...requestForm, title: e.target.value })}
+                  placeholder="예: 웹사이트 개발 프로젝트"
+                  className="mt-1"
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="outline">프로젝트 개요 *</Label>
+                <textarea
+                  id="outline"
+                  value={requestForm.outline}
+                  onChange={(e) => setRequestForm({ ...requestForm, outline: e.target.value })}
+                  placeholder="프로젝트에 대한 상세 설명을 입력해주세요"
+                  className="mt-1 w-full min-h-[100px] p-2 border rounded-md"
+                  rows={4}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="start_date">시작 예정일 *</Label>
+                  <Input
+                    id="start_date"
+                    type="date"
+                    value={requestForm.start_date}
+                    onChange={(e) => setRequestForm({ ...requestForm, start_date: e.target.value })}
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="due_date">마감 예정일 *</Label>
+                  <Input
+                    id="due_date"
+                    type="date"
+                    value={requestForm.due_date}
+                    onChange={(e) => setRequestForm({ ...requestForm, due_date: e.target.value })}
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowRequestDialog(false)
+                    setSelectedTeam(null)
+                    setRequestForm({
+                      title: '',
+                      outline: '',
+                      start_date: '',
+                      due_date: ''
+                    })
+                    setTeamSearchTerm('')
+                    setTeamResults([])
+                  }}
+                >
+                  취소
+                </Button>
+                <Button
+                  onClick={handleRequestEstimate}
+                  disabled={submittingRequest || !selectedTeam}
+                >
+                  {submittingRequest ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      요청 중...
+                    </>
+                  ) : (
+                    '견적 요청하기'
+                  )}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {/* 탭 네비게이션 */}
       <div className="flex gap-2 mb-6 border-b">
-        <button
-          onClick={() => setActiveTab('counsel')}
-          className={`px-4 py-2 font-medium transition-colors ${
-            activeTab === 'counsel'
-              ? 'text-blue-600 border-b-2 border-blue-600'
-              : 'text-gray-600 hover:text-gray-900'
-          }`}
-        >
-          상담
-        </button>
         <button
           onClick={() => setActiveTab('estimate')}
           className={`px-4 py-2 font-medium transition-colors ${
@@ -261,74 +472,17 @@ export default function CompanyProjectsClient() {
         </button>
       </div>
 
-      {/* 상담 탭 */}
-      {activeTab === 'counsel' && (
-        <div className="space-y-4">
-          {counsels.length === 0 ? (
-            <div className="text-center py-12 bg-gray-50 rounded-lg">
-              <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-600">등록된 상담이 없습니다</p>
-            </div>
-          ) : (
-            counsels.map((counsel) => (
-              <div key={counsel.counsel_id} className="bg-white rounded-lg shadow-sm border p-4 md:p-6">
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">{counsel.title}</h3>
-                    {getStatusBadge(counsel.counsel_status)}
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleCounselEdit(counsel.counsel_id)}
-                    >
-                      <Edit className="w-4 h-4 mr-1" />
-                      수정
-                    </Button>
-                    {counsel.counsel_status === 'recruiting' && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleCounselClose(counsel.counsel_id)}
-                      >
-                        마감
-                      </Button>
-                    )}
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-600">
-                  <div>
-                    <span className="font-medium">기간:</span> {counsel.period}
-                  </div>
-                  <div>
-                    <span className="font-medium">예산:</span> {counsel.cost}
-                  </div>
-                  <div>
-                    <span className="font-medium">분야:</span> {counsel.feild}
-                  </div>
-                  <div>
-                    <span className="font-medium">기술:</span> {counsel.skill}
-                  </div>
-                </div>
-                {counsel.outline && (
-                  <div className="mt-4 pt-4 border-t">
-                    <p className="text-sm text-gray-700">{counsel.outline}</p>
-                  </div>
-                )}
-              </div>
-            ))
-          )}
-        </div>
-      )}
-
       {/* 견적 진행 탭 */}
       {activeTab === 'estimate' && (
         <div className="space-y-4">
           {estimates.length === 0 ? (
             <div className="text-center py-12 bg-gray-50 rounded-lg">
               <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-600">진행 중인 견적이 없습니다</p>
+              <p className="text-gray-600 mb-4">진행 중인 견적이 없습니다</p>
+              <Button onClick={() => setShowRequestDialog(true)}>
+                <Plus className="w-4 h-4 mr-2" />
+                견적 요청하기
+              </Button>
             </div>
           ) : (
             estimates.map((estimate) => (
@@ -474,4 +628,3 @@ export default function CompanyProjectsClient() {
     </div>
   )
 }
-
