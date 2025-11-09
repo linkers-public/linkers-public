@@ -13,6 +13,7 @@ import {
   checkEstimateViewAccess,
   createEstimateView,
   createPaidEstimateView,
+  getFreeQuota,
   type EstimateViewAccess
 } from '@/apis/estimate-view.service'
 import { toast } from '@/hooks/use-toast'
@@ -24,8 +25,10 @@ import {
   Users,
   Search,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  Gift
 } from 'lucide-react'
+import PortOne from '@portone/browser-sdk/v2'
 
 interface Counsel {
   counsel_id: number
@@ -103,11 +106,22 @@ export default function CompanyEstimatesClient() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [searchTerm, setSearchTerm] = useState('')
   const [expandedProjects, setExpandedProjects] = useState<Set<number>>(new Set())
+  const [freeQuota, setFreeQuota] = useState<{ granted: number; used: number; remaining: number } | null>(null)
   const supabase = createSupabaseBrowserClient()
 
   useEffect(() => {
     loadEstimates()
+    loadFreeQuota()
   }, [])
+
+  const loadFreeQuota = async () => {
+    try {
+      const quota = await getFreeQuota()
+      setFreeQuota(quota)
+    } catch (error) {
+      console.error('무료 열람 횟수 조회 실패:', error)
+    }
+  }
 
   const loadEstimates = async () => {
     try {
@@ -303,17 +317,92 @@ export default function CompanyEstimatesClient() {
         })
         // 상세 정보 새로고침
         await loadEstimateDetail(estimateId)
+        await loadFreeQuota() // 무료 열람 횟수 갱신
         return
       }
 
-      // 건별 결제는 제거됨 - 구독 가입으로 유도
-      // 이 케이스는 발생하지 않아야 하지만, 안전을 위해 구독 페이지로 이동
-      router.push('/my/subscription/register-v2')
+      // 결제 필요 케이스는 UI에서 처리 (건별/구독 선택)
     } catch (error: any) {
       console.error('견적서 열람 처리 실패:', error)
       toast({
         variant: 'destructive',
         title: '견적서 열람 실패',
+        description: error.message,
+      })
+    } finally {
+      setCheckingAccess(false)
+    }
+  }
+
+  const handlePpvPayment = async (estimateId: number) => {
+    try {
+      setCheckingAccess(true)
+
+      // 건별 결제 API 호출
+      const response = await fetch('/api/checkout/ppv', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ estimateId }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || '결제 요청에 실패했습니다')
+      }
+
+      if (data.ok && data.message === 'already_have_access') {
+        toast({
+          title: '이미 열람 권한이 있습니다',
+        })
+        await loadEstimateDetail(estimateId)
+        return
+      }
+
+      // PortOne 결제 위젯 열기
+      if (typeof window !== 'undefined' && (window as any).PortOne) {
+        const PortOne = (window as any).PortOne
+        const paymentWidget = PortOne.loadPaymentWidget({
+          customerKey: process.env.NEXT_PUBLIC_PORTONE_CUSTOMER_KEY || '',
+        })
+
+        await paymentWidget.requestPayment({
+          orderId: data.portone.merchant_uid,
+          paymentId: data.portone.paymentId,
+          orderName: data.portone.orderName,
+          customer: {
+            fullName: '사용자',
+            email: '',
+            phoneNumber: '',
+          },
+          amount: {
+            total: data.portone.amount,
+            currency: 'KRW',
+          },
+        })
+
+        // 결제 완료 후 상세 정보 새로고침
+        toast({
+          title: '결제가 완료되었습니다',
+          description: '견적서를 열람할 수 있습니다.',
+        })
+        await loadEstimateDetail(estimateId)
+        await loadFreeQuota() // 무료 열람 횟수 갱신
+    } else {
+        // PortOne SDK가 없는 경우 결제 페이지로 이동
+        toast({
+          title: '결제 준비 중',
+          description: '결제 페이지로 이동합니다.',
+        })
+        router.push(`/checkout?estimateId=${estimateId}&type=ppv`)
+      }
+    } catch (error: any) {
+      console.error('건별 결제 실패:', error)
+      toast({
+        variant: 'destructive',
+        title: '결제 실패',
         description: error.message,
       })
     } finally {
@@ -424,8 +513,24 @@ export default function CompanyEstimatesClient() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* 헤더 */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">받은 견적서</h1>
-          <p className="text-gray-600">프로젝트별로 받은 견적서를 확인하고 관리하세요</p>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 mb-2">받은 견적서</h1>
+              <p className="text-gray-600">프로젝트별로 받은 견적서를 확인하고 관리하세요</p>
+            </div>
+            {/* 무료 열람 횟수 배지 */}
+            {freeQuota && (
+              <div className="flex items-center gap-2 px-4 py-2 bg-green-50 border border-green-200 rounded-lg">
+                <Gift className="w-5 h-5 text-green-600" />
+                <div className="text-sm">
+                  <span className="font-semibold text-green-900">FREE</span>
+                  <span className="text-green-700 mx-1">
+                    {freeQuota.remaining}/{freeQuota.granted}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* 필터 및 검색 바 */}
@@ -528,7 +633,7 @@ export default function CompanyEstimatesClient() {
               </span>
             </div>
           )}
-        </div>
+      </div>
 
       {viewMode === 'project' ? (
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
@@ -557,8 +662,8 @@ export default function CompanyEstimatesClient() {
                         필터 초기화
                       </button>
                     )}
-                  </div>
-                ) : (
+                </div>
+              ) : (
                   filteredProjectGroups.map((group) => {
                     const isExpanded = expandedProjects.has(group.counsel_id)
                     const isSelected = selectedProject === group.counsel_id
@@ -642,8 +747,8 @@ export default function CompanyEstimatesClient() {
                               견적서 {group.estimates.length}개
                             </div>
                             {group.estimates.map((estimate) => (
-                              <div
-                                key={estimate.estimate_id}
+                  <div
+                    key={estimate.estimate_id}
                                 onClick={(e) => {
                                   e.stopPropagation()
                                   loadEstimateDetail(estimate.estimate_id)
@@ -656,22 +761,22 @@ export default function CompanyEstimatesClient() {
                                   }
                                 }}
                                 className={`p-3 rounded-md border cursor-pointer transition-all focus:outline-none focus:ring-2 focus:ring-blue-500 ${
-                                  selectedEstimate?.estimate_id === estimate.estimate_id
+                      selectedEstimate?.estimate_id === estimate.estimate_id
                                     ? 'border-blue-500 bg-blue-50 shadow-sm'
                                     : 'border-gray-200 bg-white hover:border-blue-300 hover:bg-blue-50/30 hover:shadow-sm'
                                 }`}
                                 tabIndex={0}
                                 role="button"
                                 aria-label={`${estimate.teams?.[0]?.name || '팀명 없음'} 견적서, ${estimate.estimate_version?.[0]?.total_amount?.toLocaleString() || 0}원`}
-                              >
+                  >
                                 <div className="flex justify-between items-start gap-2 mb-2">
                                   <div className="font-medium text-gray-900 text-sm">
                                     {estimate.teams?.[0]?.name || '팀명 없음'}
                                   </div>
-                                  {getStatusBadge(estimate.estimate_status)}
-                                </div>
+                      {getStatusBadge(estimate.estimate_status)}
+                    </div>
                                 <div className="flex items-center justify-between gap-2">
-                                  {estimate.estimate_version && estimate.estimate_version.length > 0 && (
+                      {estimate.estimate_version && estimate.estimate_version.length > 0 && (
                                     <div className="text-sm font-bold text-gray-900">
                                       {estimate.estimate_version[0].total_amount?.toLocaleString()}원
                                     </div>
@@ -680,23 +785,23 @@ export default function CompanyEstimatesClient() {
                                     <div className="text-xs text-gray-500">
                                       {new Date(estimate.estimate_date).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })}
                                     </div>
-                                  )}
-                                </div>
-                              </div>
+                      )}
+                    </div>
+                  </div>
                             ))}
                           </div>
                         )}
                       </div>
                     )
                   })
-                )}
-              </div>
+              )}
             </div>
           </div>
+        </div>
 
-          {/* 견적서 상세 */}
+        {/* 견적서 상세 */}
           <div className="lg:col-span-3">
-            {selectedEstimate ? (
+          {selectedEstimate ? (
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 md:p-8">
               {/* 프로젝트 정보 */}
               {selectedEstimate.counsel && (
@@ -743,9 +848,9 @@ export default function CompanyEstimatesClient() {
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-3">
                     <h2 className="text-2xl font-bold text-gray-900">
-                      {selectedEstimate.teams?.[0]?.name || '팀명 없음'}
-                    </h2>
-                    {getStatusBadge(selectedEstimate.estimate_status)}
+                    {selectedEstimate.teams?.[0]?.name || '팀명 없음'}
+                  </h2>
+                  {getStatusBadge(selectedEstimate.estimate_status)}
                   </div>
                   {selectedEstimate.teams?.[0] && (
                     <div className="space-y-1">
@@ -801,23 +906,23 @@ export default function CompanyEstimatesClient() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                 {selectedEstimate.estimate_version && selectedEstimate.estimate_version.length > 0 && (
                   <>
-                    <div className="bg-gray-50 rounded-lg p-4">
+                    <div className={`bg-gray-50 rounded-lg p-4 relative ${!viewAccess?.canView ? 'blur-sm' : ''}`}>
                       <div className="text-sm text-gray-600 mb-1">총 견적 금액</div>
                       <div className="text-2xl font-bold text-gray-900">
-                        {selectedEstimate.estimate_version[0].total_amount?.toLocaleString()}원
+                          {selectedEstimate.estimate_version[0].total_amount?.toLocaleString()}원
+                        </div>
                       </div>
-                    </div>
-                    <div className="bg-gray-50 rounded-lg p-4">
+                    <div className={`bg-gray-50 rounded-lg p-4 relative ${!viewAccess?.canView ? 'blur-sm' : ''}`}>
                       <div className="text-sm text-gray-600 mb-1">작업 기간</div>
                       <div className="text-lg font-semibold text-gray-900">
-                        {selectedEstimate.estimate_version[0].start_date} ~ {selectedEstimate.estimate_version[0].end_date}
+                          {selectedEstimate.estimate_version[0].start_date} ~ {selectedEstimate.estimate_version[0].end_date}
+                        </div>
                       </div>
-                    </div>
-                    <div className="bg-gray-50 rounded-lg p-4">
+                    <div className={`bg-gray-50 rounded-lg p-4 relative ${!viewAccess?.canView ? 'blur-sm' : ''}`}>
                       <div className="text-sm text-gray-600 mb-1">견적 버전</div>
                       <div className="text-lg font-semibold text-gray-900">
                         {selectedEstimate.estimate_version.length}개
-                      </div>
+                    </div>
                     </div>
                   </>
                 )}
@@ -825,7 +930,7 @@ export default function CompanyEstimatesClient() {
 
               {/* 견적 버전 목록 */}
               {selectedEstimate.estimate_version && selectedEstimate.estimate_version.length > 1 && (
-                <div className="mb-8">
+                <div className={`mb-8 ${!viewAccess?.canView ? 'blur-sm pointer-events-none' : ''}`}>
                   <h3 className="text-lg font-semibold text-gray-900 mb-4">견적 버전</h3>
                   <div className="space-y-3">
                     {selectedEstimate.estimate_version.map((version, index) => (
@@ -859,8 +964,8 @@ export default function CompanyEstimatesClient() {
                   <h3 className="text-lg font-semibold text-gray-900 mb-4">상세 내역</h3>
                   {viewAccess?.canView ? (
                     <div className="bg-gray-50 rounded-xl p-6 text-sm text-gray-700 whitespace-pre-wrap leading-relaxed border border-gray-200">
-                      {selectedEstimate.estimate_version[0].detail}
-                    </div>
+                    {selectedEstimate.estimate_version[0].detail}
+                  </div>
                   ) : (
                     <div className="bg-gray-50 rounded-xl p-8 text-center border border-gray-200">
                       <Eye className="w-12 h-12 text-gray-400 mx-auto mb-4" />
@@ -869,7 +974,7 @@ export default function CompanyEstimatesClient() {
                           ? '무료로 견적서 상세 내역을 열람할 수 있습니다'
                           : viewAccess?.hasActiveSubscription
                           ? '구독으로 무제한 열람 가능합니다'
-                          : '견적서 상세 내역을 열람하려면 구독이 필요합니다'}
+                          : '견적서 상세 내역을 열람하려면 결제가 필요합니다'}
                       </p>
                       <p className="text-sm text-gray-500 mb-4">
                         {viewAccess?.freeViewsRemaining ? (
@@ -877,10 +982,10 @@ export default function CompanyEstimatesClient() {
                         ) : viewAccess?.hasActiveSubscription ? (
                           <>구독 중: 무제한 열람 가능</>
                         ) : (
-                          <>구독으로 무제한 열람 가능</>
+                          <>건별 열람 또는 구독으로 열람 가능</>
                         )}
                       </p>
-                      <div className="flex gap-3 justify-center">
+                      <div className="flex flex-col gap-3">
                         {viewAccess?.viewType === 'free' && (
                           <Button
                             onClick={() => handlePurchaseEstimateView(selectedEstimate.estimate_id)}
@@ -900,12 +1005,57 @@ export default function CompanyEstimatesClient() {
                           </Button>
                         )}
                         {viewAccess?.viewType === 'paid' && (
-                          <Button
-                            onClick={() => router.push('/my/subscription/register-v2')}
-                            className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-6 py-2.5"
-                          >
-                            월 1만원 구독으로 무제한 열람하기
-                          </Button>
+                          <div className="space-y-3">
+                            {/* 건별 결제 옵션 */}
+                            <div className="bg-white border border-gray-200 rounded-lg p-4">
+                              <div className="flex items-center justify-between mb-2">
+                                <div>
+                                  <h4 className="font-semibold text-gray-900">건별 열람</h4>
+                                  <p className="text-sm text-gray-600">이 견적서만 열람</p>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-lg font-bold text-gray-900">
+                                    {viewAccess.ppvPrice?.toLocaleString() || '2,000'}원
+                                  </p>
+                                </div>
+                              </div>
+                              <Button
+                                onClick={() => handlePpvPayment(selectedEstimate.estimate_id)}
+                                className="w-full bg-gray-700 hover:bg-gray-800 text-white font-medium py-2.5"
+                                disabled={checkingAccess}
+                              >
+                                {checkingAccess ? '처리 중...' : `${viewAccess.ppvPrice?.toLocaleString() || '2,000'}원으로 열람하기`}
+                              </Button>
+                            </div>
+
+                            {/* 구독 옵션 */}
+                            <div className="bg-blue-50 border-2 border-blue-300 rounded-lg p-4 relative">
+                              <span className="absolute top-2 right-2 px-2 py-0.5 bg-blue-600 text-white text-xs font-medium rounded">
+                                추천
+                              </span>
+                              <div className="flex items-center justify-between mb-2">
+                                <div>
+                                  <h4 className="font-semibold text-gray-900">월 구독</h4>
+                                  <p className="text-sm text-gray-600">무제한 열람</p>
+                                  <p className="text-xs text-blue-700 font-medium mt-1">
+                                    4건 이상 열람 시 더 유리
+                                  </p>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-lg font-bold text-blue-700">
+                                    {viewAccess.subscriptionPrice?.toLocaleString() || '9,900'}원
+                                  </p>
+                                  <p className="text-xs text-gray-500">/월</p>
+                                </div>
+                              </div>
+                              <Button
+                                onClick={() => router.push('/my/subscription/register-v2')}
+                                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5"
+                              >
+                                월 {viewAccess.subscriptionPrice?.toLocaleString() || '9,900'}원 구독으로 무제한 열람하기
+                              </Button>
+                            </div>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -937,7 +1087,7 @@ export default function CompanyEstimatesClient() {
                     <p className="text-sm text-gray-600">수락된 견적서입니다</p>
                   </div>
                 )}
-                {selectedEstimate.estimate_status === 'in_progress' && (
+                {selectedEstimate.estimate_status === 'in_progress' && viewAccess?.canView && (
                   <div className="w-full text-center py-2">
                     <p className="text-sm text-gray-600">진행 중인 견적서입니다</p>
                   </div>
@@ -960,10 +1110,10 @@ export default function CompanyEstimatesClient() {
               <p className="text-gray-500 text-lg font-medium mb-2">견적서를 선택해주세요</p>
               <p className="text-sm text-gray-400">왼쪽에서 프로젝트를 선택하면 견적서 상세 정보를 확인할 수 있습니다</p>
             </div>
-          )}
-          </div>
-        </div>
-      ) : (
+                )}
+              </div>
+            </div>
+          ) : (
         /* 전체 보기 모드 */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredEstimates.length === 0 ? (
@@ -1024,9 +1174,9 @@ export default function CompanyEstimatesClient() {
                   {estimate.estimate_date && (
                     <div className="text-xs text-gray-500">
                       견적일: {new Date(estimate.estimate_date).toLocaleDateString('ko-KR')}
-                    </div>
-                  )}
-                </div>
+            </div>
+          )}
+        </div>
               </div>
             ))
           )}

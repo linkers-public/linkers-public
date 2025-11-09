@@ -1,13 +1,15 @@
 /**
- * 견적서 열람 건별 결제 API
- * 가격: 1만원
+ * 견적서 열람 건별 결제 API (레거시 - 새 API 사용 권장)
+ * 가격: 2,000원 (새 모델)
+ * 
+ * @deprecated 새로운 /api/checkout/ppv API를 사용하세요
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createSupabaseServerClient } from '@/supabase/supabase-server'
 import { getPortOneClients } from '@/apis/subscription-v2.service'
 
-const ESTIMATE_VIEW_PRICE = 10000 // 1만원
+const ESTIMATE_VIEW_PRICE = 2000 // 2,000원 (새 모델)
 
 export async function POST(request: NextRequest) {
   try {

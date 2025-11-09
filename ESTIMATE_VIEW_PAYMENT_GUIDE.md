@@ -2,10 +2,11 @@
 
 ## 📋 요구사항
 
-1. **가격**: 1만원 (건별)
-2. **구성**: 건별 열람권 + 무제한 열람(구독제)
+1. **구성**: 무제한 열람(구독제) + 무료 열람(신규 회원가입 시 3회)
+2. **구독 가격**: 월 1만원
 3. **무료 제공**: 신규 회원가입 시 구독 없이도 최초 3회 무료 열람 제공 (구독과 별개)
    - 무료 열람으로 견적서를 열람하면, 견적서에 포함된 연락처 정보도 함께 확인 가능
+4. **건별 결제**: 제거됨 (구독 가입으로 유도)
 
 ---
 
@@ -29,8 +30,8 @@ CREATE TABLE public.estimate_views (
 
 **열람 타입:**
 - `free`: 무료 열람 (최초 n회)
-- `paid`: 건별 결제 (1만원)
 - `subscription`: 구독으로 열람 (무제한)
+- `paid`: 건별 결제 (현재 사용되지 않음, 기존 데이터 호환성 유지)
 
 ### 2. `client` 테이블 확장
 
@@ -73,7 +74,7 @@ ADD COLUMN free_estimate_views_remaining INTEGER DEFAULT 3;
 1. 이미 열람함 → `canView: true`
 2. 무료 열람 횟수 있음 → `viewType: 'free'`
 3. 활성 구독 있음 → `viewType: 'subscription'`
-4. 건별 결제 필요 → `viewType: 'paid'`, `canView: false`
+4. 구독 가입 필요 → `viewType: 'paid'`, `canView: false` (구독 가입 페이지로 유도)
 
 #### ✅ `createEstimateView(estimateId, viewType)`
 무료/구독 열람 기록 생성
@@ -132,7 +133,7 @@ ADD COLUMN free_estimate_views_remaining INTEGER DEFAULT 3;
 #### ✅ 열람 버튼 표시
 - **무료 열람**: "무료로 열람하기" 버튼
 - **구독 열람**: "구독으로 열람하기" 버튼
-- **건별 결제**: "10,000원으로 열람하기" 버튼
+- **구독 가입 필요**: "월 1만원 구독으로 무제한 열람하기" 버튼 (구독 가입 페이지로 이동)
 
 #### ✅ 열람 후 상세 내용 표시
 열람 기록 생성 후 견적서 상세 내용 표시
@@ -187,7 +188,7 @@ ADD COLUMN free_estimate_views_remaining INTEGER DEFAULT 3;
 8. 견적서 상세 내용 표시 (연락처 정보 포함)
 ```
 
-### 시나리오 3: 건별 결제 (1만원)
+### 시나리오 3: 구독 가입 필요
 
 ```
 1. 사용자가 견적서 상세 페이지 접근
@@ -196,17 +197,21 @@ ADD COLUMN free_estimate_views_remaining INTEGER DEFAULT 3;
    ↓
 3. 무료 열람 횟수 없음 + 구독 없음 확인
    ↓
-4. "10,000원으로 열람하기" 버튼 표시
+4. "월 1만원 구독으로 무제한 열람하기" 버튼 표시
    ↓
-5. 버튼 클릭 → POST /api/payments/estimate-view
+5. 버튼 클릭 → 구독 가입 페이지로 이동 (/my/subscription/register-v2)
    ↓
-6. PortOne 결제 위젯 열기 (⚠️ 미구현)
+6. 구독 가입 완료
    ↓
-7. 결제 완료 → createPaidEstimateView(estimateId, paymentId)
+7. 다시 견적서 상세 페이지 접근
    ↓
-8. estimate_views 레코드 생성 (view_type: 'paid', payment_id, amount_paid 저장)
+8. "구독으로 열람하기" 버튼 표시
    ↓
-9. 견적서 상세 내용 표시 (연락처 정보 포함)
+9. 버튼 클릭 → createEstimateView(estimateId, 'subscription')
+   ↓
+10. estimate_views 레코드 생성 (view_type: 'subscription', subscription_id 저장)
+   ↓
+11. 견적서 상세 내용 표시 (연락처 정보 포함)
 ```
 
 ### 시나리오 4: 이미 열람한 견적서
@@ -225,24 +230,19 @@ ADD COLUMN free_estimate_views_remaining INTEGER DEFAULT 3;
 
 ---
 
-## ⚠️ 미완성 항목
+## ⚠️ 정리 필요 항목
 
-### 1. PortOne 결제 위젯 연동
+### 1. 건별 결제 API 정리
 
 **현재 상태:**
-- 결제 API는 구현됨 (`/api/payments/estimate-view`)
-- PortOne V2 결제 요청 생성은 완료
-- 프론트엔드 결제 위젯 연동 미구현
+- ✅ UI에서 건별 결제 버튼 제거됨
+- ✅ 구독 가입으로 유도하도록 변경됨
+- ⚠️ `/api/payments/estimate-view` API는 아직 존재 (사용되지 않음)
+- ⚠️ `createPaidEstimateView()` 함수는 아직 존재 (사용되지 않음)
 
-**필요 작업:**
-1. PortOne SDK 설치 및 설정
-2. 결제 위젯 UI 구현
-3. 결제 완료 콜백 처리
-4. `createPaidEstimateView()` 호출
-
-**참고:**
-- PortOne V2 문서: https://developers.portone.io/docs/ko/v2
-- 결제 위젯 예제 코드 필요
+**권장 작업:**
+- 주석으로 "현재 사용되지 않음" 표시
+- 향후 필요 시 재활성화 가능하도록 유지
 
 ### 2. 구독 시스템 연동
 
@@ -255,7 +255,7 @@ ADD COLUMN free_estimate_views_remaining INTEGER DEFAULT 3;
 2. 구독 해지 시 권한 제거 확인
 3. 구독 만료 시 권한 제거 확인
 
-### 3. 무료 열람 횟수 관리
+### 3. 무료 열람 횟수 마이그레이션
 
 **현재 상태:**
 - 기본값: 3회
@@ -305,7 +305,7 @@ WITH CHECK (auth.uid() = client_id);
 checkEstimateViewAccess()
   ↓
 이미 열람함? 
-  ├─ YES → 상세 내용 표시
+  ├─ YES → 상세 내용 표시 (연락처 정보 포함)
   └─ NO
       ↓
 무료 열람 가능? (free_estimate_views_remaining > 0)
@@ -315,7 +315,7 @@ checkEstimateViewAccess()
   │         ↓
   │         free_estimate_views_remaining - 1
   │         ↓
-  │         상세 내용 표시
+  │         상세 내용 표시 (연락처 정보 포함)
   └─ NO
       ↓
 구독 중? (subscriptions.status = 'active')
@@ -323,43 +323,45 @@ checkEstimateViewAccess()
   │         ↓
   │         createEstimateView('subscription')
   │         ↓
-  │         상세 내용 표시
+  │         상세 내용 표시 (연락처 정보 포함)
   └─ NO
       ↓
-건별 결제 필요 → "10,000원으로 열람하기" 버튼
+구독 가입 필요 → "월 1만원 구독으로 무제한 열람하기" 버튼
   ↓
-POST /api/payments/estimate-view
+구독 가입 페이지로 이동 (/my/subscription/register-v2)
   ↓
-PortOne 결제 위젯 (⚠️ 미구현)
+구독 가입 완료 후 다시 접근
   ↓
-결제 완료
+"구독으로 열람하기" 버튼 표시
   ↓
-createPaidEstimateView(estimateId, paymentId)
-  ↓
-상세 내용 표시
+상세 내용 표시 (연락처 정보 포함)
 ```
 
 ---
 
 ## 🚀 다음 단계
 
-### 우선순위 1: PortOne 결제 위젯 연동
+### 우선순위 1: 문서 업데이트 완료 ✅
 
-1. **PortOne SDK 설치**
-   ```bash
-   npm install @portone/browser-sdk/v2
+건별 결제 제거 반영 완료
+
+### 우선순위 2: 무료 열람 횟수 마이그레이션
+
+1. **SQL 마이그레이션 실행**
+   ```sql
+   -- 기존 client 레코드에 무료 열람 횟수 설정
+   UPDATE public.client
+   SET free_estimate_views_remaining = 3
+   WHERE free_estimate_views_remaining IS NULL;
    ```
 
-2. **결제 위젯 구현**
-   - `CompanyEstimatesClient.tsx`에 결제 위젯 추가
-   - 결제 완료 콜백 처리
-   - `createPaidEstimateView()` 호출
+### 우선순위 3: 건별 결제 API 정리 (선택)
 
-3. **에러 처리**
-   - 결제 실패 시 처리
-   - 결제 취소 시 처리
+1. **코드 정리**
+   - `/api/payments/estimate-view` 주석 처리
+   - `createPaidEstimateView()` 주석 처리
 
-### 우선순위 2: 구독 시스템 확인
+### 우선순위 4: 구독 시스템 확인
 
 1. **구독 가입/해지 로직 확인**
    - 구독 가입 시 권한 부여 확인
@@ -386,18 +388,18 @@ createPaidEstimateView(estimateId, paymentId)
 - 데이터베이스 구조 (estimate_views, client.free_estimate_views_remaining)
 - 열람 권한 확인 API (`checkEstimateViewAccess`)
 - 무료/구독 열람 기록 생성 (`createEstimateView`)
-- 건별 결제 열람 기록 생성 (`createPaidEstimateView`)
-- 결제 API (`/api/payments/estimate-view`)
 - UI 구현 (열람 버튼, 상세 내용 표시)
+- 연락처 정보 포함 기능
+- 구독 가입 유도 기능
 
-### ⚠️ 미완성 기능
-- PortOne 결제 위젯 연동 (프론트엔드)
-- 결제 완료 콜백 처리
-- 구독 시스템 연동 확인
+### ⚠️ 정리 필요
+- 건별 결제 API 정리 (사용되지 않지만 코드 존재)
+- 무료 열람 횟수 마이그레이션 (기존 사용자)
 
 ### 📌 핵심 포인트
-1. **가격**: 1만원 (건별) ✅
-2. **구성**: 건별 열람권 + 무제한 열람(구독제) ✅
+1. **구성**: 무제한 열람(구독제) + 무료 열람(신규 회원가입 시 3회) ✅
+2. **구독 가격**: 월 1만원 ✅
 3. **무료 제공**: 신규 회원가입 시 구독 없이도 3회 무료 열람 제공 (구독과 별개) ✅
 4. **연락처 포함**: 견적서 열람 시 견적서에 포함된 연락처 정보도 함께 확인 가능 ✅
+5. **건별 결제**: 제거됨 (구독 가입으로 유도) ✅
 
