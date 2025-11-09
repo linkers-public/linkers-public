@@ -79,6 +79,66 @@ const LandingPage = () => {
           </div>
         </section>
 
+        {/* Role Introduction Section */}
+        <section className="w-full bg-white/70 px-4 py-8 sm:px-6 md:py-14 lg:px-8">
+          <div className="mx-auto max-w-6xl space-y-8 md:space-y-10">
+            <div className="grid grid-cols-1 gap-6 md:gap-8 lg:grid-cols-2">
+              <div className="rounded-2xl border border-blue-50 bg-white p-6 shadow-sm transition-shadow hover:shadow-md md:p-7">
+                <div className="mb-4 flex items-center gap-3">
+                  <BriefcaseBusiness className="h-10 w-10 text-blue-500" />
+                  <h3 className="text-xl font-bold text-gray-900 md:text-2xl">기업</h3>
+                </div>
+                <p className="mb-6 text-sm leading-relaxed text-gray-600 md:text-base">
+                  개발자가 필요하지만 어디서 찾아야 할지 막막하신가요?
+                  <br />
+                  프로젝트에 맞는 맞춤 견적서를 간편하게 받아보세요.
+                  <br />
+                  부담 없이 먼저 확인하고, 가장 잘 맞는 팀을 선택하세요.
+                </p>
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <Link
+                    href={buildLoginRedirect('/enterprise/counsel-form')}
+                    className="flex-1 rounded-lg bg-blue-600 py-3 text-center font-semibold text-white transition-colors hover:bg-blue-700"
+                  >
+                    프로젝트 등록하기
+                  </Link>
+                  <Link
+                    href="/enterprise"
+                    className="flex-1 rounded-lg border border-blue-200 py-3 text-center font-semibold text-blue-600 transition-colors hover:bg-blue-50"
+                  >
+                    더 알아보기
+                  </Link>
+                </div>
+              </div>
+              <div className="rounded-2xl border border-cyan-50 bg-white p-6 shadow-sm transition-shadow hover:shadow-md md:p-7">
+                <div className="mb-4 flex items-center gap-3">
+                  <Users className="h-10 w-10 text-cyan-500" />
+                  <h3 className="text-xl font-bold text-gray-900 md:text-2xl">프리랜서</h3>
+                </div>
+                <p className="mb-6 text-sm leading-relaxed text-gray-600 md:text-base">
+                  지금 바로 프리랜서로 활동을 시작해보세요.
+                  <br />
+                  기업이 올린 프로젝트 개요를 확인하고 세부 견적서를 작성해 제안할 수 있습니다.
+                  <br />
+                  매니저로 팀을 이끌며 기업과 직접 조율하는 리드 역할을 경험하세요.
+                </p>
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <Link
+                    href={buildLoginRedirect('/auth?role=maker')}
+                    className="flex-1 rounded-lg bg-cyan-600 py-3 text-center font-semibold text-white transition-colors hover:bg-cyan-700"
+                  >
+                    무료 프로필 만들기
+                  </Link>
+                  <Link
+                    href="/(home)/team-projects"
+                    className="flex-1 rounded-lg border border-cyan-200 py-3 text-center font-semibold text-cyan-600 transition-colors hover:bg-cyan-50"
+                  >
+                    더 알아보기
+                  </Link>
+                </div>
+              </div>
+            </div>
+
         {/* Service Toggle Section */}
         <section className="w-full bg-white/60 px-4 py-12 sm:px-6 md:py-16 lg:px-8">
           <div className="mx-auto max-w-6xl text-center">
@@ -144,67 +204,6 @@ const LandingPage = () => {
             })}
           </div>
         </section>
-
-        {/* Role Introduction Section */}
-        <section className="w-full bg-white/70 px-4 py-8 sm:px-6 md:py-14 lg:px-8">
-          <div className="mx-auto max-w-6xl space-y-8 md:space-y-10">
-            <div className="grid grid-cols-1 gap-6 md:gap-8 lg:grid-cols-2">
-              <div className="rounded-2xl border border-blue-50 bg-white p-6 shadow-sm transition-shadow hover:shadow-md md:p-7">
-                <div className="mb-4 flex items-center gap-3">
-                  <BriefcaseBusiness className="h-10 w-10 text-blue-500" />
-                  <h3 className="text-xl font-bold text-gray-900 md:text-2xl">기업</h3>
-                </div>
-                <p className="mb-6 text-sm leading-relaxed text-gray-600 md:text-base">
-                  개발자가 필요하지만 어디서 찾아야 할지 막막하신가요?
-                  <br />
-                  프로젝트에 맞는 맞춤 견적서를 간편하게 받아보세요.
-                  <br />
-                  부담 없이 먼저 확인하고, 가장 잘 맞는 팀을 선택하세요.
-                </p>
-                <div className="flex flex-col gap-3 sm:flex-row">
-                  <Link
-                    href={buildLoginRedirect('/enterprise/counsel-form')}
-                    className="flex-1 rounded-lg bg-blue-600 py-3 text-center font-semibold text-white transition-colors hover:bg-blue-700"
-                  >
-                    프로젝트 등록하기
-                  </Link>
-                  <Link
-                    href="/enterprise"
-                    className="flex-1 rounded-lg border border-blue-200 py-3 text-center font-semibold text-blue-600 transition-colors hover:bg-blue-50"
-                  >
-                    더 알아보기
-                  </Link>
-                </div>
-              </div>
-              <div className="rounded-2xl border border-cyan-50 bg-white p-6 shadow-sm transition-shadow hover:shadow-md md:p-7">
-                <div className="mb-4 flex items-center gap-3">
-                  <Users className="h-10 w-10 text-cyan-500" />
-                  <h3 className="text-xl font-bold text-gray-900 md:text-2xl">프리랜서</h3>
-                </div>
-                <p className="mb-6 text-sm leading-relaxed text-gray-600 md:text-base">
-                  지금 바로 프리랜서로 활동을 시작해보세요.
-                  <br />
-                  기업이 올린 프로젝트 개요를 확인하고 세부 견적서를 작성해 제안할 수 있습니다.
-                  <br />
-                  매니저로 팀을 이끌며 기업과 직접 조율하는 리드 역할을 경험하세요.
-                </p>
-                <div className="flex flex-col gap-3 sm:flex-row">
-                  <Link
-                    href={buildLoginRedirect('/auth?role=maker')}
-                    className="flex-1 rounded-lg bg-cyan-600 py-3 text-center font-semibold text-white transition-colors hover:bg-cyan-700"
-                  >
-                    무료 프로필 만들기
-                  </Link>
-                  <Link
-                    href="/(home)/team-projects"
-                    className="flex-1 rounded-lg border border-cyan-200 py-3 text-center font-semibold text-cyan-600 transition-colors hover:bg-cyan-50"
-                  >
-                    더 알아보기
-                  </Link>
-                </div>
-              </div>
-            </div>
-
             <div className="rounded-2xl border border-blue-100 bg-white p-6 shadow-sm md:p-8">
               <div className="mx-auto max-w-4xl space-y-6 text-center">
                 <h4 className="text-lg font-bold text-blue-700 md:text-xl">메이커와 매니저, 두 가지 역할로 활동하세요</h4>
