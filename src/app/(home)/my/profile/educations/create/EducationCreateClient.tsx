@@ -1,9 +1,10 @@
-'use client'
+"use client"
 
 import React, { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
+import { MajorSelector } from '@/components/education/MajorSelector'
+import { formatMajorsForStorage } from '@/utils/education'
 import { useRouter } from 'next/navigation'
 import { useProfileStore } from '@/stores/useProfileStore'
 import { createEducation } from '@/apis/profile.service'
@@ -12,8 +13,8 @@ interface FormData {
   name: string
   start_date: string
   end_date: string | null
-  content: string
   education_level: string
+  majors: string[]
 }
 
 const EducationCreateClient = () => {
@@ -26,8 +27,8 @@ const EducationCreateClient = () => {
     name: '',
     start_date: '',
     end_date: null,
-    content: '',
     education_level: '',
+    majors: [],
   })
 
   const handleInputChange = (
@@ -49,6 +50,13 @@ const EducationCreateClient = () => {
     }))
   }
 
+  const handleMajorsChange = (majors: string[]) => {
+    setFormData((prev) => ({
+      ...prev,
+      majors,
+    }))
+  }
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setIsLoading(true)
@@ -58,19 +66,16 @@ const EducationCreateClient = () => {
         name: formData.name,
         start_date: formData.start_date,
         end_date: formData.end_date,
-        content: formData.content,
-        education_level: formData.education_level || null,
+        content: formatMajorsForStorage(formData.majors),
       }
 
-      const { data, error: createError } = await createEducation(createData)
+      const { error: createError } = await createEducation(createData)
 
       if (createError) {
         throw createError
       }
 
-      if (data) {
-        useProfileStore.getState().addEducation(data)
-      }
+      await useProfileStore.getState().fetchMyProfileData()
 
       router.push('/my/profile')
     } catch (err) {
@@ -111,7 +116,12 @@ const EducationCreateClient = () => {
             <select
               name="education_level"
               value={formData.education_level}
-              onChange={(e) => setFormData((prev) => ({ ...prev, education_level: e.target.value }))}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  education_level: e.target.value,
+                }))
+              }
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">선택하세요</option>
@@ -159,12 +169,9 @@ const EducationCreateClient = () => {
             <label className="block text-sm font-medium mb-1">
               전공/부전공
             </label>
-            <Textarea
-              name="content"
-              value={formData.content}
-              onChange={handleInputChange}
-              rows={4}
-              placeholder="전공 및 부전공 정보를 입력해주세요."
+            <MajorSelector
+              value={formData.majors}
+              onChange={handleMajorsChange}
             />
           </div>
         </div>

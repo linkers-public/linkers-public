@@ -97,34 +97,34 @@ export const createEducation = async (data: any) => {
     throw new Error('인증되지 않은 사용자입니다.')
   }
 
-  // 활성 프로필의 profile_id 가져오기
   const { data: profile, error: profileError } = await supabase
     .from('accounts')
-    .select('profile_id')
-    .eq('user_id', sessionData.session.user.id)
-    .eq('is_active', true)
+    .select('user_id')
+    .eq('profile_id', data.profile_id)
     .is('deleted_at', null)
-    .single()
+    .eq('is_active', true)
+    .maybeSingle()
 
   if (profileError || !profile) {
-    throw new Error('활성 프로필을 찾을 수 없습니다.')
+    throw new Error('프로필을 찾을 수 없습니다.')
   }
 
-  // profile_id를 포함하여 insert
-  const { data: education, error } = await supabase
+  if (profile.user_id !== sessionData.session.user.id) {
+    throw new Error('본인 프로필에만 학력 추가가 가능합니다.')
+  }
+
+  // profile_id를 포함하여 insert 및 소유자 검증
+  const { error } = await supabase
     .from('account_educations')
     .insert({
       ...data,
-      profile_id: profile.profile_id,
     })
-    .select('*')
-    .single()
 
   if (error) {
     console.error('Create error:', error)
   }
 
-  return { data: education, error }
+  return { data: null, error }
 }
 export const deleteEducation = async (id: string) => {}
 
@@ -133,16 +133,44 @@ export const updateLicense = async (id: number, data: any) => {
 
   console.log('Update license data:', data)
 
-  const { data: sessionData, error: sessionError } =
-    await supabase.auth.getSession()
+  const {
+    data: sessionData,
+    error: sessionError,
+  } = await supabase.auth.getSession()
+  if (sessionError) throw sessionError
   if (!sessionData.session) {
     throw new Error('인증되지 않은 사용자입니다.')
+  }
+
+  const { data: licenseOwner, error: licenseOwnerError } = await supabase
+    .from('account_license')
+    .select('profile_id')
+    .eq('id', id)
+    .maybeSingle()
+
+  if (licenseOwnerError) throw licenseOwnerError
+  if (!licenseOwner) {
+    throw new Error('자격증을 찾을 수 없습니다.')
+  }
+
+  const { data: accountOwner, error: accountError } = await supabase
+    .from('accounts')
+    .select('user_id')
+    .eq('profile_id', licenseOwner.profile_id)
+    .is('deleted_at', null)
+    .maybeSingle()
+
+  if (accountError) throw accountError
+
+  if (accountOwner?.user_id !== sessionData.session.user.id) {
+    throw new Error('본인 자격증만 수정할 수 있습니다.')
   }
 
   const { data: license, error } = await supabase
     .from('account_license')
     .update(data)
     .eq('id', id)
+    .eq('profile_id', licenseOwner.profile_id)
     .select('*')
     .single()
 
@@ -164,17 +192,20 @@ export const createLicense = async (data: any) => {
     throw new Error('인증되지 않은 사용자입니다.')
   }
 
-  // 활성 프로필의 profile_id 가져오기
   const { data: profile, error: profileError } = await supabase
     .from('accounts')
-    .select('profile_id')
-    .eq('user_id', sessionData.session.user.id)
-    .eq('is_active', true)
+    .select('user_id')
+    .eq('profile_id', data.profile_id)
     .is('deleted_at', null)
-    .single()
+    .eq('is_active', true)
+    .maybeSingle()
 
   if (profileError || !profile) {
-    throw new Error('활성 프로필을 찾을 수 없습니다.')
+    throw new Error('프로필을 찾을 수 없습니다.')
+  }
+
+  if (profile.user_id !== sessionData.session.user.id) {
+    throw new Error('본인 프로필에만 자격증을 추가할 수 있습니다.')
   }
 
   // profile_id를 포함하여 insert
@@ -182,7 +213,6 @@ export const createLicense = async (data: any) => {
     .from('account_license')
     .insert({
       ...data,
-      profile_id: profile.profile_id,
     })
     .select('*')
     .single()
@@ -196,16 +226,44 @@ export const createLicense = async (data: any) => {
 export const deleteLicense = async (id: number) => {
   const supabase = createSupabaseBrowserClient()
 
-  const { data: sessionData, error: sessionError } =
-    await supabase.auth.getSession()
+  const {
+    data: sessionData,
+    error: sessionError,
+  } = await supabase.auth.getSession()
+  if (sessionError) throw sessionError
   if (!sessionData.session) {
     throw new Error('인증되지 않은 사용자입니다.')
+  }
+
+  const { data: licenseOwner, error: licenseOwnerError } = await supabase
+    .from('account_license')
+    .select('profile_id')
+    .eq('id', id)
+    .maybeSingle()
+
+  if (licenseOwnerError) throw licenseOwnerError
+  if (!licenseOwner) {
+    throw new Error('자격증을 찾을 수 없습니다.')
+  }
+
+  const { data: accountOwner, error: accountError } = await supabase
+    .from('accounts')
+    .select('user_id')
+    .eq('profile_id', licenseOwner.profile_id)
+    .is('deleted_at', null)
+    .maybeSingle()
+
+  if (accountError) throw accountError
+
+  if (accountOwner?.user_id !== sessionData.session.user.id) {
+    throw new Error('본인 자격증만 삭제할 수 있습니다.')
   }
 
   const { error } = await supabase
     .from('account_license')
     .delete()
     .eq('id', id)
+    .eq('profile_id', licenseOwner.profile_id)
 
   if (error) {
     console.error('Delete error:', error)

@@ -12,7 +12,8 @@ import { createSupabaseBrowserClient } from '@/supabase/supabase-client'
 import { submitCareerVerification } from '@/apis/career-verification.service'
 import { bookmark, unbookmark, checkBookmarked } from '@/apis/bookmark.service'
 import { toast } from '@/hooks/use-toast'
-import { XCircle, FileText, CheckCircle, Pause, Star, Trophy, Briefcase, Calendar, Paperclip, Edit, GraduationCap, FolderOpen, MessageCircle } from 'lucide-react'
+import { XCircle, FileText, CheckCircle, Pause, Star, Trophy, Briefcase, Calendar, Paperclip, Edit, GraduationCap, FolderOpen, MessageCircle, Trash2 } from 'lucide-react'
+import { parseMajorContent } from '@/utils/education'
 
 export const ProfileClient = ({ username, isOwner = false }) => {
   const router = useRouter()
@@ -783,54 +784,67 @@ const EduCationMeta = ({
           )}
         </div>
         <div className="flex flex-col gap-4">
-          {account_educations?.map((edu, index) => (
-            <div
-              className="flex gap-4 p-4 bg-gray-50 rounded-lg border border-gray-100 hover:bg-gray-100 transition-colors"
-              key={edu.id || index}
-            >
-              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center text-white font-bold flex-shrink-0">
-                <GraduationCap className="w-6 h-6" />
-              </div>
-              <div className="flex flex-1 flex-col gap-2">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900">{edu.name || '학교명 없음'}</h3>
-                    <p className="text-sm text-gray-500 mt-1 flex items-center gap-1">
-                      <Calendar className="w-4 h-4" />
-                      {formatDate(edu.start_date)} ~ {edu.end_date ? formatDate(edu.end_date) : '현재'}
-                    </p>
-                    {edu.content && (
-                      <p className="text-sm text-gray-700 mt-2">{edu.content}</p>
+          {account_educations?.map((edu, index) => {
+            const majors = parseMajorContent(edu.content)
+
+            return (
+              <div
+                className="flex gap-4 p-4 bg-gray-50 rounded-lg border border-gray-100 hover:bg-gray-100 transition-colors"
+                key={edu.id || index}
+              >
+                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center text-white font-bold flex-shrink-0">
+                  <GraduationCap className="w-6 h-6" />
+                </div>
+                <div className="flex flex-1 flex-col gap-2">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h3 className="text-lg font-semibold text-gray-900">{edu.name || '학교명 없음'}</h3>
+                      <p className="text-sm text-gray-500 mt-1 flex items-center gap-1">
+                        <Calendar className="w-4 h-4" />
+                        {formatDate(edu.start_date)} ~ {edu.end_date ? formatDate(edu.end_date) : '현재'}
+                      </p>
+                      {majors.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-2">
+                          {majors.map((major) => (
+                            <span
+                              key={major}
+                              className="rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-700"
+                            >
+                              {major}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    {isOwner && (
+                      <div className="flex gap-2">
+                        <Button
+                          onClick={() => {
+                            setSelectedEduId(edu.id)
+                            setShowFileDialog(true)
+                          }}
+                          size="sm"
+                          variant="outline"
+                          className="text-xs flex items-center gap-1"
+                        >
+                          <Paperclip className="w-3 h-3" />
+                          파일
+                        </Button>
+                        <Button
+                          onClick={() => onEditEducation(edu.id)}
+                          size="icon"
+                          variant="ghost"
+                          className="flex-shrink-0"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                      </div>
                     )}
                   </div>
-                  {isOwner && (
-                    <div className="flex gap-2">
-                      <Button
-                        onClick={() => {
-                          setSelectedEduId(edu.id)
-                          setShowFileDialog(true)
-                        }}
-                        size="sm"
-                        variant="outline"
-                        className="text-xs flex items-center gap-1"
-                      >
-                        <Paperclip className="w-3 h-3" />
-                        파일
-                      </Button>
-                      <Button
-                        onClick={() => onEditEducation(edu.id)}
-                        size="icon"
-                        variant="ghost"
-                        className="flex-shrink-0"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  )}
                 </div>
               </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </div>
 
@@ -1082,6 +1096,7 @@ const PortfolioMeta = ({ profileId, isOwner }) => {
   const [portfolios, setPortfolios] = useState([])
   const [loading, setLoading] = useState(true)
   const [showDialog, setShowDialog] = useState(false)
+  const [editingPortfolio, setEditingPortfolio] = useState(null)
   const [formData, setFormData] = useState({
     title: '',
     description: '',
@@ -1128,22 +1143,42 @@ const PortfolioMeta = ({ profileId, isOwner }) => {
   const handleSubmit = async (e) => {
     e.preventDefault()
     try {
+      if (!formData.title || !formData.link_url) {
+        alert('제목과 링크는 필수입니다.')
+        return
+      }
       const supabase = createSupabaseBrowserClient()
-      const { error } = await supabase
-        .from('account_portfolios')
-        .insert({
-          profile_id: profileId,
-          title: formData.title,
-          description: formData.description || null,
-          link_url: formData.link_url,
-          role: formData.role || null,
-          achievements: formData.achievements || null,
-          image_url: formData.image_url || null,
-        })
+      let error
+
+      if (editingPortfolio) {
+        ;({ error } = await supabase
+          .from('account_portfolios')
+          .update({
+            title: formData.title,
+            description: formData.description || null,
+            link_url: formData.link_url,
+            role: formData.role || null,
+            achievements: formData.achievements || null,
+            image_url: formData.image_url || null,
+          })
+          .eq('id', editingPortfolio.id))
+      } else {
+        ;({ error } = await supabase
+          .from('account_portfolios')
+          .insert({
+            profile_id: profileId,
+            title: formData.title,
+            description: formData.description || null,
+            link_url: formData.link_url,
+            role: formData.role || null,
+            achievements: formData.achievements || null,
+            image_url: formData.image_url || null,
+          }))
+      }
 
       if (error) throw error
-
       setShowDialog(false)
+      setEditingPortfolio(null)
       setFormData({
         title: '',
         description: '',
@@ -1155,7 +1190,39 @@ const PortfolioMeta = ({ profileId, isOwner }) => {
       await loadPortfolios()
     } catch (error) {
       console.error('포트폴리오 추가 실패:', error)
-      alert('포트폴리오 추가에 실패했습니다.')
+      alert('포트폴리오 저장에 실패했습니다.')
+    }
+  }
+
+  const handleEditPortfolio = (portfolio) => {
+    setEditingPortfolio(portfolio)
+    setFormData({
+      title: portfolio.title || '',
+      description: portfolio.description || '',
+      link_url: portfolio.link_url || '',
+      role: portfolio.role || '',
+      achievements: portfolio.achievements || '',
+      image_url: portfolio.image_url || '',
+    })
+    setShowDialog(true)
+  }
+
+  const handleDeletePortfolio = async (id) => {
+    if (!confirm('포트폴리오를 삭제하시겠습니까?')) return
+
+    try {
+      const supabase = createSupabaseBrowserClient()
+      const { error } = await supabase
+        .from('account_portfolios')
+        .update({ deleted_at: new Date().toISOString() })
+        .eq('id', id)
+
+      if (error) throw error
+      await loadPortfolios()
+      alert('포트폴리오가 삭제되었습니다.')
+    } catch (error) {
+      console.error('포트폴리오 삭제 실패:', error)
+      alert('포트폴리오 삭제에 실패했습니다.')
     }
   }
 
@@ -1173,7 +1240,18 @@ const PortfolioMeta = ({ profileId, isOwner }) => {
         {isOwner && (
           <div className="flex gap-2">
             <Button
-              onClick={() => setShowDialog(true)}
+              onClick={() => {
+                setEditingPortfolio(null)
+                setFormData({
+                  title: '',
+                  description: '',
+                  link_url: '',
+                  role: '',
+                  achievements: '',
+                  image_url: '',
+                })
+                setShowDialog(true)
+              }}
               variant="outline"
               size="sm"
             >
@@ -1205,9 +1283,31 @@ const PortfolioMeta = ({ profileId, isOwner }) => {
                   className="w-full h-32 object-cover rounded-lg mb-3"
                 />
               )}
-              <h3 className="font-semibold text-gray-900 mb-2 line-clamp-1">
-                {portfolio.title}
-              </h3>
+              <div className="mb-2 flex items-start justify-between gap-2">
+                <h3 className="font-semibold text-gray-900 line-clamp-1">
+                  {portfolio.title}
+                </h3>
+                {isOwner && (
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => handleEditPortfolio(portfolio)}
+                    >
+                      <Edit className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-red-600"
+                      onClick={() => handleDeletePortfolio(portfolio.id)}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                )}
+              </div>
               {portfolio.description && (
                 <p className="text-sm text-gray-600 mb-2 line-clamp-2">
                   {portfolio.description}
@@ -1241,7 +1341,9 @@ const PortfolioMeta = ({ profileId, isOwner }) => {
       {showDialog && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-semibold mb-4">포트폴리오 추가</h3>
+            <h3 className="text-lg font-semibold mb-4">
+              {editingPortfolio ? '포트폴리오 수정' : '포트폴리오 추가'}
+            </h3>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium mb-1">제목 *</label>
@@ -1311,6 +1413,7 @@ const PortfolioMeta = ({ profileId, isOwner }) => {
                   variant="outline"
                   onClick={() => {
                     setShowDialog(false)
+                    setEditingPortfolio(null)
                     setFormData({
                       title: '',
                       description: '',
@@ -1323,7 +1426,9 @@ const PortfolioMeta = ({ profileId, isOwner }) => {
                 >
                   취소
                 </Button>
-                <Button type="submit">추가</Button>
+                <Button type="submit">
+                  {editingPortfolio ? '수정' : '추가'}
+                </Button>
               </div>
             </form>
           </div>

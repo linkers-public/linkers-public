@@ -3,18 +3,19 @@
 import React, { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
+import { MajorSelector } from '@/components/education/MajorSelector'
 import { useRouter } from 'next/navigation'
 import { selectEducations, useProfileStore } from '@/stores/useProfileStore'
 import { updateEducation } from '@/apis/profile.service'
 import { Tables } from '@/types/supabase'
+import { formatMajorsForStorage, parseMajorContent } from '@/utils/education'
 
 interface FormData {
   name: string
   start_date: string
   end_date: string | null
-  content: string
   education_level: string
+  majors: string[]
 }
 
 const EducationUpdateClient = ({ id }: { id: string }) => {
@@ -23,13 +24,12 @@ const EducationUpdateClient = ({ id }: { id: string }) => {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isCurrentEducation, setIsCurrentEducation] = useState(false)
-  console.log(educations)
   const [formData, setFormData] = useState<FormData>({
     name: '',
     start_date: '',
     end_date: null,
-    content: '',
     education_level: '',
+    majors: [],
   })
 
   useEffect(() => {
@@ -44,8 +44,8 @@ const EducationUpdateClient = ({ id }: { id: string }) => {
       name: education.name,
       start_date: education.start_date,
       end_date: education.end_date,
-      content: education.content,
       education_level: (education as any).education_level || '',
+      majors: parseMajorContent(education.content),
     })
 
     setIsCurrentEducation(education.end_date === null)
@@ -70,6 +70,13 @@ const EducationUpdateClient = ({ id }: { id: string }) => {
     }))
   }
 
+  const handleMajorsChange = (majors: string[]) => {
+    setFormData((prev) => ({
+      ...prev,
+      majors,
+    }))
+  }
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     setIsLoading(true)
@@ -79,8 +86,7 @@ const EducationUpdateClient = ({ id }: { id: string }) => {
         name: formData.name,
         start_date: formData.start_date,
         end_date: formData.end_date,
-        content: formData.content,
-        education_level: formData.education_level || null,
+        content: formatMajorsForStorage(formData.majors),
       }
 
       const { error: updateError } = await updateEducation(
@@ -181,12 +187,9 @@ const EducationUpdateClient = ({ id }: { id: string }) => {
             <label className="block text-sm font-medium mb-1">
               전공/부전공
             </label>
-            <Textarea
-              name="content"
-              value={formData.content}
-              onChange={handleInputChange}
-              rows={4}
-              placeholder="전공 및 부전공 정보를 입력해주세요."
+            <MajorSelector
+              value={formData.majors}
+              onChange={handleMajorsChange}
             />
           </div>
         </div>

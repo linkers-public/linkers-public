@@ -8,10 +8,20 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { toast } from '@/hooks/use-toast'
-import { ArrowLeft } from 'lucide-react'
-import { JOB_OPTIONS, EXPERTISE_OPTIONS } from '@/constants/job-options'
+import { ArrowLeft, X } from 'lucide-react'
+import {
+  JOB_CATEGORIES,
+  MAX_MAIN_JOB_SELECTION,
+  SPECIALTY_OPTIONS_BY_CATEGORY,
+  SPECIALTY_TO_CATEGORY_MAP,
+  CATEGORY_ALLOW_CUSTOM_SPECIALTY,
+  OTHER_CATEGORY_LABEL,
+} from '@/constants/job-options'
 
 type ProfileType = Database['public']['Enums']['profile_type']
+
+const MAIN_JOB_OPTIONS = JOB_CATEGORIES.map((category) => category.category)
+const OTHER_CATEGORY_VALUE = OTHER_CATEGORY_LABEL
 
 function CreateProfilePageContent() {
   const router = useRouter()
@@ -26,6 +36,7 @@ function CreateProfilePageContent() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [checking, setChecking] = useState(true)
+  const [otherSpecialtyInput, setOtherSpecialtyInput] = useState('')
 
   // 쿼리 파라미터에서 프로필 타입 가져오기 및 중복 체크
   useEffect(() => {
@@ -64,22 +75,125 @@ function CreateProfilePageContent() {
     setError(null)
   }
 
-  const toggleJob = (job: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      main_job: prev.main_job.includes(job)
-        ? prev.main_job.filter((j) => j !== job)
-        : [...prev.main_job, job],
-    }))
+  const toggleMainJob = (role: string) => {
+    let limitReached = false
+    let shouldClearCustomInput = false
+
+    setFormData((prev) => {
+      const isSelected = prev.main_job.includes(role)
+
+      if (!isSelected && prev.main_job.length >= MAX_MAIN_JOB_SELECTION) {
+        limitReached = true
+        return prev
+      }
+
+      if (isSelected && role === OTHER_CATEGORY_VALUE) {
+        shouldClearCustomInput = true
+      }
+
+      const nextMainJobs = isSelected
+        ? prev.main_job.filter((item) => item !== role)
+        : [...prev.main_job, role]
+
+      const nextExpertise = isSelected
+        ? prev.expertise.filter((item) => {
+            const mappedRole = SPECIALTY_TO_CATEGORY_MAP[item]
+            if (mappedRole) {
+              return mappedRole !== role
+            }
+            if (role === OTHER_CATEGORY_VALUE) {
+              return false
+            }
+            return true
+          })
+        : prev.expertise
+
+      return {
+        ...prev,
+        main_job: nextMainJobs,
+        expertise: nextExpertise,
+      }
+    })
+
+    if (limitReached) {
+      toast({
+        variant: 'destructive',
+        title: '주직무 선택 제한',
+        description: `주직무는 최대 ${MAX_MAIN_JOB_SELECTION}개까지 선택할 수 있습니다.`,
+      })
+    }
+
+    if (shouldClearCustomInput) {
+      setOtherSpecialtyInput('')
+    }
   }
 
   const toggleExpertise = (expertise: string) => {
+    setFormData((prev) => {
+      const parentRole = SPECIALTY_TO_CATEGORY_MAP[expertise]
+      if (parentRole && !prev.main_job.includes(parentRole)) {
+        toast({
+          variant: 'destructive',
+          title: '전문 분야 선택 불가',
+          description: '해당 전문 분야의 주직무를 먼저 선택해주세요.',
+        })
+        return prev
+      }
+
+      const isSelected = prev.expertise.includes(expertise)
+      const nextExpertise = isSelected
+        ? prev.expertise.filter((item) => item !== expertise)
+        : [...prev.expertise, expertise]
+
+      return {
+        ...prev,
+        expertise: nextExpertise,
+      }
+    })
+  }
+
+  const removeExpertise = (expertise: string) => {
     setFormData((prev) => ({
       ...prev,
-      expertise: prev.expertise.includes(expertise)
-        ? prev.expertise.filter((e) => e !== expertise)
-        : [...prev.expertise, expertise],
+      expertise: prev.expertise.filter((item) => item !== expertise),
     }))
+  }
+
+  const addCustomSpecialty = () => {
+    const trimmed = otherSpecialtyInput.trim()
+    if (!trimmed) return
+
+    if (!formData.main_job.includes(OTHER_CATEGORY_VALUE)) {
+      toast({
+        variant: 'destructive',
+        title: '전문 분야 입력 불가',
+        description: '"기타" 주직무를 선택하면 직접 입력할 수 있습니다.',
+      })
+      return
+    }
+
+    let isDuplicate = false
+    setFormData((prev) => {
+      if (prev.expertise.includes(trimmed)) {
+        isDuplicate = true
+        return prev
+      }
+
+      return {
+        ...prev,
+        expertise: [...prev.expertise, trimmed],
+      }
+    })
+
+    if (isDuplicate) {
+      toast({
+        variant: 'destructive',
+        title: '이미 추가된 전문 분야입니다.',
+      })
+      return
+    }
+
+    setOtherSpecialtyInput('')
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -99,12 +213,20 @@ function CreateProfilePageContent() {
       setLoading(true)
       setError(null)
 
+      const uniqueMainJobs = Array.from(
+        new Set(formData.main_job.filter((item) => item.trim())),
+      )
+      const uniqueExpertise = Array.from(
+        new Set(formData.expertise.filter((item) => item.trim())),
+      )
+
       await createProfile({
         profile_type: profileType,
         username: formData.username,
         bio: formData.bio,
-        main_job: formData.main_job.length > 0 ? formData.main_job : undefined,
-        expertise: formData.expertise.length > 0 ? formData.expertise : undefined,
+        main_job: uniqueMainJobs.length > 0 ? uniqueMainJobs : undefined,
+        expertise:
+          uniqueExpertise.length > 0 ? uniqueExpertise : undefined,
       })
 
       toast({
@@ -232,49 +354,142 @@ function CreateProfilePageContent() {
                 />
               </div>
 
-              {/* 주요 업무 */}
+              {/* 주직무 */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-3">
-                  주요 업무
+                  주직무
                 </label>
+                <p className="text-xs text-gray-500 mb-2">
+                  최대 {MAX_MAIN_JOB_SELECTION}개까지 선택할 수 있습니다.
+                </p>
                 <div className="flex flex-wrap gap-2">
-                  {JOB_OPTIONS.map((job) => (
+                  {MAIN_JOB_OPTIONS.map((role) => (
                     <button
-                      key={job}
+                      key={role}
                       type="button"
-                      onClick={() => toggleJob(job)}
+                      onClick={() => toggleMainJob(role)}
                       className={`px-4 py-2 rounded-full text-sm transition-colors ${
-                        formData.main_job.includes(job)
+                        formData.main_job.includes(role)
                           ? 'bg-blue-600 text-white'
                           : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                       }`}
                     >
-                      {job}
+                      {role}
                     </button>
                   ))}
                 </div>
               </div>
 
-              {/* 전문 기술 */}
+              {/* 전문 분야 */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-3">
-                  전문 기술
+                  전문 분야
                 </label>
-                <div className="flex flex-wrap gap-2">
-                  {EXPERTISE_OPTIONS.map((expertise) => (
-                    <button
-                      key={expertise}
-                      type="button"
-                      onClick={() => toggleExpertise(expertise)}
-                      className={`px-4 py-2 rounded-full text-sm transition-colors ${
-                        formData.expertise.includes(expertise)
-                          ? 'bg-green-600 text-white'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
-                    >
-                      {expertise}
-                    </button>
-                  ))}
+                <div className="space-y-4">
+                  {formData.main_job.length === 0 ? (
+                    <p className="text-sm text-gray-500">
+                      주직무를 먼저 선택해주세요.
+                    </p>
+                  ) : (
+                    formData.main_job.map((role) => {
+                      const specialties = SPECIALTY_OPTIONS_BY_CATEGORY[role] || []
+                      const allowCustom =
+                        CATEGORY_ALLOW_CUSTOM_SPECIALTY[role] || false
+
+                      return (
+                        <div key={role} className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-semibold text-gray-800">
+                              {role}
+                            </span>
+                            {allowCustom && (
+                              <span className="text-xs text-gray-500">
+                                필요한 전문 분야를 직접 추가할 수 있습니다.
+                              </span>
+                            )}
+                          </div>
+
+                          {specialties.length > 0 ? (
+                            <div className="flex flex-wrap gap-2">
+                              {specialties.map((specialty) => (
+                                <button
+                                  key={specialty}
+                                  type="button"
+                                  onClick={() => toggleExpertise(specialty)}
+                                  className={`px-4 py-2 rounded-full text-sm transition-colors ${
+                                    formData.expertise.includes(specialty)
+                                      ? 'bg-green-600 text-white'
+                                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                  }`}
+                                >
+                                  {specialty}
+                                </button>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-gray-500">
+                              선택 가능한 전문 분야가 없습니다. 직접 입력을
+                              사용해주세요.
+                            </p>
+                          )}
+
+                          {allowCustom && (
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                              <Input
+                                value={otherSpecialtyInput}
+                                onChange={(e) =>
+                                  setOtherSpecialtyInput(e.target.value)
+                                }
+                                placeholder="전문 분야를 직접 입력하세요"
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault()
+                                    addCustomSpecialty()
+                                  }
+                                }}
+                              />
+                              <Button
+                                type="button"
+                                onClick={addCustomSpecialty}
+                                variant="outline"
+                              >
+                                추가
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })
+                  )}
+
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-700">
+                      선택된 전문 분야
+                    </h3>
+                    {formData.expertise.length > 0 ? (
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {formData.expertise.map((expertise) => (
+                          <span
+                            key={expertise}
+                            className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm"
+                          >
+                            {expertise}
+                            <button
+                              type="button"
+                              onClick={() => removeExpertise(expertise)}
+                              className="hover:text-green-900"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-gray-500 mt-2">
+                        전문 분야를 선택하거나 직접 추가해주세요.
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
             </>

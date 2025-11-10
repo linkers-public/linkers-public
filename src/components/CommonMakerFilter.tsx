@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
 import {
@@ -23,10 +23,27 @@ export const ExperienceFilter = ({
   value,
   onChange,
 }: ExperienceFilterProps) => {
+  const [open, setOpen] = useState(false)
+  const [localValue, setLocalValue] = useState<[number, number]>(value)
+
+  useEffect(() => {
+    if (!open) {
+      setLocalValue(value)
+    }
+  }, [value, open])
+
+  const handleApply = () => {
+    onChange(localValue)
+    setOpen(false)
+  }
+
   return (
-    <Dialog>
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm" className="text-sm">
+        <Button
+          variant="outline"
+          className="h-10 px-4 text-sm whitespace-nowrap min-w-[140px]"
+        >
           경력 {value[0]}~{value[1]}년
         </Button>
       </DialogTrigger>
@@ -37,22 +54,24 @@ export const ExperienceFilter = ({
 
         <div className="flex flex-col gap-4 py-4">
           <Slider
-            value={value}
-            onValueChange={(value) => onChange(value as [number, number])}
+            value={localValue}
+            onValueChange={(newValue) =>
+              setLocalValue(newValue as [number, number])
+            }
             min={0}
             max={20}
             step={1}
             className="w-full"
           />
           <p className="text-sm text-gray-600 text-center">
-            {value[0]}년 ~ {value[1]}년
+            {localValue[0]}년 ~ {localValue[1]}년
           </p>
         </div>
 
         <DialogFooter>
-          <DialogClose asChild>
-            <Button size="sm">적용</Button>
-          </DialogClose>
+          <Button size="sm" onClick={handleApply}>
+            적용
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -68,11 +87,35 @@ interface JobFilterProps {
 
 export const JobFilter = ({ value, onChange }: JobFilterProps) => {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
+  const [open, setOpen] = useState(false)
+  const [localValue, setLocalValue] = useState<string[]>(value)
+
+  useEffect(() => {
+    if (!open) {
+      setLocalValue(value)
+    }
+  }, [value, open])
+
+  const handleToggleJob = (job: string) => {
+    if (localValue.length >= 3 && !localValue.includes(job)) return
+    const newJobs = localValue.includes(job)
+      ? localValue.filter((j) => j !== job)
+      : [...localValue, job]
+    setLocalValue(newJobs)
+  }
+
+  const handleApply = () => {
+    onChange(localValue)
+    setOpen(false)
+  }
 
   return (
-    <Dialog>
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="sm" className="text-sm">
+        <Button
+          variant="outline"
+          className="h-10 px-4 text-sm whitespace-nowrap min-w-[120px]"
+        >
           {value.length > 0 ? `직무 ${value.length}개` : '직무'}
         </Button>
       </DialogTrigger>
@@ -114,14 +157,8 @@ export const JobFilter = ({ value, onChange }: JobFilterProps) => {
                       <span className="text-gray-700">{job}</span>
                       <input
                         type="checkbox"
-                        checked={value.includes(job)}
-                        onChange={() => {
-                          if (value.length >= 3 && !value.includes(job)) return
-                          const newJobs = value.includes(job)
-                            ? value.filter((j) => j !== job)
-                            : [...value, job]
-                          onChange(newJobs)
-                        }}
+                        checked={localValue.includes(job)}
+                        onChange={() => handleToggleJob(job)}
                         className="w-4 h-4"
                       />
                     </label>
@@ -133,21 +170,21 @@ export const JobFilter = ({ value, onChange }: JobFilterProps) => {
           </div>
         </div>
 
-        {value.length > 0 && (
+        {localValue.length > 0 && (
           <div className="border-t border-gray-200 pt-4">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm text-gray-600">
-                선택된 직무 ({value.length}/3)
+                선택된 직무 ({localValue.length}/3)
               </span>
               <button
-                onClick={() => onChange([])}
+                onClick={() => setLocalValue([])}
                 className="text-xs text-gray-500 hover:text-gray-700"
               >
                 전체 삭제
               </button>
             </div>
             <div className="flex flex-wrap gap-2">
-              {value.map((job) => (
+              {localValue.map((job) => (
                 <div
                   key={job}
                   className="flex items-center gap-1 bg-gray-100 px-2 py-1 rounded-md text-sm"
@@ -155,7 +192,9 @@ export const JobFilter = ({ value, onChange }: JobFilterProps) => {
                   <span>{job}</span>
                   <XCircle
                     className="h-3 w-3 cursor-pointer text-gray-400 hover:text-gray-600"
-                    onClick={() => onChange(value.filter((j) => j !== job))}
+                    onClick={() =>
+                      setLocalValue((prev) => prev.filter((j) => j !== job))
+                    }
                   />
                 </div>
               ))}
@@ -164,9 +203,16 @@ export const JobFilter = ({ value, onChange }: JobFilterProps) => {
         )}
 
         <DialogFooter>
-          <DialogClose asChild>
-            <Button size="sm">적용</Button>
-          </DialogClose>
+          <div className="flex items-center justify-between w-full">
+            <DialogClose asChild>
+              <Button variant="outline" size="sm">
+                취소
+              </Button>
+            </DialogClose>
+            <Button size="sm" onClick={handleApply}>
+              적용
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

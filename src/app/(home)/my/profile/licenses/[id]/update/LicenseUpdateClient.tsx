@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useRouter } from 'next/navigation'
 import { useProfileStore } from '@/stores/useProfileStore'
-import { updateLicense } from '@/apis/profile.service'
+import { deleteLicense, updateLicense } from '@/apis/profile.service'
 import { Tables } from '@/types/supabase'
 
 interface FormData {
@@ -18,6 +18,7 @@ const LicenseUpdateClient = ({ id }: { id: string }) => {
   const { profile } = useProfileStore()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const [formData, setFormData] = useState<FormData>({
     name: '',
@@ -77,6 +78,28 @@ const LicenseUpdateClient = ({ id }: { id: string }) => {
     }
   }
 
+  const handleDelete = async () => {
+    if (!window.confirm('선택한 자격증을 삭제하시겠습니까?')) return
+
+    setIsDeleting(true)
+    setError(null)
+    try {
+      const { error: deleteError } = await deleteLicense(Number(id))
+      if (deleteError) {
+        throw deleteError
+      }
+
+      useProfileStore.getState().deleteLicense(Number(id))
+      router.push('/my/profile')
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : '삭제 중 오류가 발생했습니다.',
+      )
+    } finally {
+      setIsDeleting(false)
+    }
+  }
+
   return (
     <div className="w-full p-4 md:p-6 -mt-4 md:-mt-8">
       <h1 className="text-xl md:text-2xl font-bold mb-4 md:mb-6">자격증 수정</h1>
@@ -113,21 +136,32 @@ const LicenseUpdateClient = ({ id }: { id: string }) => {
           </div>
         </div>
 
-        <div className="flex justify-end gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleDelete}
+            disabled={isLoading || isDeleting}
+            className="border-red-400 text-red-600 hover:text-red-700 hover:border-red-500"
+          >
+            {isDeleting ? '삭제 중...' : '삭제'}
+          </Button>
+          <div className="flex gap-3">
           <Button
             type="button"
             variant="outline"
             onClick={() => router.back()}
-            disabled={isLoading}
+            disabled={isLoading || isDeleting}
           >
             취소
           </Button>
           <Button
             type="submit"
-            disabled={isLoading}
+            disabled={isLoading || isDeleting}
           >
             {isLoading ? '저장 중...' : '저장'}
           </Button>
+          </div>
         </div>
       </form>
     </div>
