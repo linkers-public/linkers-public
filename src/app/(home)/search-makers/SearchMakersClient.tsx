@@ -3,11 +3,7 @@
 import React, { useEffect, useState } from 'react'
 import { useMakerFilter } from '@/hooks/use-maker-filter'
 import { useRouter } from 'next/navigation'
-import {
-  ExperienceFilter,
-  JobFilter,
-  SpecializationFilter,
-} from '@/components/CommonMakerFilter'
+import { ExperienceFilter, JobFilter } from '@/components/CommonMakerFilter'
 import { searchMakers } from '@/apis/search-maker.service'
 import { PostgrestError } from '@supabase/supabase-js'
 import { SearchMakerCard } from '@/components/SearchMakerCard'
@@ -66,7 +62,10 @@ const SearchMakersClient = () => {
       try {
         const { data, error } = await searchMakers({
           job: filters.job.length > 0 ? filters.job : undefined,
-          specialization: filters.specialization.length > 0 ? filters.specialization : undefined,
+          specialization:
+            filters.specialization.length > 0
+              ? filters.specialization
+              : undefined,
           experience: filters.experience,
         })
         
@@ -123,9 +122,21 @@ const SearchMakersClient = () => {
 
             {/* 필터 섹션 */}
             <div className="border-t border-gray-200 pt-6">
-              <div className="flex items-center gap-2 mb-4">
-                <Filter className="w-5 h-5 text-gray-600" />
-                <h3 className="text-lg font-semibold text-gray-900">필터</h3>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Filter className="w-5 h-5 text-gray-600" />
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    필터
+                  </h3>
+                </div>
+                {filters.job.length > 0 && (
+                  <button
+                    onClick={() => handleFilterChange('job', [])}
+                    className="text-sm text-blue-600 hover:text-blue-700"
+                  >
+                    직무 초기화
+                  </button>
+                )}
               </div>
               <div className="flex flex-wrap gap-3">
                 <ExperienceFilter
@@ -136,11 +147,31 @@ const SearchMakersClient = () => {
                   value={filters.job}
                   onChange={(value) => handleFilterChange('job', value)}
                 />
-                <SpecializationFilter
-                  value={filters.specialization}
-                  onChange={(value) => handleFilterChange('specialization', value)}
-                />
               </div>
+              {filters.job.length > 0 && (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {filters.job.map((job) => (
+                    <div
+                      key={job}
+                      className="flex items-center gap-2 bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-sm"
+                    >
+                      <span>{job}</span>
+                      <button
+                        onClick={() =>
+                          handleFilterChange(
+                            'job',
+                            filters.job.filter((j) => j !== job),
+                          )
+                        }
+                        className="text-blue-500 hover:text-blue-700"
+                        aria-label={`${job} 필터 제거`}
+                      >
+                        X
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 

@@ -37,9 +37,15 @@ const LicenseCreateClient = () => {
     setIsLoading(true)
 
     try {
+      const profileId = useProfileStore.getState().profile?.profile_id
+      if (!profileId) {
+        throw new Error('활성 프로필을 찾을 수 없습니다.')
+      }
+
       const createData = {
         name: formData.name,
         acquisition_date: formData.acquisition_date || null,
+        profile_id: profileId,
       }
 
       const { data, error: createError } = await createLicense(createData)

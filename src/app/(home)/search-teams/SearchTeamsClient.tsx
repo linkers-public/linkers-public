@@ -1,20 +1,11 @@
 'use client'
 
 import React, { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import { searchTeams } from '@/apis/team.service'
 import { Search, Users, Building2, Filter, Loader2 } from 'lucide-react'
 import Link from 'next/link'
-import { Button } from '@/components/ui/button'
-
-const TEAM_SPECIALTY_OPTIONS = [
-  '웹 및 모바일 개발',
-  '데이터 및 인공지능',
-  '클라우드 및 인프라',
-  '보안 및 테스트',
-  '비즈니스 프로세스 관리',
-  '기타',
-] as const
+import { useMakerFilter } from '@/hooks/use-maker-filter'
+import { JobFilter } from '@/components/CommonMakerFilter'
 
 interface Team {
   id: number
@@ -35,13 +26,12 @@ interface Team {
 }
 
 const SearchTeamsClient = () => {
-  const router = useRouter()
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [teamList, setTeamList] = useState<Team[]>([])
   const [searchTerm, setSearchTerm] = useState('')
-  const [selectedSpecialty, setSelectedSpecialty] = useState<string[]>([])
   const [filteredTeamList, setFilteredTeamList] = useState<Team[]>([])
+  const { filters, handleFilterChange } = useMakerFilter()
 
   // 검색 및 필터링
   useEffect(() => {
@@ -52,7 +42,7 @@ const SearchTeamsClient = () => {
       try {
         const { data } = await searchTeams({
           searchTerm: searchTerm.trim() || undefined,
-          specialty: selectedSpecialty.length > 0 ? selectedSpecialty : undefined,
+          specialty: filters.job.length > 0 ? filters.job : undefined,
         })
         
         if (data && Array.isArray(data)) {
@@ -73,19 +63,11 @@ const SearchTeamsClient = () => {
     }
     
     fetchData()
-  }, [searchTerm, selectedSpecialty])
-
-  const handleSpecialtyToggle = (specialty: string) => {
-    setSelectedSpecialty(prev =>
-      prev.includes(specialty)
-        ? prev.filter(s => s !== specialty)
-        : [...prev, specialty]
-    )
-  }
+  }, [searchTerm, filters.job])
 
   const clearFilters = () => {
     setSearchTerm('')
-    setSelectedSpecialty([])
+    handleFilterChange('job', [])
   }
 
   return (
@@ -119,9 +101,9 @@ const SearchTeamsClient = () => {
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <Filter className="w-5 h-5 text-gray-600" />
-                  <h3 className="text-lg font-semibold text-gray-900">전문분야</h3>
+                  <h3 className="text-lg font-semibold text-gray-900">필터</h3>
                 </div>
-                {(searchTerm || selectedSpecialty.length > 0) && (
+                {(searchTerm || filters.job.length > 0) && (
                   <button
                     onClick={clearFilters}
                     className="text-sm text-blue-600 hover:text-blue-700 font-medium"
@@ -130,21 +112,34 @@ const SearchTeamsClient = () => {
                   </button>
                 )}
               </div>
-              <div className="flex flex-wrap gap-2">
-                {TEAM_SPECIALTY_OPTIONS.map((specialty) => (
-                  <button
-                    key={specialty}
-                    onClick={() => handleSpecialtyToggle(specialty)}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      selectedSpecialty.includes(specialty)
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    {specialty}
-                  </button>
-                ))}
-              </div>
+              <JobFilter
+                value={filters.job}
+                onChange={(value) => handleFilterChange('job', value)}
+              />
+              {filters.job.length > 0 && (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {filters.job.map((job) => (
+                    <div
+                      key={job}
+                      className="flex items-center gap-2 bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-sm"
+                    >
+                      <span>{job}</span>
+                      <button
+                        onClick={() =>
+                          handleFilterChange(
+                            'job',
+                            filters.job.filter((j) => j !== job),
+                          )
+                        }
+                        className="text-blue-500 hover:text-blue-700"
+                        aria-label={`${job} 필터 제거`}
+                      >
+                        X
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -191,11 +186,11 @@ const SearchTeamsClient = () => {
                   </div>
                   <h3 className="text-xl font-semibold text-gray-900 mb-2">검색 결과가 없습니다</h3>
                   <p className="text-gray-600 mb-6 text-lg">
-                    {searchTerm || selectedSpecialty.length > 0
+                    {searchTerm || filters.job.length > 0
                       ? '다른 검색어나 필터로 시도해보세요'
                       : '조건을 변경해보세요'}
                   </p>
-                  {(searchTerm || selectedSpecialty.length > 0) && (
+                  {(searchTerm || filters.job.length > 0) && (
                     <button
                       onClick={clearFilters}
                       className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold shadow-md hover:shadow-lg"

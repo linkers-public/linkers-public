@@ -307,9 +307,29 @@ export default function PortfolioClient() {
                   className="w-full h-48 object-cover rounded-lg mb-4"
                 />
               )}
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                {portfolio.title}
-              </h3>
+              <div className="mb-2 flex items-start justify-between gap-2">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  {portfolio.title}
+                </h3>
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => handleEdit(portfolio)}
+                  >
+                    <Edit2 className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-red-600"
+                    onClick={() => handleDelete(portfolio.id)}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
               {portfolio.description && (
                 <p className="text-sm text-gray-600 mb-3 line-clamp-2">
                   {portfolio.description}
@@ -325,32 +345,16 @@ export default function PortfolioClient() {
                   <span className="font-medium">성과:</span> {portfolio.achievements}
                 </p>
               )}
-              <div className="flex items-center gap-2">
+              <div className="mt-3 flex justify-center">
                 <a
                   href={portfolio.link_url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-1 text-sm text-blue-600 hover:underline"
+                  className="inline-flex items-center gap-2 whitespace-nowrap rounded-md border border-blue-200 bg-blue-50 px-6 py-1.5 text-sm font-medium text-blue-600 transition hover:bg-blue-100 hover:text-blue-700"
                 >
                   <ExternalLink className="w-4 h-4" />
                   링크 열기
                 </a>
-                <div className="ml-auto flex gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleEdit(portfolio)}
-                  >
-                    <Edit2 className="w-4 h-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleDelete(portfolio.id)}
-                  >
-                    <Trash2 className="w-4 h-4 text-red-600" />
-                  </Button>
-                </div>
               </div>
             </div>
           ))}

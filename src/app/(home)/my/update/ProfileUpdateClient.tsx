@@ -9,7 +9,14 @@ import { useProfileStore } from '@/stores/useProfileStore'
 import { updateProfile, fetchMyProfile } from '@/apis/profile.service'
 import { createSupabaseBrowserClient } from '@/supabase/supabase-client'
 import { X } from 'lucide-react'
-import { JOB_OPTIONS, EXPERTISE_OPTIONS } from '@/constants/job-options'
+import {
+  JOB_CATEGORIES,
+  MAX_MAIN_JOB_SELECTION,
+  SPECIALTY_OPTIONS_BY_CATEGORY,
+  SPECIALTY_TO_CATEGORY_MAP,
+  CATEGORY_ALLOW_CUSTOM_SPECIALTY,
+  OTHER_CATEGORY_LABEL,
+} from '@/constants/job-options'
 import { toast } from '@/hooks/use-toast'
 
 interface FormData {
@@ -23,6 +30,44 @@ interface FormData {
   skills: string[]
 }
 
+const MAIN_JOB_OPTIONS = JOB_CATEGORIES.map((category) => category.category)
+const OTHER_CATEGORY_VALUE = OTHER_CATEGORY_LABEL
+
+const deriveInitialMainJobs = (
+  storedMainJobs: string[] = [],
+  storedExpertise: string[] = [],
+) => {
+  const roleSet = new Set<string>()
+
+  storedMainJobs.forEach((item) => {
+    if (MAIN_JOB_OPTIONS.includes(item)) {
+      roleSet.add(item)
+      return
+    }
+    const mappedRole = SPECIALTY_TO_CATEGORY_MAP[item]
+    if (mappedRole) {
+      roleSet.add(mappedRole)
+    }
+  })
+
+  storedExpertise.forEach((item) => {
+    const mappedRole = SPECIALTY_TO_CATEGORY_MAP[item]
+    if (mappedRole) {
+      roleSet.add(mappedRole)
+    }
+  })
+
+  const hasCustomSpecialty = storedExpertise.some(
+    (item) => !SPECIALTY_TO_CATEGORY_MAP[item],
+  )
+
+  if (hasCustomSpecialty) {
+    roleSet.add(OTHER_CATEGORY_VALUE)
+  }
+
+  return Array.from(roleSet)
+}
+
 const ProfileUpdateClient = () => {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -34,6 +79,7 @@ const ProfileUpdateClient = () => {
   const [isNewProfile, setIsNewProfile] = useState(false)
   const [profileImage, setProfileImage] = useState<string | null>(null)
   const [isUploadingImage, setIsUploadingImage] = useState(false)
+  const [otherSpecialtyInput, setOtherSpecialtyInput] = useState('')
 
   const [formData, setFormData] = useState<FormData>({
     bio: '',
@@ -63,22 +109,45 @@ const ProfileUpdateClient = () => {
         }
 
         await fetchMyProfileData()
-        
+        const latestProfile: any = useProfileStore.getState().profile
+
+        const storedMainJobs = Array.isArray(latestProfile?.main_job)
+          ? (latestProfile.main_job as any[]).filter(
+              (item): item is string => typeof item === 'string' && item.trim(),
+            )
+          : []
+        const storedExpertise = Array.isArray(latestProfile?.expertise)
+          ? (latestProfile.expertise as any[]).filter(
+              (item): item is string => typeof item === 'string' && item.trim(),
+            )
+          : []
+        const storedSkills = Array.isArray(latestProfile?.skills)
+          ? (latestProfile.skills as any[]).filter(
+              (item): item is string => typeof item === 'string' && item.trim(),
+            )
+          : []
+
+        const initialMainJobs = deriveInitialMainJobs(
+          storedMainJobs,
+          storedExpertise,
+        )
+        const uniqueExpertise = Array.from(new Set(storedExpertise))
+
         // 사용자 이메일 가져오기
         const supabase = createSupabaseBrowserClient()
         const { data: { user } } = await supabase.auth.getUser()
         
         setFormData({
-          bio: profile?.bio || '',
-          username: profile?.username || '',
-          main_job: profile?.main_job || [],
-          expertise: profile?.expertise || [],
+          bio: latestProfile?.bio || '',
+          username: latestProfile?.username || '',
+          main_job: initialMainJobs,
+          expertise: uniqueExpertise,
           email: user?.email || '',
-          phone: (profile as any)?.contact_phone || '',
-          website: (profile as any)?.contact_website || '',
-          skills: (profile as any)?.skills || [],
+          phone: latestProfile?.contact_phone || '',
+          website: latestProfile?.contact_website || '',
+          skills: storedSkills,
         })
-        setProfileImage((profile as any)?.profile_image_url || null)
+        setProfileImage(latestProfile?.profile_image_url || null)
       } catch (err) {
         console.error('프로필 로드 실패:', err)
         setError('프로필 정보를 불러오는데 실패했습니다.')
@@ -100,22 +169,125 @@ const ProfileUpdateClient = () => {
     }))
   }
 
-  const toggleJob = (job: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      main_job: prev.main_job.includes(job)
-        ? prev.main_job.filter((j) => j !== job)
-        : [...prev.main_job, job],
-    }))
+  const toggleMainJob = (role: string) => {
+    let limitReached = false
+    let shouldClearCustomInput = false
+
+    setFormData((prev) => {
+      const isSelected = prev.main_job.includes(role)
+
+      if (!isSelected && prev.main_job.length >= MAX_MAIN_JOB_SELECTION) {
+        limitReached = true
+        return prev
+      }
+
+      if (isSelected && role === OTHER_CATEGORY_VALUE) {
+        shouldClearCustomInput = true
+      }
+
+      const nextMainJobs = isSelected
+        ? prev.main_job.filter((item) => item !== role)
+        : [...prev.main_job, role]
+
+      const nextExpertise = isSelected
+        ? prev.expertise.filter((item) => {
+            const mappedRole = SPECIALTY_TO_CATEGORY_MAP[item]
+            if (mappedRole) {
+              return mappedRole !== role
+            }
+            if (role === OTHER_CATEGORY_VALUE) {
+              return false
+            }
+            return true
+          })
+        : prev.expertise
+
+      return {
+        ...prev,
+        main_job: nextMainJobs,
+        expertise: nextExpertise,
+      }
+    })
+
+    if (limitReached) {
+      toast({
+        variant: 'destructive',
+        title: '주직무 선택 제한',
+        description: `주직무는 최대 ${MAX_MAIN_JOB_SELECTION}개까지 선택할 수 있습니다.`,
+      })
+    }
+
+    if (shouldClearCustomInput) {
+      setOtherSpecialtyInput('')
+    }
   }
 
   const toggleExpertise = (expertise: string) => {
+    setFormData((prev) => {
+      const parentRole = SPECIALTY_TO_CATEGORY_MAP[expertise]
+      if (parentRole && !prev.main_job.includes(parentRole)) {
+        toast({
+          variant: 'destructive',
+          title: '전문 분야 선택 불가',
+          description: '해당 전문 분야의 주직무를 먼저 선택해주세요.',
+        })
+        return prev
+      }
+
+      const isSelected = prev.expertise.includes(expertise)
+      const nextExpertise = isSelected
+        ? prev.expertise.filter((item) => item !== expertise)
+        : [...prev.expertise, expertise]
+
+      return {
+        ...prev,
+        expertise: nextExpertise,
+      }
+    })
+  }
+
+  const removeExpertise = (expertise: string) => {
     setFormData((prev) => ({
       ...prev,
-      expertise: prev.expertise.includes(expertise)
-        ? prev.expertise.filter((e) => e !== expertise)
-        : [...prev.expertise, expertise],
+      expertise: prev.expertise.filter((item) => item !== expertise),
     }))
+  }
+
+  const addCustomSpecialty = () => {
+    const trimmed = otherSpecialtyInput.trim()
+    if (!trimmed) return
+
+    if (!formData.main_job.includes(OTHER_CATEGORY_VALUE)) {
+      toast({
+        variant: 'destructive',
+        title: '전문 분야 입력 불가',
+        description: '"기타" 주직무를 선택하면 직접 입력할 수 있습니다.',
+      })
+      return
+    }
+
+    let isDuplicate = false
+    setFormData((prev) => {
+      if (prev.expertise.includes(trimmed)) {
+        isDuplicate = true
+        return prev
+      }
+
+      return {
+        ...prev,
+        expertise: [...prev.expertise, trimmed],
+      }
+    })
+
+    if (isDuplicate) {
+      toast({
+        variant: 'destructive',
+        title: '이미 추가된 전문 분야입니다.',
+      })
+      return
+    }
+
+    setOtherSpecialtyInput('')
   }
 
   const addSkill = () => {
@@ -141,15 +313,21 @@ const ProfileUpdateClient = () => {
     setError(null)
 
     try {
+      const uniqueMainJobs = Array.from(
+        new Set(formData.main_job.filter((item) => item.trim())),
+      )
+      const uniqueExpertise = Array.from(
+        new Set(formData.expertise.filter((item) => item.trim())),
+      )
+
       await updateProfile({
         bio: formData.bio,
         username: formData.username,
-        main_job: formData.main_job,
-        expertise: formData.expertise,
+        main_job: uniqueMainJobs,
+        expertise: uniqueExpertise,
         contact_phone: formData.phone || null,
         contact_website: formData.website || null,
         profile_image_url: profileImage || null,
-        skills: formData.skills,
       })
 
       // 프로필 새로고침
@@ -413,19 +591,22 @@ const ProfileUpdateClient = () => {
               <label className="block text-sm font-medium mb-3">
                 주직무 <span className="text-red-500">*</span>
               </label>
+              <p className="text-xs text-gray-500 mb-2">
+                최대 {MAX_MAIN_JOB_SELECTION}개까지 선택할 수 있습니다.
+              </p>
               <div className="flex flex-wrap gap-2">
-                {JOB_OPTIONS.map((job) => (
+                {MAIN_JOB_OPTIONS.map((role) => (
                   <button
-                    key={job}
+                    key={role}
                     type="button"
-                    onClick={() => toggleJob(job)}
+                    onClick={() => toggleMainJob(role)}
                     className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      formData.main_job.includes(job)
+                      formData.main_job.includes(role)
                         ? 'bg-blue-600 text-white'
                         : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                     }`}
                   >
-                    {job}
+                    {role}
                   </button>
                 ))}
               </div>
@@ -440,22 +621,113 @@ const ProfileUpdateClient = () => {
               <label className="block text-sm font-medium mb-3">
                 전문 분야 <span className="text-red-500">*</span>
               </label>
-              <div className="flex flex-wrap gap-2">
-                {EXPERTISE_OPTIONS.map((exp) => (
-                  <button
-                    key={exp}
-                    type="button"
-                    onClick={() => toggleExpertise(exp)}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      formData.expertise.includes(exp)
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    {exp}
-                  </button>
-                ))}
+              <div className="space-y-4">
+                {formData.main_job.length === 0 ? (
+                  <p className="text-sm text-gray-500">
+                    주직무를 먼저 선택해주세요.
+                  </p>
+                ) : (
+                  formData.main_job.map((role) => {
+                    const specialties = SPECIALTY_OPTIONS_BY_CATEGORY[role] || []
+                    const allowCustom =
+                      CATEGORY_ALLOW_CUSTOM_SPECIALTY[role] || false
+
+                    return (
+                      <div key={role} className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-semibold text-gray-800">
+                            {role}
+                          </span>
+                          {allowCustom && (
+                            <span className="text-xs text-gray-500">
+                              필요한 전문 분야를 직접 추가할 수 있습니다.
+                            </span>
+                          )}
+                        </div>
+
+                        {specialties.length > 0 ? (
+                          <div className="flex flex-wrap gap-2">
+                            {specialties.map((specialty) => (
+                              <button
+                                key={specialty}
+                                type="button"
+                                onClick={() => toggleExpertise(specialty)}
+                                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                                  formData.expertise.includes(specialty)
+                                    ? 'bg-blue-600 text-white'
+                                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                }`}
+                              >
+                                {specialty}
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-gray-500">
+                            선택 가능한 전문 분야가 없습니다. 직접 입력을
+                            사용해주세요.
+                          </p>
+                        )}
+
+                        {allowCustom && (
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                            <Input
+                              value={otherSpecialtyInput}
+                              onChange={(e) =>
+                                setOtherSpecialtyInput(e.target.value)
+                              }
+                              placeholder="전문 분야를 직접 입력하세요"
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault()
+                                  addCustomSpecialty()
+                                }
+                              }}
+                            />
+                            <Button
+                              type="button"
+                              onClick={addCustomSpecialty}
+                              variant="outline"
+                            >
+                              추가
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })
+                )}
+
+                <div>
+                  <h3 className="text-sm font-medium text-gray-700">
+                    선택된 전문 분야
+                  </h3>
+                  {formData.expertise.length > 0 ? (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {formData.expertise.map((exp) => (
+                        <span
+                          key={exp}
+                          className="inline-flex items-center gap-1 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm"
+                        >
+                          {exp}
+                          <button
+                            type="button"
+                            onClick={() => removeExpertise(exp)}
+                            className="hover:text-blue-900"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-gray-500 mt-2">
+                      전문 분야를 선택하거나 직접 추가해주세요.
+                    </p>
+                  )}
+                </div>
               </div>
+
               {formData.expertise.length === 0 && (
                 <p className="text-xs text-red-500 mt-2">
                   최소 1개 이상의 전문 분야를 선택해주세요.

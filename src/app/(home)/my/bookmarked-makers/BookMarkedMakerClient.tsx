@@ -128,7 +128,7 @@ const BookMarkedMakerClient = () => {
       </div>
 
       {/* 필터 섹션 */}
-      <div className="flex flex-col gap-4 mb-6">
+      <div className="flex flex-col gap-4 mb-6 md:flex-row md:items-center md:justify-between">
         {/* 제안 상태 필터 */}
         <div className="flex gap-2">
           <button
@@ -154,7 +154,7 @@ const BookMarkedMakerClient = () => {
         </div>
 
         {/* 상세 필터 */}
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 md:ml-auto md:justify-end">
           <ExperienceFilter
             value={filters.experience}
             onChange={(value) => handleFilterChange('experience', value)}
