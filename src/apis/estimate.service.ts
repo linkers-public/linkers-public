@@ -274,6 +274,20 @@ export const insertEstimate = async (estimateData: {
             }
         }
 
+        // 4. RAG를 위한 벡터 임베딩 생성 (비동기, 실패해도 견적서 생성은 성공)
+        // 동적 import를 사용하여 순환 참조 방지
+        if (typeof window !== 'undefined') {
+            // 클라이언트 사이드에서만 실행
+            import('@/apis/estimate-rag.service').then(({ createEstimateEmbedding }) => {
+                createEstimateEmbedding(estimate.estimate_id, estimateVersion.estimate_version_id)
+                    .catch((error) => {
+                        console.warn('견적서 임베딩 생성 실패 (견적서는 정상 생성됨):', error);
+                    });
+            }).catch((error) => {
+                console.warn('RAG 서비스 로드 실패:', error);
+            });
+        }
+
         return { 
             success: true, 
             message: 'Estimate가 성공적으로 생성되었습니다.',

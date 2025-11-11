@@ -1,32 +1,11 @@
 {
   "mcpServers": {
-    "supabase-linkers": {
+    "supabase-sessac": {
       "url": "https://mcp.supabase.com/mcp?project_ref=zmxxbdrfwhavwxizdfyz"
     },
-    "vercel-linkers": {
+    "vercel-sessac": {
       "url": "https://mcp.vercel.com",
       "headers": {}
-    },
-    "portone-mcp-server-linkers": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@portone/mcp-server@latest"
-      ]
-    },
-    "notion-linkers": {
-      "command": "cmd",
-      "args": [
-        "/c",
-        "npx",
-        "-y",
-        "@smithery/cli@latest",
-        "run",
-        "notion",
-        "--key",
-        "76cf4fbd-dd90-4dcf-8049-b1ea8cc47a97"
-      ]
     }
   }
 }
-
