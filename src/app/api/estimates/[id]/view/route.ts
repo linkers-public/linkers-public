@@ -29,7 +29,7 @@ export async function POST(
     }
 
     // 이미 권리 있는지 확인
-    const { data: canView, error: canViewError } = await supabase.rpc(
+    const { data: canView, error: canViewError } = await (supabase.rpc as any)(
       'can_view_estimate',
       { p_user: user.id, p_estimate: estimateId }
     )
@@ -44,7 +44,7 @@ export async function POST(
 
     if (canView) {
       // 열람 기록만 추가
-      await supabase.from('estimate_views').insert({
+      await supabase.from('estimate_views' as any).insert({
         user_id: user.id,
         estimate_id: estimateId,
         view_type: 'subscription',
@@ -55,7 +55,7 @@ export async function POST(
     }
 
     // 무료 열람 시도
-    const { data: granted, error: grantError } = await supabase.rpc(
+    const { data: granted, error: grantError } = await (supabase.rpc as any)(
       'grant_free_view',
       { p_user: user.id, p_estimate: estimateId }
     )
@@ -70,7 +70,7 @@ export async function POST(
 
     if (granted) {
       // 무료 열람 횟수 조회
-      const { data: freeQuota } = await supabase.rpc('get_free_quota', {
+      const { data: freeQuota } = await (supabase.rpc as any)('get_free_quota', {
         p_user: user.id
       })
 
@@ -83,7 +83,7 @@ export async function POST(
 
     // 결제 필요 - 가격표 조회
     const { data: pricing } = await supabase
-      .from('pricing')
+      .from('pricing' as any)
       .select('*')
       .eq('is_active', true)
       .order('plan')

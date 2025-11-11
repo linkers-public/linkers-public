@@ -50,6 +50,7 @@ interface Estimate {
   estimate_status: string
   estimate_start_date: string | null
   estimate_due_date: string | null
+  estimate_date: string | null
   created_at?: string
   teams?: Array<{
     id: number
@@ -127,7 +128,7 @@ export default function CompanyEstimatesClient() {
     try {
       setLoading(true)
       const data = await getReceivedEstimates()
-      setEstimates(data)
+      setEstimates(data as any)
       
       // 프로젝트별로 그룹화
       const grouped = new Map<number, ProjectGroup>()
@@ -206,7 +207,7 @@ export default function CompanyEstimatesClient() {
 
   const loadEstimateDetail = async (estimateId: number) => {
     try {
-      const data = await getEstimateDetail(estimateId)
+      const data = await getEstimateDetail(estimateId) as any
       
       // team 정보 처리 (배열/객체 모두 처리)
       if (data) {

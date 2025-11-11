@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 이미 권리 있으면 차단
-    const { data: canView } = await supabase.rpc('can_view_estimate', {
+    const { data: canView } = await (supabase.rpc as any)('can_view_estimate', {
       p_user: user.id,
       p_estimate: estimateId
     })
@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
 
     // 결제 프리레코드(대기)
     const { data: payment, error: paymentError } = await supabase
-      .from('payments')
+      .from('payments' as any)
       .insert({
         user_id: user.id,
         purpose: 'ppv',
@@ -67,10 +67,10 @@ export async function POST(request: NextRequest) {
     }
 
     // PortOne 결제 요청 생성
-    const { portoneClient } = getPortOneClients()
+    const { paymentClient } = getPortOneClients()
     const merchantUid = `ppv_${payment.id}`
 
-    const paymentResponse = await portoneClient.post('/payments', {
+    const paymentResponse = await (paymentClient as any).post('/payments', {
       amount: {
         total: PPV_PRICE,
         currency: 'KRW'

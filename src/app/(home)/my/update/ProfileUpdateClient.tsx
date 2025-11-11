@@ -113,17 +113,17 @@ const ProfileUpdateClient = () => {
 
         const storedMainJobs = Array.isArray(latestProfile?.main_job)
           ? (latestProfile.main_job as any[]).filter(
-              (item): item is string => typeof item === 'string' && item.trim(),
+              (item): item is string => typeof item === 'string' && item.trim().length > 0,
             )
           : []
         const storedExpertise = Array.isArray(latestProfile?.expertise)
           ? (latestProfile.expertise as any[]).filter(
-              (item): item is string => typeof item === 'string' && item.trim(),
+              (item): item is string => typeof item === 'string' && item.trim().length > 0,
             )
           : []
         const storedSkills = Array.isArray(latestProfile?.skills)
           ? (latestProfile.skills as any[]).filter(
-              (item): item is string => typeof item === 'string' && item.trim(),
+              (item): item is string => typeof item === 'string' && item.trim().length > 0,
             )
           : []
 

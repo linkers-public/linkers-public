@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
     const supabase = await createServerSideClient()
 
     // 결제 완료 이벤트 처리
-    if (webhook.type === 'payment.succeeded' || webhook.type === 'payment.paid') {
+    if ((webhook as any).type === 'payment.succeeded' || (webhook as any).type === 'payment.paid') {
       const paymentData = (webhook as any).data
       const merchantUid: string = paymentData.merchantUid || paymentData.merchant_uid
       const pgTid: string = paymentData.paymentId || paymentData.imp_uid || paymentData.pg_tid
@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
 
         // payments 업데이트
         const { data: payment, error: updateError } = await supabase
-          .from('payments')
+          .from('payments' as any)
           .update({
             payment_status: 'completed',
             pg_tid: pgTid,
@@ -95,7 +95,7 @@ export async function POST(req: NextRequest) {
         }
 
         // 권리 부여(멱등: 내부 on conflict)
-        const { error: grantError } = await supabase.rpc('grant_ppv_after_payment', {
+        const { error: grantError } = await (supabase.rpc as any)('grant_ppv_after_payment', {
           p_payment_id: paymentId
         })
 

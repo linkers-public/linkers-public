@@ -86,7 +86,7 @@ export default function EstimateViewHistoryClient() {
         })
       )
 
-      setViews(viewsWithDetails)
+      setViews(viewsWithDetails as any)
     } catch (error: any) {
       console.error('견적서 열람 기록 로드 실패:', error)
       toast({

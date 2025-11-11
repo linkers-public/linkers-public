@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
 
     // 이미 열람한 경우 확인
     const { data: existingView } = await supabase
-      .from('estimate_views')
+      .from('estimate_views' as any)
       .select('id')
       .eq('client_id', client.user_id)
       .eq('estimate_id', estimateId)
@@ -62,12 +62,12 @@ export async function POST(request: NextRequest) {
     }
 
     // PortOne 결제 요청
-    const { portoneClient } = getPortOneClients()
+    const { paymentClient } = getPortOneClients()
     
     const merchantUid = `estimate_view_${user.id}_${estimateId}_${Date.now()}`
     
     // 결제 요청 생성
-    const paymentResponse = await portoneClient.post('/payments', {
+    const paymentResponse = await (paymentClient as any).post('/payments', {
       amount: {
         total: ESTIMATE_VIEW_PRICE,
         currency: 'KRW'

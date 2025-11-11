@@ -18,7 +18,7 @@ export default function RootLayout({
       {/* <AccountProvider /> */}
       <Header />
       <main className={`flex w-full h-full min-h-[calc(100vh-64px)] ${
-        isLandingPage ? 'pt-[128px]' : 'pt-[64px] md:pt-[65px]' // 랜딩 페이지는 헤더(64px) + 탭(약 64px) 여백
+        isLandingPage ? 'pt-[64px]' : 'pt-[64px] md:pt-[65px]' // 랜딩 페이지는 헤더(64px)만큼 여백
       }`}>
         <div className={`flex w-full px-0 md:px-6 ${
           isMyPage 

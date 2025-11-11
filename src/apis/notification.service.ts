@@ -44,7 +44,7 @@ export const createTeamToClientEstimateRequest = async (
   }
 
   const { data, error } = await supabase
-    .from('notifications')
+    .from('notifications' as any)
     .insert({
       type: 'TEAM_TO_CLIENT_ESTIMATE_REQUEST',
       sender_type: 'TEAM',
@@ -82,7 +82,7 @@ export const createClientToTeamEstimateRequest = async (
   }
 
   const { data, error } = await supabase
-    .from('notifications')
+    .from('notifications' as any)
     .insert({
       type: 'CLIENT_TO_TEAM_ESTIMATE_REQUEST',
       sender_type: 'CLIENT',
@@ -109,7 +109,7 @@ export const getClientNotifications = async (clientId: string) => {
   const supabase = createSupabaseBrowserClient()
   
   const { data, error } = await supabase
-    .from('notifications')
+    .from('notifications' as any)
     .select('*')
     .eq('target_client_id', clientId)
     .order('created_at', { ascending: false })
@@ -128,7 +128,7 @@ export const getTeamNotifications = async (teamId: number) => {
   const supabase = createSupabaseBrowserClient()
   
   const { data, error } = await supabase
-    .from('notifications')
+    .from('notifications' as any)
     .select('*')
     .eq('target_team_id', teamId)
     .order('created_at', { ascending: false })
@@ -156,7 +156,7 @@ export const updateNotificationStatus = async (
   }
 
   const { data, error } = await supabase
-    .from('notifications')
+    .from('notifications' as any)
     .update(updateData)
     .eq('id', notificationId)
     .select()

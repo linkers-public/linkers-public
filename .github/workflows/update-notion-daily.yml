@@ -1,0 +1,52 @@
+name: Update Notion Daily Work Log
+
+on:
+  # 수동 실행
+  workflow_dispatch:
+  # 매일 한국 시간 오전 9시에 자동 실행 (UTC 00:00 = KST 09:00)
+  schedule:
+    - cron: '0 0 * * *'
+  # main 브랜치에 push될 때마다 실행
+  push:
+    branches:
+      - main
+
+jobs:
+  update-notion:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 전체 히스토리 가져오기 (커밋 로그를 위해 필요)
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Configure Git
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+
+      - name: Update Notion with today's work
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_PARENT_PAGE_ID: ${{ secrets.NOTION_PARENT_PAGE_ID }}
+        run: npm run update-notion
+
+      - name: Check if there were errors
+        if: failure()
+        run: |
+          echo "❌ Notion 업데이트 중 오류가 발생했습니다."
+          echo "다음을 확인하세요:"
+          echo "1. NOTION_TOKEN이 올바르게 설정되었는지"
+          echo "2. NOTION_PARENT_PAGE_ID가 올바르게 설정되었는지"
+          echo "3. Notion Integration이 부모 페이지에 접근 권한이 있는지"
+          exit 1
+

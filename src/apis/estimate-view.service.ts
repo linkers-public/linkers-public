@@ -63,7 +63,7 @@ export const checkEstimateViewAccess = async (estimateId: number): Promise<Estim
   if (canView) {
     // 열람 기록 확인
     const { data: existingView } = await supabase
-      .from('estimate_views')
+      .from('estimate_views' as any)
       .select('view_type')
       .eq('user_id', user.id)
       .eq('estimate_id', estimateId)
@@ -72,13 +72,13 @@ export const checkEstimateViewAccess = async (estimateId: number): Promise<Estim
       .maybeSingle()
 
     // 무료 열람 횟수 조회
-    const { data: freeQuota } = await supabase.rpc('get_free_quota', {
+    const { data: freeQuota } = await (supabase.rpc as any)('get_free_quota', {
       p_user: user.id
     })
 
     // 활성 구독 확인
     const { data: subscription } = await supabase
-      .from('subscriptions')
+      .from('subscriptions' as any)
       .select('id, status, current_period_start, current_period_end')
       .eq('user_id', user.id)
       .eq('status', 'active')
@@ -101,7 +101,7 @@ export const checkEstimateViewAccess = async (estimateId: number): Promise<Estim
   }
 
   // 권리가 없는 경우 - 무료 열람 가능 여부 확인
-  const { data: freeQuota } = await supabase.rpc('get_free_quota', {
+  const { data: freeQuota } = await (supabase.rpc as any)('get_free_quota', {
     p_user: user.id
   })
 
@@ -124,7 +124,7 @@ export const checkEstimateViewAccess = async (estimateId: number): Promise<Estim
 
   // 활성 구독 확인
   const { data: subscription } = await supabase
-    .from('subscriptions')
+    .from('subscriptions' as any)
     .select('id, status, current_period_start, current_period_end')
     .eq('user_id', user.id)
     .eq('status', 'active')
@@ -177,7 +177,7 @@ export const createEstimateView = async (
   }
 
   // 이미 권리가 있는지 확인
-  const { data: canView } = await supabase.rpc('can_view_estimate', {
+  const { data: canView } = await (supabase.rpc as any)('can_view_estimate', {
     p_user: user.id,
     p_estimate: estimateId
   })
@@ -185,7 +185,7 @@ export const createEstimateView = async (
   if (canView) {
     // 이미 열람 기록이 있는지 확인
     const { data: existingView } = await supabase
-      .from('estimate_views')
+      .from('estimate_views' as any)
       .select('*')
       .eq('user_id', user.id)
       .eq('estimate_id', estimateId)
@@ -198,7 +198,7 @@ export const createEstimateView = async (
     // 열람 기록만 추가 (권리는 이미 있음)
     // client_id도 함께 설정 (레거시 호환성)
     const { data, error } = await supabase
-      .from('estimate_views')
+      .from('estimate_views' as any)
       .insert({
         user_id: user.id,
         client_id: user.id, // 레거시 호환성
@@ -218,7 +218,7 @@ export const createEstimateView = async (
 
   // 무료 열람인 경우 RPC 함수 사용
   if (viewType === 'free') {
-    const { data: granted, error: grantError } = await supabase.rpc(
+    const { data: granted, error: grantError } = await (supabase.rpc as any)(
       'grant_free_view',
       { p_user: user.id, p_estimate: estimateId }
     )
@@ -233,7 +233,7 @@ export const createEstimateView = async (
 
     // 열람 기록 조회
     const { data: viewRecord } = await supabase
-      .from('estimate_views')
+      .from('estimate_views' as any)
       .select('*')
       .eq('user_id', user.id)
       .eq('estimate_id', estimateId)
@@ -251,7 +251,7 @@ export const createEstimateView = async (
   if (viewType === 'subscription') {
     // 구독 ID 조회
     const { data: subscription } = await supabase
-      .from('subscriptions')
+      .from('subscriptions' as any)
       .select('id')
       .eq('user_id', user.id)
       .eq('status', 'active')
@@ -262,19 +262,19 @@ export const createEstimateView = async (
     }
 
     // 권리 부여 (estimate_access)
-    await supabase
-      .from('estimate_access')
+    await (supabase
+      .from('estimate_access' as any)
       .insert({
         user_id: user.id,
         estimate_id: estimateId,
         source: 'subscription'
-      })
+      }) as any)
       .onConflict('user_id,estimate_id')
       .ignore()
 
     // 열람 기록 생성 (client_id도 함께 설정)
     const { data, error } = await supabase
-      .from('estimate_views')
+      .from('estimate_views' as any)
       .insert({
         user_id: user.id,
         client_id: user.id, // 레거시 호환성
@@ -314,7 +314,7 @@ export const createPaidEstimateView = async (
 
   // 결제 정보 확인
   const { data: payment } = await supabase
-    .from('payments')
+    .from('payments' as any)
     .select('id, amount_krw, amount, payment_status')
     .eq('id', paymentId)
     .eq('user_id', user.id)
@@ -330,7 +330,7 @@ export const createPaidEstimateView = async (
 
   // 이미 열람한 경우 확인
   const { data: existingView } = await supabase
-    .from('estimate_views')
+    .from('estimate_views' as any)
     .select('*')
     .eq('user_id', user.id)
     .eq('estimate_id', estimateId)
@@ -341,7 +341,7 @@ export const createPaidEstimateView = async (
   }
 
   // RPC 함수로 권리 부여 (멱등성 보장)
-  const { error: grantError } = await supabase.rpc('grant_ppv_after_payment', {
+  const { error: grantError } = await (supabase.rpc as any)('grant_ppv_after_payment', {
     p_payment_id: paymentId
   })
 
@@ -354,7 +354,7 @@ export const createPaidEstimateView = async (
 
   // 열람 기록 조회
   const { data: viewRecord } = await supabase
-    .from('estimate_views')
+    .from('estimate_views' as any)
     .select('*')
     .eq('user_id', user.id)
     .eq('estimate_id', estimateId)
@@ -383,7 +383,7 @@ export const getEstimateViewHistory = async (): Promise<EstimateViewRecord[]> =>
 
   // user_id 기반으로 조회 (client_id는 레거시 호환성)
   const { data, error } = await supabase
-    .from('estimate_views')
+    .from('estimate_views' as any)
     .select('*')
     .or(`user_id.eq.${user.id},client_id.eq.${user.id}`)
     .order('created_at', { ascending: false })
@@ -406,7 +406,7 @@ export const getFreeQuota = async (): Promise<{ granted: number; used: number; r
     throw new Error('로그인이 필요합니다.')
   }
 
-  const { data, error } = await supabase.rpc('get_free_quota', {
+  const { data, error } = await (supabase.rpc as any)('get_free_quota', {
     p_user: user.id
   })
 
