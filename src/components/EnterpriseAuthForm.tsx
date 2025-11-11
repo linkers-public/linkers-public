@@ -45,15 +45,86 @@ const EnterpriseAuthForm: React.FC<EnterpriseAuthFormProps> = ({ onSuccess }) =>
 
         if (error) throw error
 
-        // 기업 계정인지 확인
+        if (!data.user?.id) {
+          throw new Error('사용자 정보를 가져올 수 없습니다.')
+        }
+
+        // 기업 계정인지 확인 (client 테이블)
         const { data: clientData } = await supabase
           .from('client')
           .select('*')
-          .eq('user_id', data.user?.id)
-          .single()
+          .eq('user_id', data.user.id)
+          .maybeSingle()
 
-        if (!clientData) {
-          throw new Error('기업 계정이 아닙니다.')
+        // accounts 테이블에서 COMPANY 프로필 확인
+        const { data: companyProfile } = await supabase
+          .from('accounts')
+          .select('*')
+          .eq('user_id', data.user.id)
+          .eq('profile_type', 'COMPANY')
+          .is('deleted_at', null)
+          .maybeSingle()
+
+        // client 테이블에 없거나 COMPANY 프로필이 없는 경우
+        if (!clientData && !companyProfile) {
+          throw new Error('기업 계정이 아닙니다. 기업 회원가입을 먼저 진행해주세요.')
+        }
+
+        // client 테이블은 있지만 COMPANY 프로필이 없는 경우, 프로필 생성
+        if (clientData && !companyProfile) {
+          // 먼저 모든 프로필을 비활성화 (프로필 전환을 위해)
+          await supabase
+            .from('accounts')
+            .update({ is_active: false })
+            .eq('user_id', data.user.id)
+            .is('deleted_at', null)
+
+          const userName = clientData.company_name || 
+                          formData.email?.split('@')[0] || 
+                          `company_${data.user.id.slice(0, 8)}`
+
+          const { error: profileError } = await supabase
+            .from('accounts')
+            .upsert({
+              user_id: data.user.id,
+              username: userName,
+              profile_type: 'COMPANY',
+              bio: '',
+              role: 'MANAGER',
+              main_job: [],
+              expertise: [],
+              badges: [],
+              is_active: true,
+              availability_status: 'available',
+              profile_created_at: new Date().toISOString()
+            }, { 
+              onConflict: 'user_id,profile_type',
+              ignoreDuplicates: false
+            })
+
+          if (profileError) {
+            console.error('프로필 생성 실패:', profileError)
+            throw new Error('기업 프로필 생성에 실패했습니다. 관리자에게 문의해주세요.')
+          }
+        } else if (companyProfile && !companyProfile.is_active) {
+          // COMPANY 프로필이 있지만 비활성화된 경우, 활성화
+          // 먼저 모든 프로필을 비활성화
+          await supabase
+            .from('accounts')
+            .update({ is_active: false })
+            .eq('user_id', data.user.id)
+            .is('deleted_at', null)
+
+          // COMPANY 프로필을 활성화
+          await supabase
+            .from('accounts')
+            .update({ 
+              is_active: true,
+              updated_at: new Date().toISOString()
+            })
+            .eq('user_id', data.user.id)
+            .eq('profile_type', 'COMPANY')
+            .is('deleted_at', null)
         }
 
         onSuccess?.()
@@ -249,7 +320,9 @@ const EnterpriseAuthForm: React.FC<EnterpriseAuthFormProps> = ({ onSuccess }) =>
               await supabase.auth.signInWithOAuth({
                 provider: 'google',
                 options: {
-                  redirectTo: `${window.location.origin}/auth/callback?type=client&next=/enterprise`,
+                  redirectTo: `${window.location.origin}/auth/callback?profile_type=COMPANY&next=/enterprise`,
+                  // Google OAuth: 항상 계정 선택 화면 표시
+                  queryParams: { prompt: 'select_account' },
                 },
               })
             }}
@@ -269,7 +342,7 @@ const EnterpriseAuthForm: React.FC<EnterpriseAuthFormProps> = ({ onSuccess }) =>
               await supabase.auth.signInWithOAuth({
                 provider: 'kakao',
                 options: {
-                  redirectTo: `${window.location.origin}/auth/callback?type=client&next=/enterprise`,
+                  redirectTo: `${window.location.origin}/auth/callback?profile_type=COMPANY&next=/enterprise`,
                 },
               })
             }}

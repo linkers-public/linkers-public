@@ -170,10 +170,44 @@ export async function POST(request: NextRequest) {
             }
           })
       }
-    }).catch((error: any) => {
+    }).catch(async (error: any) => {
       // 비동기 작업이므로 에러는 로그만 남기고 사용자에게는 영향 없음
       console.error('결제 예약 실패 (비동기):', error)
-      // TODO: 실패 시 재시도 로직 추가 (예: cron job 또는 별도 큐)
+      
+      // 재시도 큐에 저장
+      try {
+        const errorData = error.data || error.response?.data
+        const nextRetryAt = new Date()
+        nextRetryAt.setMinutes(nextRetryAt.getMinutes() + 5) // 5분 후 재시도
+        
+        await supabase
+          .from('payment_retry_queue' as any)
+          .insert({
+            subscription_id: subscription.id,
+            billing_key: billingKey,
+            payment_id: paymentId,
+            scheduled_at: scheduledAt,
+            amount: 2000,
+            order_name: '링커스 월 구독료',
+            customer_name: buyer_info?.name || accountData?.username || user.email?.split('@')[0] || '사용자',
+            customer_email: buyer_info?.email || accountData?.contact_email || user.email || '',
+            customer_phone_number: phoneNumber,
+            status: 'pending',
+            error_message: error.message || '알 수 없는 오류',
+            last_error_type: errorData?.type || 'UNKNOWN_ERROR',
+            last_error_message: errorData?.message || error.message || '알 수 없는 오류',
+            next_retry_at: nextRetryAt.toISOString(),
+          })
+        
+        console.log('결제 예약 실패 - 재시도 큐에 저장됨:', {
+          subscription_id: subscription.id,
+          payment_id: paymentId,
+          next_retry_at: nextRetryAt.toISOString(),
+        })
+      } catch (queueError: any) {
+        // 재시도 큐 저장 실패는 로그만 남김 (사용자에게는 영향 없음)
+        console.error('재시도 큐 저장 실패:', queueError)
+      }
     })
 
     // 즉시 성공 응답 반환 (빌링키 발급 완료)

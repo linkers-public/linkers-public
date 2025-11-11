@@ -451,7 +451,28 @@ const Header = () => {
   }, [pathname])
 
   const handleLogout = async () => {
-    await supabase.auth.signOut()
+    // 완전한 로그아웃: 모든 스토리지 정리
+    await supabase.auth.signOut({ scope: 'global' })
+    
+    // localStorage와 sessionStorage 정리
+    if (typeof window !== 'undefined') {
+      // Supabase 관련 키 정리
+      const keys = Object.keys(localStorage)
+      keys.forEach(key => {
+        if (key.includes('supabase') || key.includes('auth')) {
+          localStorage.removeItem(key)
+        }
+      })
+      
+      // sessionStorage도 정리
+      const sessionKeys = Object.keys(sessionStorage)
+      sessionKeys.forEach(key => {
+        if (key.includes('supabase') || key.includes('auth') || key === 'profileType') {
+          sessionStorage.removeItem(key)
+        }
+      })
+    }
+    
     setShowUserMenu(false)
     router.push('/')
     window.location.reload()

@@ -41,7 +41,7 @@ export async function GET(request: Request) {
       if (profileType) {
         const { data: existingProfile } = await supabase
           .from('accounts')
-          .select('user_id, profile_type')
+          .select('user_id, profile_type, is_active')
           .eq('user_id', userId)
           .eq('profile_type', profileType)
           .is('deleted_at', null)
@@ -49,6 +49,13 @@ export async function GET(request: Request) {
 
         // 같은 타입의 프로필이 없으면 생성
         if (!existingProfile) {
+          // 먼저 모든 프로필을 비활성화 (프로필 전환을 위해)
+          await supabase
+            .from('accounts')
+            .update({ is_active: false })
+            .eq('user_id', userId)
+            .is('deleted_at', null)
+
           const { error: upsertError } = await supabase
             .from('accounts')
             .upsert({
@@ -75,6 +82,25 @@ export async function GET(request: Request) {
             // 프로필이 새로 생성된 경우, 프로필 완성 유도를 위해 온보딩 페이지로 리다이렉트
             return NextResponse.redirect(new URL('/my/update?from=onboarding', origin))
           }
+        } else {
+          // 기존 프로필이 있는 경우, 해당 프로필을 활성화 (프로필 전환)
+          // 먼저 모든 프로필을 비활성화
+          await supabase
+            .from('accounts')
+            .update({ is_active: false })
+            .eq('user_id', userId)
+            .is('deleted_at', null)
+
+          // 선택한 프로필 타입을 활성화
+          await supabase
+            .from('accounts')
+            .update({ 
+              is_active: true,
+              updated_at: new Date().toISOString()
+            })
+            .eq('user_id', userId)
+            .eq('profile_type', profileType)
+            .is('deleted_at', null)
         }
       } else {
         // 프로필 타입이 없는 경우 (기존 사용자), 기존 프로필 유지
