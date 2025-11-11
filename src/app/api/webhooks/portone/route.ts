@@ -7,7 +7,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createSupabaseServerClient } from '@/supabase/supabase-server'
+import { createServerSideClient } from '@/supabase/supabase-server'
 import { verifyWebhook } from '@/apis/subscription-v2.service'
 
 export async function POST(req: NextRequest) {
@@ -37,7 +37,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const supabase = createSupabaseServerClient()
+    const supabase = await createServerSideClient()
 
     // 결제 완료 이벤트 처리
     if (webhook.type === 'payment.succeeded' || webhook.type === 'payment.paid') {

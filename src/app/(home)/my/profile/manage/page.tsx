@@ -60,6 +60,12 @@ export default function ProfileManagePage() {
       })
 
       await loadProfiles()
+      
+      // 헤더 업데이트를 위한 이벤트 발생
+      window.dispatchEvent(new Event('profileSwitched'))
+      
+      // 페이지 새로고침으로 헤더 및 네비게이션 업데이트
+      router.refresh()
     } catch (err: any) {
       toast({
         variant: 'destructive',
@@ -238,7 +244,12 @@ export default function ProfileManagePage() {
                       프로필 보기
                     </Button>
                     <Button
-                      onClick={() => router.push(`/my/update`)}
+                      onClick={() => {
+                        const updatePath = profile.profile_type === 'FREELANCER' 
+                          ? '/my/update' 
+                          : '/my/company/info'
+                        router.push(updatePath)
+                      }}
                       variant="outline"
                       size="sm"
                     >

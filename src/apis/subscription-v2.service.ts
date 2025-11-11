@@ -11,7 +11,7 @@ import { Webhook } from '@portone/server-sdk'
 
 // 포트원 V2 클라이언트 생성
 // 서버 사이드에서만 실행되도록 함수로 래핑
-function getPortOneClients() {
+export function getPortOneClients() {
   const PORTONE_API_SECRET = process.env.PORTONE_V2_API_SECRET || ''
 
   if (!PORTONE_API_SECRET) {

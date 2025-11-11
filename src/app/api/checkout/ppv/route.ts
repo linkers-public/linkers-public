@@ -6,14 +6,14 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createSupabaseServerClient } from '@/supabase/supabase-server'
+import { createServerSideClient } from '@/supabase/supabase-server'
 import { getPortOneClients } from '@/apis/subscription-v2.service'
 
 const PPV_PRICE = 2000 // 건별 열람권 가격
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createSupabaseServerClient()
+    const supabase = await createServerSideClient()
     const { data: { user } } = await supabase.auth.getUser()
 
     if (!user) {
@@ -67,10 +67,10 @@ export async function POST(request: NextRequest) {
     }
 
     // PortOne 결제 요청 생성
-    const { portoneV2Client } = getPortOneClients()
+    const { portoneClient } = getPortOneClients()
     const merchantUid = `ppv_${payment.id}`
 
-    const paymentResponse = await portoneV2Client.post('/payments', {
+    const paymentResponse = await portoneClient.post('/payments', {
       amount: {
         total: PPV_PRICE,
         currency: 'KRW'

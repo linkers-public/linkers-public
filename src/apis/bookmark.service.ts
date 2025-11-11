@@ -71,7 +71,13 @@ export const fetchBookmarkList = async ({
         return minYears === 0 // 신입만
       }
       
-      const totalExp = calculateTotalExperience(item.maker.account_work_experiences)
+      // 타입 변환: null → undefined
+      const experiences = item.maker.account_work_experiences.map(exp => ({
+        start_date: exp.start_date,
+        end_date: exp.end_date ?? undefined
+      }))
+      
+      const totalExp = calculateTotalExperience(experiences)
       const totalYears = totalExp.years + totalExp.months / 12
       
       return totalYears >= minYears && (maxYears === null || totalYears <= maxYears)
@@ -82,7 +88,7 @@ export const fetchBookmarkList = async ({
   if (job && job.length > 0) {
     filteredResult = filteredResult.filter(item => {
       if (!item.maker?.main_job) return false
-      return job.some(j => item.maker.main_job?.includes(j))
+      return job.some(j => item.maker?.main_job?.includes(j))
     })
   }
 
@@ -90,7 +96,7 @@ export const fetchBookmarkList = async ({
   if (specialization && specialization.length > 0) {
     filteredResult = filteredResult.filter(item => {
       if (!item.maker?.expertise) return false
-      return specialization.some(s => item.maker.expertise?.includes(s))
+      return specialization.some(s => item.maker?.expertise?.includes(s))
     })
   }
 

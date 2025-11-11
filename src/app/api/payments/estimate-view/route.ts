@@ -6,14 +6,14 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createSupabaseServerClient } from '@/supabase/supabase-server'
+import { createServerSideClient } from '@/supabase/supabase-server'
 import { getPortOneClients } from '@/apis/subscription-v2.service'
 
 const ESTIMATE_VIEW_PRICE = 2000 // 2,000원 (새 모델)
 
 export async function POST(request: NextRequest) {
   try {
-    const supabase = createSupabaseServerClient()
+    const supabase = await createServerSideClient()
     const { data: { user } } = await supabase.auth.getUser()
 
     if (!user) {
@@ -62,12 +62,12 @@ export async function POST(request: NextRequest) {
     }
 
     // PortOne 결제 요청
-    const { portoneV2Client } = getPortOneClients()
+    const { portoneClient } = getPortOneClients()
     
     const merchantUid = `estimate_view_${user.id}_${estimateId}_${Date.now()}`
     
     // 결제 요청 생성
-    const paymentResponse = await portoneV2Client.post('/payments', {
+    const paymentResponse = await portoneClient.post('/payments', {
       amount: {
         total: ESTIMATE_VIEW_PRICE,
         currency: 'KRW'

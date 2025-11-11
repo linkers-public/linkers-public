@@ -333,6 +333,9 @@ const ProfileUpdateClient = () => {
       // 프로필 새로고침
       await fetchMyProfileData()
       
+      // 헤더 업데이트를 위한 이벤트 발생
+      window.dispatchEvent(new Event('profileSwitched'))
+      
       router.push('/my/profile')
     } catch (err) {
       console.error('프로필 업데이트 실패:', err)

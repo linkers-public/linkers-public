@@ -204,20 +204,15 @@ export const getEstimateDetail = async (estimateId: number) => {
       
       if (managerAccount) {
         // 팀 객체에 연락처 정보 추가
+        const contactInfo = {
+          contact_phone: (managerAccount as any).contact_phone,
+          contact_email: (managerAccount as any).contact_email,
+          contact_website: (managerAccount as any).contact_website,
+        }
         if (Array.isArray(data.team)) {
-          data.team[0] = {
-            ...team,
-            contact_phone: managerAccount.contact_phone,
-            contact_email: managerAccount.contact_email,
-            contact_website: managerAccount.contact_website,
-          }
+          Object.assign(data.team[0], contactInfo)
         } else {
-          data.team = {
-            ...team,
-            contact_phone: managerAccount.contact_phone,
-            contact_email: managerAccount.contact_email,
-            contact_website: managerAccount.contact_website,
-          }
+          Object.assign(data.team, contactInfo)
         }
       }
     }
@@ -323,20 +318,15 @@ export const getReceivedEstimates = async () => {
             .maybeSingle()
           
           if (managerAccount) {
+            const contactInfo = {
+              contact_phone: (managerAccount as any).contact_phone,
+              contact_email: (managerAccount as any).contact_email,
+              contact_website: (managerAccount as any).contact_website,
+            }
             if (Array.isArray(estimate.team)) {
-              estimate.team[0] = {
-                ...team,
-                contact_phone: managerAccount.contact_phone,
-                contact_email: managerAccount.contact_email,
-                contact_website: managerAccount.contact_website,
-              }
+              Object.assign(estimate.team[0], contactInfo)
             } else {
-              estimate.team = {
-                ...team,
-                contact_phone: managerAccount.contact_phone,
-                contact_email: managerAccount.contact_email,
-                contact_website: managerAccount.contact_website,
-              }
+              Object.assign(estimate.team, contactInfo)
             }
           }
         }

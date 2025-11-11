@@ -41,7 +41,7 @@ export const checkEstimateViewAccess = async (estimateId: number): Promise<Estim
 
   // 가격표 조회
   const { data: pricing } = await supabase
-    .from('pricing')
+    .from('pricing' as any)
     .select('*')
     .eq('is_active', true)
 
@@ -49,7 +49,7 @@ export const checkEstimateViewAccess = async (estimateId: number): Promise<Estim
   const subscriptionPrice = pricing?.find(p => p.plan === 'subscription')?.amount_krw || 9900
 
   // RPC 함수로 권한 확인
-  const { data: canView, error: canViewError } = await supabase.rpc(
+  const { data: canView, error: canViewError } = await (supabase.rpc as any)(
     'can_view_estimate',
     { p_user: user.id, p_estimate: estimateId }
   )

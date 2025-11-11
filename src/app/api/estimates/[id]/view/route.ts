@@ -9,14 +9,14 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createSupabaseServerClient } from '@/supabase/supabase-server'
+import { createServerSideClient } from '@/supabase/supabase-server'
 
 export async function POST(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
-    const supabase = createSupabaseServerClient()
+    const supabase = await createServerSideClient()
     const { data: { user } } = await supabase.auth.getUser()
 
     if (!user) {
