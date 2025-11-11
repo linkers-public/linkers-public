@@ -52,11 +52,12 @@ function CreateProfilePageContent() {
       try {
         const typeParam = searchParams.get('type')
         if (typeParam && (typeParam === 'FREELANCER' || typeParam === 'COMPANY')) {
-          // 기존 프로필 확인
+          // 기존 프로필 확인 (deleted_at이 null인 것만 조회)
           const profiles = await getUserProfiles()
           const existingProfile = profiles.find((p: any) => p.profile_type === typeParam)
           
           if (existingProfile) {
+            console.log('기존 프로필 발견:', existingProfile)
             toast({
               variant: 'destructive',
               title: '프로필이 이미 존재합니다',
@@ -64,6 +65,29 @@ function CreateProfilePageContent() {
             })
             router.push('/my/profile/manage')
             return
+          }
+          
+          // 추가 확인: DB에서 직접 확인 (hard delete된 경우 대비)
+          const supabase = createSupabaseBrowserClient()
+          const { data: { user } } = await supabase.auth.getUser()
+          if (user) {
+            const { data: directCheck } = await supabase
+              .from('accounts')
+              .select('profile_id, profile_type, deleted_at')
+              .eq('user_id', user.id)
+              .eq('profile_type', typeParam)
+              .maybeSingle()
+            
+            if (directCheck && !directCheck.deleted_at) {
+              console.log('DB에서 직접 확인한 기존 프로필:', directCheck)
+              toast({
+                variant: 'destructive',
+                title: '프로필이 이미 존재합니다',
+                description: `${typeParam === 'FREELANCER' ? '프리랜서' : '기업'} 프로필이 이미 생성되어 있습니다.`,
+              })
+              router.push('/my/profile/manage')
+              return
+            }
           }
           
           setProfileType(typeParam as ProfileType)

@@ -109,10 +109,23 @@ export default function ProfileManagePage() {
       <div className="space-y-6">
         {/* 헤더 섹션 */}
         <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-2xl p-6 md:p-8 border border-blue-100">
-          <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-3">프로필 관리</h1>
-          <p className="text-gray-700 leading-relaxed">
-            프리랜서와 기업 프로필을 생성하고 전환하여 다양한 역할로 활동할 수 있습니다.
-          </p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-3">프로필 관리</h1>
+              <p className="text-gray-700 leading-relaxed">
+                프리랜서와 기업 프로필을 생성하고 전환하여 다양한 역할로 활동할 수 있습니다.
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              onClick={loadProfiles}
+              disabled={loading}
+              className="ml-4"
+            >
+              <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+              새로고침
+            </Button>
+          </div>
         </div>
 
         {error && (
