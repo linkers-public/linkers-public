@@ -3,10 +3,12 @@
 import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createProfile, getUserProfiles } from '@/apis/profile-refactor.service'
+import { createSupabaseBrowserClient } from '@/supabase/supabase-client'
 import { Database } from '@/types/supabase'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
+import { Label } from '@/components/ui/label'
 import { toast } from '@/hooks/use-toast'
 import { ArrowLeft, X } from 'lucide-react'
 import {
@@ -32,6 +34,12 @@ function CreateProfilePageContent() {
     bio: '',
     main_job: [] as string[],
     expertise: [] as string[],
+    // 기업 프로필 전용 필드
+    company_name: '',
+    contact_person: '',
+    contact_phone: '',
+    address: '',
+    website: '',
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -204,9 +212,24 @@ function CreateProfilePageContent() {
       return
     }
 
-    if (!formData.username.trim()) {
-      setError('사용자명을 입력해주세요.')
-      return
+    if (profileType === 'COMPANY') {
+      if (!formData.company_name.trim()) {
+        setError('회사명을 입력해주세요.')
+        return
+      }
+      if (!formData.contact_person.trim()) {
+        setError('담당자명을 입력해주세요.')
+        return
+      }
+      if (!formData.contact_phone.trim()) {
+        setError('연락처를 입력해주세요.')
+        return
+      }
+    } else {
+      if (!formData.username.trim()) {
+        setError('사용자명을 입력해주세요.')
+        return
+      }
     }
 
     try {
@@ -220,21 +243,50 @@ function CreateProfilePageContent() {
         new Set(formData.expertise.filter((item) => item.trim())),
       )
 
-      await createProfile({
+      const supabase = createSupabaseBrowserClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        throw new Error('로그인이 필요합니다.')
+      }
+
+      // 프로필 생성
+      const profile = await createProfile({
         profile_type: profileType,
-        username: formData.username,
+        username: profileType === 'COMPANY' ? formData.company_name : formData.username,
         bio: formData.bio,
         main_job: uniqueMainJobs.length > 0 ? uniqueMainJobs : undefined,
         expertise:
           uniqueExpertise.length > 0 ? uniqueExpertise : undefined,
       })
 
+      // 기업 프로필인 경우 client 테이블에도 데이터 저장
+      if (profileType === 'COMPANY') {
+        const { error: clientError } = await supabase
+          .from('client')
+          .upsert({
+            user_id: user.id,
+            company_name: formData.company_name,
+            email: user.email || '',
+            contact_person: formData.contact_person,
+            contact_phone: formData.contact_phone,
+            address: formData.address || null,
+            website: formData.website || null,
+          }, {
+            onConflict: 'user_id'
+          })
+
+        if (clientError) {
+          console.error('client 테이블 저장 실패:', clientError)
+          // 프로필은 생성되었으므로 계속 진행
+        }
+      }
+
       toast({
         title: '프로필 생성 완료',
         description: `${profileType === 'FREELANCER' ? '프리랜서' : '기업'} 프로필이 생성되었습니다.`,
       })
 
-      router.push('/my/profile')
+      router.push(profileType === 'COMPANY' ? '/my/company/info' : '/my/profile')
     } catch (err: any) {
       setError(err.message || '프로필 생성에 실패했습니다.')
     } finally {
@@ -255,22 +307,38 @@ function CreateProfilePageContent() {
 
   return (
     <div className="w-full md:py-6">
-      <Button
-        variant="outline"
-        onClick={() => router.back()}
-        className="mb-4 md:mb-6"
-      >
-        <ArrowLeft className="w-4 h-4 mr-2" />
-        돌아가기
-      </Button>
+      {profileType !== 'COMPANY' && (
+        <Button
+          variant="outline"
+          onClick={() => router.back()}
+          className="mb-4 md:mb-6"
+        >
+          <ArrowLeft className="w-4 h-4 mr-2" />
+          돌아가기
+        </Button>
+      )}
 
-      <div className="bg-white rounded-lg shadow-sm border p-4 md:p-6 lg:p-8">
-        <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-2">새 프로필 생성</h1>
-        <p className="text-gray-600 mb-6 md:mb-8">
-          {profileType 
-            ? `${profileType === 'FREELANCER' ? '프리랜서' : '기업'} 프로필을 생성하세요.`
-            : '프리랜서 또는 기업 프로필을 생성하세요. 한 유저당 각각 최대 1개씩 생성할 수 있습니다.'}
-        </p>
+      <div className={profileType === 'COMPANY' 
+        ? 'bg-white rounded-xl shadow-sm border border-gray-200 p-6 md:p-8'
+        : 'bg-white rounded-lg shadow-sm border p-4 md:p-6 lg:p-8'
+      }>
+        {profileType === 'COMPANY' ? (
+          <>
+            <div className="mb-8">
+              <h1 className="text-3xl font-bold text-gray-900 mb-2">기업 프로필 생성</h1>
+              <p className="text-gray-600">회사명·담당자·연락처 등을 입력하세요</p>
+            </div>
+          </>
+        ) : (
+          <>
+            <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-2">새 프로필 생성</h1>
+            <p className="text-gray-600 mb-6 md:mb-8">
+              {profileType 
+                ? `${profileType === 'FREELANCER' ? '프리랜서' : '기업'} 프로필을 생성하세요.`
+                : '프리랜서 또는 기업 프로필을 생성하세요. 한 유저당 각각 최대 1개씩 생성할 수 있습니다.'}
+            </p>
+          </>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-6 md:space-y-8">
           {/* 프로필 타입 선택 */}
@@ -328,33 +396,123 @@ function CreateProfilePageContent() {
           {/* 기본 정보 */}
           {profileType && (
             <>
-              <div>
-                <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-2">
-                  사용자명 <span className="text-red-500">*</span>
-                </label>
-                <Input
-                  id="username"
-                  value={formData.username}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, username: e.target.value }))}
-                  placeholder="예: johndoe"
-                  required
-                />
-              </div>
+              {/* 기업 프로필인 경우 /my/company/info 스타일 적용 */}
+              {profileType === 'COMPANY' ? (
+                <>
+                  <div>
+                    <Label htmlFor="company_name" className="text-sm font-semibold text-gray-900 mb-2 block">
+                      회사명 <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      id="company_name"
+                      value={formData.company_name}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, company_name: e.target.value }))}
+                      required
+                      className="border-gray-300 focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
 
-              <div>
-                <label htmlFor="bio" className="block text-sm font-medium text-gray-700 mb-2">
-                  소개
-                </label>
-                <Textarea
-                  id="bio"
-                  value={formData.bio}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, bio: e.target.value }))}
-                  rows={4}
-                  placeholder="자신에 대해 간단히 소개해주세요."
-                />
-              </div>
+                  <div>
+                    <Label htmlFor="contact_person" className="text-sm font-semibold text-gray-900 mb-2 block">
+                      담당자명 <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      id="contact_person"
+                      value={formData.contact_person}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, contact_person: e.target.value }))}
+                      required
+                      className="border-gray-300 focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
 
-              {/* 주직무 */}
+                  <div>
+                    <Label htmlFor="contact_phone" className="text-sm font-semibold text-gray-900 mb-2 block">
+                      연락처 <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      id="contact_phone"
+                      type="tel"
+                      value={formData.contact_phone}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, contact_phone: e.target.value }))}
+                      required
+                      className="border-gray-300 focus:ring-2 focus:ring-blue-500"
+                      placeholder="010-1234-5678"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="address" className="text-sm font-semibold text-gray-900 mb-2 block">
+                      주소
+                    </Label>
+                    <Input
+                      id="address"
+                      value={formData.address}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, address: e.target.value }))}
+                      className="border-gray-300 focus:ring-2 focus:ring-blue-500"
+                      placeholder="서울시 강남구..."
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="website" className="text-sm font-semibold text-gray-900 mb-2 block">
+                      웹사이트
+                    </Label>
+                    <Input
+                      id="website"
+                      type="url"
+                      value={formData.website}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, website: e.target.value }))}
+                      placeholder="https://example.com"
+                      className="border-gray-300 focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="bio" className="text-sm font-semibold text-gray-900 mb-2 block">
+                      소개
+                    </Label>
+                    <Textarea
+                      id="bio"
+                      value={formData.bio}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, bio: e.target.value }))}
+                      rows={4}
+                      placeholder="회사에 대해 간단히 소개해주세요."
+                      className="border-gray-300 focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-2">
+                      사용자명 <span className="text-red-500">*</span>
+                    </label>
+                    <Input
+                      id="username"
+                      value={formData.username}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, username: e.target.value }))}
+                      placeholder="예: johndoe"
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label htmlFor="bio" className="block text-sm font-medium text-gray-700 mb-2">
+                      소개
+                    </label>
+                    <Textarea
+                      id="bio"
+                      value={formData.bio}
+                      onChange={(e) => setFormData((prev) => ({ ...prev, bio: e.target.value }))}
+                      rows={4}
+                      placeholder="자신에 대해 간단히 소개해주세요."
+                    />
+                  </div>
+                </>
+              )}
+
+              {/* 주직무 (프리랜서 전용) */}
+              {profileType === 'FREELANCER' && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-3">
                   주직무
@@ -492,6 +650,7 @@ function CreateProfilePageContent() {
                   </div>
                 </div>
               </div>
+              )}
             </>
           )}
 
@@ -503,24 +662,36 @@ function CreateProfilePageContent() {
           )}
 
           {/* 제출 버튼 */}
-          <div className="flex gap-3 pt-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => router.back()}
-              className="flex-1"
-              disabled={loading}
-            >
-              취소
-            </Button>
-            <Button
-              type="submit"
-              className="flex-1"
-              disabled={loading || !profileType}
-            >
-              {loading ? '생성 중...' : '프로필 생성'}
-            </Button>
-          </div>
+          {profileType === 'COMPANY' ? (
+            <div className="mt-8 pt-6 border-t border-gray-200">
+              <Button 
+                type="submit" 
+                disabled={loading || !profileType} 
+                className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-6 py-2.5 shadow-sm hover:shadow-md transition-all"
+              >
+                {loading ? '생성 중...' : '프로필 생성'}
+              </Button>
+            </div>
+          ) : (
+            <div className="flex gap-3 pt-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => router.back()}
+                className="flex-1"
+                disabled={loading}
+              >
+                취소
+              </Button>
+              <Button
+                type="submit"
+                className="flex-1"
+                disabled={loading || !profileType}
+              >
+                {loading ? '생성 중...' : '프로필 생성'}
+              </Button>
+            </div>
+          )}
         </form>
       </div>
     </div>

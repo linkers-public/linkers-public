@@ -16,12 +16,23 @@ const NOTION_PARENT_PAGE_ID = process.env.NOTION_PARENT_PAGE_ID; // 작업 일�
 
 if (!NOTION_TOKEN) {
   console.error('❌ NOTION_TOKEN 환경 변수가 설정되지 않았습니다.');
+  console.error('   GitHub Secrets에서 NOTION_TOKEN을 설정하세요.');
   process.exit(1);
 }
 
 if (!NOTION_PARENT_PAGE_ID) {
   console.error('❌ NOTION_PARENT_PAGE_ID 환경 변수가 설정되지 않았습니다.');
+  console.error('   GitHub Secrets에서 NOTION_PARENT_PAGE_ID를 설정하세요.');
   process.exit(1);
+}
+
+// 페이지 ID 형식 검증 (UUID 형식: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
+const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+if (!uuidRegex.test(NOTION_PARENT_PAGE_ID)) {
+  console.warn('⚠️ NOTION_PARENT_PAGE_ID 형식이 올바르지 않을 수 있습니다.');
+  console.warn('   예상 형식: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx');
+  console.warn(`   현재 값: ${NOTION_PARENT_PAGE_ID}`);
+  console.warn('   Notion 페이지 URL에서 페이지 ID를 추출할 때 하이픈을 포함해야 합니다.');
 }
 
 // Notion 클라이언트 초기화
@@ -95,6 +106,23 @@ function getChangedFiles(commitHash) {
   }
 }
 
+// 부모 페이지 접근 권한 확인
+async function verifyParentPageAccess(parentPageId) {
+  try {
+    const page = await notion.pages.retrieve({ page_id: parentPageId });
+    console.log(`✅ 부모 페이지 접근 확인: ${page.properties?.title?.title?.[0]?.plain_text || '제목 없음'}`);
+    return true;
+  } catch (error) {
+    console.error('❌ 부모 페이지 접근 실패:', error.message);
+    console.error(`   페이지 ID: ${parentPageId}`);
+    console.error('   해결 방법:');
+    console.error('   1. Notion Integration이 해당 페이지에 접근 권한이 있는지 확인하세요');
+    console.error('   2. 페이지를 Notion Integration과 공유했는지 확인하세요');
+    console.error('   3. NOTION_PARENT_PAGE_ID 환경 변수가 올바른지 확인하세요');
+    throw error;
+  }
+}
+
 // Notion 페이지 검색 (제목으로)
 async function findPageByTitle(parentPageId, title) {
   try {
@@ -106,12 +134,17 @@ async function findPageByTitle(parentPageId, title) {
 
     for (const block of response.results) {
       if (block.type === 'child_page') {
-        const page = await notion.pages.retrieve({ page_id: block.id });
-        if (page.properties && page.properties.title) {
-          const pageTitle = page.properties.title.title?.[0]?.plain_text || '';
-          if (pageTitle === title) {
-            return block.id;
+        try {
+          const page = await notion.pages.retrieve({ page_id: block.id });
+          if (page.properties && page.properties.title) {
+            const pageTitle = page.properties.title.title?.[0]?.plain_text || '';
+            if (pageTitle === title) {
+              return block.id;
+            }
           }
+        } catch (error) {
+          // 개별 페이지 접근 실패는 무시하고 계속 진행
+          console.warn(`⚠️ 페이지 ${block.id} 접근 실패: ${error.message}`);
         }
       }
     }
@@ -451,6 +484,10 @@ async function updatePageContent(pageId, content) {
 // 메인 함수
 async function main() {
   try {
+    // 부모 페이지 접근 권한 확인
+    console.log('🔍 부모 페이지 접근 권한 확인 중...');
+    await verifyParentPageAccess(NOTION_PARENT_PAGE_ID);
+
     const today = getTodayKST();
     const todayStr = formatDate(today);
     const pageTitle = `${todayStr} 작업 일지`;

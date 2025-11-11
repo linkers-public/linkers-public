@@ -6,7 +6,7 @@ import { createSupabaseBrowserClient } from '@/supabase/supabase-client'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
-import { Bell, Mail, Smartphone, MessageSquare } from 'lucide-react'
+import { Mail } from 'lucide-react'
 import { toast } from '@/hooks/use-toast'
 
 interface NotificationSettings {
@@ -120,6 +120,7 @@ export default function NotificationsClient() {
     }
   }
 
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -135,7 +136,7 @@ export default function NotificationsClient() {
     <div className="w-full py-6 md:py-8">
       <div className="mb-6">
         <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-2">알림 설정</h1>
-        <p className="text-gray-600">이메일/웹푸시/카카오톡 알림을 설정하세요</p>
+        <p className="text-gray-600">이메일 알림을 설정하세요</p>
       </div>
 
       <div className="bg-white rounded-lg shadow-sm border p-4 md:p-6">
@@ -160,45 +161,6 @@ export default function NotificationsClient() {
             />
           </div>
 
-          {/* 웹 푸시 알림 */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Smartphone className="w-5 h-5 text-gray-600" />
-              <div>
-                <Label htmlFor="webPush" className="text-base font-medium">
-                  웹 푸시 알림
-                </Label>
-                <p className="text-sm text-gray-500">브라우저 푸시 알림을 받습니다</p>
-              </div>
-            </div>
-            <Switch
-              id="webPush"
-              checked={settings.web_push_enabled}
-              onCheckedChange={(checked) =>
-                setSettings({ ...settings, web_push_enabled: checked })
-              }
-            />
-          </div>
-
-          {/* 카카오톡 알림 */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <MessageSquare className="w-5 h-5 text-gray-600" />
-              <div>
-                <Label htmlFor="kakao" className="text-base font-medium">
-                  카카오톡 알림
-                </Label>
-                <p className="text-sm text-gray-500">카카오톡으로 알림을 받습니다</p>
-              </div>
-            </div>
-            <Switch
-              id="kakao"
-              checked={settings.kakao_enabled}
-              onCheckedChange={(checked) =>
-                setSettings({ ...settings, kakao_enabled: checked })
-              }
-            />
-          </div>
         </div>
 
         <div className="mt-6 pt-6 border-t">
