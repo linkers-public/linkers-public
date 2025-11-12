@@ -1,23 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import OpenAI from 'openai';
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
 
 /**
  * POST /api/public-announcement/analyze
  * 공고 AI 분석 (요구기술, 예산, 기간 추출)
+ * 백엔드 Python API로 프록시
  */
 export async function POST(request: NextRequest) {
   try {
-    if (!process.env.OPENAI_API_KEY) {
-      return NextResponse.json(
-        { error: 'OpenAI API 키가 설정되지 않았습니다.' },
-        { status: 500 }
-      );
-    }
-
     const { announcementId, rawText } = await request.json();
 
     if (!rawText) {
@@ -27,51 +16,68 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // GPT-4o-mini를 사용하여 공고 분석
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        {
-          role: 'system',
-          content: `당신은 공공 프로젝트 발주 공고를 분석하는 전문가입니다. 
-다음 정보를 JSON 형식으로 추출해주세요:
-- requiredSkills: 요구 기술 스택 배열 (예: ["React", "Node.js", "PostgreSQL"])
-- budgetMin: 최소 예산 (숫자, 없으면 null)
-- budgetMax: 최대 예산 (숫자, 없으면 null)
-- durationMonths: 프로젝트 기간 (개월 수, 없으면 null)
-- organizationName: 발주기관명
-- deadline: 마감일 (YYYY-MM-DD 형식, 없으면 null)
-- location: 지역 (없으면 null)
-- summary: 공고 요약 (200자 이내)`,
-        },
-        {
-          role: 'user',
-          content: `다음 공고를 분석해주세요:\n\n${rawText.substring(0, 8000)}`, // 토큰 제한 고려
-        },
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.3,
-    });
-
-    const analysis = JSON.parse(completion.choices[0].message.content || '{}');
-
-    // 벡터 임베딩 생성 (RAG용)
-    const embeddingResponse = await openai.embeddings.create({
-      model: 'text-embedding-3-small',
-      input: rawText,
-    });
-
-    const embedding = embeddingResponse.data[0].embedding;
-
-    // 임베딩을 청크로 나누어 저장 (향후 RAG 검색용)
-    // 여기서는 전체 텍스트를 하나의 청크로 저장
-    // 실제로는 텍스트를 의미 단위로 청크화하는 것이 좋음
-
-    return NextResponse.json({
-      success: true,
-      ...analysis,
-      embedding, // 클라이언트에서 저장하도록
-    });
+    // 백엔드 API URL
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://localhost:8000'
+    
+    // 백엔드의 공고 분석은 업로드 시 자동으로 수행되므로
+    // announcementId로 분석 결과를 조회
+    if (announcementId) {
+      try {
+        const analysisUrl = `${backendUrl}/api/v2/announcements/${announcementId}/analysis`
+        
+        const backendResponse = await fetch(analysisUrl, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        })
+        
+        if (backendResponse.ok) {
+          const backendData = await backendResponse.json()
+          
+          // 백엔드 응답을 프론트엔드 형식으로 변환
+          const analysis = backendData.data || backendData
+          return NextResponse.json({
+            success: true,
+            requiredSkills: analysis.required_skills || analysis.requiredSkills || [],
+            budgetMin: analysis.budget_min || analysis.budgetMin,
+            budgetMax: analysis.budget_max || analysis.budgetMax,
+            durationMonths: analysis.duration_months || analysis.durationMonths,
+            organizationName: analysis.organization_name || analysis.organizationName || analysis.agency,
+            deadline: analysis.deadline,
+            location: analysis.location,
+            summary: analysis.summary || analysis.title || '',
+            // 임베딩은 백엔드에서 자동 생성됨
+          })
+        } else {
+          // 분석 결과가 없으면 rawText로 직접 분석 요청
+          // 백엔드에 /api/v2/announcements/analyze 엔드포인트가 필요할 수 있음
+          return NextResponse.json(
+            { 
+              error: '분석 결과를 찾을 수 없습니다.',
+              hint: '공고 업로드 후 분석이 완료될 때까지 기다려주세요.'
+            },
+            { status: 404 }
+          )
+        }
+      } catch (backendError) {
+        console.error('백엔드 분석 결과 조회 실패:', backendError)
+        return NextResponse.json(
+          { 
+            error: '백엔드 API 호출 실패',
+            message: backendError instanceof Error ? backendError.message : String(backendError),
+            hint: `백엔드 서버(${backendUrl})가 실행 중인지 확인해주세요.`
+          },
+          { status: 500 }
+        )
+      }
+    }
+    
+    // announcementId가 없으면 에러
+    return NextResponse.json(
+      { error: 'announcementId가 필요합니다.' },
+      { status: 400 }
+    )
   } catch (error: any) {
     console.error('공고 분석 오류:', error);
     return NextResponse.json(
@@ -80,4 +86,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-

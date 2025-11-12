@@ -16,7 +16,6 @@ export default function PublicAnnouncementUpload({
   const [uploadType, setUploadType] = useState<'file' | 'url'>('file')
   const [file, setFile] = useState<File | null>(null)
   const [url, setUrl] = useState('')
-  const [title, setTitle] = useState('')
   const [loading, setLoading] = useState(false)
   const [step, setStep] = useState<'upload' | 'analyzing' | 'complete'>('upload')
   const [announcementId, setAnnouncementId] = useState<number | null>(null)
@@ -24,18 +23,10 @@ export default function PublicAnnouncementUpload({
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       setFile(e.target.files[0])
-      if (!title && e.target.files[0].name) {
-        setTitle(e.target.files[0].name.replace(/\.[^/.]+$/, ''))
-      }
     }
   }
 
   const handleSubmit = async () => {
-    if (!title.trim()) {
-      alert('공고 제목을 입력해주세요.')
-      return
-    }
-
     if (uploadType === 'file' && !file) {
       alert('파일을 선택해주세요.')
       return
@@ -45,6 +36,11 @@ export default function PublicAnnouncementUpload({
       alert('URL을 입력해주세요.')
       return
     }
+
+    // 파일명에서 자동으로 title 추출
+    const title = file 
+      ? file.name.replace(/\.[^/.]+$/, '') 
+      : url || '제목 없음'
 
     setLoading(true)
     setStep('upload')
@@ -60,13 +56,22 @@ export default function PublicAnnouncementUpload({
       setAnnouncementId(id)
       setStep('analyzing')
 
-      // 2. PDF 텍스트 추출 (파일인 경우)
+      // 2. 파일 텍스트 추출 (파일인 경우, 서버에서 자동 처리)
       let rawText = ''
       if (pdfUrl) {
-        rawText = await extractPdfText(pdfUrl)
+        // PDF URL이 있는 경우에만 텍스트 추출 시도
+        try {
+          rawText = await extractPdfText(pdfUrl)
+        } catch (e) {
+          // PDF가 아니거나 추출 실패 시 서버에서 처리됨
+          rawText = `파일 업로드 완료. 서버에서 자동으로 처리 중입니다...`
+        }
       } else if (url) {
         // URL인 경우 페이지 텍스트 추출 (실제로는 서버에서 처리)
         rawText = `URL: ${url}\n공고 내용을 분석 중입니다...`
+      } else if (file) {
+        // 파일 업로드 시 서버에서 자동 처리
+        rawText = `파일 업로드 완료. 서버에서 자동으로 처리 중입니다...`
       }
 
       // 3. AI 분석
@@ -87,7 +92,7 @@ export default function PublicAnnouncementUpload({
     <div className="space-y-6 p-6 border rounded-lg">
       <div>
         <h2 className="text-2xl font-bold mb-2">공공 프로젝트 공고 업로드</h2>
-        <p className="text-gray-600">PDF 파일 또는 URL을 업로드하여 AI 분석을 시작하세요.</p>
+        <p className="text-gray-600">파일(PDF, HWP, HWPX, HWPS) 또는 URL을 업로드하여 AI 분석을 시작하세요.</p>
       </div>
 
       {/* 업로드 타입 선택 */}
@@ -97,7 +102,7 @@ export default function PublicAnnouncementUpload({
           onClick={() => setUploadType('file')}
         >
           <FileText className="w-4 h-4 mr-2" />
-          PDF 파일
+          파일 업로드
         </Button>
         <Button
           variant={uploadType === 'url' ? 'default' : 'outline'}
@@ -108,25 +113,14 @@ export default function PublicAnnouncementUpload({
         </Button>
       </div>
 
-      {/* 제목 입력 */}
-      <div>
-        <label className="block text-sm font-medium mb-2">공고 제목</label>
-        <Input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="예: 전자정부 플랫폼 구축 사업"
-          disabled={loading}
-        />
-      </div>
-
       {/* 파일 업로드 */}
       {uploadType === 'file' && (
         <div>
-          <label className="block text-sm font-medium mb-2">PDF 파일 선택</label>
+          <label className="block text-sm font-medium mb-2">파일 선택 (PDF, HWP, HWPX, HWPS)</label>
           <div className="flex items-center gap-4">
             <Input
               type="file"
-              accept=".pdf"
+              accept=".pdf,.hwp,.hwpx,.hwps,.txt,.html,.htm"
               onChange={handleFileChange}
               disabled={loading}
               className="flex-1"
@@ -169,7 +163,7 @@ export default function PublicAnnouncementUpload({
       {/* 업로드 버튼 */}
       <Button
         onClick={handleSubmit}
-        disabled={loading || !title.trim() || (uploadType === 'file' && !file) || (uploadType === 'url' && !url)}
+        disabled={loading || (uploadType === 'file' && !file) || (uploadType === 'url' && !url)}
         className="w-full"
       >
         {loading ? (

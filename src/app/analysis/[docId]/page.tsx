@@ -12,8 +12,9 @@ import {
   AnalysisSummaryCard,
 } from '@/components/rag/AnalysisSummaryCard'
 import { Button } from '@/components/ui/button'
-import { Loader2, ArrowRight } from 'lucide-react'
+import { Loader2, ArrowRight, Send, Sparkles } from 'lucide-react'
 import type { QueryResponse } from '@/types/rag'
+import { MarkdownTable } from '@/components/rag/MarkdownTable'
 
 export default function AnalysisPage() {
   const params = useParams()
@@ -23,6 +24,14 @@ export default function AnalysisPage() {
   const [loading, setLoading] = useState(true)
   const [analysis, setAnalysis] = useState<QueryResponse | null>(null)
   const [docInfo, setDocInfo] = useState<any>(null)
+  const [customQuery, setCustomQuery] = useState('')
+  const [isCustomMode, setIsCustomMode] = useState(false)
+  const [examplePrompts] = useState([
+    '아래 공고 PDF와 과거 3년간 유사 공공 IT사업 데이터를 바탕으로, 주요 기술 요구사항과 적정 예산 범위, 예상 수행기간을 요약해줘.',
+    '아래 기업/프리랜서 이력 데이터 중 기술스택, 평점, 지역 경력을 비교해 상위 3개 팀 추천 이유를 표로 요약해줘.',
+    '이 공고의 핵심 요구사항, 예산 범위, 예상 기간을 요약해주세요.',
+    '과거 유사 프로젝트와 비교하여 이 공고의 난이도와 리스크를 분석해주세요.',
+  ])
 
   useEffect(() => {
     loadAnalysis()
@@ -57,17 +66,25 @@ export default function AnalysisPage() {
     }
   }
 
-  const loadAnalysis = async () => {
+  const loadAnalysis = async (query?: string, useCustomMode = false) => {
     try {
       setLoading(true)
+      const analysisQuery = query || '이 공고의 핵심 요구사항, 예산 범위, 예상 기간을 요약해주세요.'
+      const isTeamComparison = analysisQuery.includes('팀') && (analysisQuery.includes('비교') || analysisQuery.includes('추천'))
+      
+      // docId가 UUID인지 숫자인지 확인
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(docId)
+      const docIds = isUUID ? [docId] : [parseInt(docId)]
+      
       const response = await fetch('/api/rag/query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          mode: 'summary',
-          query: '이 공고의 핵심 요구사항, 예산 범위, 예상 기간을 요약해주세요.',
-          topK: 8,
-          docIds: [parseInt(docId)],
+          mode: useCustomMode ? 'custom' : 'summary',
+          query: analysisQuery,
+          topK: useCustomMode ? 16 : 8, // 커스텀 모드에서는 더 많은 청크 검색
+          withTeams: isTeamComparison,
+          docIds: docIds,
         }),
       })
 
@@ -78,6 +95,7 @@ export default function AnalysisPage() {
 
       const data = await response.json()
       setAnalysis(data)
+      setIsCustomMode(useCustomMode)
     } catch (error) {
       console.error('분석 로드 실패:', error)
       // 에러 상태 표시를 위해 null로 설정하지 않고 빈 결과로 설정
@@ -88,6 +106,16 @@ export default function AnalysisPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleCustomQuery = async () => {
+    if (!customQuery.trim()) return
+    await loadAnalysis(customQuery, true)
+  }
+
+  const handleExampleClick = (example: string) => {
+    setCustomQuery(example)
+    loadAnalysis(example, true)
   }
 
   // 분석 결과에서 정보 추출 (간단한 파싱)
@@ -140,6 +168,61 @@ export default function AnalysisPage() {
         totalSteps={5}
       />
       <main className="flex-1 container mx-auto px-6 py-8 max-w-7xl">
+        {/* 프롬프트 입력 섹션 */}
+        <div className="mb-6 rounded-2xl border border-slate-200 p-6 bg-white shadow-sm">
+          <div className="flex items-center gap-2 mb-4">
+            <Sparkles className="w-5 h-5 text-purple-500" />
+            <h2 className="text-xl font-semibold">커스텀 분석 프롬프트</h2>
+          </div>
+          
+          <div className="space-y-4">
+            <div className="flex gap-2">
+              <textarea
+                value={customQuery}
+                onChange={(e) => setCustomQuery(e.target.value)}
+                placeholder="예: 아래 공고 PDF와 과거 3년간 유사 공공 IT사업 데이터를 바탕으로, 주요 기술 요구사항과 적정 예산 범위, 예상 수행기간을 요약해줘."
+                className="flex-1 min-h-[100px] px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                    handleCustomQuery()
+                  }
+                }}
+              />
+              <Button
+                onClick={handleCustomQuery}
+                disabled={loading || !customQuery.trim()}
+                className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-6 py-3 h-auto"
+              >
+                {loading ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <>
+                    <Send className="w-5 h-5 mr-2" />
+                    분석
+                  </>
+                )}
+              </Button>
+            </div>
+
+            {/* 예시 프롬프트 */}
+            <div>
+              <p className="text-sm text-slate-600 mb-2">💡 예시 프롬프트:</p>
+              <div className="flex flex-wrap gap-2">
+                {examplePrompts.map((example, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => handleExampleClick(example)}
+                    disabled={loading}
+                    className="text-xs px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {example.substring(0, 40)}...
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
@@ -182,9 +265,20 @@ export default function AnalysisPage() {
               {analysis?.answer && (
                 <div className="rounded-2xl border border-slate-200 p-5 bg-white shadow-sm">
                   <h3 className="text-lg font-semibold mb-4">상세 분석</h3>
-                  <div className="prose max-w-none text-sm text-slate-700 whitespace-pre-wrap">
-                    {analysis.answer}
-                  </div>
+                  
+                  {/* 표가 있는 경우 표로 렌더링 */}
+                  <MarkdownTable content={analysis.answer} />
+                  
+                  {/* 일반 텍스트 렌더링 */}
+                  <div 
+                    className="prose max-w-none text-sm text-slate-700 whitespace-pre-wrap mt-4"
+                    dangerouslySetInnerHTML={{ 
+                      __html: analysis.answer
+                        .replace(/\|.+\|[\n\r]+/g, '') // 표 제거 (표는 별도 컴포넌트로 렌더링)
+                        .replace(/\n/g, '<br />')
+                        .replace(/\[id:(\d+)\]/g, '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono bg-blue-100 text-blue-700 border border-blue-200">[id:$1]</span>')
+                    }}
+                  />
                 </div>
               )}
             </div>

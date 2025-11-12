@@ -46,7 +46,7 @@ export interface IngestResponse {
 }
 
 export interface QueryRequest {
-  mode: 'summary' | 'estimate' | 'match'
+  mode: 'summary' | 'estimate' | 'match' | 'custom'
   query: string
   topK?: number
   withTeams?: boolean
@@ -75,5 +75,60 @@ export interface TeamUpdateRequest {
   teamId: number
   summary: string
   meta: Record<string, any>
+}
+
+export interface AnnouncementMetadata {
+  projectName: string
+  budget?: {
+    min?: number
+    max?: number
+    currency?: string
+  }
+  duration?: {
+    months?: number
+  }
+  techStack?: string[]
+  organization?: string
+  deadline?: string
+}
+
+export interface SearchFilters {
+  budgetMin?: number
+  budgetMax?: number
+  techStack?: string[]
+  region?: string
+}
+
+export interface AnalysisResult {
+  requirements: {
+    essential_skills: string[]
+    preferred_skills: string[]
+    team_size: number
+    difficulty: number
+  }
+  similar_bids: Array<{
+    announcement_id: string
+    similarity: number
+    budget?: number
+  }>
+  risk_analysis: {
+    difficulty: number
+    schedule_risk: string
+    budget_risk: string
+    team_risk: string
+  }
+  estimated_effort: {
+    frontend: number
+    backend: number
+    devops: number
+    total: number
+    team_size: number
+  }
+}
+
+export interface EstimateDocument {
+  team_id: string
+  content: string
+  created_at: string
 }
 

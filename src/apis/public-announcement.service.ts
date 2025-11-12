@@ -17,19 +17,22 @@ const checkSession = async (): Promise<string> => {
 };
 
 /**
- * 공고 업로드 (PDF 파일 또는 URL)
+ * 공고 업로드 (파일 또는 URL)
+ * title이 없으면 파일명에서 자동으로 추출합니다.
  */
 export const uploadAnnouncement = async (
   file: File | null,
   url: string | null,
-  title: string
+  title?: string
 ): Promise<{ id: number; pdfUrl?: string }> => {
   try {
     const userId = await checkSession();
 
     let pdfUrl: string | undefined;
+    // title이 없으면 파일명 또는 URL에서 자동 추출
+    const autoTitle = title || (file ? file.name.replace(/\.[^/.]+$/, '') : url || '제목 없음');
 
-    // PDF 파일 업로드
+    // 파일 업로드
     if (file) {
       const fileExt = file.name.split('.').pop();
       const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
@@ -57,7 +60,7 @@ export const uploadAnnouncement = async (
     const { data, error } = await supabase
       .from('public_announcements')
       .insert({
-        title,
+        title: autoTitle,
         source_url: url,
         pdf_file_url: pdfUrl,
         status: 'pending',

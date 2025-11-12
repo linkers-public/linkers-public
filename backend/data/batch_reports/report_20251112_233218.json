@@ -1,0 +1,24 @@
+{
+  "total": 2,
+  "success": 1,
+  "failed": 1,
+  "results": [
+    {
+      "file": "data\\announcements\\#물품공급 및 기술지원협약서_정보통신시스템 통합유지관리.pdf",
+      "status": "failed",
+      "announcement_id": null,
+      "error": "공고 처리 실패: 청크 생성 실패",
+      "started_at": "2025-11-12T23:31:56.424182",
+      "completed_at": "2025-11-12T23:31:58.957374"
+    },
+    {
+      "file": "data\\announcements\\0. 위치도 및 사진대지(장등천) ★.pdf",
+      "status": "success",
+      "announcement_id": "2df74124-4e02-4c1a-b0d6-3bb43dcf9080",
+      "error": null,
+      "started_at": "2025-11-12T23:31:58.957374",
+      "completed_at": "2025-11-12T23:32:18.302259"
+    }
+  ],
+  "processed_at": "2025-11-12T23:32:18.302259"
+}

@@ -1,26 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerSideClient } from '@/supabase/supabase-server';
-import OpenAI from 'openai';
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
 
 /**
  * POST /api/public-announcement/generate-estimate
  * 견적 자동 초안 생성
+ * 백엔드 Python API로 프록시 (향후 구현 필요)
  */
 export async function POST(request: NextRequest) {
   try {
-    if (!process.env.OPENAI_API_KEY) {
+    const { announcementId, teamId } = await request.json();
+
+    if (!announcementId || !teamId) {
       return NextResponse.json(
-        { error: 'OpenAI API 키가 설정되지 않았습니다.' },
-        { status: 500 }
+        { error: 'announcementId와 teamId가 필요합니다.' },
+        { status: 400 }
       );
     }
 
-    const { announcementId, teamId } = await request.json();
-
+    // 백엔드 API URL
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://localhost:8000'
+    
+    // 백엔드에 견적 생성 엔드포인트가 있다면 사용
+    // 없으면 Supabase에서 데이터를 가져와서 백엔드로 전달
     const supabase = await createServerSideClient();
 
     // 공고 정보 조회
@@ -54,78 +55,53 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 과거 유사 프로젝트 조회 (RAG용)
-    const { data: similarProjects } = await supabase
-      .from('counsel')
-      .select('*, estimate_version(*)')
-      .eq('feild', announcement.ai_analysis?.field || '')
-      .limit(5);
-
-    // GPT-4o-mini로 견적 초안 생성
-    const prompt = `
-다음 공공 프로젝트 공고를 기반으로 견적서 초안을 작성해주세요.
-
-## 공고 정보
-제목: ${announcement.title}
-요구 기술: ${(announcement.required_skills || []).join(', ')}
-예산 범위: ${announcement.budget_min ? `${announcement.budget_min.toLocaleString()}원` : ''} ~ ${announcement.budget_max ? `${announcement.budget_max.toLocaleString()}원` : ''}
-기간: ${announcement.duration_months ? `${announcement.duration_months}개월` : ''}
-내용: ${announcement.raw_text?.substring(0, 2000) || ''}
-
-## 팀 정보
-팀명: ${team.name}
-전문분야: ${(team.expertise || []).join(', ')}
-
-## 과거 유사 프로젝트 (참고용)
-${similarProjects?.map((p, i) => `
-프로젝트 ${i + 1}:
-- 제목: ${p.title}
-- 금액: ${p.cost || 'N/A'}
-- 기간: ${p.period || 'N/A'}
-`).join('\n') || '없음'}
-
-다음 JSON 형식으로 견적서 초안을 작성해주세요:
-{
-  "totalAmount": 총 금액 (숫자),
-  "startDate": 시작일 (YYYY-MM-DD),
-  "endDate": 종료일 (YYYY-MM-DD),
-  "detail": 상세 작업 범위 설명 (500자 이상),
-  "milestones": [
-    {
-      "title": "마일스톤 제목",
-      "detail": "상세 설명",
-      "paymentAmount": 금액 (숫자),
-      "startDate": "YYYY-MM-DD",
-      "endDate": "YYYY-MM-DD"
+    // 백엔드에 견적 생성 요청
+    // 백엔드에 /api/v2/announcements/{id}/estimate 엔드포인트 추가 필요
+    try {
+      const estimateUrl = `${backendUrl}/api/v2/announcements/${announcementId}/estimate`
+      
+      const backendResponse = await fetch(estimateUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          team_id: teamId,
+          announcement_data: {
+            title: announcement.title,
+            raw_text: announcement.raw_text,
+            required_skills: announcement.required_skills,
+            budget_min: announcement.budget_min,
+            budget_max: announcement.budget_max,
+            duration_months: announcement.duration_months,
+          },
+          team_data: {
+            name: team.name,
+            expertise: team.expertise,
+            description: team.description,
+          },
+        }),
+      })
+      
+      if (backendResponse.ok) {
+        const backendData = await backendResponse.json()
+        return NextResponse.json({
+          success: true,
+          ...backendData.data,
+        })
+      }
+    } catch (backendError) {
+      console.error('백엔드 견적 생성 실패:', backendError)
     }
-  ]
-}
-
-각 마일스톤에는 [id:##] 형식으로 참조 근거를 표기해주세요.
-`;
-
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        {
-          role: 'system',
-          content: '당신은 공공 프로젝트 견적서 작성 전문가입니다. 정확하고 상세한 견적서를 작성해주세요.',
-        },
-        {
-          role: 'user',
-          content: prompt,
-        },
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.3,
-    });
-
-    const draft = JSON.parse(completion.choices[0].message.content || '{}');
-
-    return NextResponse.json({
-      success: true,
-      ...draft,
-    });
+    
+    // 백엔드 엔드포인트가 없으면 에러 반환
+    return NextResponse.json(
+      { 
+        error: '백엔드 견적 생성 엔드포인트가 필요합니다.',
+        hint: '백엔드에 /api/v2/announcements/{id}/estimate 엔드포인트를 추가해주세요.'
+      },
+      { status: 501 }
+    )
   } catch (error: any) {
     console.error('견적 초안 생성 오류:', error);
     return NextResponse.json(
@@ -134,4 +110,3 @@ ${similarProjects?.map((p, i) => `
     );
   }
 }
-

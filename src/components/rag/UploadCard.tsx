@@ -14,10 +14,6 @@ export function UploadCard({ onUploadComplete }: UploadCardProps) {
   const [status, setStatus] = useState<UploadStatus>('idle')
   const [file, setFile] = useState<File | null>(null)
   const [source, setSource] = useState<'narajangter' | 'ntis' | 'pdf' | 'internal'>('pdf')
-  const [title, setTitle] = useState('')
-  const [organization, setOrganization] = useState('')
-  const [publishedAt, setPublishedAt] = useState('')
-  const [docUrl, setDocUrl] = useState('')
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<{ docId: number; chunks: number } | null>(null)
@@ -25,16 +21,21 @@ export function UploadCard({ onUploadComplete }: UploadCardProps) {
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     const droppedFile = e.dataTransfer.files[0]
-    if (droppedFile && droppedFile.type === 'application/pdf') {
-      setFile(droppedFile)
-      if (!title) setTitle(droppedFile.name)
+    // 모든 지원 파일 형식 허용
+    if (droppedFile) {
+      const ext = droppedFile.name.toLowerCase().split('.').pop()
+      const supportedExts = ['pdf', 'hwp', 'hwpx', 'hwps', 'txt', 'html', 'htm']
+      if (ext && supportedExts.includes(ext)) {
+        setFile(droppedFile)
+      } else {
+        setError('지원하지 않는 파일 형식입니다. PDF, HWP, HWPX, HWPS, TXT, HTML 파일만 가능합니다.')
+      }
     }
-  }, [title])
+  }, [])
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       setFile(e.target.files[0])
-      if (!title) setTitle(e.target.files[0].name)
     }
   }
 
@@ -52,10 +53,9 @@ export function UploadCard({ onUploadComplete }: UploadCardProps) {
       const formData = new FormData()
       formData.append('file', file)
       formData.append('source', source)
-      if (title) formData.append('title', title)
-      if (organization) formData.append('organization', organization)
-      if (publishedAt) formData.append('publishedAt', publishedAt)
-      if (docUrl) formData.append('docUrl', docUrl)
+      // 파일명에서 자동으로 title 추출 (서버에서도 처리하지만 클라이언트에서도 전달)
+      const title = file.name.replace(/\.[^/.]+$/, '')
+      formData.append('title', title)
 
       // 업로드 진행률 시뮬레이션
       const xhr = new XMLHttpRequest()
@@ -111,7 +111,7 @@ export function UploadCard({ onUploadComplete }: UploadCardProps) {
           >
             <input
               type="file"
-              accept=".pdf"
+              accept=".pdf,.hwp,.hwpx,.hwps,.txt,.html,.htm"
               onChange={handleFileSelect}
               className="hidden"
               id="file-input"
@@ -125,10 +125,10 @@ export function UploadCard({ onUploadComplete }: UploadCardProps) {
             >
               <Upload className="w-12 h-12 text-slate-400 mb-4" />
               <p className="text-sm text-slate-600 mb-2">
-                {file ? file.name : 'PDF 파일을 드래그하거나 클릭하여 선택'}
+                {file ? file.name : '파일을 드래그하거나 클릭하여 선택'}
               </p>
               <p className="text-xs text-slate-500">
-                최대 50MB, PDF 형식만 지원
+                최대 50MB, PDF/HWP/HWPX/HWPS/TXT/HTML 지원
               </p>
             </label>
           </div>
@@ -145,7 +145,6 @@ export function UploadCard({ onUploadComplete }: UploadCardProps) {
               <button
                 onClick={() => {
                   setFile(null)
-                  setTitle('')
                 }}
                 className="text-slate-400 hover:text-slate-600"
               >
@@ -197,9 +196,9 @@ export function UploadCard({ onUploadComplete }: UploadCardProps) {
           )}
         </div>
 
-        {/* 오른쪽: 메타데이터 입력 */}
+        {/* 오른쪽: 업로드 정보 및 버튼 */}
         <div>
-          <h3 className="text-lg font-semibold mb-4">메타데이터</h3>
+          <h3 className="text-lg font-semibold mb-4">업로드 정보</h3>
 
           <div className="space-y-4">
             <div>
@@ -210,58 +209,26 @@ export function UploadCard({ onUploadComplete }: UploadCardProps) {
                 className="w-full p-2 border border-slate-300 rounded-xl"
                 disabled={status !== 'idle'}
               >
-                <option value="pdf">PDF 파일</option>
+                <option value="pdf">파일 업로드</option>
                 <option value="narajangter">나라장터</option>
                 <option value="ntis">NTIS</option>
                 <option value="internal">내부 문서</option>
               </select>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium mb-2">제목</label>
-              <input
-                type="text"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                className="w-full p-2 border border-slate-300 rounded-xl"
-                placeholder="문서 제목"
-                disabled={status !== 'idle'}
-              />
-            </div>
+            {file && (
+              <div className="p-3 bg-slate-50 rounded-lg">
+                <p className="text-sm font-medium text-slate-700 mb-1">파일 정보</p>
+                <p className="text-xs text-slate-600">제목: {file.name.replace(/\.[^/.]+$/, '')}</p>
+                <p className="text-xs text-slate-600">크기: {(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                <p className="text-xs text-slate-600">형식: {file.name.split('.').pop()?.toUpperCase()}</p>
+              </div>
+            )}
 
-            <div>
-              <label className="block text-sm font-medium mb-2">기관명</label>
-              <input
-                type="text"
-                value={organization}
-                onChange={(e) => setOrganization(e.target.value)}
-                className="w-full p-2 border border-slate-300 rounded-xl"
-                placeholder="발주기관명"
-                disabled={status !== 'idle'}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-2">게시일</label>
-              <input
-                type="date"
-                value={publishedAt}
-                onChange={(e) => setPublishedAt(e.target.value)}
-                className="w-full p-2 border border-slate-300 rounded-xl"
-                disabled={status !== 'idle'}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium mb-2">URL (선택)</label>
-              <input
-                type="url"
-                value={docUrl}
-                onChange={(e) => setDocUrl(e.target.value)}
-                className="w-full p-2 border border-slate-300 rounded-xl"
-                placeholder="https://..."
-                disabled={status !== 'idle'}
-              />
+            <div className="text-xs text-slate-500 space-y-1">
+              <p>• 파일명이 자동으로 제목으로 사용됩니다</p>
+              <p>• 서버에서 파일 형식을 자동으로 감지합니다</p>
+              <p>• 메타데이터는 파일 내용에서 자동 추출됩니다</p>
             </div>
 
             <Button

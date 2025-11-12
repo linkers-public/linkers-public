@@ -4,6 +4,7 @@
  */
 
 import pdfParse from 'pdf-parse'
+import type { ExtractionResult } from './extractor'
 
 export interface ExtractedMetadata {
   budget?: {
