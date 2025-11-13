@@ -282,4 +282,135 @@ class SupabaseVectorStore:
                 "score": score
             })\
             .execute()
+    
+    def upsert_team_embedding(
+        self,
+        team_id: int,
+        summary: str,
+        meta: Dict[str, Any] = None,
+        embedding: Optional[List[float]] = None
+    ):
+        """
+        팀 임베딩 저장/업데이트
+        
+        Args:
+            team_id: 팀 ID
+            summary: 팀 요약 텍스트 (임베딩 생성용)
+            meta: 팀 메타데이터 (기술 스택, 지역, 평점 등)
+            embedding: 임베딩 벡터 (None이면 자동 생성)
+        
+        Returns:
+            성공 여부
+        """
+        self._ensure_initialized()
+        
+        # 임베딩이 없으면 생성 (generator 사용)
+        if embedding is None:
+            from .generator_v2 import LLMGenerator
+            generator = LLMGenerator()
+            embedding = generator.embed_one(summary)
+        
+        # 팀 임베딩 저장/업데이트
+        payload = {
+            "team_id": team_id,
+            "summary": summary,
+            "meta": meta or {},
+            "embedding": embedding,
+            "updated_at": "now()"
+        }
+        
+        self.sb.table("team_embeddings")\
+            .upsert(payload, on_conflict="team_id")\
+            .execute()
+        
+        return True
+    
+    def search_similar_teams(
+        self,
+        query_embedding: List[float],
+        top_k: int = 5,
+        filters: Optional[Dict[str, Any]] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        유사 팀 검색 (벡터 코사인 유사도)
+        
+        Args:
+            query_embedding: 쿼리 임베딩 벡터
+            top_k: 반환할 최대 개수
+            filters: 메타데이터 필터 (예: {"specialty": ["웹개발"]})
+        
+        Returns:
+            [{
+                team_id: int,
+                summary: str,
+                similarity: float,
+                meta: Dict
+            }]
+        """
+        self._ensure_initialized()
+        
+        # Supabase RPC 함수 사용 (있으면)
+        try:
+            rpc_params = {
+                "query_embedding": query_embedding,
+                "match_threshold": 0.7,
+                "match_count": top_k,
+                "filters": filters or {}
+            }
+            
+            result = self.sb.rpc(
+                "match_team_embeddings",
+                rpc_params
+            ).execute()
+            
+            return result.data if result.data else []
+        except Exception as e:
+            # RPC 함수가 없으면 직접 SQL 쿼리 (간단한 버전)
+            print(f"[경고] 팀 벡터 검색 RPC 함수가 없습니다: {str(e)}")
+            print("[팁] Supabase에 'match_team_embeddings' RPC 함수를 생성하거나 직접 쿼리를 구현하세요.")
+            
+            # 기본 검색 (모든 팀 조회 후 클라이언트 사이드에서 필터링)
+            # 실제로는 RPC 함수를 사용하는 것이 권장됩니다
+            result = self.sb.table("team_embeddings")\
+                .select("team_id, summary, meta, embedding")\
+                .limit(100)\
+                .execute()
+            
+            if not result.data:
+                return []
+            
+            # 간단한 유사도 계산 (코사인 유사도)
+            import numpy as np
+            
+            query_vec = np.array(query_embedding)
+            similarities = []
+            
+            for team in result.data:
+                if team.get("embedding"):
+                    team_vec = np.array(team["embedding"])
+                    # 코사인 유사도
+                    similarity = np.dot(query_vec, team_vec) / (
+                        np.linalg.norm(query_vec) * np.linalg.norm(team_vec)
+                    )
+                    similarities.append({
+                        "team_id": team["team_id"],
+                        "summary": team["summary"],
+                        "similarity": float(similarity),
+                        "meta": team.get("meta", {})
+                    })
+            
+            # 유사도 순으로 정렬하고 top_k 반환
+            similarities.sort(key=lambda x: x["similarity"], reverse=True)
+            return similarities[:top_k]
+    
+    def get_team_embedding(self, team_id: int) -> Optional[Dict[str, Any]]:
+        """팀 임베딩 조회"""
+        self._ensure_initialized()
+        result = self.sb.table("team_embeddings")\
+            .select("*")\
+            .eq("team_id", team_id)\
+            .single()\
+            .execute()
+        
+        return result.data if result.data else None
 

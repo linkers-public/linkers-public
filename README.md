@@ -72,9 +72,11 @@ linkers-public/
 │   ├── models/                 # 데이터 모델
 │   ├── scripts/                # 배치 처리 스크립트
 │   ├── data/                   # 데이터 저장소
-│   │   ├── announcements/     # 공고 문서 폴더
+│   │   ├── bids/               # 견적서 RAG용 데이터 (공공조달)
+│   │   ├── companies/          # 기업 추천용 데이터
+│   │   ├── indexed/            # 인덱싱 완료 리포트
 │   │   ├── sample_data/        # 샘플 데이터
-│   │   └── chroma_db/          # 벡터 DB (자동 생성)
+│   │   └── temp/               # 임시 파일
 │   ├── main.py                 # FastAPI 메인 앱
 │   ├── config.py               # 설정 관리
 │   └── requirements.txt        # Python 의존성
@@ -216,7 +218,7 @@ python -m uvicorn main:app --reload
 문서를 벡터 DB에 인덱싱하려면:
 
 ```bash
-# PDF 파일을 backend/data/announcements/ 폴더에 넣고
+# PDF 파일을 backend/data/bids/ 폴더에 넣고
 python scripts/simple_ingest.py
 ```
 
@@ -371,7 +373,7 @@ python -m uvicorn main:app --reload
 #### 6. 문서 인덱싱 (선택)
 
 ```bash
-# PDF 파일을 backend/data/announcements/ 폴더에 넣고
+# PDF 파일을 backend/data/bids/ 폴더에 넣고
 python scripts/simple_ingest.py
 ```
 
@@ -426,7 +428,7 @@ curl http://localhost:8000/api/health
 
 #### 2단계: 문서 준비 및 인덱싱
 ```bash
-# PDF 파일을 backend/data/announcements/ 폴더에 넣고
+# PDF 파일을 backend/data/bids/ 폴더에 넣고
 cd backend
 python scripts/simple_ingest.py
 ```
@@ -478,7 +480,7 @@ SELECT COUNT(*) FROM announcement_chunks;  -- 1 이상이어야 함
 
 ```bash
 # 1. 공고 PDF들을 폴더에 모음
-mkdir -p backend/data/announcements
+mkdir -p backend/data/bids
 # PDF 파일들을 복사
 
 # 2. 인덱싱 실행
@@ -490,12 +492,12 @@ python scripts/simple_ingest.py
 
 ```bash
 # 1. 공고 PDF들을 폴더에 모음
-mkdir -p backend/data/announcements
+mkdir -p backend/data/bids
 # PDF 파일들을 복사
 
 # 2. 배치 처리 실행
 cd backend
-python scripts/batch_ingest.py data/announcements
+python scripts/batch_ingest.py data/bids
 ```
 
 #### 방법 3: 폴더 감시 (자동 인입)
@@ -503,7 +505,7 @@ python scripts/batch_ingest.py data/announcements
 ```bash
 # 1. 감시 폴더 설정
 cd backend
-python scripts/watch_folder.py data/announcements
+python scripts/watch_folder.py data/bids
 
 # 2. 새 파일을 폴더에 드롭
 # 자동으로 처리됨!
@@ -537,33 +539,33 @@ backend/data/
 
 ```bash
 # 기본 (모든 지원 형식 처리: PDF, TXT, HWP, HWPX, HTML)
-python scripts/batch_ingest.py ./data/announcements
+python scripts/batch_ingest.py ./data/bids
 
 # 특정 형식만 처리
-python scripts/batch_ingest.py ./data/announcements --extensions .pdf
-python scripts/batch_ingest.py ./data/announcements --extensions .hwpx
-python scripts/batch_ingest.py ./data/announcements --extensions .html .htm
+python scripts/batch_ingest.py ./data/bids --extensions .pdf
+python scripts/batch_ingest.py ./data/bids --extensions .hwpx
+python scripts/batch_ingest.py ./data/bids --extensions .html .htm
 
 # HWPX와 HTML 함께 처리
-python scripts/batch_ingest.py ./data/announcements --extensions .hwpx .html
+python scripts/batch_ingest.py ./data/bids --extensions .hwpx .html
 
 # 병렬 처리 (빠름)
-python scripts/batch_ingest.py ./data/announcements --parallel --max-workers 5
+python scripts/batch_ingest.py ./data/bids --parallel --max-workers 5
 
 # 리포트 저장
-python scripts/batch_ingest.py ./data/announcements --report ./reports/batch.json
+python scripts/batch_ingest.py ./data/bids --report ./reports/batch.json
 ```
 
 #### 폴더 감시
 
 ```bash
 # 기본 (모든 지원 형식 감시: PDF, TXT, HWP, HWPX, HTML)
-python scripts/watch_folder.py ./data/announcements
+python scripts/watch_folder.py ./data/bids
 
 # 특정 형식만 감시
-python scripts/watch_folder.py ./data/announcements --extensions .pdf
-python scripts/watch_folder.py ./data/announcements --extensions .hwpx
-python scripts/watch_folder.py ./data/announcements --extensions .html .htm
+python scripts/watch_folder.py ./data/bids --extensions .pdf
+python scripts/watch_folder.py ./data/bids --extensions .hwpx
+python scripts/watch_folder.py ./data/bids --extensions .html .htm
 ```
 
 ### 파일명 규칙
@@ -861,10 +863,10 @@ source venv/bin/activate
 ```bash
 cd backend
 # 모든 지원 형식 처리
-python scripts/batch_ingest.py data/announcements
+python scripts/batch_ingest.py data/bids
 
 # 특정 형식만 처리 (예: HWPX만)
-python scripts/batch_ingest.py data/announcements --extensions .hwpx
+python scripts/batch_ingest.py data/bids --extensions .hwpx
 ```
 
 ### `backend/data/sample_data/`

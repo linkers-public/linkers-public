@@ -254,4 +254,63 @@ class Orchestrator:
             return result.data[0]
         
         return None
+    
+    def match_teams_for_announcement(
+        self,
+        announcement_id: str,
+        top_k: int = 5
+    ) -> List[Dict[str, Any]]:
+        """
+        공고에 맞는 팀 매칭
+        
+        Args:
+            announcement_id: 공고 ID
+            top_k: 반환할 최대 팀 수
+        
+        Returns:
+            매칭된 팀 리스트 (유사도 순)
+        """
+        try:
+            # 1. 공고 분석 결과 조회
+            analysis = self.get_announcement_analysis(announcement_id)
+            
+            if not analysis:
+                # 분석 결과가 없으면 공고 본문으로 검색
+                text = self.store.get_announcement_body(announcement_id)
+                if not text:
+                    return []
+                
+                # 공고 본문 요약 (간단히 처음 500자 사용)
+                query_text = text[:500]
+            else:
+                # 분석 결과에서 요구사항 추출
+                result = analysis.get("result", {})
+                requirements = []
+                
+                if result.get("essential_skills"):
+                    requirements.extend(result["essential_skills"])
+                if result.get("preferred_skills"):
+                    requirements.extend(result["preferred_skills"])
+                if result.get("project_name"):
+                    requirements.append(result["project_name"])
+                
+                query_text = " ".join(requirements) if requirements else result.get("summary", "")
+            
+            if not query_text:
+                return []
+            
+            # 2. 쿼리 임베딩 생성
+            query_embedding = self.generator.embed_one(query_text)
+            
+            # 3. 유사 팀 검색
+            matched_teams = self.store.search_similar_teams(
+                query_embedding=query_embedding,
+                top_k=top_k
+            )
+            
+            return matched_teams
+            
+        except Exception as e:
+            print(f"[팀 매칭] 오류: {str(e)}")
+            return []
 

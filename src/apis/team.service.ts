@@ -465,6 +465,38 @@ export const createDefaultTeam = async () => {
     throw teamError
   }
 
+  // 팀 임베딩 자동 생성 (비동기, 실패해도 팀 생성은 성공)
+  if (newTeam) {
+    try {
+      const { generateTeamSummarySimple } = await import('@/lib/rag/team-summary')
+      const summaryData = generateTeamSummarySimple({
+        name: newTeam.name,
+        bio: newTeam.bio,
+        specialty: newTeam.specialty,
+        sub_specialty: newTeam.sub_specialty,
+        prefered: newTeam.prefered,
+      })
+
+      // 백엔드 API로 임베딩 저장
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://localhost:8000'
+      await fetch(`${backendUrl}/api/v2/teams/embedding`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          team_id: String(newTeam.id),
+          summary: summaryData.summary,
+          meta: JSON.stringify(summaryData.meta),
+        }),
+      }).catch(err => {
+        console.warn('[팀 임베딩] 자동 생성 실패 (무시됨):', err)
+      })
+    } catch (err) {
+      console.warn('[팀 임베딩] 자동 생성 중 오류 (무시됨):', err)
+    }
+  }
+
   return { data: newTeam, error: null }
 }
 
@@ -536,6 +568,37 @@ export const updateTeam = async (
     .single()
 
   if (error) throw error
+
+  // 팀 임베딩 자동 업데이트 (비동기, 실패해도 팀 업데이트는 성공)
+  try {
+    const { generateTeamSummarySimple } = await import('@/lib/rag/team-summary')
+    const summaryData = generateTeamSummarySimple({
+      name: updatedTeam.name,
+      bio: updatedTeam.bio,
+      specialty: updatedTeam.specialty,
+      sub_specialty: updatedTeam.sub_specialty,
+      prefered: updatedTeam.prefered,
+    })
+
+    // 백엔드 API로 임베딩 저장
+    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://localhost:8000'
+    await fetch(`${backendUrl}/api/v2/teams/embedding`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        team_id: String(teamId),
+        summary: summaryData.summary,
+        meta: JSON.stringify(summaryData.meta),
+      }),
+    }).catch(err => {
+      console.warn('[팀 임베딩] 자동 업데이트 실패 (무시됨):', err)
+    })
+  } catch (err) {
+    console.warn('[팀 임베딩] 자동 업데이트 중 오류 (무시됨):', err)
+  }
+
   return updatedTeam
 }
 

@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     use_local_embedding: bool = True  # sentence-transformers 사용 (무료)
     local_embedding_model: str = "BAAI/bge-small-en-v1.5"  # 로컬 임베딩 모델: bge-small (빠름) 또는 bge-m3 (다국어)
     
+    # 문서/기업 임베딩 모델 구분 (선택사항)
+    doc_embed_model: str = "BAAI/bge-m3"  # 문서 임베딩: 공고문·제안요청서·과업지시서 (1024차원, 다국어)
+    company_embed_model: str = "BAAI/bge-small-en-v1.5"  # 기업 임베딩: 기업/팀 기술스택 및 수행이력 (384차원, 빠름)
+    
     # LLM Model (Ollama 사용)
     llm_temperature: float = 0.1
     disable_llm: bool = False  # True면 LLM 분석 비활성화 (개발/테스트용)

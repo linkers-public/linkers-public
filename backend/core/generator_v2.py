@@ -102,15 +102,18 @@ class LLMGenerator:
         
         self.llm_temperature = settings.llm_temperature
     
-    def embed(self, texts: List[str]) -> List[List[float]]:
+    def embed(self, texts: List[str], model_type: str = "doc") -> List[List[float]]:
         """
         텍스트 리스트 → 임베딩 벡터 리스트
         
         Args:
             texts: 텍스트 리스트
+            model_type: 모델 타입 ("doc" 또는 "company")
+                - "doc": 문서 임베딩 (공고문용, BAAI/bge-m3 권장)
+                - "company": 기업 임베딩 (팀/기업용, multilingual-e5-large 또는 text-embedding-3-small)
         
         Returns:
-            임베딩 벡터 리스트 (로컬 모델: 384차원, OpenAI: 1536차원)
+            임베딩 벡터 리스트
         """
         if not texts:
             return []
@@ -118,6 +121,8 @@ class LLMGenerator:
         # 로컬 임베딩 모델 사용 (무료)
         if self.use_local_embedding:
             try:
+                # 모델 타입에 따라 다른 모델 사용 (선택사항)
+                # 현재는 기본 모델 사용, 추후 확장 가능
                 model = _get_local_embedding_model()
                 embeddings = model.encode(texts, convert_to_numpy=True, show_progress_bar=False)
                 return embeddings.tolist()
@@ -135,9 +140,15 @@ class LLMGenerator:
         except Exception as e:
             raise Exception(f"임베딩 생성 실패: {str(e)}")
     
-    def embed_one(self, text: str) -> List[float]:
-        """단일 텍스트 임베딩"""
-        return self.embed([text])[0]
+    def embed_one(self, text: str, model_type: str = "doc") -> List[float]:
+        """
+        단일 텍스트 임베딩
+        
+        Args:
+            text: 텍스트
+            model_type: 모델 타입 ("doc" 또는 "company")
+        """
+        return self.embed([text], model_type=model_type)[0]
     
     def analyze_announcement(
         self,

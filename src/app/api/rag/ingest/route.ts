@@ -19,8 +19,8 @@ export async function POST(request: NextRequest) {
     let response: Response
     try {
       response = await fetch(backendEndpoint, {
-        method: 'POST',
-        body: formData,
+      method: 'POST',
+      body: formData,
         // 타임아웃 설정 (60초)
         signal: AbortSignal.timeout(60000),
       })

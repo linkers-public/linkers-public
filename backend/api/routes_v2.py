@@ -494,6 +494,118 @@ async def search_announcements(
         )
 
 
+@router_v2.post("/teams/embedding", response_model=APIResponse)
+async def upsert_team_embedding(
+    team_id: int = Form(...),
+    summary: str = Form(...),
+    meta: Optional[str] = Form(None),  # JSON 문자열
+):
+    """
+    팀 임베딩 저장/업데이트
+    
+    Args:
+        team_id: 팀 ID
+        summary: 팀 요약 텍스트
+        meta: 팀 메타데이터 (JSON 문자열)
+    """
+    try:
+        store = get_orchestrator().store
+        
+        # meta 파싱
+        meta_dict = {}
+        if meta:
+            try:
+                meta_dict = json.loads(meta)
+            except:
+                pass
+        
+        store.upsert_team_embedding(
+            team_id=team_id,
+            summary=summary,
+            meta=meta_dict
+        )
+        
+        return APIResponse(
+            status="success",
+            message="팀 임베딩 저장 완료",
+            data={"team_id": team_id}
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"팀 임베딩 저장 실패: {str(e)}"
+        )
+
+
+@router_v2.get("/teams/search")
+async def search_teams(
+    query: str,
+    top_k: int = 5
+):
+    """
+    유사 팀 검색
+    
+    Args:
+        query: 검색 쿼리 텍스트
+        top_k: 반환할 최대 개수
+    """
+    try:
+        orchestrator = get_orchestrator()
+        
+        # 쿼리 임베딩 생성
+        query_embedding = orchestrator.generator.embed_one(query)
+        
+        # 팀 검색
+        results = orchestrator.store.search_similar_teams(
+            query_embedding=query_embedding,
+            top_k=top_k
+        )
+        
+        return APIResponse(
+            status="success",
+            message=f"{len(results)}개 팀 검색 완료",
+            data={"teams": results}
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"팀 검색 실패: {str(e)}"
+        )
+
+
+@router_v2.get("/announcements/{announcement_id}/match-teams")
+async def match_teams_for_announcement(
+    announcement_id: str,
+    top_k: int = 5
+):
+    """
+    공고에 맞는 팀 매칭
+    
+    Args:
+        announcement_id: 공고 ID
+        top_k: 반환할 최대 팀 수
+    """
+    try:
+        orchestrator = get_orchestrator()
+        
+        # 팀 매칭
+        matched_teams = orchestrator.match_teams_for_announcement(
+            announcement_id=announcement_id,
+            top_k=top_k
+        )
+        
+        return APIResponse(
+            status="success",
+            message=f"{len(matched_teams)}개 팀 매칭 완료",
+            data={"teams": matched_teams}
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"팀 매칭 실패: {str(e)}"
+        )
+
+
 @router.get("/health")
 async def health_check():
     """헬스 체크"""
