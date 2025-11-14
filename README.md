@@ -849,8 +849,8 @@ source venv/bin/activate
 
 ## 📝 데이터 폴더 설명
 
-### `backend/data/announcements/`
-공고 문서 파일(PDF, HWPX, HWP, HTML, TXT)을 넣고 배치 처리 스크립트를 실행하면 자동으로 RAG에 반영됩니다.
+### `backend/data/bids/`
+견적서 RAG용 데이터 폴더입니다. 공고 문서 파일(PDF, HWPX, HWP, HTML, TXT, CSV)을 넣고 배치 처리 스크립트를 실행하면 자동으로 RAG에 반영됩니다.
 
 **지원 형식**:
 - PDF (`.pdf`)
@@ -858,6 +858,7 @@ source venv/bin/activate
 - HWP (`.hwp`) - 바이너리 형식, 외부 변환 서비스 권장
 - HTML (`.html`, `.htm`)
 - TXT (`.txt`)
+- CSV (`.csv`) - 입찰공고 내역, 통합 입찰공고 내역 등
 
 **사용 방법:**
 ```bash
@@ -867,6 +868,19 @@ python scripts/batch_ingest.py data/bids
 
 # 특정 형식만 처리 (예: HWPX만)
 python scripts/batch_ingest.py data/bids --extensions .hwpx
+
+# CSV 파일 처리
+python scripts/batch_ingest.py data/bids --extensions .csv
+```
+
+### `backend/data/companies/`
+기업 추천용 데이터 폴더입니다. 기업 등록 데이터, R&D 과제 데이터, 수행이력 등을 저장합니다.
+
+**사용 방법:**
+```bash
+cd backend
+# 기업 데이터 처리 (추후 구현)
+python scripts/batch_ingest.py data/companies
 ```
 
 ### `backend/data/sample_data/`
