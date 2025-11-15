@@ -1,13 +1,23 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Header from '@/components/layout/Header'
 import Footer from '@/components/layout/Footer'
 import { Button } from '@/components/ui/button'
-import { Loader2, Clock, DollarSign, Briefcase, Code, AlertTriangle } from 'lucide-react'
+import { Textarea } from '@/components/ui/textarea'
+import { Loader2, Clock, DollarSign, Briefcase, Code, AlertTriangle, Send, MessageSquare, Sparkles, Bot, User } from 'lucide-react'
 import { RiskGauge } from '@/components/contract/RiskGauge'
 import { ContractCategoryCard, ContractCategoryData } from '@/components/contract/ContractCategoryCard'
+import { MarkdownRenderer } from '@/components/rag/MarkdownRenderer'
+import type { QueryResponse } from '@/types/rag'
+
+interface Message {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  timestamp: Date
+}
 
 export default function AnalysisPage() {
   const params = useParams()
@@ -16,6 +26,22 @@ export default function AnalysisPage() {
 
   const [loading, setLoading] = useState(true)
   const [riskScore, setRiskScore] = useState(65) // 전체 위험도 (0-100)
+  
+  // 채팅 관련 상태
+  const [messages, setMessages] = useState<Message[]>([])
+  const [inputMessage, setInputMessage] = useState('')
+  const [chatLoading, setChatLoading] = useState(false)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const chatContainerRef = useRef<HTMLDivElement>(null)
+
+  // 미리 생성된 질문 프롬프트
+  const suggestedQuestions = [
+    '이 계약서의 주요 위험 요소는 무엇인가요?',
+    '근로시간 조항에 문제가 있나요?',
+    '임금 지급 조건은 적절한가요?',
+    '해고 관련 조항은 법적으로 유효한가요?',
+    '이 계약서에서 수정이 필요한 부분은?',
+  ]
   const [categories, setCategories] = useState<ContractCategoryData[]>([
     {
       category: '근로시간/휴게',
@@ -71,6 +97,77 @@ export default function AnalysisPage() {
     }, 2000)
   }, [docId])
 
+  // 메시지 전송
+  const handleSendMessage = async (question?: string) => {
+    const query = question || inputMessage.trim()
+    if (!query) return
+
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      role: 'user',
+      content: query,
+      timestamp: new Date(),
+    }
+
+    setMessages((prev) => [...prev, userMessage])
+    setInputMessage('')
+    setChatLoading(true)
+
+    try {
+      const response = await fetch('/api/rag/query', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          mode: 'custom',
+          query: query,
+          topK: 8,
+          withTeams: false,
+          docIds: docId && !isNaN(Number(docId)) ? [Number(docId)] : undefined,
+        }),
+      })
+
+      if (response.ok) {
+        const data: QueryResponse = await response.json()
+        const assistantMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: data.answer || '답변을 생성할 수 없습니다.',
+          timestamp: new Date(),
+        }
+        setMessages((prev) => [...prev, assistantMessage])
+      } else {
+        throw new Error('답변 생성 실패')
+      }
+    } catch (error) {
+      console.error('메시지 전송 실패:', error)
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: '답변을 생성하는 중 오류가 발생했습니다. 다시 시도해주세요.',
+        timestamp: new Date(),
+      }
+      setMessages((prev) => [...prev, errorMessage])
+    } finally {
+      setChatLoading(false)
+    }
+  }
+
+  // 스크롤을 하단으로 이동
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [messages])
+
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault()
+      handleSendMessage()
+    }
+  }
+
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -125,6 +222,158 @@ export default function AnalysisPage() {
             >
               상황별 상담 가이드 보기
             </Button>
+          </div>
+        )}
+
+        {/* AI 상담 채팅 UI */}
+        {!loading && (
+          <div className="mt-12 pt-8 border-t border-slate-200">
+            <div className="mb-6">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <MessageSquare className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold text-slate-900">AI 상담</h2>
+                  <p className="text-sm text-slate-600">계약서에 대해 궁금한 점을 질문하세요</p>
+                </div>
+              </div>
+            </div>
+
+            {/* 추천 질문 */}
+            {messages.length === 0 && (
+              <div className="mb-6">
+                <div className="flex items-center gap-2 mb-3">
+                  <Sparkles className="w-4 h-4 text-blue-500" />
+                  <span className="text-sm font-medium text-slate-700">추천 질문</span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {suggestedQuestions.map((question, index) => (
+                    <button
+                      key={index}
+                      onClick={() => handleSendMessage(question)}
+                      disabled={chatLoading}
+                      className="px-4 py-2 text-sm bg-white border border-slate-200 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-left"
+                    >
+                      {question}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 채팅 영역 */}
+            <div
+              ref={chatContainerRef}
+              className="border border-slate-200 rounded-xl bg-white shadow-sm overflow-hidden"
+            >
+              {/* 메시지 목록 */}
+              <div className="h-[500px] overflow-y-auto p-6 space-y-6 bg-gradient-to-b from-slate-50 to-white">
+                {messages.length === 0 ? (
+                  <div className="flex items-center justify-center h-full text-slate-400">
+                    <div className="text-center">
+                      <MessageSquare className="w-16 h-16 mx-auto mb-4 opacity-30" />
+                      <p className="text-base">위의 추천 질문을 선택하거나</p>
+                      <p className="text-base">아래 입력창에 직접 질문을 입력해주세요.</p>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {messages.map((message) => (
+                      <div
+                        key={message.id}
+                        className={`flex gap-4 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                      >
+                        {/* 아바타 */}
+                        <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
+                          message.role === 'user' 
+                            ? 'bg-blue-600 text-white' 
+                            : 'bg-slate-200 text-slate-600'
+                        }`}>
+                          {message.role === 'user' ? (
+                            <User className="w-4 h-4" />
+                          ) : (
+                            <Bot className="w-4 h-4" />
+                          )}
+                        </div>
+
+                        {/* 메시지 내용 */}
+                        <div className={`flex-1 max-w-[75%] ${message.role === 'user' ? 'items-end' : 'items-start'} flex flex-col gap-1`}>
+                          <div
+                            className={`rounded-2xl px-4 py-3 ${
+                              message.role === 'user'
+                                ? 'bg-blue-600 text-white rounded-br-sm'
+                                : 'bg-white border border-slate-200 text-slate-900 rounded-bl-sm shadow-sm'
+                            }`}
+                          >
+                            {message.role === 'assistant' ? (
+                              <div className="prose prose-sm max-w-none">
+                                <MarkdownRenderer content={message.content} />
+                              </div>
+                            ) : (
+                              <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</p>
+                            )}
+                          </div>
+                          <p className={`text-xs ${message.role === 'user' ? 'text-slate-500' : 'text-slate-400'}`}>
+                            {message.timestamp.toLocaleTimeString('ko-KR', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                    {chatLoading && (
+                      <div className="flex gap-4 justify-start">
+                        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center">
+                          <Bot className="w-4 h-4" />
+                        </div>
+                        <div className="bg-white border border-slate-200 rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm">
+                          <div className="flex items-center gap-2">
+                            <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                            <span className="text-sm text-slate-600">답변 생성 중...</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    <div ref={messagesEndRef} />
+                  </>
+                )}
+              </div>
+
+              {/* 입력 영역 */}
+              <div className="border-t border-slate-200 p-4 bg-white">
+                <div className="flex gap-3">
+                  <Textarea
+                    value={inputMessage}
+                    onChange={(e) => setInputMessage(e.target.value)}
+                    onKeyDown={handleKeyPress}
+                    placeholder="질문을 입력하세요... (Ctrl+Enter 또는 Cmd+Enter로 전송)"
+                    disabled={chatLoading}
+                    className="flex-1 min-h-[80px] max-h-[200px] resize-none"
+                    rows={3}
+                  />
+                  <Button
+                    onClick={() => handleSendMessage()}
+                    disabled={chatLoading || !inputMessage.trim()}
+                    size="lg"
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-6 h-auto self-end"
+                  >
+                    {chatLoading ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <>
+                        <Send className="w-5 h-5 mr-2" />
+                        전송
+                      </>
+                    )}
+                  </Button>
+                </div>
+                <p className="text-xs text-slate-400 mt-2 ml-1">
+                  Shift+Enter로 줄바꿈, Ctrl+Enter(또는 Cmd+Enter)로 전송
+                </p>
+              </div>
+            </div>
           </div>
         )}
       </main>
