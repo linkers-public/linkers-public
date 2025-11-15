@@ -139,6 +139,9 @@ npm run dev
 
 ### 3. Backend 설정
 
+> **⚠️ 중요**: `venv` 폴더는 `.gitignore`에 포함되어 있어 GitHub에 올라가지 않습니다.  
+> 따라서 **처음 클론한 경우** 반드시 가상환경을 새로 생성하고 의존성을 설치해야 합니다.
+
 #### Python 버전 확인
 Python 3.9 이상이 필요합니다:
 ```bash
@@ -147,22 +150,27 @@ python --version
 
 #### 가상환경 생성 및 활성화
 
-**Windows:**
+**처음 클론한 경우 (필수):**
 ```bash
 cd backend
-python -m venv venv
+python -m venv venv  # 가상환경 생성 (처음 한 번만)
+```
+
+**Windows:**
+```bash
 venv\Scripts\activate
 ```
 
 **Linux/Mac:**
 ```bash
-cd backend
-python -m venv venv
 source venv/bin/activate
 ```
 
-#### 의존성 설치
+> **참고**: 이미 가상환경이 생성되어 있다면 생성 단계는 생략하고 활성화만 하면 됩니다.
+
+#### 의존성 설치 (필수)
 ```bash
+# 가상환경 활성화 후 반드시 실행
 pip install -r requirements.txt
 ```
 

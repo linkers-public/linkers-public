@@ -41,7 +41,7 @@ sentence-transformers==2.3.1
 
 # 해커톤용 무료 스택 (완전 오프라인 가능)
 ollama>=0.1.7  # 로컬 LLM 클라이언트 (llama3, mistral, phi3) - 버전 충돌 해결을 위해 >= 사용
-chromadb==0.4.22  # 로컬 벡터 DB (Windows 빌드 필요 시 pip install chromadb --no-build-isolation)
+# chromadb==0.4.22  # Windows 빌드 문제로 임시 주석 처리 - Supabase pgvector 사용
 # langchain-community에 이미 Ollama 지원 포함됨
 
 # 프론트엔드 (해커톤용)
