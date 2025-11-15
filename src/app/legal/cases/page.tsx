@@ -15,7 +15,13 @@ import {
   Loader2,
   AlertCircle,
   CheckCircle2,
-  FileWarning
+  FileWarning,
+  Scale,
+  TrendingUp,
+  MessageSquare,
+  ArrowRight,
+  Filter,
+  Sparkles
 } from 'lucide-react'
 import { searchLegalCases } from '@/apis/legal.service'
 import { cn } from '@/lib/utils'
@@ -254,173 +260,266 @@ export default function CasesPage() {
     router.push('/legal/situation')
   }
 
+  // 카테고리별 케이스 개수 계산
+  const categoryCounts = cases.reduce((acc, caseItem) => {
+    const cat = caseItem.category || 'all'
+    acc[cat] = (acc[cat] || 0) + 1
+    return acc
+  }, {} as Record<string, number>)
+
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/20 to-slate-50">
       <div className="container mx-auto px-4 sm:px-6 py-8 sm:py-12 max-w-7xl">
         {/* Header */}
-        <div className="mb-8 text-center">
-          <div className="flex items-center justify-center gap-3 mb-4">
-            <FileWarning className="w-8 h-8 text-blue-600" />
-            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900">
-              실제처럼 구성한 청년 법률 케이스 모음
+        <div className="mb-10">
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-full mb-4 shadow-lg">
+              <BookOpen className="w-5 h-5" />
+              <span className="font-semibold">케이스 스터디룸</span>
+            </div>
+            <h1 className="text-4xl md:text-5xl font-extrabold mb-4 bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+              케이스로 배우는 청년 노동·계약 사례
             </h1>
+            <p className="text-lg md:text-xl text-slate-600 max-w-3xl mx-auto leading-relaxed">
+              인턴 해고, 무급 야근, 스톡옵션 박탈, 프리랜서 대금 미지급까지
+              <br />
+              실제와 비슷한 시나리오를 기반으로, 법적 쟁점과 배울 점을 정리했어요.
+            </p>
           </div>
-          <p className="text-sm sm:text-base text-slate-600 max-w-2xl mx-auto">
-            수습 해고, 무급 야근, 스톡옵션, 프리랜서 대금 미지급…
-            <br />
-            실제로 자주 발생하는 상황을 케이스로 정리했습니다.
-          </p>
+
+          {/* 요약 통계/태그 */}
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-6">
+            <div className="px-4 py-2 bg-white/80 backdrop-blur-sm border-2 border-slate-200 rounded-xl shadow-sm">
+              <span className="text-sm font-semibold text-slate-700">총 </span>
+              <span className="text-lg font-bold text-blue-600">{cases.length}개</span>
+              <span className="text-sm font-semibold text-slate-700"> 케이스</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 justify-center">
+              {(Object.keys(CATEGORY_LABELS) as CategoryFilter[]).filter(cat => cat !== 'all' && categoryCounts[cat] > 0).map((category) => (
+                <span
+                  key={category}
+                  className="inline-flex items-center px-2 py-1 rounded-full bg-slate-100 text-[11px] font-medium text-slate-700 border border-slate-200"
+                >
+                  {CATEGORY_LABELS[category]} {categoryCounts[category] || 0}
+                </span>
+              ))}
+            </div>
+          </div>
         </div>
 
         {/* Filter / Search Area */}
-        <div className="mb-6 space-y-4">
-          {/* 검색바 */}
-          <div className="flex gap-3">
-            <Input
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="수습 해고, 스톡옵션 같이 키워드로 찾아보세요"
-              className="flex-1"
-            />
-            <Button
-              onClick={() => {}}
-              className="bg-blue-600 hover:bg-blue-700 text-white"
-            >
-              <Search className="w-4 h-4 mr-2" />
-              검색
-            </Button>
-          </div>
-
-          {/* 필터 및 정렬 */}
-          <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-            {/* 카테고리 필터 */}
-            <div className="flex flex-wrap gap-2">
-              {(Object.keys(CATEGORY_LABELS) as CategoryFilter[]).map((category) => (
-                <button
-                  key={category}
-                  onClick={() => setCategoryFilter(category)}
-                  className={cn(
-                    "px-4 py-2 rounded-full text-sm font-medium transition-all",
-                    categoryFilter === category
-                      ? "bg-blue-600 text-white shadow-md"
-                      : "bg-white border border-slate-300 text-slate-700 hover:border-blue-400 hover:bg-blue-50"
-                  )}
-                >
-                  {CATEGORY_LABELS[category]}
-                </button>
-              ))}
+        <Card className="mb-8 border-2 border-slate-200 shadow-lg bg-white/80 backdrop-blur-sm">
+          <CardContent className="p-5 space-y-5">
+            {/* 검색바 */}
+            <div className="flex gap-3">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
+                <Input
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      // 검색 실행 (이미 searchQuery가 변경되면 자동으로 필터링됨)
+                    }
+                  }}
+                  placeholder="예: 수습 후 바로 해고, 무급 야근, 프리랜서 대금 미지급"
+                  className="pl-10 h-12 text-base border-2 border-slate-300 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                />
+              </div>
+              <Button
+                onClick={() => {
+                  // 검색 실행 (이미 searchQuery가 변경되면 자동으로 필터링됨)
+                }}
+                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg h-12 px-6"
+              >
+                <Search className="w-5 h-5 mr-2" />
+                검색
+              </Button>
             </div>
 
-            {/* 정렬 */}
-            <Select value={sortOption} onValueChange={(value) => setSortOption(value as SortOption)}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="recommended">추천순</SelectItem>
-                <SelectItem value="recent">최근 추가</SelectItem>
-                <SelectItem value="severity">심각도 높은 순</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
+            {/* 필터 및 정렬 */}
+            <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between pt-4 border-t border-slate-200">
+              {/* 카테고리 필터 */}
+              <div className="flex flex-wrap gap-2">
+                <span className="text-xs font-semibold text-slate-600 flex items-center gap-1 self-center">
+                  <Filter className="w-4 h-4" />
+                  카테고리:
+                </span>
+                {(Object.keys(CATEGORY_LABELS) as CategoryFilter[]).map((category) => (
+                  <button
+                    key={category}
+                    onClick={() => setCategoryFilter(category)}
+                    className={cn(
+                      "px-3 py-1.5 rounded-full text-xs font-semibold transition-all duration-200",
+                      categoryFilter === category
+                        ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md scale-105"
+                        : "bg-white border-2 border-slate-300 text-slate-700 hover:border-blue-400 hover:bg-blue-50 hover:shadow-sm"
+                    )}
+                  >
+                    {CATEGORY_LABELS[category]}
+                  </button>
+                ))}
+              </div>
+
+              {/* 정렬 */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-slate-600">정렬:</span>
+                <Select value={sortOption} onValueChange={(value) => setSortOption(value as SortOption)}>
+                  <SelectTrigger className="w-[160px] h-9 border-2 border-slate-300">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="recommended">추천순</SelectItem>
+                    <SelectItem value="recent">최근 추가순</SelectItem>
+                    <SelectItem value="severity">심각도 높은 순</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Cases Grid */}
         {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {[1, 2, 3, 4, 5, 6].map((i) => (
-              <Card key={i} className="animate-pulse">
+              <Card key={i} className="animate-pulse rounded-2xl border-2 border-slate-200 bg-white shadow-sm">
                 <CardContent className="p-5">
-                  <div className="h-4 bg-slate-200 rounded mb-3" />
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="h-5 w-20 bg-slate-200 rounded-full" />
+                    <div className="h-5 w-16 bg-slate-200 rounded-full" />
+                  </div>
+                  <div className="h-5 bg-slate-200 rounded mb-3" />
+                  <div className="h-5 bg-slate-200 rounded w-4/5 mb-4" />
+                  <div className="h-16 bg-slate-200 rounded mb-4" />
                   <div className="h-4 bg-slate-200 rounded w-3/4 mb-3" />
-                  <div className="h-20 bg-slate-200 rounded mb-3" />
-                  <div className="h-6 bg-slate-200 rounded w-1/2" />
+                  <div className="h-4 bg-slate-200 rounded w-2/3 mb-4" />
+                  <div className="h-8 bg-slate-200 rounded" />
                 </CardContent>
               </Card>
             ))}
           </div>
         ) : filteredAndSortedCases.length === 0 ? (
-          <Card className="text-center py-12">
+          <Card className="text-center py-16 border-2 border-slate-200 shadow-lg bg-white/80 backdrop-blur-sm">
             <CardContent>
-              <AlertCircle className="w-12 h-12 mx-auto mb-4 text-slate-400" />
-              <p className="text-slate-600 mb-4">
-                아직 준비된 케이스가 많지 않아요.
-                <br />
-                먼저 [상황 분석]에서 본인 상황을 입력해보셔도 좋아요.
+              <div className="p-4 bg-slate-100 rounded-full w-20 h-20 mx-auto mb-6 flex items-center justify-center">
+                <Search className="w-10 h-10 text-slate-400" />
+              </div>
+              <h3 className="text-xl font-bold text-slate-900 mb-3">
+                해당 조건에 맞는 케이스를 찾지 못했어요
+              </h3>
+              <p className="text-slate-600 mb-6 max-w-md mx-auto leading-relaxed">
+                그래도 상담이 필요하다면, 바로 내 상황을 직접 입력해서 분석 받아보세요.
               </p>
               <Button
                 onClick={() => router.push('/legal/situation')}
-                className="bg-blue-600 hover:bg-blue-700 text-white"
+                className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg h-12 px-8"
+                size="lg"
               >
-                상황 분석으로 이동
+                <Sparkles className="w-5 h-5 mr-2" />
+                내 상황 직접 분석 받기
               </Button>
             </CardContent>
           </Card>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredAndSortedCases.map((caseItem) => (
               <Card
                 key={caseItem.id}
-                className="rounded-2xl border border-slate-200 bg-white shadow-sm hover:shadow-md hover:border-blue-200 transition-all cursor-pointer"
+                className="rounded-2xl border-2 border-slate-200 bg-white shadow-sm hover:shadow-xl hover:border-blue-300 transition-all duration-200 group cursor-pointer"
                 onClick={() => handleCaseClick(caseItem)}
               >
-                <CardContent className="p-4 sm:p-5">
+                <CardContent className="p-5">
                   {/* 상단 라벨 영역 */}
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-xs bg-slate-100 text-slate-700 rounded-full px-2 py-1 font-medium">
+                  <div className="flex items-center justify-between mb-4">
+                    <span className="text-[11px] bg-slate-100 text-slate-700 rounded-full px-2 py-[2px] font-semibold">
                       {CATEGORY_LABELS[caseItem.category || 'all']}
                     </span>
                     {caseItem.severity && (
                       <span className={cn(
-                        "text-xs rounded-full px-2 py-1 font-medium border",
-                        SEVERITY_LABELS[caseItem.severity].color
+                        "text-[11px] rounded-full px-2.5 py-[2px] font-semibold border",
+                        caseItem.severity === 'high'
+                          ? "bg-red-100 text-red-700 border-red-300"
+                          : caseItem.severity === 'medium'
+                          ? "bg-amber-100 text-amber-700 border-amber-300"
+                          : "bg-emerald-100 text-emerald-700 border-emerald-300"
                       )}>
-                        {SEVERITY_LABELS[caseItem.severity].label}
+                        {caseItem.severity === 'high' ? '심각도: 높음' : caseItem.severity === 'medium' ? '심각도: 중간' : '심각도: 낮음'}
                       </span>
                     )}
                   </div>
 
                   {/* 제목 */}
-                  <h3 className="text-lg font-semibold text-slate-900 mb-2 line-clamp-2">
+                  <h3 className="text-sm font-semibold text-slate-900 mb-2 line-clamp-1 group-hover:text-blue-700 transition-colors">
                     {caseItem.title}
                   </h3>
 
-                  {/* 요약 */}
-                  <p className="text-sm text-slate-600 mb-3 line-clamp-3">
+                  {/* 한 줄 설명 */}
+                  <p className="text-xs text-slate-600 mb-4 line-clamp-2 leading-relaxed">
                     {caseItem.situation}
                   </p>
 
-                  {/* 키워드 태그 */}
-                  {caseItem.keywords && caseItem.keywords.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mb-4">
-                      {caseItem.keywords.slice(0, 3).map((keyword, index) => (
-                        <span
-                          key={index}
-                          className="text-xs bg-slate-50 text-slate-600 rounded-full px-2 py-1"
-                        >
-                          {keyword}
-                        </span>
-                      ))}
-                    </div>
-                  )}
+                  {/* 법적 쟁점 & 배울 점 미리보기 */}
+                  <div className="space-y-3 mb-4">
+                    {/* 법적 쟁점 미리보기 */}
+                    {caseItem.legalIssues && caseItem.legalIssues.length > 0 && (
+                      <div>
+                        <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5">법적 쟁점</p>
+                        <p className="text-xs text-slate-700 line-clamp-2 leading-relaxed">
+                          {caseItem.legalIssues.slice(0, 2).join(', ')}
+                          {caseItem.legalIssues.length > 2 && ' 등'}
+                        </p>
+                      </div>
+                    )}
 
-                  {/* 푸터 */}
-                  <div className="flex items-center justify-between pt-3 border-t border-slate-100">
-                    <p className="text-xs text-slate-500">
-                      핵심 쟁점: {caseItem.main_issues[0] || '법적 문제'}
-                    </p>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-blue-600 hover:text-blue-700"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        handleCaseClick(caseItem)
-                      }}
-                    >
-                      자세히 보기
-                      <ChevronRight className="w-4 h-4 ml-1" />
-                    </Button>
+                    {/* 배울 점 미리보기 */}
+                    {caseItem.learnings && caseItem.learnings.length > 0 && (
+                      <div>
+                        <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mb-1.5">이 케이스에서 배울 점</p>
+                        <p className="text-xs text-slate-700 line-clamp-2 leading-relaxed">
+                          {caseItem.learnings[0]}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 카드 하단 액션 영역 */}
+                  <div className="pt-4 border-t-2 border-slate-100">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-[10px] text-slate-500 line-clamp-1 flex-1">
+                        키워드: {caseItem.main_issues.slice(0, 3).join(', ')}
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 h-8 text-xs border-slate-300 hover:bg-slate-50 hover:border-blue-300"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleCaseClick(caseItem)
+                        }}
+                      >
+                        자세히 보기
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="flex-1 h-8 text-xs bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-sm"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          // 케이스 정보를 localStorage에 저장하고 /legal/situation으로 이동
+                          localStorage.setItem('lastCase', JSON.stringify({
+                            id: caseItem.id,
+                            title: caseItem.title,
+                            situation: caseItem.situation,
+                            category: caseItem.category
+                          }))
+                          router.push('/legal/situation?fromCase=' + caseItem.id)
+                        }}
+                      >
+                        내 상황과 비교
+                      </Button>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -430,49 +529,73 @@ export default function CasesPage() {
 
         {/* Case Detail Modal */}
         <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto bg-gradient-to-br from-white to-slate-50/50">
             {selectedCase && (
               <>
-                <DialogHeader>
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex-1">
-                      <DialogTitle className="text-xl font-bold text-slate-900 mb-2">
+                <DialogHeader className="pb-4 border-b-2 border-slate-200">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1 pr-4">
+                      <DialogTitle className="text-2xl font-extrabold text-slate-900 mb-3">
                         {selectedCase.title}
                       </DialogTitle>
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-xs bg-slate-100 text-slate-700 rounded-full px-2 py-1 font-medium">
+                        <span className="text-xs bg-slate-100 text-slate-700 rounded-full px-3 py-1.5 font-semibold">
                           {CATEGORY_LABELS[selectedCase.category || 'all']}
                         </span>
                         {selectedCase.severity && (
                           <span className={cn(
-                            "text-xs rounded-full px-2 py-1 font-medium border",
-                            SEVERITY_LABELS[selectedCase.severity].color
+                            "text-xs rounded-full px-3 py-1.5 font-semibold border",
+                            selectedCase.severity === 'high'
+                              ? "bg-red-100 text-red-700 border-red-300"
+                              : selectedCase.severity === 'medium'
+                              ? "bg-amber-100 text-amber-700 border-amber-300"
+                              : "bg-emerald-100 text-emerald-700 border-emerald-300"
                           )}>
-                            {SEVERITY_LABELS[selectedCase.severity].label}
+                            심각도: {selectedCase.severity === 'high' ? '높음' : selectedCase.severity === 'medium' ? '중간' : '낮음'}
                           </span>
                         )}
                       </div>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setIsModalOpen(false)}
-                      className="h-8 w-8 p-0"
-                    >
-                      <X className="w-4 h-4" />
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          localStorage.setItem('lastCase', JSON.stringify({
+                            id: selectedCase.id,
+                            title: selectedCase.title,
+                            situation: selectedCase.situation,
+                            category: selectedCase.category
+                          }))
+                          setIsModalOpen(false)
+                          router.push('/legal/situation?fromCase=' + selectedCase.id)
+                        }}
+                        className="h-9 border-blue-300 hover:bg-blue-50 hover:border-blue-400 text-blue-700"
+                      >
+                        <MessageSquare className="w-4 h-4 mr-1.5" />
+                        내 상황으로 분석
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setIsModalOpen(false)}
+                        className="h-9 w-9 p-0"
+                      >
+                        <X className="w-5 h-5" />
+                      </Button>
+                    </div>
                   </div>
                 </DialogHeader>
 
-                <div className="space-y-6">
-                  {/* [1] 상황 설명 */}
-                  <div>
-                    <h3 className="text-lg font-semibold text-slate-900 mb-3 flex items-center gap-2">
-                      <BookOpen className="w-5 h-5 text-blue-600" />
-                      상황 설명
+                <div className="space-y-6 pt-6">
+                  {/* [1] 상황 요약 */}
+                  <div className="border-t-2 border-slate-200 pt-6">
+                    <h3 className="text-xs font-semibold text-slate-900 mb-3 flex items-center gap-2 uppercase tracking-wide">
+                      <BookOpen className="w-4 h-4 text-blue-600" />
+                      상황 요약
                     </h3>
-                    <div className="bg-slate-50 rounded-lg p-4 space-y-2">
-                      <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-line">
+                    <div className="bg-gradient-to-br from-slate-50 to-blue-50/30 rounded-xl p-5 border border-slate-200">
+                      <p className="text-xs leading-relaxed text-slate-700 whitespace-pre-line">
                         {selectedCase.situation}
                       </p>
                     </div>
@@ -480,14 +603,15 @@ export default function CasesPage() {
 
                   {/* [2] 법적 쟁점 */}
                   {selectedCase.legalIssues && selectedCase.legalIssues.length > 0 && (
-                    <div>
-                      <h3 className="text-lg font-semibold text-slate-900 mb-3">
+                    <div className="border-t-2 border-slate-200 pt-6">
+                      <h3 className="text-xs font-semibold text-slate-900 mb-3 flex items-center gap-2 uppercase tracking-wide">
+                        <Scale className="w-4 h-4 text-blue-600" />
                         법적 쟁점
                       </h3>
                       <ul className="space-y-2">
                         {selectedCase.legalIssues.map((issue, index) => (
-                          <li key={index} className="flex items-start gap-2 text-sm text-slate-700">
-                            <span className="text-blue-600 mt-1">•</span>
+                          <li key={index} className="flex items-start gap-2 text-xs leading-relaxed text-slate-700">
+                            <span className="text-blue-600 mt-1 font-bold">·</span>
                             <span>{issue}</span>
                           </li>
                         ))}
@@ -495,17 +619,18 @@ export default function CasesPage() {
                     </div>
                   )}
 
-                  {/* [3] 배울 점 */}
+                  {/* [3] AI 요약 & 배울 점 */}
                   {selectedCase.learnings && selectedCase.learnings.length > 0 && (
-                    <div>
-                      <h3 className="text-lg font-semibold text-slate-900 mb-3">
-                        이 케이스에서 배울 점
+                    <div className="border-t-2 border-slate-200 pt-6">
+                      <h3 className="text-xs font-semibold text-slate-900 mb-3 flex items-center gap-2 uppercase tracking-wide">
+                        <TrendingUp className="w-4 h-4 text-blue-600" />
+                        AI 요약 & 배울 점
                       </h3>
-                      <div className="space-y-2">
+                      <div className="space-y-3">
                         {selectedCase.learnings.map((learning, index) => (
-                          <div key={index} className="flex items-start gap-2 p-3 bg-blue-50 rounded-lg">
+                          <div key={index} className="flex items-start gap-3 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl border border-blue-200">
                             <CheckCircle2 className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-                            <p className="text-sm text-slate-700">{learning}</p>
+                            <p className="text-xs leading-relaxed text-slate-700 flex-1">{learning}</p>
                           </div>
                         ))}
                       </div>
@@ -514,14 +639,15 @@ export default function CasesPage() {
 
                   {/* [4] 행동 가이드 */}
                   {selectedCase.actions && selectedCase.actions.length > 0 && (
-                    <div>
-                      <h3 className="text-lg font-semibold text-slate-900 mb-3">
-                        나도 비슷한 상황이라면?
+                    <div className="border-t-2 border-slate-200 pt-6">
+                      <h3 className="text-xs font-semibold text-slate-900 mb-3 flex items-center gap-2 uppercase tracking-wide">
+                        <FileWarning className="w-4 h-4 text-blue-600" />
+                        비슷한 상황에서의 행동 가이드
                       </h3>
                       <ul className="space-y-2">
                         {selectedCase.actions.map((action, index) => (
-                          <li key={index} className="flex items-start gap-2 text-sm text-slate-700">
-                            <span className="text-blue-600 mt-1">•</span>
+                          <li key={index} className="flex items-start gap-2 text-xs leading-relaxed text-slate-700">
+                            <span className="text-blue-600 mt-1 font-bold">·</span>
                             <span>{action}</span>
                           </li>
                         ))}
@@ -529,15 +655,31 @@ export default function CasesPage() {
                     </div>
                   )}
 
-                  {/* CTA 버튼 */}
-                  <div className="pt-4 border-t border-slate-200">
-                    <Button
-                      onClick={handleAnalyzeClick}
-                      className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-                      size="lg"
-                    >
-                      내 상황으로 분석 받기
-                    </Button>
+                  {/* 하단 CTA */}
+                  <div className="pt-6 border-t-2 border-slate-200">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                      <p className="text-[10px] text-amber-800 leading-relaxed flex-1">
+                        * 실제 법률 자문이 아닌, 공개된 가이드와 사례를 바탕으로 한 교육용 요약입니다.
+                      </p>
+                      <Button
+                        onClick={() => {
+                          localStorage.setItem('lastCase', JSON.stringify({
+                            id: selectedCase.id,
+                            title: selectedCase.title,
+                            situation: selectedCase.situation,
+                            category: selectedCase.category
+                          }))
+                          setIsModalOpen(false)
+                          router.push('/legal/situation?fromCase=' + selectedCase.id)
+                        }}
+                        className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg h-11 px-6"
+                        size="lg"
+                      >
+                        <Sparkles className="w-5 h-5 mr-2" />
+                        이 케이스 기반으로 내 상황 분석 받기
+                        <ArrowRight className="w-4 h-4 ml-2" />
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </>
