@@ -3,7 +3,7 @@
 
 -- 공고 메타데이터 (구조화된 데이터)
 CREATE TABLE IF NOT EXISTS announcement_metadata (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT extensions.uuid_generate_v4(),
     doc_id BIGINT REFERENCES docs(id) ON DELETE CASCADE,
     
     -- 기본 정보
@@ -26,8 +26,8 @@ CREATE TABLE IF NOT EXISTS announcement_metadata (
     risk_level TEXT DEFAULT 'medium',  -- low, medium, high
     
     -- 메타데이터
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
+    created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT now(),
+    updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT now()
 );
 
 -- 인덱스
@@ -42,7 +42,7 @@ CREATE INDEX IF NOT EXISTS idx_announcement_doc_id
 
 -- 과거 입찰 이력 (ChromaDB 메타데이터 동기화용)
 CREATE TABLE IF NOT EXISTS bidding_history (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT extensions.uuid_generate_v4(),
     announcement_id UUID REFERENCES announcement_metadata(id),
     team_id BIGINT REFERENCES teams(id),
     
@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS bidding_history (
     is_won BOOLEAN DEFAULT FALSE,
     actual_amount BIGINT,
     
-    created_at TIMESTAMP DEFAULT NOW()
+    created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT now()
 );
 
 -- 인덱스
@@ -68,7 +68,7 @@ CREATE INDEX IF NOT EXISTS idx_bidding_won
 
 -- 견적 템플릿
 CREATE TABLE IF NOT EXISTS estimate_templates (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT extensions.uuid_generate_v4(),
     team_id BIGINT REFERENCES teams(id),
     
     -- 템플릿 정보
@@ -83,8 +83,8 @@ CREATE TABLE IF NOT EXISTS estimate_templates (
     usage_count INTEGER DEFAULT 0,
     avg_win_rate FLOAT DEFAULT 0.0,
     
-    created_at TIMESTAMP DEFAULT NOW(),
-    updated_at TIMESTAMP DEFAULT NOW()
+    created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT now(),
+    updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT now()
 );
 
 -- 인덱스

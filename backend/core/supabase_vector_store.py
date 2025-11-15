@@ -28,11 +28,25 @@ class SupabaseVectorStore:
         if not supabase_url or not supabase_key:
             raise ValueError("SUPABASE_URL과 SUPABASE_SERVICE_ROLE_KEY가 필요합니다")
         
+        # proxy 관련 문제를 피하기 위해 환경 변수에서 proxy 제거
+        # supabase-py는 내부적으로 httpx를 사용하는데, httpx가 환경 변수의 proxy를 자동으로 사용함
+        proxy_vars = ['HTTP_PROXY', 'HTTPS_PROXY', 'http_proxy', 'https_proxy', 'ALL_PROXY', 'all_proxy']
+        original_proxies = {}
+        for var in proxy_vars:
+            if var in os.environ:
+                original_proxies[var] = os.environ.pop(var)
+        
         try:
-            # Supabase 클라이언트 생성 (기본 방식만 사용)
+            # Supabase 클라이언트 생성
+            # supabase-py 2.x 버전에서는 기본 방식 사용
             self.sb = create_client(supabase_url, supabase_key)
             self._initialized = True
+            # 성공 시 proxy 값 복원하지 않음 (Supabase 연결에는 필요 없음)
         except Exception as e:
+            # 실패 시 원래 proxy 값 복원
+            for var, value in original_proxies.items():
+                os.environ[var] = value
+            
             error_msg = str(e)
             if "'dict' object has no attribute 'headers'" in error_msg:
                 # supabase 패키지 버전 문제일 수 있음
@@ -40,7 +54,19 @@ class SupabaseVectorStore:
                     f"Supabase 클라이언트 초기화 실패: {error_msg}\n"
                     f"[해결] supabase 패키지를 재설치하세요: pip install --upgrade supabase"
                 )
-            raise ValueError(f"Supabase 클라이언트 초기화 실패: {error_msg}")
+            elif "proxy" in error_msg.lower():
+                raise ValueError(
+                    f"Supabase 클라이언트 초기화 실패 (proxy 오류): {error_msg}\n"
+                    f"[해결] 환경 변수의 proxy 설정을 확인하거나 제거하세요."
+                )
+            else:
+                raise ValueError(f"Supabase 클라이언트 초기화 실패: {error_msg}")
+    
+    def _reinitialize_client(self):
+        """Supabase 클라이언트 재초기화 (스키마 캐시 갱신용)"""
+        self._initialized = False
+        self.sb = None
+        self._ensure_initialized()
     
     @staticmethod
     def content_hash(text: str) -> str:
@@ -112,6 +138,9 @@ class SupabaseVectorStore:
             "file_name": meta.get("file_name"),
             "file_mime_type": meta.get("file_mime_type")
         }
+        
+        # Storage 파일 정보는 별도로 업데이트 (스키마 캐시 문제 방지)
+        # insert_data에 포함하지 않고 나중에 update로 처리
         
         # 날짜 필드 처리 (None이거나 빈 문자열이면 제외)
         from datetime import datetime
@@ -418,4 +447,307 @@ class SupabaseVectorStore:
             .execute()
         
         return result.data if result.data else None
+    
+    # ========== Legal Chunks Methods (새 스키마) ==========
+    
+    def upsert_legal_chunk(
+        self,
+        content: str,
+        embedding: List[float],
+        metadata: Dict[str, Any]
+    ) -> str:
+        """
+        법률 청크 단일 저장/업데이트 (새 스키마)
+        
+        Args:
+            content: 청크 텍스트
+            embedding: 임베딩 벡터 (384차원)
+            metadata: {
+                source_type: 'law' | 'manual' | 'case',
+                external_id: str,  # 파일명/케이스 ID
+                title: str,
+                chunk_index: int,
+                file_path: str,
+                ... (나머지는 metadata JSONB에 저장)
+            }
+        
+        Returns:
+            chunk_id (uuid)
+        """
+        self._ensure_initialized()
+        
+        # metadata에서 컬럼으로 매핑할 필드 추출
+        source_type = metadata.get("source_type", "law")
+        external_id = metadata.get("external_id", "")
+        title = metadata.get("title", "")
+        chunk_index = metadata.get("chunk_index", 0)
+        file_path = metadata.get("file_path", "")
+        
+        # 나머지는 metadata JSONB에 저장
+        metadata_json = {k: v for k, v in metadata.items() 
+                        if k not in ["source_type", "external_id", "title", "chunk_index", "file_path"]}
+        
+        # 기존 청크 조회 (external_id + chunk_index로)
+        try:
+            existing = self.sb.table("legal_chunks")\
+                .select("id")\
+                .eq("external_id", external_id)\
+                .eq("chunk_index", chunk_index)\
+                .limit(1)\
+                .execute()
+        except Exception as e:
+            error_msg = str(e)
+            if "Could not find the table" in error_msg or "PGRST205" in error_msg:
+                print(f"[경고] 스키마 캐시 문제 감지, 클라이언트 재초기화 중...")
+                self._reinitialize_client()
+                existing = self.sb.table("legal_chunks")\
+                    .select("id")\
+                    .eq("external_id", external_id)\
+                    .eq("chunk_index", chunk_index)\
+                    .limit(1)\
+                    .execute()
+            else:
+                raise
+        
+        insert_data = {
+            "external_id": external_id,
+            "source_type": source_type,
+            "title": title,
+            "content": content,
+            "chunk_index": chunk_index,
+            "file_path": file_path,
+            "metadata": metadata_json,
+            "embedding": embedding,
+        }
+        
+        # 기존 청크가 있으면 업데이트, 없으면 삽입
+        if existing.data and len(existing.data) > 0:
+            chunk_id = existing.data[0]["id"]
+            try:
+                self.sb.table("legal_chunks")\
+                    .update(insert_data)\
+                    .eq("id", chunk_id)\
+                    .execute()
+            except Exception as e:
+                error_msg = str(e)
+                if "Could not find the table" in error_msg or "PGRST205" in error_msg:
+                    self._reinitialize_client()
+                    self.sb.table("legal_chunks")\
+                        .update(insert_data)\
+                        .eq("id", chunk_id)\
+                        .execute()
+                else:
+                    raise
+            return chunk_id
+        else:
+            # 새 청크 삽입
+            try:
+                result = self.sb.table("legal_chunks")\
+                    .insert(insert_data)\
+                    .execute()
+            except Exception as e:
+                error_msg = str(e)
+                if "Could not find the table" in error_msg or "PGRST205" in error_msg:
+                    self._reinitialize_client()
+                    result = self.sb.table("legal_chunks")\
+                        .insert(insert_data)\
+                        .execute()
+                else:
+                    raise
+            
+            if not result.data or len(result.data) == 0:
+                raise Exception("법률 청크 저장 실패")
+            
+            return result.data[0]["id"]
+    
+    def check_legal_chunks_exist(self, external_id: str) -> bool:
+        """
+        특정 external_id로 이미 청크가 존재하는지 확인
+        
+        Args:
+            external_id: 문서 ID
+            
+        Returns:
+            존재 여부 (True: 존재함, False: 없음)
+        """
+        self._ensure_initialized()
+        try:
+            result = self.sb.table("legal_chunks")\
+                .select("id", count="exact")\
+                .eq("external_id", external_id)\
+                .limit(1)\
+                .execute()
+            
+            return result.count > 0 if result.count is not None else len(result.data) > 0
+        except Exception as e:
+            # 오류 발생 시 False 반환 (안전하게 처리)
+            print(f"[경고] 중복 체크 실패: {str(e)}")
+            return False
+    
+    def bulk_upsert_legal_chunks(
+        self,
+        chunks: List[Dict[str, Any]]
+    ):
+        """
+        법률 청크 및 임베딩 일괄 저장 (새 스키마)
+        
+        Args:
+            chunks: [{
+                content: str,
+                embedding: List[float],
+                metadata: {
+                    source_type: 'law' | 'manual' | 'case',
+                    external_id: str,
+                    title: str,
+                    chunk_index: int,
+                    file_path: str,
+                    ... (나머지는 metadata JSONB에 저장)
+                }
+            }]
+        """
+        self._ensure_initialized()
+        if not chunks:
+            return
+        
+        payload = []
+        for c in chunks:
+            metadata = c.get("metadata", {})
+            source_type = metadata.get("source_type", "law")
+            external_id = metadata.get("external_id", "")
+            title = metadata.get("title", "")
+            chunk_index = metadata.get("chunk_index", 0)
+            file_path = metadata.get("file_path", "")
+            
+            # 나머지는 metadata JSONB에 저장
+            metadata_json = {k: v for k, v in metadata.items() 
+                            if k not in ["source_type", "external_id", "title", "chunk_index", "file_path"]}
+            
+            payload.append({
+                "external_id": external_id,
+                "source_type": source_type,
+                "title": title,
+                "content": c["content"],
+                "chunk_index": chunk_index,
+                "file_path": file_path,
+                "metadata": metadata_json,
+                "embedding": c["embedding"],
+            })
+        
+        try:
+            # 기존 청크 삭제 후 삽입 (external_id 기준)
+            if payload:
+                external_ids = list(set([p["external_id"] for p in payload]))
+                for ext_id in external_ids:
+                    try:
+                        self.sb.table("legal_chunks")\
+                            .delete()\
+                            .eq("external_id", ext_id)\
+                            .execute()
+                    except Exception as e:
+                        error_msg = str(e)
+                        if "Could not find the table" in error_msg or "PGRST205" in error_msg:
+                            self._reinitialize_client()
+                            self.sb.table("legal_chunks")\
+                                .delete()\
+                                .eq("external_id", ext_id)\
+                                .execute()
+                        else:
+                            print(f"[경고] 기존 청크 삭제 실패: {str(e)}")
+            
+            # 새 청크 삽입
+            self.sb.table("legal_chunks")\
+                .insert(payload)\
+                .execute()
+        except Exception as e:
+            error_msg = str(e)
+            if "Could not find the table" in error_msg or "PGRST205" in error_msg:
+                print(f"[경고] 스키마 캐시 문제 감지, 클라이언트 재초기화 중...")
+                self._reinitialize_client()
+                self.sb.table("legal_chunks")\
+                    .insert(payload)\
+                    .execute()
+            else:
+                raise
+    
+    def search_similar_legal_chunks(
+        self,
+        query_embedding: List[float],
+        top_k: int = 5,
+        filters: Optional[Dict[str, Any]] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        유사 법률 청크 검색 (벡터 코사인 유사도) - 새 스키마
+        
+        Args:
+            query_embedding: 쿼리 임베딩 벡터
+            top_k: 반환할 최대 개수
+            filters: 필터 (예: {"source_type": "case"})
+        
+        Returns:
+            [{
+                id: str,
+                external_id: str,
+                source_type: str,
+                title: str,
+                content: str,
+                chunk_index: int,
+                file_path: str,
+                metadata: Dict,
+                score: float (similarity)
+            }]
+        """
+        self._ensure_initialized()
+        
+        # 직접 SQL 쿼리로 벡터 검색 (RPC 함수 대신)
+        try:
+            # 필터 조건 구성
+            query = self.sb.table("legal_chunks")\
+                .select("id, external_id, source_type, title, content, chunk_index, file_path, metadata, embedding")
+            
+            # source_type 필터
+            if filters and "source_type" in filters:
+                source_type = filters["source_type"]
+                if isinstance(source_type, list):
+                    query = query.in_("source_type", source_type)
+                else:
+                    query = query.eq("source_type", source_type)
+            
+            # 모든 청크 조회 (임시 - 나중에 RPC 함수로 최적화)
+            result = query.limit(1000).execute()
+            
+            if not result.data:
+                return []
+            
+            # 벡터 유사도 계산
+            import numpy as np
+            
+            query_vec = np.array(query_embedding)
+            similarities = []
+            
+            for chunk in result.data:
+                if chunk.get("embedding"):
+                    chunk_vec = np.array(chunk["embedding"])
+                    # 코사인 유사도
+                    similarity = np.dot(query_vec, chunk_vec) / (
+                        np.linalg.norm(query_vec) * np.linalg.norm(chunk_vec)
+                    )
+                    similarities.append({
+                        "id": chunk["id"],
+                        "external_id": chunk.get("external_id", ""),
+                        "source_type": chunk.get("source_type", "law"),
+                        "title": chunk.get("title", ""),
+                        "content": chunk.get("content", ""),
+                        "chunk_index": chunk.get("chunk_index", 0),
+                        "file_path": chunk.get("file_path", ""),
+                        "metadata": chunk.get("metadata", {}),
+                        "score": float(similarity),
+                    })
+            
+            # 유사도 순으로 정렬하고 top_k 반환
+            similarities.sort(key=lambda x: x["score"], reverse=True)
+            return similarities[:top_k]
+            
+        except Exception as e:
+            print(f"[경고] legal 벡터 검색 실패: {str(e)}")
+            return []
 

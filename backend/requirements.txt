@@ -3,9 +3,10 @@ uvicorn[standard]==0.27.0
 python-multipart==0.0.6
 
 # RAG Core
-langchain==0.1.5
-langchain-community==0.0.20
-langchain-openai==0.0.5
+langchain>=1.0.0
+langchain-community>=0.4.0
+langchain-core>=1.0.0
+langchain-openai>=1.0.0
 # chromadb==0.4.22  # Windows 빌드 문제로 임시 주석 처리
 # 대안: Supabase pgvector 사용 (이미 구현됨)
 
@@ -26,12 +27,13 @@ requests==2.31.0  # HWP 변환 서비스 호출용
 
 # Utilities
 python-dotenv==1.0.0
-pydantic==2.5.3
-pydantic-settings==2.1.0
+pydantic>=2.7.4,<3.0.0
+pydantic-settings>=2.1.0
 numpy==1.26.3
 
 # Supabase
-supabase==2.3.4
+supabase>=2.24.0
+websockets>=12.0,<16.0  # realtime 패키지 호환성
 
 # File Watching (선택)
 watchdog==3.0.0

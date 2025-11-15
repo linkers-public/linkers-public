@@ -8,7 +8,11 @@ import re
 import os
 from pathlib import Path
 from pydantic import BaseModel
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+# langchain_text_splitters는 scipy/nltk 의존성으로 Windows에서 매우 느리므로
+# 기본적으로 SimpleTextSplitter를 사용하고, 필요시에만 lazy import
+LANGCHAIN_SPLITTER_AVAILABLE = False
+RecursiveCharacterTextSplitter = None
 
 
 class Chunk(BaseModel):
@@ -16,6 +20,81 @@ class Chunk(BaseModel):
     index: int
     content: str
     metadata: Dict[str, Any]
+
+
+class SimpleTextSplitter:
+    """간단한 텍스트 분할기 (langchain_text_splitters 대체용)"""
+    
+    def __init__(self, chunk_size: int = 1000, chunk_overlap: int = 200, separators: List[str] = None):
+        self.chunk_size = chunk_size
+        self.chunk_overlap = chunk_overlap
+        self.separators = separators or ["\n\n", "\n", ". ", " ", ""]
+    
+    def create_documents(self, texts: List[str], metadatas: List[Dict[str, Any]] = None) -> List[Any]:
+        """텍스트 리스트를 문서 리스트로 변환"""
+        if metadatas is None:
+            metadatas = [{}] * len(texts)
+        
+        documents = []
+        for text, metadata in zip(texts, metadatas):
+            chunks = self._split_text(text)
+            for i, chunk_text in enumerate(chunks):
+                # LangChain Document 형식과 호환되도록 page_content 속성 추가
+                doc = type('Document', (), {
+                    'page_content': chunk_text,
+                    'metadata': {**metadata, 'chunk_index': i}
+                })()
+                documents.append(doc)
+        
+        return documents
+    
+    def _split_text(self, text: str) -> List[str]:
+        """텍스트를 청크로 분할"""
+        if not text:
+            return []
+        
+        chunks = []
+        current_pos = 0
+        
+        while current_pos < len(text):
+            # 청크 크기 계산
+            chunk_end = min(current_pos + self.chunk_size, len(text))
+            
+            # 오버랩을 고려한 시작 위치
+            if current_pos > 0:
+                chunk_start = max(0, current_pos - self.chunk_overlap)
+            else:
+                chunk_start = current_pos
+            
+            # 청크 텍스트 추출
+            chunk_text = text[chunk_start:chunk_end]
+            
+            # 구분자를 사용하여 자연스러운 분할 시도
+            if chunk_end < len(text):
+                # 다음 구분자 찾기
+                best_split = -1
+                best_sep_len = 0
+                for sep in self.separators:
+                    if sep:
+                        last_sep = chunk_text.rfind(sep)
+                        if last_sep > len(chunk_text) * 0.5:  # 청크의 절반 이상에서 찾은 경우만
+                            if last_sep > best_split:
+                                best_split = last_sep
+                                best_sep_len = len(sep)
+                
+                if best_split > 0:
+                    chunk_text = chunk_text[:best_split + best_sep_len]
+                    chunk_end = chunk_start + len(chunk_text)
+            
+            if chunk_text.strip():
+                chunks.append(chunk_text.strip())
+            
+            # 다음 청크 시작 위치
+            if chunk_end >= len(text):
+                break
+            current_pos = chunk_end
+        
+        return chunks if chunks else [text]
 
 
 class DocumentProcessor:
@@ -33,10 +112,11 @@ class DocumentProcessor:
             else chunk_overlap
         )
         
-        self.splitter = RecursiveCharacterTextSplitter(
+        # 기본적으로 SimpleTextSplitter 사용 (Windows에서 scipy/nltk 로딩이 매우 느림)
+        # langchain_text_splitters는 필요시에만 lazy import
+        self.splitter = SimpleTextSplitter(
             chunk_size=self.chunk_size,
-            chunk_overlap=self.chunk_overlap,
-            separators=["\n\n", "\n", ". ", " ", ""]
+            chunk_overlap=self.chunk_overlap
         )
     
     def pdf_to_text(self, pdf_path: str) -> str:

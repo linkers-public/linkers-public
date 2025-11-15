@@ -2,16 +2,14 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { FileText, Search, BarChart3, FileCheck, FolderOpen } from 'lucide-react'
+import { FileText } from 'lucide-react'
 
 export default function Header() {
   const pathname = usePathname()
 
   const navItems = [
-    { href: '/upload', label: '업로드', icon: FileText },
-    { href: '/docs', label: '문서 목록', icon: FolderOpen },
-    { href: '/match', label: '매칭', icon: Search },
-    { href: '/compare', label: '비교', icon: BarChart3 },
+    { href: '/upload', label: '계약서 업로드', icon: FileText },
+    { href: '/guide', label: '상담 가이드', icon: FileText },
   ]
 
   return (
@@ -21,7 +19,7 @@ export default function Header() {
           {/* 로고 */}
           <Link href="/" className="flex items-center gap-2">
             <FileText className="w-8 h-8 text-blue-600" />
-            <span className="text-xl font-bold text-slate-900">Linkus Public</span>
+            <span className="text-xl font-bold text-slate-900">계약서 AI 검토</span>
           </Link>
 
           {/* 네비게이션 */}

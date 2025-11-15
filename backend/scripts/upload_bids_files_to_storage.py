@@ -72,10 +72,32 @@ class BidsFileUploader:
             mime_type = mime_map.get(ext, 'application/octet-stream')
         return mime_type
     
+    def sanitize_filename(self, filename: str) -> str:
+        """파일명을 Storage에 안전한 형식으로 변환 (해시 기반)"""
+        import hashlib
+        import base64
+        
+        # 파일명을 해시로 변환하여 안전한 파일명 생성
+        # 원본 파일명의 해시 + 확장자
+        file_stem = Path(filename).stem
+        file_ext = Path(filename).suffix
+        
+        # 해시 생성 (짧게)
+        hash_obj = hashlib.md5(file_stem.encode('utf-8'))
+        hash_hex = hash_obj.hexdigest()[:12]  # 12자리만 사용
+        
+        # 안전한 파일명: 해시_원본파일명(최대20자).확장자
+        # 하지만 한글이 문제가 되므로 해시만 사용
+        safe_name = f"{hash_hex}{file_ext}"
+        
+        return safe_name
+    
     def upload_to_storage(self, announcement_id: str, file_path: Path) -> str:
         """Storage에 파일 업로드"""
-        # Storage 경로: {announcement_id}/{file_name}
-        storage_path = f"{announcement_id}/{file_path.name}"
+        # 파일명을 안전하게 변환
+        safe_filename = self.sanitize_filename(file_path.name)
+        # Storage 경로: {announcement_id}/{safe_file_name}
+        storage_path = f"{announcement_id}/{safe_filename}"
         mime_type = self.get_mime_type(file_path)
         
         print(f"[Storage 업로드] {file_path.name} → {self.bucket_name}/{storage_path}")

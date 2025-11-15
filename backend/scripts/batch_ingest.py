@@ -20,6 +20,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from core.orchestrator_v2 import Orchestrator
 from core.supabase_vector_store import SupabaseVectorStore
+from core.legal_chunker import LegalChunker, extract_doc_type_from_path
+from core.document_processor_v2 import DocumentProcessor
+from core.generator_v2 import LLMGenerator
 
 
 class BatchIngester:
@@ -132,7 +135,8 @@ class BatchIngester:
         file_path: Path,
         meta: Dict[str, Any] = None,
         verbose: bool = True,
-        default_type: str = None
+        default_type: str = None,
+        mode: str = "announcements"
     ) -> Dict[str, Any]:
         """
         단일 파일 처리
@@ -157,14 +161,20 @@ class BatchIngester:
             "file": str(file_path),
             "status": "pending",
             "announcement_id": None,
+            "legal_document_id": None,
             "error": None,
             "started_at": datetime.now().isoformat(),
         }
         
         try:
             if verbose:
-                print(f"[처리 중] {file_path.name}")
+                print(f"[처리 중] {file_path.name} (모드: {mode})")
             
+            # Legal 모드 처리
+            if mode == "legal":
+                return self._process_legal_file(file_path, meta, verbose)
+            
+            # Announcements 모드 처리 (기존 로직)
             # 파일 타입 결정
             suffix = file_path.suffix.lower()
             if suffix == ".pdf":
@@ -411,6 +421,152 @@ class BatchIngester:
         
         return result
     
+    def _process_legal_file(
+        self,
+        file_path: Path,
+        meta: Dict[str, Any] = None,
+        verbose: bool = True
+    ) -> Dict[str, Any]:
+        """
+        법률/계약 문서 처리 (legal 모드)
+        
+        Args:
+            file_path: 파일 경로
+            meta: 메타데이터 (없으면 파일명에서 추출)
+            verbose: 진행 상황 출력 여부
+        
+        Returns:
+            처리 결과
+        """
+        result = {
+            "file": str(file_path),
+            "status": "pending",
+            "legal_document_id": None,
+            "error": None,
+            "started_at": datetime.now().isoformat(),
+        }
+        
+        try:
+            # 메타데이터 추출
+            if meta is None:
+                meta = {}
+            
+            # 파일명에서 기본 정보 추출
+            filename = file_path.stem
+            if not meta.get("title"):
+                meta["title"] = filename
+            
+            # 파일 경로에서 doc_type 추출
+            file_path_str = str(file_path)
+            doc_type = extract_doc_type_from_path(file_path_str)
+            meta["doc_type"] = doc_type
+            
+            # source 추출 (폴더 구조에서)
+            if "laws" in file_path_str.lower() or "법" in file_path_str.lower():
+                source = "moel"  # 고용노동부
+            elif "standard_contracts" in file_path_str.lower() or "계약" in file_path_str.lower():
+                source = "mss"  # 중소벤처기업부
+            elif "manuals" in file_path_str.lower() or "매뉴얼" in file_path_str.lower():
+                source = "mcst"  # 문화체육관광부
+            else:
+                source = "unknown"
+            
+            meta["source"] = source
+            
+            # 파일 경로를 상대 경로로 변환 (안전하게)
+            try:
+                # 절대 경로로 변환
+                file_path_abs = Path(file_path).resolve()
+                base_data_dir_abs = self.base_data_dir.resolve()
+                
+                # base_data_dir의 하위 경로인지 확인
+                if str(file_path_abs).startswith(str(base_data_dir_abs)):
+                    meta["file_path"] = str(file_path_abs.relative_to(base_data_dir_abs))
+                else:
+                    # 하위 경로가 아니면 파일명만 사용하거나 전체 경로 사용
+                    # data/legal/... 형태로 시작하는지 확인
+                    file_path_str = str(file_path)
+                    if "data" in file_path_str:
+                        # data 이후의 경로만 추출
+                        data_idx = file_path_str.find("data")
+                        meta["file_path"] = file_path_str[data_idx:]
+                    else:
+                        # 그 외에는 파일명만
+                        meta["file_path"] = file_path.name
+            except Exception as e:
+                # 오류 발생 시 파일명만 사용
+                meta["file_path"] = file_path.name
+            
+            # 1. 텍스트 추출
+            processor = DocumentProcessor()
+            suffix = file_path.suffix.lower()
+            if suffix == ".pdf":
+                file_type = "pdf"
+            elif suffix in [".hwp", ".hwpx"]:
+                file_type = "hwp"
+            elif suffix == ".txt":
+                file_type = "text"
+            elif suffix in [".html", ".htm"]:
+                file_type = "html"
+            else:
+                file_type = None
+            
+            text, _ = processor.process_file(str(file_path), file_type)
+            
+            # 2. Legal Chunker로 청크 생성
+            chunker = LegalChunker(max_chars=1200, overlap=200)
+            legal_chunks = chunker.build_legal_chunks(
+                text=text,
+                source_name=source,
+                file_path=meta["file_path"]
+            )
+            
+            if not legal_chunks:
+                raise Exception("법률 청크 생성 실패")
+            
+            # 3. 법률 문서 저장
+            legal_document_id = self.store.upsert_legal_document(meta, text)
+            
+            # 4. 청크 임베딩 생성 및 저장
+            generator = LLMGenerator()
+            chunk_texts = [chunk.text for chunk in legal_chunks]
+            embeddings = generator.embed(chunk_texts)
+            
+            chunk_payload = [
+                {
+                    "section_title": chunk.section_title,
+                    "chunk_index": chunk.chunk_index,
+                    "text": chunk.text,
+                    "embedding": embeddings[i],
+                    "meta": {}
+                }
+                for i, chunk in enumerate(legal_chunks)
+            ]
+            
+            self.store.bulk_upsert_legal_chunks(legal_document_id, chunk_payload)
+            
+            result.update({
+                "status": "success",
+                "legal_document_id": legal_document_id,
+                "chunks_count": len(legal_chunks),
+                "completed_at": datetime.now().isoformat(),
+            })
+            
+            if verbose:
+                print(f"[완료] {file_path.name} → {legal_document_id} ({len(legal_chunks)}개 청크)")
+        
+        except Exception as e:
+            result.update({
+                "status": "failed",
+                "error": str(e),
+                "completed_at": datetime.now().isoformat(),
+            })
+            
+            if verbose:
+                print(f"[실패] {file_path.name} - {str(e)}")
+        
+        return result
+    
     def _save_processed_file(
         self,
         file_path: Path,
@@ -525,7 +681,8 @@ class BatchIngester:
         parallel: bool = False,
         max_workers: int = 3,
         verbose: bool = True,
-        auto_detect_type: bool = True
+        auto_detect_type: bool = True,
+        mode: str = "announcements"
     ) -> Dict[str, Any]:
         """
         폴더의 모든 파일 배치 처리
@@ -618,7 +775,8 @@ class BatchIngester:
         # 단일 폴더 처리 (기존 로직)
         return self._process_single_folder(
             folder_path, extensions, parallel, max_workers, verbose, 
-            "입찰" if not auto_detect_type else None
+            "입찰" if not auto_detect_type else None,
+            mode=mode
         )
     
     def _process_single_folder(
@@ -628,7 +786,8 @@ class BatchIngester:
         parallel: bool = False,
         max_workers: int = 3,
         verbose: bool = True,
-        default_type: str = None
+        default_type: str = None,
+        mode: str = "announcements"
     ) -> Dict[str, Any]:
         """
         단일 폴더 처리 (내부 메서드)
@@ -661,7 +820,7 @@ class BatchIngester:
             from concurrent.futures import ThreadPoolExecutor
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 results = list(executor.map(
-                    lambda f: self.process_file(f, verbose=verbose, default_type=default_type),
+                    lambda f: self.process_file(f, verbose=verbose, default_type=default_type, mode=mode),
                     files
                 ))
         else:
@@ -670,7 +829,7 @@ class BatchIngester:
             for i, file in enumerate(files, 1):
                 if verbose:
                     print(f"[{i}/{len(files)}] ", end="")
-                result = self.process_file(file, verbose=verbose, default_type=default_type)
+                result = self.process_file(file, verbose=verbose, default_type=default_type, mode=mode)
                 results.append(result)
         
         # 결과 집계
@@ -721,11 +880,18 @@ class BatchIngester:
 
 def main():
     """메인 함수"""
-    parser = argparse.ArgumentParser(description="공고 문서 배치 인입 스크립트")
+    parser = argparse.ArgumentParser(description="공고/법률 문서 배치 인입 스크립트")
     parser.add_argument(
         "folder",
         type=str,
         help="처리할 폴더 경로"
+    )
+    parser.add_argument(
+        "--mode",
+        type=str,
+        choices=["announcements", "legal"],
+        default="announcements",
+        help="처리 모드: announcements (공고) 또는 legal (법률/계약) (기본: announcements)"
     )
     parser.add_argument(
         "--extensions",
@@ -767,7 +933,8 @@ def main():
         extensions=args.extensions,
         parallel=args.parallel,
         max_workers=args.max_workers,
-        verbose=not args.quiet
+        verbose=not args.quiet,
+        mode=args.mode
     )
     
     # 리포트 저장

@@ -158,7 +158,7 @@ export function UploadCard({ onUploadComplete }: UploadCardProps) {
             <div className="mt-4">
               <div className="flex items-center justify-between text-sm mb-2">
                 <span className="text-slate-600">
-                  {status === 'uploading' ? '업로드 중...' : '처리 중...'}
+                  {status === 'uploading' ? '업로드 중...' : '계약 조항 분석 중...'}
                 </span>
                 <span className="font-medium">{Math.round(progress)}%</span>
               </div>
@@ -247,7 +247,7 @@ export function UploadCard({ onUploadComplete }: UploadCardProps) {
               {status === 'processing' && (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  처리 중...
+                  계약 조항 분석 중...
                 </>
               )}
               {status === 'done' && '완료'}

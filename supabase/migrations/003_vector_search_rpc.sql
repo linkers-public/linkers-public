@@ -28,11 +28,14 @@ BEGIN
   WHERE 
     a.status = 'active'
     AND 1 - (ac.embedding <=> query_embedding) > match_threshold
-    -- 필터 적용 (예산, 기간 등)
+    -- 필터 적용 (예산, 기간, announcement_id 등)
     AND (
       filters = '{}'::jsonb OR
-      (filters ? 'budget_min' AND a.budget_min >= (filters->>'budget_min')::bigint) OR
-      (filters ? 'budget_max' AND a.budget_max <= (filters->>'budget_max')::bigint)
+      (
+        (NOT (filters ? 'announcement_id') OR ac.announcement_id::text = filters->>'announcement_id')
+        AND (NOT (filters ? 'budget_min') OR a.budget_min >= (filters->>'budget_min')::bigint)
+        AND (NOT (filters ? 'budget_max') OR a.budget_max <= (filters->>'budget_max')::bigint)
+      )
     )
   ORDER BY ac.embedding <=> query_embedding
   LIMIT match_count;

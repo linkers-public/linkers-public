@@ -50,3 +50,72 @@ class APIResponse(BaseModel):
     message: Optional[str] = None
     data: Optional[dict] = None
 
+
+# ========== Legal RAG 스키마 ==========
+
+class LegalIssue(BaseModel):
+    """법적 이슈"""
+    name: str = Field(..., description="법적 이슈명 (예: 부당해고, 초과근로 수당 미지급)")
+    description: str
+    severity: str = Field(..., description="low | medium | high 등급")
+    legal_basis: List[str] = Field(default_factory=list, description="관련 법 조항/근거")
+
+
+class LegalRecommendation(BaseModel):
+    """법적 권고사항"""
+    title: str
+    description: str
+    steps: List[str] = Field(default_factory=list)
+
+
+class LegalGroundingChunk(BaseModel):
+    """RAG 검색 결과 청크"""
+    source_id: str
+    source_type: str  # "law" | "manual" | "case"
+    title: str
+    snippet: str
+    score: float
+
+
+class LegalAnalysisResult(BaseModel):
+    """법률 리스크 분석 결과"""
+    risk_score: int = Field(..., ge=0, le=100)
+    risk_level: str  # "low" | "medium" | "high"
+    summary: str
+    issues: List[LegalIssue] = Field(default_factory=list)
+    recommendations: List[LegalRecommendation] = Field(default_factory=list)
+    grounding: List[LegalGroundingChunk] = Field(
+        default_factory=list,
+        description="RAG로 가져온 근거 텍스트 목록",
+    )
+
+
+class LegalAnalyzeContractRequest(BaseModel):
+    """계약서 분석 요청 (JSON용)"""
+    description: Optional[str] = Field(
+        None,
+        description="사용자가 설명한 법적 상황/걱정 포인트",
+    )
+
+
+class LegalAnalyzeSituationRequest(BaseModel):
+    """상황 분석 요청"""
+    text: str = Field(
+        ...,
+        description="현재 겪고 있는 법적 상황 설명",
+        min_length=10,
+    )
+
+
+class LegalCasePreview(BaseModel):
+    """법률 케이스 프리뷰"""
+    id: str
+    title: str
+    situation: str
+    main_issues: List[str]
+
+
+class LegalSearchResponse(BaseModel):
+    """케이스 검색 응답"""
+    query: str
+    cases: List[LegalCasePreview] = Field(default_factory=list)

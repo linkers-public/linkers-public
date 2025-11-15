@@ -31,6 +31,13 @@
 - **견적서 작성**: 상담 요청에 대한 견적서를 작성하고 제출할 수 있습니다
 - **프로젝트 진행**: 수락된 프로젝트의 진행 상황을 관리할 수 있습니다
 
+### 법률 서비스 (Linkus Legal)
+- **법률 문제 분석**: 계약서나 법률 문서를 업로드하여 AI가 자동으로 법적 위험 요소를 분석합니다
+- **위험도 점검**: 문서 분석 후 법적 위험도를 0~100점으로 제공하고 색상으로 구분합니다
+- **법적 리스크 설명**: 분석된 리스크 항목과 해당 법적 근거를 상세히 제공합니다
+- **추천 대응 방법**: 각 법적 문제에 대한 구체적인 해결책과 대응 방법을 제시합니다
+- **법률 검색**: RAG 시스템을 통해 입력한 법적 상황에 대한 관련 법률 시나리오와 대응 방법을 조회합니다
+
 ## 🛠️ 기술 스택
 
 ### Frontend
@@ -85,10 +92,21 @@ linkers-public/
 │   ├── app/                    # Next.js App Router
 │   │   ├── (home)/            # 홈페이지 및 일반 사용자 페이지
 │   │   ├── enterprise/        # 기업 고객 전용
+│   │   ├── legal/             # 법률 서비스 (Linkus Legal)
+│   │   │   ├── page.tsx       # 법률 서비스 홈페이지
+│   │   │   ├── layout.tsx     # 법률 서비스 레이아웃
+│   │   │   ├── analysis/      # 법률 문제 분석 페이지
+│   │   │   └── search/        # 법률 검색 페이지
 │   │   ├── upload/            # 공고 업로드
 │   │   ├── analysis/[docId]/  # AI 분석 결과
 │   │   └── match/[docId]/     # 팀 매칭
 │   ├── components/            # React 컴포넌트
+│   │   ├── legal/             # 법률 서비스 전용 컴포넌트
+│   │   │   ├── FileUpload.tsx      # 파일 업로드
+│   │   │   ├── RiskScore.tsx       # 위험도 점수 표시
+│   │   │   ├── AnalysisResultCard.tsx  # 분석 결과 카드
+│   │   │   └── SearchResultCard.tsx    # 검색 결과 카드
+│   │   └── ui/                # 공통 UI 컴포넌트
 │   ├── lib/                   # 유틸리티 및 라이브러리
 │   │   └── rag/               # RAG 라이브러리
 │   ├── apis/                  # API 서비스 함수
@@ -361,9 +379,54 @@ ollama pull phi3      # 2.3GB, 매우 빠름, 한국어 제한적
 
 Supabase SQL Editor에서 실행:
 ```sql
--- 벡터 컬럼을 384차원으로 설정 (bge-small-en-v1.5 사용 시)
+-- 공고 벡터 컬럼을 384차원으로 설정 (bge-small-en-v1.5 사용 시)
 ALTER TABLE announcement_chunks DROP COLUMN IF EXISTS embedding;
 ALTER TABLE announcement_chunks ADD COLUMN embedding vector(384);
+
+-- 법률/계약 벡터 컬럼 설정 (legal RAG 모드 사용 시)
+ALTER TABLE legal_chunks DROP COLUMN IF EXISTS embedding;
+ALTER TABLE legal_chunks ADD COLUMN embedding vector(384);
+```
+
+**법률/계약 RAG 모드 사용 시 추가 테이블 생성:**
+
+```sql
+-- legal_documents 테이블
+CREATE TABLE IF NOT EXISTS legal_documents (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    title TEXT NOT NULL,
+    source TEXT,  -- 'moel', 'mss', 'mcst' 등
+    file_path TEXT,
+    doc_type TEXT,  -- 'law', 'standard_contract', 'manual', 'case'
+    content_hash TEXT,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- legal_chunks 테이블
+CREATE TABLE IF NOT EXISTS legal_chunks (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    legal_document_id UUID REFERENCES legal_documents(id) ON DELETE CASCADE,
+    section_title TEXT,  -- '제1조 (목적)' 등
+    chunk_index INTEGER,
+    text TEXT,
+    embedding vector(384),
+    meta JSONB DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- 인덱스 생성
+CREATE INDEX IF NOT EXISTS idx_legal_chunks_document_id ON legal_chunks(legal_document_id);
+CREATE INDEX IF NOT EXISTS idx_legal_chunks_embedding ON legal_chunks USING ivfflat (embedding vector_cosine_ops);
+
+-- 선택사항: legal_document_bodies 테이블 (원본 본문 저장)
+CREATE TABLE IF NOT EXISTS legal_document_bodies (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    legal_document_id UUID REFERENCES legal_documents(id) ON DELETE CASCADE,
+    text TEXT,
+    mime TEXT DEFAULT 'text/plain',
+    language TEXT DEFAULT 'ko',
+    created_at TIMESTAMPTZ DEFAULT now()
+);
 ```
 
 #### 5. 서버 실행
@@ -746,6 +809,24 @@ curl -X POST "http://localhost:8000/api/v2/announcements/upload" \
 - `/match/[docId]` - 팀 매칭
 - `/compare/[docId]` - 견적 비교
 
+### 법률 서비스 (Linkus Legal)
+- `/legal` - 법률 서비스 홈페이지 (Landing Page)
+  - 서비스 소개 및 기능 안내
+  - 법적 리스크 점검, 계약서 분석, 법적 시나리오 제공 소개
+  - CTA 버튼 (문서 업로드, 법률 문제 분석 시작하기)
+- `/legal/analysis` - 법률 문제 분석 페이지
+  - 계약서/법률 문서 파일 업로드 (드래그 앤 드롭 지원)
+  - 법적 상황 텍스트 입력
+  - 위험도 점수 표시 (0~100점, 색상 구분)
+  - 법적 리스크 설명 (법적 근거 포함)
+  - 추천 대응 방법 제시
+  - 관련 법적 시나리오 제공
+- `/legal/search` - 법률 검색 페이지
+  - 법적 상황 검색 입력
+  - RAG 시스템 기반 검색 결과 제공
+  - 각 시나리오별 법적 근거, 추천 대응 방법, 관련 법률 목록 표시
+  - 위험도 레벨 표시 (높음/보통/낮음)
+
 ## 🚨 문제 해결
 
 ### 서버가 시작되지 않는 경우
@@ -855,6 +936,222 @@ source venv/bin/activate
 - `main.py`의 CORS 설정 확인
 - 프론트엔드 도메인을 `allow_origins`에 추가
 
+## ⚖️ 법률 서비스 UI (Linkus Legal)
+
+법률 서비스는 청년 법률 리스크 탐지를 위한 AI 기반 계약/노동 리스크 분석 시스템입니다.
+
+### 주요 페이지
+
+#### 1. 홈페이지 (`/legal`)
+- **Hero Section**: 서비스 소개 및 강조된 CTA 버튼
+- **기능 소개 카드**: 법적 리스크 점검, 계약서 분석, 법적 시나리오 제공
+- **서비스 소개**: 각 기능에 대한 상세 설명
+- **CTA Section**: 문서 업로드 및 법률 검색 버튼
+
+#### 2. 법률 문제 분석 페이지 (`/legal/analysis`)
+- **파일 업로드 섹션**: 
+  - 드래그 앤 드롭 지원
+  - PDF, DOC, DOCX, TXT 파일 지원
+  - 파일 크기 제한 (기본 10MB)
+- **텍스트 입력 섹션**: 
+  - 법적 상황을 직접 텍스트로 입력
+  - 파일 업로드와 텍스트 입력 중 선택 가능
+- **분석 결과 표시**:
+  - 위험도 점수 (0~100점, 색상 구분: 높음/보통/낮음)
+  - 법적 리스크 설명 (제목, 설명, 법적 근거, 추천 대응 방법)
+  - 관련 법적 시나리오 목록
+
+#### 3. 법률 검색 페이지 (`/legal/search`)
+- **검색 입력**: 법적 상황을 텍스트로 입력
+- **검색 결과 카드**: 
+  - 각 시나리오별로 카드 형태로 표시
+  - 법적 근거 섹션
+  - 추천 대응 방법 섹션
+  - 관련 법률 목록
+  - 위험도 레벨 표시 (높음/보통/낮음)
+
+### UI 컴포넌트
+
+#### 공통 컴포넌트
+- `Card`: 재사용 가능한 카드 컴포넌트 (`src/components/ui/card.tsx`)
+- `Button`: 버튼 컴포넌트 (기존)
+- `Input`: 입력 필드 컴포넌트 (기존)
+- `Textarea`: 텍스트 영역 컴포넌트 (기존)
+
+#### 법률 서비스 전용 컴포넌트
+- `FileUpload` (`src/components/legal/FileUpload.tsx`): 
+  - 파일 업로드 컴포넌트
+  - 드래그 앤 드롭 지원
+  - 파일 선택 및 제거 기능
+- `RiskScore` (`src/components/legal/RiskScore.tsx`): 
+  - 위험도 점수 표시 컴포넌트
+  - 점수에 따른 색상 및 레벨 표시
+  - 진행 바 표시
+- `AnalysisResultCard` (`src/components/legal/AnalysisResultCard.tsx`): 
+  - 분석 결과 카드 컴포넌트
+  - 법적 리스크 설명 표시
+  - 법적 근거 및 추천 대응 방법 포함
+  - 관련 법적 시나리오 표시
+- `SearchResultCard` (`src/components/legal/SearchResultCard.tsx`): 
+  - 검색 결과 카드 컴포넌트
+  - 시나리오, 법적 근거, 추천 대응 방법, 관련 법률 표시
+  - 위험도 레벨 표시
+
+### 레이아웃
+
+법률 서비스는 전용 레이아웃을 사용합니다 (`src/app/legal/layout.tsx`):
+- **헤더**: Linkus Legal 로고 및 네비게이션 메뉴
+- **네비게이션**: 홈, 법률 문제 분석, 법률 검색 페이지 간 이동
+- **푸터**: 저작권 정보
+
+### 사용 방법
+
+1. **법률 서비스 접속**: `/legal` 경로로 접속
+2. **법률 문제 분석**:
+   - `/legal/analysis` 페이지로 이동
+   - 파일 업로드 또는 텍스트 입력
+   - "분석 시작하기" 버튼 클릭
+   - 분석 결과 확인
+3. **법률 검색**:
+   - `/legal/search` 페이지로 이동
+   - 법적 상황을 검색창에 입력
+   - "검색" 버튼 클릭 또는 Enter 키 입력
+   - 검색 결과 확인
+
+### API 연동
+
+현재는 시뮬레이션 데이터를 사용하고 있습니다. 실제 백엔드 API와 연동하려면:
+
+1. **법률 문제 분석 API 연동**:
+   - `src/app/legal/analysis/page.tsx`의 `handleAnalyze` 함수 수정
+   - 백엔드 API 엔드포인트 호출 추가
+   - 예: `POST /api/v2/legal/analyze-contract`
+
+2. **법률 검색 API 연동**:
+   - `src/app/legal/search/page.tsx`의 `handleSearch` 함수 수정
+   - RAG 검색 API 엔드포인트 호출 추가
+   - 예: `GET /api/v2/legal/search?q={query}`
+
+### 디자인 특징
+
+- **반응형 디자인**: 모바일, 태블릿, 데스크톱 지원
+- **일관된 UI**: Tailwind CSS 기반 디자인 시스템
+- **사용자 경험**: 로딩 상태, 에러 처리, 직관적인 인터페이스
+- **접근성**: 명확한 레이블, 색상 대비, 키보드 네비게이션 지원
+
+## 📚 Legal RAG 모드 (청년 법률/계약 네비게이터)
+
+법률/계약 문서를 RAG로 인덱싱하고 검색/분석할 수 있는 모드입니다.
+
+### 데이터 폴더 구조
+
+```
+backend/data/legal/
+├── laws/              # 근로기준법, 노동법 요약, 청년 노동 가이드
+├── standard_contracts/ # 표준 근로·용역·프리랜서·콘텐츠 계약서
+├── manuals/           # 직장 내 괴롭힘/성희롭 등 매뉴얼
+└── cases/             # 가공된 시나리오/케이스 텍스트 (직접 만든 md/txt)
+```
+
+### 인덱싱 방법
+
+```bash
+cd backend
+
+# 법률 문서 인덱싱
+python scripts/batch_ingest.py data/legal --mode legal
+
+# 특정 폴더만 인덱싱 (예: laws 폴더만)
+python scripts/batch_ingest.py data/legal/laws --mode legal
+
+# 특정 형식만 처리 (예: PDF만)
+python scripts/batch_ingest.py data/legal --mode legal --extensions .pdf
+```
+
+### 검색/분석 API
+
+#### 1. 법률 문서 검색
+
+```bash
+GET /api/v2/legal/search?q=근로시간&limit=5&doc_type=law
+```
+
+**응답:**
+```json
+{
+  "results": [
+    {
+      "legal_document_id": "uuid",
+      "section_title": "제1조 (목적)",
+      "text": "청크 텍스트...",
+      "score": 0.85,
+      "source": "moel",
+      "doc_type": "law",
+      "title": "근로기준법"
+    }
+  ],
+  "count": 5,
+  "query": "근로시간"
+}
+```
+
+#### 2. 계약서 분석
+
+```bash
+POST /api/v2/legal/analyze-contract
+Content-Type: multipart/form-data
+
+file: [계약서 PDF]
+title: "프리랜서 계약서" (선택)
+```
+
+**응답:**
+```json
+{
+  "risk_score": 65.5,
+  "risks": [
+    {
+      "clause": "계약 해지 조항",
+      "risk_level": "high",
+      "description": "일방적 해지 가능 조항이 포함되어 있습니다",
+      "related_law": "제1조 (목적)"
+    }
+  ],
+  "summary": "전체 요약...",
+  "references": [
+    {
+      "section_title": "제1조 (목적)",
+      "source": "moel",
+      "text": "관련 법률 조문..."
+    }
+  ],
+  "title": "프리랜서 계약서"
+}
+```
+
+### 특징
+
+- **제n조 기준 청킹**: 법률 문서를 조(제n조) 단위로 자동 분할
+- **섹션 제목 보존**: 각 청크에 조문 제목(section_title) 포함
+- **벡터 검색**: pgvector 기반 유사도 검색
+- **계약서 분석**: 업로드한 계약서의 위험 조항 자동 분석
+
+### 사용 예시
+
+```bash
+# 법률 문서 인덱싱
+cd backend
+python scripts/batch_ingest.py data/legal --mode legal
+
+# 법률 검색 테스트
+curl "http://localhost:8000/api/v2/legal/search?q=근로시간&limit=5"
+
+# 계약서 분석 테스트
+curl -X POST "http://localhost:8000/api/v2/legal/analyze-contract" \
+  -F "file=@contract.pdf" \
+  -F "title=프리랜서 계약서"
+```
+
 ## 📝 데이터 폴더 설명
 
 ### `backend/data/bids/`
@@ -880,6 +1177,27 @@ python scripts/batch_ingest.py data/bids --extensions .hwpx
 # CSV 파일 처리
 python scripts/batch_ingest.py data/bids --extensions .csv
 ```
+
+### `backend/data/legal/`
+법률/계약 RAG용 데이터 폴더입니다. 근로기준법, 표준 계약서, 매뉴얼 등을 넣고 legal 모드로 인덱싱합니다.
+
+**사용 방법:**
+```bash
+cd backend
+# 법률 문서 인덱싱
+python scripts/batch_ingest.py data/legal --mode legal
+
+# 특정 폴더만 인덱싱
+python scripts/batch_ingest.py data/legal/laws --mode legal
+```
+
+**지원 형식:**
+- PDF (`.pdf`)
+- HWPX (`.hwpx`)
+- HWP (`.hwp`)
+- HTML (`.html`, `.htm`)
+- TXT (`.txt`)
+- Markdown (`.md`)
 
 ### `backend/data/companies/`
 기업 추천용 데이터 폴더입니다. 기업 등록 데이터, R&D 과제 데이터, 수행이력 등을 저장합니다.
