@@ -99,24 +99,24 @@ export function RiskOverviewBar({ analysisResult, onCategoryClick }: RiskOvervie
   const contractType = estimateContractType()
 
   return (
-    <div className="sticky top-0 z-20 bg-white/95 backdrop-blur-xl border-b border-slate-200/80 shadow-lg">
-      <div className="container mx-auto px-4 sm:px-6 py-5">
-        <div className="flex flex-col lg:flex-row items-start lg:items-center gap-5 lg:gap-6">
+    <div className="sticky top-0 z-20 bg-white/95 backdrop-blur-xl border-b border-slate-200/80">
+      <div className="w-full px-4 sm:px-6 lg:px-8 py-2.5">
+        <div className="flex flex-col lg:flex-row items-start lg:items-center gap-3 lg:gap-4">
           {/* 좌측: 계약서 요약 정보 */}
-          <div className="flex-1 flex flex-col sm:flex-row items-start sm:items-center gap-4 min-w-0">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl shadow-md">
-                <FileText className="w-5 h-5 text-white" />
+          <div className="flex-1 flex flex-col sm:flex-row items-start sm:items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg shadow-sm">
+                <FileText className="w-4 h-4 text-white" />
               </div>
               <div className="min-w-0">
-                <p className="text-base font-bold text-slate-900 truncate">{contractType}</p>
-                <div className="flex items-center gap-2 text-xs text-slate-600 mt-1">
-                  <span className="flex items-center gap-1.5 px-2 py-0.5 bg-slate-100 rounded-md">
-                    <Calendar className="w-3 h-3" />
+                <p className="text-sm font-bold text-slate-900 truncate">{contractType}</p>
+                <div className="flex items-center gap-1.5 text-[10px] text-slate-500 mt-0.5">
+                  <span className="flex items-center gap-1 px-1.5 py-0.5 bg-slate-100 rounded">
+                    <Calendar className="w-2.5 h-2.5" />
                     {new Date().toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' })}
                   </span>
                   {clauseCount > 0 && (
-                    <span className="px-2 py-0.5 bg-slate-100 rounded-md">
+                    <span className="px-1.5 py-0.5 bg-slate-100 rounded">
                       {clauseCount}개 조항
                     </span>
                   )}
@@ -124,50 +124,50 @@ export function RiskOverviewBar({ analysisResult, onCategoryClick }: RiskOvervie
               </div>
             </div>
             <div className={cn(
-              "px-4 py-2 rounded-xl border-2 text-sm font-semibold flex items-center gap-2 shadow-sm",
+              "px-3 py-1 rounded-lg border text-xs font-semibold flex items-center gap-1.5",
               riskInfo.bgColor,
               riskInfo.borderColor,
               riskInfo.textColor
             )}>
-              <RiskIcon className="w-4 h-4" />
+              <RiskIcon className="w-3 h-3" />
               {riskInfo.label}
             </div>
           </div>
 
           {/* 중앙: 전체 위험도 게이지 */}
-          <div className="flex items-center gap-5 min-w-0 bg-gradient-to-br from-slate-50 to-white rounded-xl p-4 border border-slate-200/60 shadow-sm">
-            <div className="flex items-center gap-4 min-w-0 flex-1">
+          <div className="flex items-center gap-3 min-w-0 bg-gradient-to-br from-slate-50 to-white rounded-lg px-3 py-2 border border-slate-200/60">
+            <div className="flex items-center gap-3 min-w-0 flex-1">
               <div className="flex-shrink-0">
-                <div className="flex items-center gap-2 mb-2">
-                  <BarChart3 className="w-4 h-4 text-slate-500" />
-                  <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">전체 위험도</p>
+                <div className="flex items-center gap-1.5 mb-1">
+                  <BarChart3 className="w-3 h-3 text-slate-500" />
+                  <p className="text-[10px] font-semibold text-slate-600 uppercase tracking-wide">전체 위험도</p>
                 </div>
-                <div className="flex items-baseline gap-1.5">
-                  <span className={cn("text-3xl font-extrabold", riskInfo.labelColor)}>{riskScore}</span>
-                  <span className="text-sm text-slate-500 font-medium">/100</span>
+                <div className="flex items-baseline gap-1">
+                  <span className={cn("text-2xl font-extrabold", riskInfo.labelColor)}>{riskScore}</span>
+                  <span className="text-xs text-slate-500 font-medium">/100</span>
                 </div>
               </div>
-              <div className="flex-1 min-w-[140px] max-w-[220px]">
-                <div className="h-4 bg-slate-200 rounded-full overflow-hidden shadow-inner">
+              <div className="flex-1 min-w-[120px] max-w-[180px]">
+                <div className="h-2.5 bg-slate-200 rounded-full overflow-hidden shadow-inner">
                   <div
                     className={cn(
-                      "h-full bg-gradient-to-r transition-all duration-700 ease-out rounded-full shadow-sm",
+                      "h-full bg-gradient-to-r transition-all duration-700 ease-out rounded-full",
                       riskInfo.gradient
                     )}
                     style={{ width: `${riskScore}%` }}
                   />
                 </div>
-                <p className={cn("text-xs mt-2 font-semibold", riskInfo.labelColor)}>
-                  {riskInfo.label === '위험 낮음' ? '✅ 안전합니다' :
-                   riskInfo.label === '주의' ? '⚠️ 주의 필요' :
-                   '🚨 위험 높음'}
+                <p className={cn("text-[10px] mt-1 font-semibold", riskInfo.labelColor)}>
+                  {riskInfo.label === '위험 낮음' ? '✅ 안전' :
+                   riskInfo.label === '주의' ? '⚠️ 주의' :
+                   '🚨 위험'}
                 </p>
               </div>
             </div>
           </div>
 
           {/* 우측: 카테고리별 요약 뱃지 */}
-          <div className="flex flex-wrap gap-2 lg:flex-nowrap">
+          <div className="flex flex-wrap gap-1.5 lg:flex-nowrap">
             {displayedCategories.map(category => {
               const count = categoryCounts[category]
               if (!count || count.total === 0) return null
@@ -180,7 +180,7 @@ export function RiskOverviewBar({ analysisResult, onCategoryClick }: RiskOvervie
                     bg: 'bg-gradient-to-br from-red-50 to-rose-50',
                     border: 'border-red-300',
                     text: 'text-red-700',
-                    label: `위험 ${count.high}개`,
+                    label: `${count.high}개`,
                     icon: AlertTriangle,
                   }
                 : hasMedium
@@ -188,14 +188,14 @@ export function RiskOverviewBar({ analysisResult, onCategoryClick }: RiskOvervie
                     bg: 'bg-gradient-to-br from-amber-50 to-orange-50',
                     border: 'border-amber-300',
                     text: 'text-amber-700',
-                    label: `경고 ${count.medium}개`,
+                    label: `${count.medium}개`,
                     icon: TrendingUp,
                   }
                 : {
                     bg: 'bg-gradient-to-br from-blue-50 to-indigo-50',
                     border: 'border-blue-300',
                     text: 'text-blue-700',
-                    label: `주의 ${count.low}개`,
+                    label: `${count.low}개`,
                     icon: Shield,
                   }
 
@@ -206,16 +206,16 @@ export function RiskOverviewBar({ analysisResult, onCategoryClick }: RiskOvervie
                   key={category}
                   onClick={() => onCategoryClick?.(category)}
                   className={cn(
-                    "group px-4 py-2.5 rounded-xl border-2 text-xs font-semibold",
-                    "transition-all duration-200 hover:shadow-lg hover:scale-105",
-                    "flex items-center gap-2",
+                    "group px-2.5 py-1.5 rounded-lg border text-[10px] font-semibold",
+                    "transition-all duration-200 hover:shadow-md hover:scale-105",
+                    "flex items-center gap-1.5",
                     badgeConfig.bg,
                     badgeConfig.border,
                     badgeConfig.text
                   )}
                 >
-                  <BadgeIcon className="w-3.5 h-3.5 flex-shrink-0" />
-                  <div className="flex items-center gap-1.5">
+                  <BadgeIcon className="w-3 h-3 flex-shrink-0" />
+                  <div className="flex items-center gap-1">
                     <span className="font-bold">{CATEGORY_LABELS[category]}</span>
                     <span className="opacity-60">·</span>
                     <span>{badgeConfig.label}</span>

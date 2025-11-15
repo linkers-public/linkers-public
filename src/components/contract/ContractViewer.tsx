@@ -199,12 +199,12 @@ export function ContractViewer({
   return (
     <div
       ref={containerRef}
-      className="h-full overflow-y-auto bg-gradient-to-b from-slate-50/80 to-white p-6 sm:p-8"
+      className="h-full overflow-y-auto bg-gradient-to-b from-slate-50/80 to-white px-4 sm:px-6 lg:px-8 pb-4 sm:pb-6 lg:pb-8"
       role="article"
       aria-label="계약서 전문"
     >
-      <div className="max-w-4xl mx-auto">
-        <div className="sticky top-0 bg-white/95 backdrop-blur-md z-10 pb-5 mb-6 border-b border-slate-200/60 shadow-sm rounded-b-lg">
+      <div className="w-full max-w-none lg:max-w-5xl mx-auto">
+        <div className="sticky top-0 bg-white/95 backdrop-blur-md z-10 pt-3 pb-3 mb-4 border-b border-slate-200/60">
           <div className="flex items-center gap-3 mb-2">
             <div className="p-2 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg shadow-md">
               <FileText className="w-5 h-5 text-white" />

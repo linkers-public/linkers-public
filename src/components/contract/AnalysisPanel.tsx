@@ -152,7 +152,7 @@ export function AnalysisPanel({
   return (
     <div className="h-full flex flex-col bg-gradient-to-b from-slate-50/80 to-white" role="complementary" aria-label="분석 결과">
       {/* 헤더 */}
-      <div className="p-4 sm:p-5 bg-white/95 backdrop-blur-sm border-b border-slate-200/60 shadow-sm flex-shrink-0">
+      <div className="p-3 sm:p-4 lg:p-5 bg-white/95 backdrop-blur-sm border-b border-slate-200/60 flex-shrink-0">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <div className="p-2 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg shadow-md">
@@ -269,7 +269,7 @@ export function AnalysisPanel({
       <div className="flex-1 overflow-y-auto">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           {/* 요약 보기 탭 */}
-          <TabsContent value="summary" className="p-3 sm:p-4 mt-0">
+          <TabsContent value="summary" className="p-3 sm:p-4 lg:p-6 mt-0">
             <div className="space-y-3">
               {/* 전체 요약 */}
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
@@ -331,7 +331,7 @@ export function AnalysisPanel({
           </TabsContent>
 
           {/* 조항별 분석 탭 */}
-          <TabsContent value="issues" className="p-3 sm:p-4 mt-0">
+          <TabsContent value="issues" className="p-3 sm:p-4 lg:p-6 mt-0">
             {filteredAndSortedIssues.length === 0 ? (
               <div className="text-center py-8 text-slate-500">
                 <p>필터 조건에 맞는 이슈가 없습니다.</p>
@@ -357,7 +357,7 @@ export function AnalysisPanel({
           </TabsContent>
 
           {/* 법령·표준계약 비교 탭 */}
-          <TabsContent value="legal" className="p-3 sm:p-4 mt-0">
+          <TabsContent value="legal" className="p-3 sm:p-4 lg:p-6 mt-0">
             <div className="space-y-4">
               {/* 법적 근거 아코디언 */}
               {issues.map((issue, index) => {

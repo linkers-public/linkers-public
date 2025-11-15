@@ -224,7 +224,7 @@ export default function ContractDetailPage() {
 
   // 분석 완료 상태 - 2-컬럼 레이아웃
   return (
-    <div className="h-screen flex flex-col bg-gradient-to-br from-slate-50 via-white to-slate-50">
+    <div className="min-h-screen h-screen flex flex-col bg-gradient-to-br from-slate-50 via-white to-slate-50">
       {/* 상단 요약 헤더 */}
       <RiskOverviewBar 
         analysisResult={analysisResult}
@@ -238,9 +238,12 @@ export default function ContractDetailPage() {
       />
 
       {/* 메인 컨텐츠 영역 */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden min-h-0">
         {/* 상단: 2-컬럼 레이아웃 (계약서 + 분석 결과) */}
-        <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+        <div className={cn(
+          "flex flex-col lg:flex-row overflow-hidden",
+          isChatOpen ? "flex-1 min-h-0" : "flex-[1.2] min-h-0"
+        )}>
           {/* 왼쪽: 계약서 뷰어 */}
           <div className="w-full lg:w-1/2 flex-shrink-0 overflow-hidden bg-white border-r border-slate-200/60 shadow-sm">
             <ContractViewer
@@ -296,16 +299,19 @@ export default function ContractDetailPage() {
         </div>
 
         {/* 하단: 채팅 UI (접기/펼치기 가능) */}
-        <div className="border-t border-slate-200/60 bg-white/80 backdrop-blur-sm shadow-lg">
+        <div className={cn(
+          "border-t border-slate-200/60 bg-white/80 backdrop-blur-sm flex-shrink-0",
+          isChatOpen ? "flex flex-col" : ""
+        )}>
           {/* 채팅 토글 버튼 */}
           <button
             onClick={() => setIsChatOpen(!isChatOpen)}
             className={cn(
-              "w-full px-5 py-4 flex items-center justify-between",
+              "w-full px-5 py-3 flex items-center justify-between",
               "bg-gradient-to-r from-blue-50/50 to-indigo-50/50",
               "hover:from-blue-50 hover:to-indigo-50",
               "transition-all duration-200",
-              "border-b border-slate-200/60"
+              isChatOpen && "border-b border-slate-200/60"
             )}
           >
             <div className="flex items-center gap-3">
@@ -335,7 +341,7 @@ export default function ContractDetailPage() {
           {isChatOpen && (
             <div 
               id="contract-chat" 
-              className="h-[400px] lg:h-[450px] overflow-hidden flex flex-col animate-in slide-in-from-bottom-2 duration-300"
+              className="h-[320px] lg:h-[380px] overflow-hidden flex flex-col animate-in slide-in-from-bottom-2 duration-300"
             >
               <ContractChat
                 docId={docId}
