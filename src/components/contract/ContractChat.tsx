@@ -22,6 +22,10 @@ interface ContractChatProps {
   selectedIssueId?: string
   prefilledQuestion?: string
   onQuestionPrefilled?: () => void
+  externalMessage?: string
+  onExternalMessageSent?: () => void
+  onLoadingChange?: (loading: boolean) => void
+  onMessageCountChange?: (count: number) => void
 }
 
 export function ContractChat({
@@ -30,12 +34,69 @@ export function ContractChat({
   selectedIssueId,
   prefilledQuestion,
   onQuestionPrefilled,
+  externalMessage,
+  onExternalMessageSent,
+  onLoadingChange,
+  onMessageCountChange,
 }: ContractChatProps) {
-  const [messages, setMessages] = useState<Message[]>([])
+  // localStorage에서 메시지 로드
+  const loadMessages = (): Message[] => {
+    if (typeof window === 'undefined') return []
+    try {
+      const stored = localStorage.getItem(`contract_chat_${docId}`)
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        return parsed.map((msg: any) => ({
+          ...msg,
+          timestamp: new Date(msg.timestamp),
+        }))
+      }
+    } catch (error) {
+      console.error('메시지 로드 실패:', error)
+    }
+    return []
+  }
+
+  // 메시지 저장
+  const saveMessages = (msgs: Message[]) => {
+    if (typeof window === 'undefined') return
+    try {
+      localStorage.setItem(`contract_chat_${docId}`, JSON.stringify(msgs))
+    } catch (error) {
+      console.error('메시지 저장 실패:', error)
+    }
+  }
+
+  const [messages, setMessages] = useState<Message[]>(loadMessages())
   const [inputMessage, setInputMessage] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const chatContainerRef = useRef<HTMLDivElement>(null)
+
+  // 초기 메시지 개수 알림
+  useEffect(() => {
+    const initialMessages = loadMessages()
+    onMessageCountChange?.(initialMessages.length)
+  }, [docId, onMessageCountChange])
+
+  // 메시지가 변경될 때마다 저장
+  useEffect(() => {
+    saveMessages(messages)
+    onMessageCountChange?.(messages.length)
+  }, [messages, docId, onMessageCountChange])
+
+  // 외부에서 메시지 전송 요청
+  useEffect(() => {
+    if (externalMessage && externalMessage.trim()) {
+      handleSendMessage(undefined, externalMessage)
+      onExternalMessageSent?.()
+    }
+  }, [externalMessage, onExternalMessageSent])
+
+  // 로딩 상태 변경 알림
+  useEffect(() => {
+    onLoadingChange?.(chatLoading)
+  }, [chatLoading, onLoadingChange])
 
   // 분석 결과 기반 추천 질문 생성 (해커톤용 강화)
   const generateSuggestedQuestions = (): string[] => {

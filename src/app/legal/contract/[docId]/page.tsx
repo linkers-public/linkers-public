@@ -2,10 +2,12 @@
 
 import React, { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
-import { Loader2, AlertCircle, ChevronUp, ChevronDown, MessageSquare, GripVertical } from 'lucide-react'
+import { Loader2, AlertCircle, ChevronUp, ChevronDown, MessageSquare, GripVertical, Send } from 'lucide-react'
 import { ContractViewer } from '@/components/contract/ContractViewer'
 import { AnalysisPanel } from '@/components/contract/AnalysisPanel'
 import { ContractChat } from '@/components/contract/ContractChat'
+import { Button } from '@/components/ui/button'
+import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
 import type { LegalIssue, ContractAnalysisResult } from '@/types/legal'
 
@@ -22,6 +24,10 @@ export default function ContractDetailPage() {
   const [prefilledQuestion, setPrefilledQuestion] = useState<string | undefined>()
   const [chatHeight, setChatHeight] = useState(380)
   const [isResizing, setIsResizing] = useState(false)
+  const [chatLoading, setChatLoading] = useState(false)
+  const [messageCount, setMessageCount] = useState(0)
+  const [externalMessage, setExternalMessage] = useState<string>('')
+  const [collapsedInput, setCollapsedInput] = useState('')
 
   // 분석 결과 로드
   useEffect(() => {
@@ -330,46 +336,126 @@ export default function ContractDetailPage() {
           isChatOpen ? "flex flex-col" : ""
         )}>
           {/* 채팅 토글 버튼 - 파란색 헤더 스타일 */}
-          <button
-            onClick={() => setIsChatOpen(!isChatOpen)}
-            className={cn(
-              "w-full relative overflow-hidden",
-              "bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-600",
-              "hover:from-blue-700 hover:via-blue-600 hover:to-indigo-700",
-              "transition-all duration-200",
-              "border-t border-blue-400/30"
-            )}
-          >
+          <div className="relative overflow-hidden bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-600 border-t border-blue-400/30">
             <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxwYXRoIGQ9Ik0zNiAzNGMwIDIuMjA5LTEuNzkxIDQtNCA0cy00LTEuNzkxLTQtNCAxLjc5MS00IDQtNCA0IDEuNzkxIDQgNHptMTAtMTBjMCAyLjIwOS0xLjc5MSA0LTQgNHMtNC0xLjc5MS00LTQgMS43OTEtNCA0LTQgNCAxLjc5MSA0IDR6IiBmaWxsPSJyZ2JhKDI1NSwyNTUsMjU1LDAuMSkiLz48L2c+PC9zdmc+')] opacity-20"></div>
-            <div className="relative px-4 sm:px-5 py-3 sm:py-4 flex items-center justify-between">
-              <div className="flex items-center gap-3 flex-1 min-w-0">
-                <div className="p-2 bg-white/20 backdrop-blur-sm rounded-xl shadow-lg flex-shrink-0">
-                  <MessageSquare className="w-5 h-5 text-white" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h2 className="text-base sm:text-lg font-bold text-white mb-0.5">AI 법률 상담</h2>
-                  <p className="text-xs text-blue-100 leading-relaxed">
-                    위험 조항에 대해 구체적으로 질문하시면 이해하기 쉽게 설명해드립니다
-                  </p>
-                </div>
-              </div>
-              <div className={cn(
-                "p-2 rounded-lg transition-all duration-200 flex-shrink-0 ml-3",
-                isChatOpen ? "bg-white/30 text-white rotate-180" : "bg-white/20 text-white/80"
-              )}>
-                {isChatOpen ? (
-                  <ChevronUp className="w-5 h-5" />
-                ) : (
-                  <ChevronDown className="w-5 h-5" />
+            <div className="relative">
+              <button
+                onClick={() => setIsChatOpen(!isChatOpen)}
+                className={cn(
+                  "w-full px-4 sm:px-5 py-3 sm:py-4 flex items-center justify-between",
+                  "hover:from-blue-700 hover:via-blue-600 hover:to-indigo-700",
+                  "transition-all duration-200"
                 )}
-              </div>
-            </div>
-          </button>
+              >
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <div className="p-2 bg-white/20 backdrop-blur-sm rounded-xl shadow-lg flex-shrink-0">
+                    <MessageSquare className="w-5 h-5 text-white" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <h2 className="text-base sm:text-lg font-bold text-white">AI 법률 상담</h2>
+                      {messageCount > 0 && (
+                        <span className="px-2 py-0.5 bg-white/30 rounded-full text-[10px] font-medium text-white">
+                          {messageCount}개 대화
+                        </span>
+                      )}
+                      {chatLoading && (
+                        <div className="flex items-center gap-1.5 px-2 py-0.5 bg-white/30 rounded-full">
+                          <Loader2 className="w-3 h-3 text-white animate-spin" />
+                          <span className="text-[10px] font-medium text-white">답변 대기 중...</span>
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-xs text-blue-100 leading-relaxed">
+                      {isChatOpen 
+                        ? "위험 조항에 대해 구체적으로 질문하시면 이해하기 쉽게 설명해드립니다"
+                        : "토글을 열어 대화를 확인하거나, 아래에서 바로 질문하세요"
+                      }
+                    </p>
+                  </div>
+                </div>
+                <div className={cn(
+                  "p-2 rounded-lg transition-all duration-200 flex-shrink-0 ml-3",
+                  isChatOpen ? "bg-white/30 text-white rotate-180" : "bg-white/20 text-white/80"
+                )}>
+                  {isChatOpen ? (
+                    <ChevronUp className="w-5 h-5" />
+                  ) : (
+                    <ChevronDown className="w-5 h-5" />
+                  )}
+                </div>
+              </button>
 
-          {/* 채팅 컨텐츠 (접기/펼치기) */}
-          {isChatOpen && (
-            <>
-              {/* 리사이저 핸들 */}
+              {/* 토글이 닫혀있을 때 입력창 */}
+              {!isChatOpen && (
+                <div className="px-4 pb-3 border-t border-white/20">
+                  <div className="flex gap-2 items-end pt-3">
+                    <div className="flex-1 relative">
+                      <Textarea
+                        value={collapsedInput}
+                        onChange={(e) => setCollapsedInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey && (e.metaKey || e.ctrlKey)) {
+                            e.preventDefault()
+                            if (collapsedInput.trim()) {
+                              setExternalMessage(collapsedInput.trim())
+                              setCollapsedInput('')
+                              setIsChatOpen(true) // 자동으로 채팅 열기
+                            }
+                          }
+                        }}
+                        placeholder="질문을 입력하세요... (Ctrl+Enter로 전송)"
+                        disabled={chatLoading}
+                        className={cn(
+                          "min-h-[44px] max-h-[100px] resize-none text-sm",
+                          "border-white/30 bg-white/10 text-white placeholder:text-white/60",
+                          "focus:border-white/50 focus:ring-2 focus:ring-white/20",
+                          "rounded-lg pr-20",
+                          "transition-all duration-200"
+                        )}
+                        rows={1}
+                      />
+                      <div className="absolute bottom-1.5 right-2 flex items-center gap-1 text-[10px] text-white/60">
+                        <kbd className="px-1 py-0.5 bg-white/20 rounded text-[10px]">Ctrl</kbd>
+                        <span>+</span>
+                        <kbd className="px-1 py-0.5 bg-white/20 rounded text-[10px]">Enter</kbd>
+                      </div>
+                    </div>
+                    <Button
+                      onClick={() => {
+                        if (collapsedInput.trim()) {
+                          setExternalMessage(collapsedInput.trim())
+                          setCollapsedInput('')
+                          setIsChatOpen(true) // 자동으로 채팅 열기
+                        }
+                      }}
+                      disabled={chatLoading || !collapsedInput.trim()}
+                      size="sm"
+                      className={cn(
+                        "h-[44px] px-4 rounded-lg",
+                        "bg-white/20 hover:bg-white/30 text-white",
+                        "border border-white/30",
+                        "transition-all duration-200",
+                        "disabled:opacity-50 disabled:cursor-not-allowed",
+                        "flex-shrink-0"
+                      )}
+                    >
+                      {chatLoading ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Send className="w-4 h-4" />
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 채팅 컨텐츠 (접기/펼치기) - 항상 렌더링하되 높이로 제어 */}
+          <>
+            {/* 리사이저 핸들 */}
+            {isChatOpen && (
               <div
                 onMouseDown={(e) => {
                   e.preventDefault()
@@ -390,22 +476,29 @@ export default function ContractDetailPage() {
                   <GripVertical className="w-4 h-4 text-blue-300 group-hover:text-white transition-colors" />
                 </div>
               </div>
-              
-              <div 
-                id="contract-chat" 
-                className="overflow-hidden flex flex-col animate-in slide-in-from-bottom-2 duration-300"
-                style={{ height: `${chatHeight}px` }}
-              >
+            )}
+            
+            <div 
+              id="contract-chat" 
+              className={cn(
+                "overflow-hidden flex flex-col transition-all duration-300",
+                isChatOpen ? "animate-in slide-in-from-bottom-2" : "h-0"
+              )}
+              style={isChatOpen ? { height: `${chatHeight}px` } : { height: '0px' }}
+            >
               <ContractChat
                 docId={docId}
                 analysisResult={analysisResult}
                 selectedIssueId={chatIssueId || selectedIssueId}
                 prefilledQuestion={prefilledQuestion}
                 onQuestionPrefilled={() => setPrefilledQuestion(undefined)}
+                externalMessage={externalMessage}
+                onExternalMessageSent={() => setExternalMessage('')}
+                onLoadingChange={setChatLoading}
+                onMessageCountChange={setMessageCount}
               />
-              </div>
-            </>
-          )}
+            </div>
+          </>
         </div>
       </div>
     </div>
