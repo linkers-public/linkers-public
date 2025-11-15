@@ -145,3 +145,60 @@ class LegalChatResponse(BaseModel):
     markdown: Optional[str] = Field(None, description="마크다운 형식 답변")
     query: str = Field(..., description="원본 질문")
     used_chunks: List[dict] = Field(default_factory=list, description="사용된 RAG 청크")
+
+
+# ========== 상황 기반 진단 스키마 ==========
+
+class SituationAnalysisRequest(BaseModel):
+    """상황 기반 진단 요청"""
+    category_hint: str = Field(..., description="상황 카테고리 힌트 (harassment, unpaid_wage, unfair_dismissal, overtime, probation, unknown)")
+    summary: Optional[str] = Field(None, description="한 줄 요약")
+    details: Optional[str] = Field(None, description="자세한 설명 (선택)")
+    employment_type: Optional[str] = Field(None, description="고용 형태 (regular, contract, intern, freelancer, part_time, other)")
+    work_period: Optional[str] = Field(None, description="근무 기간 (under_3_months, 3_12_months, 1_3_years, over_3_years)")
+    weekly_hours: Optional[int] = Field(None, description="주당 근로시간")
+    is_probation: Optional[bool] = Field(None, description="수습 여부")
+    social_insurance: Optional[str] = Field(None, description="4대보험 (all, partial, none, unknown)")
+    situation_text: str = Field(..., description="상황 상세 설명 (summary + details 또는 전체 텍스트)")
+
+
+class CriteriaItem(BaseModel):
+    """판단 기준 항목"""
+    name: str = Field(..., description="기준명")
+    status: str = Field(..., description="충족 여부 (likely, unclear, unlikely)")
+    reason: str = Field(..., description="판단 이유")
+
+
+class ActionStep(BaseModel):
+    """행동 가이드 단계"""
+    title: str = Field(..., description="단계 제목")
+    items: List[str] = Field(..., description="항목 목록")
+
+
+class ActionPlan(BaseModel):
+    """행동 가이드"""
+    steps: List[ActionStep] = Field(..., description="단계 목록")
+
+
+class Scripts(BaseModel):
+    """스크립트/템플릿"""
+    to_company: Optional[str] = Field(None, description="회사에 보낼 메시지 초안")
+    to_advisor: Optional[str] = Field(None, description="상담 시 쓸 설명 템플릿")
+
+
+class RelatedCase(BaseModel):
+    """유사 사례"""
+    id: str = Field(..., description="케이스 ID")
+    title: str = Field(..., description="케이스 제목")
+    summary: str = Field(..., description="케이스 요약")
+
+
+class SituationAnalysisResponse(BaseModel):
+    """상황 기반 진단 응답"""
+    classified_type: str = Field(..., description="최종 분류된 유형")
+    risk_score: int = Field(..., ge=0, le=100, description="위험도 점수 (0~100)")
+    summary: str = Field(..., description="한 줄 요약")
+    criteria: List[CriteriaItem] = Field(..., description="법적 판단 기준")
+    action_plan: ActionPlan = Field(..., description="행동 가이드")
+    scripts: Scripts = Field(..., description="스크립트/템플릿")
+    related_cases: List[RelatedCase] = Field(default_factory=list, description="유사 사례")

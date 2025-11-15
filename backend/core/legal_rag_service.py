@@ -59,7 +59,7 @@ class LegalRAGService:
         )
         return result
 
-    # 2) 텍스트 상황 설명 기반 분석
+    # 2) 텍스트 상황 설명 기반 분석 (레거시)
     async def analyze_situation(self, text: str) -> LegalAnalysisResult:
         query = text
         grounding_chunks = await self._search_legal_chunks(query=query, top_k=8)
@@ -68,6 +68,70 @@ class LegalRAGService:
             contract_text=None,
             grounding_chunks=grounding_chunks,
         )
+        return result
+
+    # 2-2) 상황 기반 상세 진단 (새로운 API)
+    async def analyze_situation_detailed(
+        self,
+        category_hint: str,
+        situation_text: str,
+        summary: Optional[str] = None,
+        details: Optional[str] = None,
+        employment_type: Optional[str] = None,
+        work_period: Optional[str] = None,
+        weekly_hours: Optional[int] = None,
+        is_probation: Optional[bool] = None,
+        social_insurance: Optional[str] = None,
+    ) -> dict:
+        """
+        상황 기반 상세 진단
+        
+        Returns:
+            {
+                "classified_type": str,
+                "risk_score": int,
+                "summary": str,
+                "criteria": List[CriteriaItem],
+                "action_plan": ActionPlan,
+                "scripts": Scripts,
+                "related_cases": List[RelatedCase]
+            }
+        """
+        # 1. RAG 검색 (법률 문서에서 관련 정보 검색)
+        # summary와 details가 있으면 우선 사용, 없으면 situation_text 사용
+        query_text = situation_text
+        if summary:
+            query_text = summary
+            if details:
+                query_text = f"{summary}\n\n{details}"
+        
+        grounding_chunks = await self._search_legal_chunks(query=query_text, top_k=8)
+        
+        # 2. 유사 케이스 검색
+        related_cases = await self.search_cases(query=query_text, limit=3)
+        
+        # 3. LLM으로 상세 진단 수행
+        result = await self._llm_situation_diagnosis(
+            category_hint=category_hint,
+            situation_text=query_text,  # summary + details 또는 situation_text
+            grounding_chunks=grounding_chunks,
+            employment_type=employment_type,
+            work_period=work_period,
+            weekly_hours=weekly_hours,
+            is_probation=is_probation,
+            social_insurance=social_insurance,
+        )
+        
+        # 4. 유사 케이스 추가
+        result["related_cases"] = [
+            {
+                "id": case.id,
+                "title": case.title,
+                "summary": case.situation[:200] if len(case.situation) > 200 else case.situation,
+            }
+            for case in related_cases
+        ]
+        
         return result
 
     # 3) 법률 상담 챗 (컨텍스트 기반)
@@ -515,4 +579,184 @@ JSON 형식만 반환하세요."""
         
         # LLM 호출 실패 시 기본 응답
         return f"답변을 생성하는 중 오류가 발생했습니다. RAG 검색 결과는 {len(grounding_chunks)}개 발견되었습니다. 다시 시도해주세요."
+
+    async def _llm_situation_diagnosis(
+        self,
+        category_hint: str,
+        situation_text: str,
+        grounding_chunks: List[LegalGroundingChunk],
+        employment_type: Optional[str] = None,
+        work_period: Optional[str] = None,
+        weekly_hours: Optional[int] = None,
+        is_probation: Optional[bool] = None,
+        social_insurance: Optional[str] = None,
+    ) -> dict:
+        """
+        상황 기반 상세 진단용 LLM 응답 생성
+        """
+        if self.generator.disable_llm:
+            # LLM 비활성화 시 기본 응답
+            return {
+                "classified_type": category_hint,
+                "risk_score": 50,
+                "summary": "LLM 분석이 비활성화되어 있습니다. RAG 검색 결과만 제공됩니다.",
+                "criteria": [],
+                "action_plan": {"steps": []},
+                "scripts": {},
+                "related_cases": [],
+            }
+        
+        # 컨텍스트 구성
+        context_parts = []
+        for chunk in grounding_chunks[:5]:
+            context_parts.append(
+                f"[{chunk.source_type}] {chunk.title}\n{chunk.snippet}"
+            )
+        context = "\n\n".join(context_parts)
+        
+        # 사용자 정보 요약
+        user_info = []
+        if employment_type:
+            user_info.append(f"고용 형태: {employment_type}")
+        if work_period:
+            user_info.append(f"근무 기간: {work_period}")
+        if weekly_hours:
+            user_info.append(f"주당 근로시간: {weekly_hours}시간")
+        if is_probation is not None:
+            user_info.append(f"수습 여부: {'수습 중' if is_probation else '수습 아님'}")
+        if social_insurance:
+            user_info.append(f"4대보험: {social_insurance}")
+        user_info_text = "\n".join(user_info) if user_info else "정보 없음"
+        
+        # 카테고리 라벨 매핑
+        category_labels = {
+            "harassment": "직장 내 괴롭힘 / 모욕",
+            "unpaid_wage": "임금체불 / 수당 미지급",
+            "unfair_dismissal": "부당해고 / 계약해지",
+            "overtime": "근로시간 / 야근 / 휴게시간 문제",
+            "probation": "수습·인턴 관련 문제",
+            "unknown": "기타 / 잘 모르겠음",
+        }
+        category_label = category_labels.get(category_hint, category_hint)
+        
+        prompt = f"""당신은 법률 진단 전문가입니다. 사용자가 설명한 상황을 분석하여 법적 위험도를 진단하고 행동 가이드를 제공해주세요.
+
+**중요한 원칙:**
+1. 이 서비스는 법률 자문이 아닙니다. 정보 안내와 가이드를 제공하는 것입니다.
+2. 항상 관련 법령/가이드를 근거로 판단하세요.
+3. 구체적이고 실용적인 행동 가이드를 제공하세요.
+
+사용자 정보:
+{user_info_text}
+
+상황 카테고리 힌트: {category_label}
+
+상황 설명:
+{situation_text}
+
+관련 법령/가이드/케이스:
+{context}
+
+다음 JSON 형식으로 진단 결과를 반환하세요:
+{{
+    "classified_type": "harassment|unpaid_wage|unfair_dismissal|overtime|probation|unknown",
+    "risk_score": 0~100 사이의 숫자,
+    "summary": "한 줄 요약 (예: '설명하신 상황은, 직장 내 괴롭힘 매뉴얼 기준 상 괴롭힘에 해당할 가능성이 높습니다.')",
+    "criteria": [
+        {{
+            "name": "판단 기준명 (예: 반복성 여부)",
+            "status": "likely|unclear|unlikely",
+            "reason": "판단 이유 및 설명"
+        }}
+    ],
+    "action_plan": {{
+        "steps": [
+            {{
+                "title": "증거 수집",
+                "items": ["○○, △△, 카톡/이메일 캡처", "출퇴근 기록 등을 남기세요"]
+            }},
+            {{
+                "title": "1차 대응",
+                "items": ["가능하다면 감정 섞지 않고 이런 식으로 문제를 제기해보는 것도 방법입니다."]
+            }},
+            {{
+                "title": "상담/신고 루트",
+                "items": ["고용노동부 1350 상담센터", "청년노동센터", "노무사 상담"]
+            }}
+        ]
+    }},
+    "scripts": {{
+        "to_company": "회사에 보낼 정중한 문제 제기 문구 템플릿 (예: '현재 계약상 주당 근로시간이 ○시간으로 기재되어 있으나, 실제로는 ○시간 이상 근무하고 있으며 연장근로 수당은 별도로 지급받지 못하고 있습니다. 이 부분에 대해 근로기준법 기준에 맞게 조정이 가능할지 검토를 요청드립니다.')",
+        "to_advisor": "노무사/기관에 상담할 때 쓸 설명 템플릿"
+    }}
+}}
+
+중요 사항:
+1. 모든 응답은 한국어로 작성하세요.
+2. criteria는 3~5개 정도로 구성하세요.
+3. action_plan의 steps는 3단계 정도로 구성하세요.
+4. scripts는 실제로 사용할 수 있는 구체적인 문구로 작성하세요.
+
+JSON 형식만 반환하세요."""
+
+        try:
+            # Ollama 사용
+            if self.generator.use_ollama:
+                from config import settings
+                import json
+                import re
+                
+                # langchain-ollama 우선 사용
+                try:
+                    from langchain_ollama import OllamaLLM
+                    llm = OllamaLLM(
+                        base_url=settings.ollama_base_url,
+                        model=settings.ollama_model
+                    )
+                except ImportError:
+                    # 대안: langchain-community 사용
+                    from langchain_community.llms import Ollama
+                    llm = Ollama(
+                        base_url=settings.ollama_base_url,
+                        model=settings.ollama_model
+                    )
+                
+                response_text = llm.invoke(prompt)
+                
+                # JSON 추출
+                try:
+                    json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+                    if json_match:
+                        diagnosis = json.loads(json_match.group())
+                        
+                        # 응답 형식 변환
+                        return {
+                            "classified_type": diagnosis.get("classified_type", category_hint),
+                            "risk_score": diagnosis.get("risk_score", 50),
+                            "summary": diagnosis.get("summary", "상황을 분석했습니다."),
+                            "criteria": diagnosis.get("criteria", []),
+                            "action_plan": diagnosis.get("action_plan", {"steps": []}),
+                            "scripts": diagnosis.get("scripts", {}),
+                            "related_cases": [],  # 나중에 추가됨
+                        }
+                except Exception as e:
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.error(f"LLM 진단 응답 파싱 실패: {str(e)}", exc_info=True)
+                    logger.error(f"LLM 응답 원문 (처음 500자): {response_text[:500] if response_text else 'None'}")
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"LLM 진단 응답 생성 실패: {str(e)}", exc_info=True)
+        
+        # LLM 호출 실패 시 기본 응답
+        return {
+            "classified_type": category_hint,
+            "risk_score": 50,
+            "summary": "진단을 생성하는 중 오류가 발생했습니다. 다시 시도해주세요.",
+            "criteria": [],
+            "action_plan": {"steps": []},
+            "scripts": {},
+            "related_cases": [],
+        }
 

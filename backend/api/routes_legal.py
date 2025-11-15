@@ -16,6 +16,8 @@ from models.schemas import (
     LegalSearchResponse,
     LegalChatRequest,
     LegalChatResponse,
+    SituationAnalysisRequest,
+    SituationAnalysisResponse,
 )
 from core.legal_rag_service import LegalRAGService
 from core.document_processor_v2 import DocumentProcessor
@@ -203,5 +205,41 @@ async def legal_chat_api(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"법률 상담 챗 중 오류가 발생했습니다: {str(e)}",
+        )
+
+
+@router_legal.post(
+    "/situation/analyze",
+    response_model=SituationAnalysisResponse,
+    summary="상황 기반 진단 (상세 정보 포함)",
+)
+async def analyze_situation_detailed_api(
+    body: SituationAnalysisRequest,
+):
+    """
+    - 계약서 없이 상황 설명만으로 법적 위험 진단
+    - 사용자 정보(고용 형태, 근무 기간 등)를 참고하여 더 정확한 진단 제공
+    - 행동 가이드 및 스크립트 템플릿 제공
+    """
+    try:
+        service = get_legal_service()
+        result = await service.analyze_situation_detailed(
+            category_hint=body.category_hint,
+            situation_text=body.situation_text,
+            summary=getattr(body, 'summary', None),
+            details=getattr(body, 'details', None),
+            employment_type=body.employment_type,
+            work_period=body.work_period,
+            weekly_hours=body.weekly_hours,
+            is_probation=body.is_probation,
+            social_insurance=body.social_insurance,
+        )
+        return result
+    except Exception as e:
+        logger = logging.getLogger(__name__)
+        logger.error(f"상황 진단 중 오류 발생: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"상황 진단 중 오류가 발생했습니다: {str(e)}",
         )
 
