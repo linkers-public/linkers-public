@@ -1,8 +1,9 @@
 # backend/core/vector_store.py
 
-from langchain_openai import OpenAIEmbeddings
 from typing import List, Dict, Optional
 from config import settings
+
+# OpenAIEmbeddings는 사용하지 않음 (로컬 임베딩 사용)
 
 # ChromaDB는 Windows 빌드 문제로 선택사항
 try:

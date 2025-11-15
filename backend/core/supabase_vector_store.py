@@ -720,28 +720,109 @@ class SupabaseVectorStore:
             
             # 벡터 유사도 계산
             import numpy as np
+            import json
             
-            query_vec = np.array(query_embedding)
+            # query_embedding을 numpy 배열로 변환 (float 타입 명시)
+            try:
+                # 타입 확인 및 변환
+                if isinstance(query_embedding, str):
+                    # 문자열이면 JSON 파싱 시도
+                    try:
+                        query_embedding = json.loads(query_embedding)
+                    except json.JSONDecodeError:
+                        # JSON이 아니면 ast.literal_eval 시도 (안전한 파싱)
+                        try:
+                            import ast
+                            query_embedding = ast.literal_eval(query_embedding)
+                        except:
+                            print(f"[경고] 쿼리 임베딩 파싱 실패: JSON도 리스트도 아닙니다")
+                            return []
+                
+                # 리스트로 변환
+                if not isinstance(query_embedding, (list, np.ndarray)):
+                    print(f"[경고] 쿼리 임베딩이 리스트가 아닙니다: {type(query_embedding)}")
+                    return []
+                
+                # numpy 배열로 변환 (명시적으로 float32)
+                query_vec = np.array(query_embedding, dtype=np.float32)
+                
+                # 빈 배열 체크
+                if len(query_vec) == 0:
+                    print(f"[경고] 쿼리 임베딩이 비어있습니다.")
+                    return []
+                    
+            except Exception as e:
+                print(f"[경고] 쿼리 임베딩 변환 실패: {str(e)}, 타입: {type(query_embedding)}")
+                return []
+            
             similarities = []
             
             for chunk in result.data:
                 if chunk.get("embedding"):
-                    chunk_vec = np.array(chunk["embedding"])
-                    # 코사인 유사도
-                    similarity = np.dot(query_vec, chunk_vec) / (
-                        np.linalg.norm(query_vec) * np.linalg.norm(chunk_vec)
-                    )
-                    similarities.append({
-                        "id": chunk["id"],
-                        "external_id": chunk.get("external_id", ""),
-                        "source_type": chunk.get("source_type", "law"),
-                        "title": chunk.get("title", ""),
-                        "content": chunk.get("content", ""),
-                        "chunk_index": chunk.get("chunk_index", 0),
-                        "file_path": chunk.get("file_path", ""),
-                        "metadata": chunk.get("metadata", {}),
-                        "score": float(similarity),
-                    })
+                    try:
+                        # embedding 데이터 가져오기
+                        embedding_data = chunk["embedding"]
+                        
+                        # 타입 변환: 문자열 -> 리스트
+                        if isinstance(embedding_data, str):
+                            try:
+                                embedding_data = json.loads(embedding_data)
+                            except json.JSONDecodeError:
+                                # JSON 파싱 실패 시 ast.literal_eval 시도 (안전한 파싱)
+                                try:
+                                    import ast
+                                    embedding_data = ast.literal_eval(embedding_data)
+                                except:
+                                    print(f"[경고] 청크 {chunk.get('id', 'unknown')} 임베딩 파싱 실패")
+                                    continue
+                        
+                        # numpy 배열이면 리스트로 변환
+                        if isinstance(embedding_data, np.ndarray):
+                            embedding_data = embedding_data.tolist()
+                        
+                        # 리스트 타입 확인
+                        if not isinstance(embedding_data, list):
+                            print(f"[경고] 청크 {chunk.get('id', 'unknown')} 임베딩이 리스트가 아닙니다: {type(embedding_data)}")
+                            continue
+                        
+                        # 빈 리스트 체크
+                        if len(embedding_data) == 0:
+                            continue
+                        
+                        # numpy 배열로 변환 (명시적으로 float32)
+                        chunk_vec = np.array(embedding_data, dtype=np.float32)
+                        
+                        # 차원 확인
+                        if query_vec.shape != chunk_vec.shape:
+                            print(f"[경고] 임베딩 차원 불일치: query={query_vec.shape}, chunk={chunk_vec.shape}, chunk_id={chunk.get('id', 'unknown')}")
+                            continue
+                        
+                        # 코사인 유사도 계산
+                        dot_product = np.dot(query_vec, chunk_vec)
+                        norm_query = np.linalg.norm(query_vec)
+                        norm_chunk = np.linalg.norm(chunk_vec)
+                        
+                        if norm_query == 0 or norm_chunk == 0:
+                            similarity = 0.0
+                        else:
+                            similarity = dot_product / (norm_query * norm_chunk)
+                        
+                        similarities.append({
+                            "id": chunk["id"],
+                            "external_id": chunk.get("external_id", ""),
+                            "source_type": chunk.get("source_type", "law"),
+                            "title": chunk.get("title", ""),
+                            "content": chunk.get("content", ""),
+                            "chunk_index": chunk.get("chunk_index", 0),
+                            "file_path": chunk.get("file_path", ""),
+                            "metadata": chunk.get("metadata", {}),
+                            "score": float(similarity),
+                        })
+                    except Exception as e:
+                        print(f"[경고] 청크 {chunk.get('id', 'unknown')} 유사도 계산 실패: {str(e)}, 타입: {type(chunk.get('embedding'))}")
+                        import traceback
+                        traceback.print_exc()
+                        continue
             
             # 유사도 순으로 정렬하고 top_k 반환
             similarities.sort(key=lambda x: x["score"], reverse=True)

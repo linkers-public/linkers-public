@@ -7,12 +7,15 @@ from fastapi import APIRouter, UploadFile, File, Form, HTTPException, status
 from typing import Optional
 import tempfile
 import os
+import logging
 from pathlib import Path
 
 from models.schemas import (
     LegalAnalyzeSituationRequest,
     LegalAnalysisResult,
     LegalSearchResponse,
+    LegalChatRequest,
+    LegalChatResponse,
 )
 from core.legal_rag_service import LegalRAGService
 from core.document_processor_v2 import DocumentProcessor
@@ -98,6 +101,8 @@ async def analyze_contract_api(
                 extracted_text=extracted_text,
                 description=description,
             )
+            # 계약서 텍스트 추가
+            result.contract_text = extracted_text
             return result
 
         finally:
@@ -108,7 +113,8 @@ async def analyze_contract_api(
     except HTTPException:
         raise
     except Exception as e:
-        # TODO: logger로 남기기
+        logger = logging.getLogger(__name__)
+        logger.error(f"계약서 분석 중 오류 발생: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"계약서 분석 중 오류가 발생했습니다: {str(e)}",
@@ -132,6 +138,8 @@ async def analyze_situation_api(
         result = await service.analyze_situation(text=body.text)
         return result
     except Exception as e:
+        logger = logging.getLogger(__name__)
+        logger.error(f"상황 분석 중 오류 발생: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"상황 분석 중 오류가 발생했습니다: {str(e)}",
@@ -156,8 +164,44 @@ async def search_cases_api(
         cases = await service.search_cases(query=query, limit=limit)
         return LegalSearchResponse(query=query, cases=cases)
     except Exception as e:
+        logger = logging.getLogger(__name__)
+        logger.error(f"케이스 검색 중 오류 발생: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"케이스 검색 중 오류가 발생했습니다: {str(e)}",
+        )
+
+
+@router_legal.post(
+    "/chat",
+    response_model=LegalChatResponse,
+    summary="법률 상담 챗 (컨텍스트 기반)",
+)
+async def legal_chat_api(
+    body: LegalChatRequest,
+):
+    """
+    - 계약서 분석 결과를 컨텍스트로 포함한 법률 상담 챗
+    - 선택된 이슈 정보와 분석 요약을 활용하여 더 정확한 답변 제공
+    """
+    try:
+        service = get_legal_service()
+        result = await service.chat_with_context(
+            query=body.query,
+            doc_ids=body.doc_ids,
+            selected_issue_id=body.selected_issue_id,
+            selected_issue=body.selected_issue,
+            analysis_summary=body.analysis_summary,
+            risk_score=body.risk_score,
+            total_issues=body.total_issues,
+            top_k=body.top_k,
+        )
+        return result
+    except Exception as e:
+        logger = logging.getLogger(__name__)
+        logger.error(f"법률 상담 챗 중 오류 발생: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"법률 상담 챗 중 오류가 발생했습니다: {str(e)}",
         )
 

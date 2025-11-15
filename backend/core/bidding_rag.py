@@ -11,22 +11,36 @@ Backend RAG - 복잡한 분석 & 생성 작업 전담
 """
 
 from typing import Dict, List, Any, Optional
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_core.prompts import ChatPromptTemplate
 from .vector_store import VectorStoreManager
 from .document_processor import DocumentProcessor
 from models.schemas import AnnouncementAnalysis, MatchedTeam
 from config import settings
 
+# langchain_openai는 조건부로만 import (Ollama 사용 시 불필요)
+# OpenAIEmbeddings는 사용하지 않으므로 제거
+
 
 class BiddingRAG:
     def __init__(self):
         self.vector_store = VectorStoreManager()
         
-        # LLM 초기화 (Ollama 사용)
-        if settings.use_ollama:
+        # LLM 초기화 (Ollama만 사용 - 해커톤 모드)
+        try:
+            # langchain-ollama 우선 사용 (deprecated 경고 없음)
             try:
+                from langchain_ollama import OllamaLLM
+                print(f"[연결] Ollama LLM: {settings.ollama_base_url} (모델: {settings.ollama_model})")
+                self.llm = OllamaLLM(
+                    base_url=settings.ollama_base_url,
+                    model=settings.ollama_model,
+                    temperature=settings.llm_temperature
+                )
+                print("[완료] Ollama LLM 연결 완료 (langchain-ollama)")
+            except ImportError:
+                # 대안: langchain-community 사용 (deprecated)
                 from langchain_community.llms import Ollama
+                print(f"[경고] langchain-ollama를 사용할 수 없습니다. deprecated된 langchain_community.llms.Ollama를 사용합니다.")
                 print(f"[연결] Ollama LLM: {settings.ollama_base_url} (모델: {settings.ollama_model})")
                 self.llm = Ollama(
                     base_url=settings.ollama_base_url,
@@ -34,25 +48,8 @@ class BiddingRAG:
                     temperature=settings.llm_temperature
                 )
                 print("[완료] Ollama LLM 연결 완료")
-            except Exception as e:
-                print(f"[경고] Ollama 연결 실패: {str(e)}")
-                print("[팁] OpenAI로 대체합니다. (해커톤 모드가 아닌 경우)")
-                if settings.openai_api_key:
-                    self.llm = ChatOpenAI(
-                        model=settings.llm_model,
-                        temperature=settings.llm_temperature,
-                        openai_api_key=settings.openai_api_key
-                    )
-                else:
-                    raise ValueError("LLM을 사용할 수 없습니다. Ollama를 실행하거나 OpenAI API 키를 설정하세요.")
-        else:
-            if not settings.openai_api_key:
-                raise ValueError("OpenAI API 키가 필요합니다. .env에 OPENAI_API_KEY를 설정하거나 해커톤 모드를 사용하세요.")
-            self.llm = ChatOpenAI(
-                model=settings.llm_model,
-                temperature=settings.llm_temperature,
-                openai_api_key=settings.openai_api_key
-            )
+        except Exception as e:
+            raise ValueError(f"Ollama 연결 실패: {str(e)}\n[팁] Ollama가 실행 중인지 확인하세요: ollama serve")
         
         # embeddings는 VectorStoreManager에서 이미 설정됨
         self.embeddings = self.vector_store.embeddings

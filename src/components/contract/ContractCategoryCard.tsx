@@ -87,13 +87,15 @@ export function ContractCategoryCard({ data }: ContractCategoryCardProps) {
                   </div>
                 </div>
 
-                {/* 근거 법령 */}
-                <div>
-                  <p className="text-xs font-medium text-slate-500 mb-1">근거가 되는 법령</p>
-                  <p className="text-sm text-slate-700 bg-blue-50 p-2 rounded border border-blue-200">
-                    {issue.reason}
-                  </p>
-                </div>
+                {/* 근거 법령 (법령이 있는 경우에만 표시) */}
+                {issue.reason && issue.reason.trim() && (
+                  <div>
+                    <p className="text-xs font-medium text-slate-500 mb-1">근거가 되는 법령</p>
+                    <p className="text-sm text-slate-700 bg-blue-50 p-2 rounded border border-blue-200">
+                      {issue.reason}
+                    </p>
+                  </div>
+                )}
 
                 {/* 표준계약 문장 (있는 경우) */}
                 {issue.standardClause && (

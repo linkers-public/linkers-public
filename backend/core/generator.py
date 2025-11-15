@@ -1,6 +1,5 @@
 # backend/core/generator.py
 
-from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import PydanticOutputParser
 from models.schemas import AnnouncementAnalysis
@@ -10,11 +9,28 @@ from typing import Dict, List
 
 class LLMGenerator:
     def __init__(self):
-        self.llm = ChatOpenAI(
-            model=settings.llm_model,
-            temperature=settings.llm_temperature,
-            openai_api_key=settings.openai_api_key
-        )
+        # Ollama만 사용 (해커톤 모드)
+        try:
+            # langchain-ollama 우선 사용 (deprecated 경고 없음)
+            try:
+                from langchain_ollama import OllamaLLM
+                self.llm = OllamaLLM(
+                    base_url=settings.ollama_base_url,
+                    model=settings.ollama_model,
+                    temperature=settings.llm_temperature
+                )
+                print("[완료] Ollama LLM 연결 완료 (langchain-ollama)")
+            except ImportError:
+                # 대안: langchain-community 사용 (deprecated)
+                from langchain_community.llms import Ollama
+                self.llm = Ollama(
+                    base_url=settings.ollama_base_url,
+                    model=settings.ollama_model,
+                    temperature=settings.llm_temperature
+                )
+                print("[완료] Ollama LLM 연결 완료")
+        except Exception as e:
+            raise ValueError(f"Ollama 연결 실패: {str(e)}\n[팁] Ollama가 실행 중인지 확인하세요: ollama serve")
     
     def analyze_announcement(self, context: Dict) -> AnnouncementAnalysis:
         """
@@ -91,7 +107,11 @@ class LLMGenerator:
         
         try:
             response = self.llm.invoke(prompt)
-            return response.content
+            # Ollama는 문자열 반환, ChatOpenAI는 AIMessage 반환
+            if hasattr(response, 'content'):
+                return response.content
+            else:
+                return str(response)
         except Exception as e:
             return f"매칭 사유 생성 실패: {str(e)}"
     
@@ -127,7 +147,11 @@ class LLMGenerator:
         
         try:
             response = self.llm.invoke(prompt)
-            return response.content
+            # Ollama는 문자열 반환, ChatOpenAI는 AIMessage 반환
+            if hasattr(response, 'content'):
+                return response.content
+            else:
+                return str(response)
         except Exception as e:
             return f"견적서 생성 실패: {str(e)}"
 

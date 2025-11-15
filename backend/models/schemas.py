@@ -59,6 +59,11 @@ class LegalIssue(BaseModel):
     description: str
     severity: str = Field(..., description="low | medium | high 등급")
     legal_basis: List[str] = Field(default_factory=list, description="관련 법 조항/근거")
+    start_index: Optional[int] = Field(None, description="계약서 텍스트 내 시작 인덱스")
+    end_index: Optional[int] = Field(None, description="계약서 텍스트 내 종료 인덱스")
+    suggested_text: Optional[str] = Field(None, description="권장 수정 문구")
+    rationale: Optional[str] = Field(None, description="수정 이유/근거")
+    suggested_questions: List[str] = Field(default_factory=list, description="협상/질문 스크립트")
 
 
 class LegalRecommendation(BaseModel):
@@ -82,6 +87,7 @@ class LegalAnalysisResult(BaseModel):
     risk_score: int = Field(..., ge=0, le=100)
     risk_level: str  # "low" | "medium" | "high"
     summary: str
+    contract_text: Optional[str] = Field(None, description="전체 계약서 텍스트")
     issues: List[LegalIssue] = Field(default_factory=list)
     recommendations: List[LegalRecommendation] = Field(default_factory=list)
     grounding: List[LegalGroundingChunk] = Field(
@@ -119,3 +125,23 @@ class LegalSearchResponse(BaseModel):
     """케이스 검색 응답"""
     query: str
     cases: List[LegalCasePreview] = Field(default_factory=list)
+
+
+class LegalChatRequest(BaseModel):
+    """법률 상담 챗 요청"""
+    query: str = Field(..., description="사용자 질문")
+    doc_ids: List[str] = Field(default_factory=list, description="계약서 문서 ID 목록")
+    selected_issue_id: Optional[str] = Field(None, description="선택된 이슈 ID")
+    selected_issue: Optional[dict] = Field(None, description="선택된 이슈 정보")
+    analysis_summary: Optional[str] = Field(None, description="분석 요약")
+    risk_score: Optional[int] = Field(None, description="위험도 점수")
+    total_issues: Optional[int] = Field(None, description="총 이슈 개수")
+    top_k: int = Field(8, description="RAG 검색 결과 개수")
+
+
+class LegalChatResponse(BaseModel):
+    """법률 상담 챗 응답"""
+    answer: str = Field(..., description="AI 답변 (마크다운 형식)")
+    markdown: Optional[str] = Field(None, description="마크다운 형식 답변")
+    query: str = Field(..., description="원본 질문")
+    used_chunks: List[dict] = Field(default_factory=list, description="사용된 RAG 청크")

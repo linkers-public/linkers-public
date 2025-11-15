@@ -1,7 +1,7 @@
 # backend/core/document_processor.py
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.document_loaders import PyPDFLoader
+from pypdf import PdfReader
 from typing import List, Dict
 import re
 from datetime import datetime
@@ -21,12 +21,20 @@ class DocumentProcessor:
         Returns: (chunks, full_text)
         """
         try:
-            # PDF 로드
-            loader = PyPDFLoader(pdf_path)
-            pages = loader.load()
+            # PDF 로드 (pypdf 직접 사용)
+            reader = PdfReader(pdf_path)
+            pages = []
+            
+            # 각 페이지에서 텍스트 추출
+            for page_num, page in enumerate(reader.pages):
+                text = page.extract_text()
+                pages.append({
+                    "page_content": text,
+                    "page_number": page_num + 1
+                })
             
             # 전체 텍스트 추출
-            full_text = "\n".join([page.page_content for page in pages])
+            full_text = "\n".join([page["page_content"] for page in pages])
             
             # 텍스트 정제
             cleaned_text = self._clean_text(full_text)

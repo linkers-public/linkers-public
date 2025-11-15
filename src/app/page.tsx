@@ -78,7 +78,7 @@ export default function HomePage() {
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
                 <Button
-                  onClick={() => router.push('/upload')}
+                  onClick={() => router.push('/legal/contract')}
                   className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-8 py-4 text-lg font-semibold shadow-lg hover:shadow-xl transition-all"
                   size="lg"
                 >

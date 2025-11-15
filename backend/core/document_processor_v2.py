@@ -206,30 +206,35 @@ class DocumentProcessor:
                 print(f"[PDF 처리] pdfplumber 오류: {str(e)}")
                 error_messages.append(f"pdfplumber 실패: {str(e)}")
         
-        # 방법 3: PyPDFLoader 시도 (기본 방법)
+        # 방법 3: pypdf 시도 (기본 방법)
         if not text or not text.strip():
             try:
-                from langchain_community.document_loaders import PyPDFLoader
-                print(f"[PDF 처리] PyPDFLoader로 시도 중...")
-                loader = PyPDFLoader(pdf_path)
-                pages = loader.load()
+                from pypdf import PdfReader
+                print(f"[PDF 처리] pypdf로 시도 중...")
+                reader = PdfReader(pdf_path)
+                pages = []
+                
+                for page_num, page in enumerate(reader.pages):
+                    page_text = page.extract_text()
+                    if page_text:
+                        pages.append(page_text)
                 
                 if pages:
-                    text = "\n".join([page.page_content for page in pages])
+                    text = "\n".join(pages)
                     if text and text.strip():
-                        print(f"[PDF 처리] PyPDFLoader로 텍스트 추출 성공 ({len(pages)}페이지, 총 {len(text)}자)")
+                        print(f"[PDF 처리] pypdf로 텍스트 추출 성공 ({len(pages)}페이지, 총 {len(text)}자)")
                     else:
-                        print(f"[PDF 처리] PyPDFLoader: 텍스트 추출했지만 내용이 비어있음")
-                        error_messages.append("PyPDFLoader: 텍스트를 추출했지만 내용이 비어있습니다")
+                        print(f"[PDF 처리] pypdf: 텍스트 추출했지만 내용이 비어있음")
+                        error_messages.append("pypdf: 텍스트를 추출했지만 내용이 비어있습니다")
                 else:
-                    print(f"[PDF 처리] PyPDFLoader: 페이지를 읽을 수 없음")
-                    error_messages.append("PyPDFLoader: 페이지를 읽을 수 없습니다")
+                    print(f"[PDF 처리] pypdf: 페이지를 읽을 수 없음")
+                    error_messages.append("pypdf: 페이지를 읽을 수 없습니다")
             except ImportError:
-                print(f"[PDF 처리] PyPDFLoader가 설치되지 않았습니다")
-                error_messages.append("PyPDFLoader가 설치되지 않았습니다")
+                print(f"[PDF 처리] pypdf가 설치되지 않았습니다")
+                error_messages.append("pypdf가 설치되지 않았습니다 (pip install pypdf)")
             except Exception as e:
-                print(f"[PDF 처리] PyPDFLoader 오류: {str(e)}")
-                error_messages.append(f"PyPDFLoader 실패: {str(e)}")
+                print(f"[PDF 처리] pypdf 오류: {str(e)}")
+                error_messages.append(f"pypdf 실패: {str(e)}")
         
         # 방법 4: OCR 시도 (스캔된 이미지 PDF용)
         if not text or not text.strip():
@@ -277,7 +282,7 @@ class DocumentProcessor:
                 for msg in error_messages:
                     error_msg += f"  - {msg}\n"
             else:
-                error_msg += "시도한 방법: PyMuPDF, pdfplumber, PyPDFLoader, OCR 모두 시도했지만 텍스트를 추출할 수 없었습니다.\n"
+                error_msg += "시도한 방법: PyMuPDF, pdfplumber, pypdf, OCR 모두 시도했지만 텍스트를 추출할 수 없었습니다.\n"
             
             error_msg += "\n[해결 방법]\n"
             error_msg += "1. PyMuPDF 설치 확인: pip install pymupdf\n"

@@ -435,7 +435,7 @@ JSON 형식으로만 응답하고 다른 설명은 포함하지 마세요.`
             </p>
             {!searchTerm && (
               <Button
-                onClick={() => router.push('/upload')}
+                onClick={() => router.push('/legal/contract')}
                 className="mt-4"
               >
                 문서 업로드하기

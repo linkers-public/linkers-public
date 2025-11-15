@@ -10,7 +10,6 @@ from pathlib import Path
 # 상위 디렉토리를 경로에 추가
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from langchain_community.document_loaders import DirectoryLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from config import settings
 
@@ -31,9 +30,10 @@ def ingest_documents(docs_dir: str = None, use_chromadb: bool = None):
     
     print(f"[로딩] 문서 폴더: {docs_dir}")
     
-    # 문서 로드 (PyPDFLoader 사용)
+    # 문서 로드 (pypdf 사용)
     try:
-        from langchain_community.document_loaders import PyPDFLoader
+        from pypdf import PdfReader
+        from langchain_core.documents import Document
         import glob
         
         pdf_files = glob.glob(os.path.join(docs_dir, "*.pdf"))
@@ -45,13 +45,22 @@ def ingest_documents(docs_dir: str = None, use_chromadb: bool = None):
         docs = []
         for pdf_file in pdf_files:
             try:
-                loader = PyPDFLoader(pdf_file)
-                docs.extend(loader.load())
-                print(f"  - 로드 완료: {os.path.basename(pdf_file)}")
+                reader = PdfReader(pdf_file)
+                for page_num, page in enumerate(reader.pages):
+                    text = page.extract_text()
+                    if text:
+                        docs.append(Document(
+                            page_content=text,
+                            metadata={
+                                "source": pdf_file,
+                                "page": page_num + 1
+                            }
+                        ))
+                print(f"  - 로드 완료: {os.path.basename(pdf_file)} ({len(reader.pages)}페이지)")
             except Exception as e:
                 print(f"  - 로드 실패: {os.path.basename(pdf_file)} - {str(e)}")
     except ImportError:
-        print("[오류] PyPDFLoader를 사용할 수 없습니다.")
+        print("[오류] pypdf를 사용할 수 없습니다.")
         print("[해결] pip install pypdf")
         return
     

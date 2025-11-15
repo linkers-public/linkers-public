@@ -8,7 +8,7 @@ import type { QueryRequest, QueryResponse } from '@/types/rag'
 
 export async function POST(request: NextRequest) {
   try {
-    const body: QueryRequest = await request.json()
+    const body: any = await request.json()
     const { mode, query, topK = 8, withTeams = false, docIds } = body
 
     if (!query) {
@@ -18,12 +18,66 @@ export async function POST(request: NextRequest) {
     // 백엔드 API URL
     const backendUrl = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://localhost:8000'
     
-    // 백엔드 API로 프록시
+    // 법률 상담 챗 모드인 경우 별도 처리
+    if (mode === 'legal_contract_chat') {
+      try {
+        const chatResponse = await fetch(`${backendUrl}/api/v1/legal/chat`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            query: query,
+            doc_ids: docIds || [],
+            selected_issue_id: body.selectedIssueId,
+            selected_issue: body.selectedIssue,
+            analysis_summary: body.analysisSummary,
+            risk_score: body.riskScore,
+            total_issues: body.totalIssues,
+            top_k: topK || 8,
+          }),
+        })
+
+        if (!chatResponse.ok) {
+          const errorText = await chatResponse.text()
+          throw new Error(`백엔드 API 오류: ${chatResponse.status} - ${errorText}`)
+        }
+
+        const chatData = await chatResponse.json()
+        
+        return NextResponse.json({
+          answer: chatData.answer || '답변을 생성할 수 없습니다.',
+          markdown: chatData.markdown || chatData.answer,
+          usedChunks: chatData.used_chunks || [],
+          query: chatData.query || query,
+          format: 'markdown',
+        } as QueryResponse & { markdown?: string; format?: string })
+      } catch (chatError) {
+        console.error('법률 상담 챗 API 호출 실패:', chatError)
+        return NextResponse.json(
+          { 
+            error: '법률 상담 챗 API 호출 실패',
+            message: chatError instanceof Error ? chatError.message : String(chatError),
+            hint: `백엔드 서버(${backendUrl})가 실행 중인지 확인해주세요.`
+          },
+          { status: 500 }
+        )
+      }
+    }
+    
+    // 기존 공고문 검색 모드
     try {
       // 백엔드 API는 GET이므로 쿼리 파라미터 사용
       const searchUrl = new URL(`${backendUrl}/api/v2/announcements/search`)
       searchUrl.searchParams.set('query', query)
       searchUrl.searchParams.set('limit', String(topK))
+      
+      // docIds가 있으면 announcement_id로 필터링 (첫 번째 ID만 사용)
+      if (docIds && docIds.length > 0) {
+        // UUID 또는 숫자 ID 모두 지원
+        const docId = docIds[0]
+        searchUrl.searchParams.set('announcement_id', String(docId))
+      }
       
       const backendResponse = await fetch(searchUrl.toString(), {
         method: 'GET',

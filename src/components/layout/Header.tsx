@@ -8,7 +8,7 @@ export default function Header() {
   const pathname = usePathname()
 
   const navItems = [
-    { href: '/upload', label: '계약서 업로드', icon: FileText },
+    { href: '/legal/contract', label: '계약서 업로드', icon: FileText },
     { href: '/guide', label: '상담 가이드', icon: FileText },
   ]
 

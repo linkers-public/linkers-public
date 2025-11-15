@@ -2,79 +2,64 @@
 
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import {
-  Upload,
-  FileText,
-  Shield,
-  CheckCircle2,
-  AlertTriangle,
-  Search,
-  Sparkles,
-  ArrowRight,
-} from 'lucide-react'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card'
+import { FileText, MessageSquare, BookOpen, Upload, AlertTriangle, ArrowRight } from 'lucide-react'
 
 export default function LegalLandingPage() {
   const router = useRouter()
 
   const features = [
     {
-      icon: Shield,
-      title: '법적 리스크 점검',
-      description: '계약서나 법률 문서를 업로드하면 AI가 자동으로 법적 위험 요소를 분석하고 점검합니다.',
-      color: 'blue',
-    },
-    {
       icon: FileText,
-      title: '계약서 분석',
-      description: '계약서의 문제 조항을 찾아내고 법적 근거와 함께 상세한 분석 결과를 제공합니다.',
-      color: 'emerald',
+      title: '계약서 업로드 분석',
+      description: '계약서 파일을 업로드하고, 위험도를 분석해 주세요.',
+      buttonText: '분석 시작',
+      onClick: () => router.push('/legal/contract'),
     },
     {
-      icon: Search,
-      title: '법적 시나리오 제공',
-      description: '입력한 법적 상황에 대해 관련 법률 시나리오와 대응 방법을 RAG 시스템으로 조회합니다.',
-      color: 'purple',
+      icon: MessageSquare,
+      title: '상황 설명 분석',
+      description: '지금 겪고 있는 상황을 설명하면, 법적 리스크를 알려드립니다.',
+      buttonText: '상황 분석',
+      onClick: () => router.push('/legal/situation'),
+    },
+    {
+      icon: BookOpen,
+      title: '유사 케이스 보기',
+      description: '유사한 법률 사례를 찾아보고, 대응 방법을 확인하세요.',
+      buttonText: '유사 케이스 찾기',
+      onClick: () => router.push('/legal/cases'),
     },
   ]
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-white">
       {/* Hero Section */}
-      <section className="bg-gradient-to-br from-blue-50 via-white to-emerald-50 py-20 lg:py-32">
+      <section className="bg-gradient-to-br from-blue-50 via-white to-indigo-50 py-20 lg:py-32">
         <div className="container mx-auto px-6 max-w-6xl">
-          <div className="text-center mb-12">
-            <div className="inline-flex items-center gap-2 px-4 py-2 bg-blue-100 text-blue-700 rounded-full text-sm font-medium mb-6">
-              <Sparkles className="w-4 h-4" />
-              AI 기반 법률 리스크 분석 시스템
-            </div>
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6 text-slate-900 leading-tight">
-              Linkus Legal
-              <br />
-              <span className="text-blue-600">청년 법률 리스크 탐지</span>
+          <div className="text-center">
+            <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold mb-6 text-slate-900 leading-tight">
+              첫 계약, AI와 함께 점검해보세요.
             </h1>
-            <p className="text-xl md:text-2xl text-slate-600 mb-8 max-w-3xl mx-auto">
-              법률적 문제를 빠르고 쉽게 해결할 수 있도록 돕는
-              <br />
-              <strong className="text-slate-900">AI 기반 계약/노동 리스크 분석 시스템</strong>
+            <p className="text-xl md:text-2xl text-slate-600 mb-10 max-w-3xl mx-auto">
+              청년이 첫 계약서에 서명하기 전에, 법적 위험을 먼저 확인하세요.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
               <Button
-                onClick={() => router.push('/legal/analysis')}
-                className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-8 py-4 text-lg font-semibold shadow-lg hover:shadow-xl transition-all"
+                onClick={() => router.push('/legal/contract')}
+                className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-10 py-6 text-lg font-semibold shadow-lg hover:shadow-xl transition-all"
                 size="lg"
               >
                 <Upload className="w-5 h-5 mr-2" />
-                문서 업로드
+                계약서 업로드하기
               </Button>
               <Button
-                onClick={() => router.push('/legal/analysis')}
-                variant="outline"
-                className="border-2 border-blue-600 text-blue-600 rounded-xl px-8 py-4 text-lg font-semibold hover:bg-blue-50"
+                onClick={() => router.push('/legal/situation')}
+                className="bg-blue-700 hover:bg-blue-800 text-white rounded-xl px-10 py-6 text-lg font-semibold shadow-lg hover:shadow-xl transition-all"
                 size="lg"
               >
-                <FileText className="w-5 h-5 mr-2" />
-                법률 문제 분석 시작하기
+                <MessageSquare className="w-5 h-5 mr-2" />
+                근로조건 간단 체크
               </Button>
             </div>
           </div>
@@ -84,39 +69,33 @@ export default function LegalLandingPage() {
       {/* Features Section */}
       <section className="py-20 bg-white">
         <div className="container mx-auto px-6 max-w-7xl">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl md:text-4xl font-semibold mb-4 text-slate-900">
-              핵심 기능
-            </h2>
-            <p className="text-lg text-slate-600 max-w-2xl mx-auto">
-              법률적 문제를 빠르고 정확하게 분석하고 해결 방법을 제시합니다
-            </p>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             {features.map((feature, index) => {
               const Icon = feature.icon
-              const colorClasses = {
-                blue: 'bg-blue-100 text-blue-600',
-                emerald: 'bg-emerald-100 text-emerald-600',
-                purple: 'bg-purple-100 text-purple-600',
-              }
-
               return (
                 <Card
                   key={index}
-                  className="hover:shadow-lg transition-shadow border-slate-200"
+                  className="hover:shadow-xl transition-all duration-300 border-slate-200 flex flex-col"
                 >
-                  <CardHeader>
-                    <div
-                      className={`w-12 h-12 ${colorClasses[feature.color as keyof typeof colorClasses]} rounded-xl flex items-center justify-center mb-4`}
-                    >
-                      <Icon className="w-6 h-6" />
+                  <CardHeader className="text-center pb-4">
+                    <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                      <Icon className="w-8 h-8" />
                     </div>
-                    <CardTitle className="text-xl">{feature.title}</CardTitle>
-                    <CardDescription className="text-base">
+                    <CardTitle className="text-2xl mb-2">{feature.title}</CardTitle>
+                    <CardDescription className="text-base text-slate-600">
                       {feature.description}
                     </CardDescription>
                   </CardHeader>
+                  <CardFooter className="mt-auto pt-0">
+                    <Button
+                      onClick={feature.onClick}
+                      className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                      size="lg"
+                    >
+                      {feature.buttonText}
+                      <ArrowRight className="w-4 h-4 ml-2" />
+                    </Button>
+                  </CardFooter>
                 </Card>
               )
             })}
@@ -124,108 +103,22 @@ export default function LegalLandingPage() {
         </div>
       </section>
 
-      {/* Service Introduction */}
-      <section className="py-20 bg-slate-50">
+      {/* Legal Disclaimer */}
+      <section className="py-16 bg-amber-50 border-y border-amber-200">
         <div className="container mx-auto px-6 max-w-4xl">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl md:text-4xl font-semibold mb-4 text-slate-900">
-              서비스 소개
-            </h2>
+          <div className="text-center">
+            <div className="flex items-center justify-center gap-2 mb-4">
+              <AlertTriangle className="w-6 h-6 text-amber-600" />
+              <h2 className="text-2xl font-bold text-slate-900">
+                Linkus Legal은 법률 자문이 아닙니다
+              </h2>
+            </div>
+            <p className="text-lg text-slate-700 leading-relaxed">
+              이 서비스는 법적 위험을 미리 파악하고, 청년이 자신의 권리를 지킬 수 있도록 돕는 도구입니다.
+              <br />
+              실제 법률 문제가 발생한 경우 전문 변호사나 법률 상담 기관의 도움을 받으시기 바랍니다.
+            </p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <AlertTriangle className="w-6 h-6 text-amber-600" />
-                  법적 리스크 점검
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-slate-600">
-                  계약서나 법률 문서를 업로드하면 AI가 자동으로 법적 위험 요소를 분석하고
-                  위험도를 점수로 제공합니다.
-                </p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <FileText className="w-6 h-6 text-blue-600" />
-                  계약서 분석
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-slate-600">
-                  계약서의 문제 조항을 찾아내고 법적 근거와 함께 상세한 분석 결과를 제공하며,
-                  추천 대응 방법을 제시합니다.
-                </p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Search className="w-6 h-6 text-purple-600" />
-                  법적 시나리오 제공
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-slate-600">
-                  입력한 법적 상황에 대해 RAG 시스템이 관련 법률 시나리오와 대응 방법을
-                  제공합니다.
-                </p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <CheckCircle2 className="w-6 h-6 text-emerald-600" />
-                  맞춤형 대응 가이드
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-slate-600">
-                  각 법적 문제에 대한 구체적인 해결책과 대응 방법을 단계별로 안내합니다.
-                </p>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </section>
-
-      {/* CTA Section */}
-      <section className="py-20 bg-gradient-to-r from-blue-600 to-emerald-600 text-white">
-        <div className="container mx-auto px-6 max-w-4xl text-center">
-          <Shield className="w-16 h-16 mx-auto mb-6 opacity-90" />
-          <h2 className="text-3xl md:text-4xl font-semibold mb-4">
-            지금 바로 시작하세요
-          </h2>
-          <p className="text-xl mb-8 opacity-90">
-            법률 문제를 빠르고 쉽게 해결할 수 있도록 AI가 도와드립니다.
-            <br />
-            무료로 체험해보세요.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button
-              onClick={() => router.push('/legal/analysis')}
-              className="bg-white text-blue-600 hover:bg-slate-100 rounded-xl px-8 py-4 text-lg font-semibold shadow-lg hover:shadow-xl transition-all"
-              size="lg"
-            >
-              <Upload className="w-5 h-5 mr-2" />
-              문서 업로드
-            </Button>
-            <Button
-              onClick={() => router.push('/legal/search')}
-              variant="outline"
-              className="border-2 border-white text-white hover:bg-white/10 rounded-xl px-8 py-4 text-lg font-semibold"
-              size="lg"
-            >
-              <Search className="w-5 h-5 mr-2" />
-              법률 검색하기
-            </Button>
-          </div>
-          <p className="mt-6 text-sm opacity-75">
-            신용카드 불필요 · 무료 체험 가능
-          </p>
         </div>
       </section>
     </div>

@@ -1,11 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Header from '@/components/layout/Header'
 import Footer from '@/components/layout/Footer'
 import { Button } from '@/components/ui/button'
-import { CheckCircle2, AlertTriangle, FileText, Clock, DollarSign, Briefcase } from 'lucide-react'
+import { Textarea } from '@/components/ui/textarea'
+import { CheckCircle2, AlertTriangle, FileText, Clock, DollarSign, Briefcase, Send, Bot, User, Loader2, MessageSquare } from 'lucide-react'
+import { MarkdownRenderer } from '@/components/rag/MarkdownRenderer'
 
 interface Situation {
   id: string
@@ -179,9 +181,141 @@ const situations: Situation[] = [
   },
 ]
 
+interface Message {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  timestamp: Date
+}
+
 export default function GuidePage() {
   const router = useRouter()
   const [selectedSituation, setSelectedSituation] = useState<Situation | null>(null)
+  
+  // 챗봇 관련 상태
+  const [showChat, setShowChat] = useState(false)
+  const [messages, setMessages] = useState<Message[]>([])
+  const [inputMessage, setInputMessage] = useState('')
+  const [chatLoading, setChatLoading] = useState(false)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const chatContainerRef = useRef<HTMLDivElement>(null)
+
+  // 메시지 스크롤
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [messages])
+
+  // 상황이 변경되면 챗봇 초기화
+  useEffect(() => {
+    if (selectedSituation) {
+      setMessages([])
+      setShowChat(false)
+    }
+  }, [selectedSituation])
+
+  // 메시지 전송
+  const handleSendMessage = async () => {
+    const query = inputMessage.trim()
+    if (!query || chatLoading) return
+
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      role: 'user',
+      content: query,
+      timestamp: new Date(),
+    }
+
+    setMessages((prev) => [...prev, userMessage])
+    setInputMessage('')
+    setChatLoading(true)
+
+    try {
+      // 상황 컨텍스트를 포함한 질문 구성
+      const situationContext = selectedSituation
+        ? `${selectedSituation.title} 상황에 대해 질문합니다: ${query}`
+        : query
+
+      const response = await fetch('/api/legal/analyze-situation', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ text: situationContext }),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        
+        // 응답 포맷팅
+        let answer = ''
+        if (data.summary) {
+          answer = `## 요약\n\n${data.summary}\n\n`
+        }
+        
+        if (data.issues && data.issues.length > 0) {
+          answer += `## 주요 이슈\n\n`
+          data.issues.forEach((issue: any, idx: number) => {
+            answer += `${idx + 1}. **${issue.name}** (심각도: ${issue.severity})\n   ${issue.description}\n\n`
+          })
+        }
+        
+        if (data.recommendations && data.recommendations.length > 0) {
+          answer += `## 권장 사항\n\n`
+          data.recommendations.forEach((rec: any, idx: number) => {
+            answer += `${idx + 1}. **${rec.title}**\n   ${rec.description}\n`
+            if (rec.steps && rec.steps.length > 0) {
+              answer += `   단계:\n`
+              rec.steps.forEach((step: string) => {
+                answer += `   - ${step}\n`
+              })
+            }
+            answer += `\n`
+          })
+        }
+
+        if (!answer) {
+          answer = '관련 정보를 찾을 수 없습니다. 더 구체적으로 질문해주세요.'
+        }
+
+        const assistantMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: answer,
+          timestamp: new Date(),
+        }
+        setMessages((prev) => [...prev, assistantMessage])
+      } else {
+        throw new Error('답변 생성 실패')
+      }
+    } catch (error) {
+      console.error('메시지 전송 실패:', error)
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: '답변을 생성하는 중 오류가 발생했습니다. 다시 시도해주세요.',
+        timestamp: new Date(),
+      }
+      setMessages((prev) => [...prev, errorMessage])
+    } finally {
+      setChatLoading(false)
+    }
+  }
+
+  // 제안 질문들
+  const suggestedQuestions = selectedSituation
+    ? [
+        `${selectedSituation.title} 상황에서 어떤 법적 권리가 있나요?`,
+        `이 상황에서 어떤 증거를 수집해야 하나요?`,
+        `이 상황의 법적 위험도는 어느 정도인가요?`,
+        `이 상황에서 권장되는 대응 방법은 무엇인가요?`,
+      ]
+    : [
+        '수습 중 해고는 법적으로 어떻게 보호받을 수 있나요?',
+        '임금 체불 시 어떤 절차를 따라야 하나요?',
+        '직장 내 괴롭힘을 당했을 때 어떻게 해야 하나요?',
+      ]
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -307,10 +441,142 @@ export default function GuidePage() {
               </ul>
             </div>
 
+            {/* AI 상담 챗봇 */}
+            <div className="rounded-2xl border border-slate-200 p-6 bg-white shadow-sm">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-semibold text-slate-900 flex items-center gap-2">
+                  <MessageSquare className="w-5 h-5 text-blue-600" />
+                  AI 법률 상담
+                </h3>
+                <Button
+                  onClick={() => setShowChat(!showChat)}
+                  variant="outline"
+                  size="sm"
+                  className="text-sm"
+                >
+                  {showChat ? '접기' : '펼치기'}
+                </Button>
+              </div>
+              
+              {showChat && (
+                <div className="space-y-4">
+                  {/* 제안 질문 */}
+                  {messages.length === 0 && (
+                    <div className="space-y-2">
+                      <p className="text-sm text-slate-600 mb-3">
+                        아래 질문을 클릭하거나 직접 질문해보세요:
+                      </p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        {suggestedQuestions.slice(0, 4).map((question, idx) => (
+                          <button
+                            key={idx}
+                            onClick={() => {
+                              setInputMessage(question)
+                              setTimeout(() => handleSendMessage(), 100)
+                            }}
+                            className="text-left p-3 text-sm bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 transition-colors"
+                          >
+                            {question}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 메시지 목록 */}
+                  <div
+                    ref={chatContainerRef}
+                    className="h-96 overflow-y-auto space-y-4 p-4 bg-slate-50 rounded-lg border border-slate-200"
+                  >
+                    {messages.length === 0 ? (
+                      <div className="flex items-center justify-center h-full text-slate-500">
+                        <div className="text-center">
+                          <Bot className="w-12 h-12 mx-auto mb-2 text-slate-400" />
+                          <p>질문을 입력하면 AI가 법률 정보를 검색하여 답변해드립니다.</p>
+                        </div>
+                      </div>
+                    ) : (
+                      messages.map((message) => (
+                        <div
+                          key={message.id}
+                          className={`flex gap-3 ${
+                            message.role === 'user' ? 'justify-end' : 'justify-start'
+                          }`}
+                        >
+                          {message.role === 'assistant' && (
+                            <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                              <Bot className="w-4 h-4 text-blue-600" />
+                            </div>
+                          )}
+                          <div
+                            className={`max-w-[80%] rounded-2xl px-4 py-3 ${
+                              message.role === 'user'
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-white text-slate-900 border border-slate-200'
+                            }`}
+                          >
+                            {message.role === 'assistant' ? (
+                              <MarkdownRenderer content={message.content} />
+                            ) : (
+                              <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                            )}
+                          </div>
+                          {message.role === 'user' && (
+                            <div className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center flex-shrink-0">
+                              <User className="w-4 h-4 text-slate-600" />
+                            </div>
+                          )}
+                        </div>
+                      ))
+                    )}
+                    {chatLoading && (
+                      <div className="flex gap-3 justify-start">
+                        <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                          <Bot className="w-4 h-4 text-blue-600" />
+                        </div>
+                        <div className="bg-white rounded-2xl px-4 py-3 border border-slate-200">
+                          <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+                        </div>
+                      </div>
+                    )}
+                    <div ref={messagesEndRef} />
+                  </div>
+
+                  {/* 입력 영역 */}
+                  <div className="flex gap-2">
+                    <Textarea
+                      value={inputMessage}
+                      onChange={(e) => setInputMessage(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault()
+                          handleSendMessage()
+                        }
+                      }}
+                      placeholder="법률 상담 질문을 입력하세요..."
+                      className="flex-1 min-h-[60px] resize-none"
+                      disabled={chatLoading}
+                    />
+                    <Button
+                      onClick={handleSendMessage}
+                      disabled={!inputMessage.trim() || chatLoading}
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-6"
+                    >
+                      {chatLoading ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <Send className="w-4 h-4" />
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* 하단 버튼 */}
             <div className="flex gap-4">
               <Button
-                onClick={() => router.push('/upload')}
+                onClick={() => router.push('/legal/contract')}
                 className="flex-1 bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-6 py-3 font-semibold"
                 size="lg"
               >

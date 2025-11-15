@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { FileText, Search, BarChart3 } from 'lucide-react'
+import { FileText, Search, BarChart3, MessageSquare, BookOpen } from 'lucide-react'
 
 export default function LegalLayout({
   children,
@@ -13,8 +13,9 @@ export default function LegalLayout({
 
   const navItems = [
     { href: '/legal', label: '홈', icon: FileText },
-    { href: '/legal/analysis', label: '법률 문제 분석', icon: BarChart3 },
-    { href: '/legal/search', label: '법률 검색', icon: Search },
+    { href: '/legal/contract', label: '계약서 분석', icon: FileText },
+    { href: '/legal/situation', label: '상황 분석', icon: MessageSquare },
+    { href: '/legal/cases', label: '유사 케이스', icon: BookOpen },
   ]
 
   return (
@@ -35,7 +36,7 @@ export default function LegalLayout({
             <nav className="flex items-center gap-1">
               {navItems.map((item) => {
                 const Icon = item.icon
-                const isActive = pathname === item.href
+                const isActive = pathname === item.href || (item.href !== '/legal' && pathname?.startsWith(item.href))
                 return (
                   <Link
                     key={item.href}

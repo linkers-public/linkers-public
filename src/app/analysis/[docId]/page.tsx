@@ -124,7 +124,7 @@ export default function AnalysisPage() {
           query: query,
           topK: 8,
           withTeams: false,
-          docIds: docId && !isNaN(Number(docId)) ? [Number(docId)] : undefined,
+          docIds: docId ? [docId] : undefined,
         }),
       })
 

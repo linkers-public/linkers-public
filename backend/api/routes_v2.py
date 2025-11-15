@@ -462,8 +462,22 @@ async def search_announcements(
                 
                 # LLM 호출
                 if orchestrator.generator.use_ollama:
-                    from langchain_community.llms import Ollama
                     from config import settings
+                    
+                    # langchain-ollama 우선 사용 (deprecated 경고 없음)
+                    try:
+                        from langchain_ollama import OllamaLLM
+                        llm = OllamaLLM(
+                            base_url=settings.ollama_base_url,
+                            model=settings.ollama_model
+                        )
+                    except ImportError:
+                        # 대안: langchain-community 사용 (deprecated)
+                        from langchain_community.llms import Ollama
+                        llm = Ollama(
+                            base_url=settings.ollama_base_url,
+                            model=settings.ollama_model
+                        )
                     
                     # 시스템 프롬프트 추가 (한국어 + 마크다운 형식 강제)
                     system_prompt = """당신은 공공사업 공고 분석 전문가입니다. 
@@ -473,10 +487,6 @@ async def search_announcements(
 - 표, 리스트, 강조를 적절히 활용하세요."""
                     full_prompt = f"{system_prompt}\n\n{prompt}"
                     
-                    llm = Ollama(
-                        base_url=settings.ollama_base_url,
-                        model=settings.ollama_model
-                    )
                     answer = llm.invoke(full_prompt)
                     
                     # 영어로 답변한 경우 재시도
@@ -862,15 +872,25 @@ JSON 형식만 반환하세요."""
                     
                     # Ollama 사용
                     if orchestrator.generator.use_ollama:
-                        from langchain_community.llms import Ollama
                         from config import settings
                         import json
                         import re
                         
-                        llm = Ollama(
-                            base_url=settings.ollama_base_url,
-                            model=settings.ollama_model
-                        )
+                        # langchain-ollama 우선 사용 (deprecated 경고 없음)
+                        try:
+                            from langchain_ollama import OllamaLLM
+                            llm = OllamaLLM(
+                                base_url=settings.ollama_base_url,
+                                model=settings.ollama_model
+                            )
+                        except ImportError:
+                            # 대안: langchain-community 사용 (deprecated)
+                            from langchain_community.llms import Ollama
+                            llm = Ollama(
+                                base_url=settings.ollama_base_url,
+                                model=settings.ollama_model
+                            )
+                        
                         response_text = llm.invoke(prompt)
                         
                         # JSON 추출

@@ -31,27 +31,29 @@ def _get_ollama_llm():
     global _ollama_llm
     if _ollama_llm is None:
         try:
-            # langchain-community의 Ollama 사용
-            from langchain_community.llms import Ollama
+            # langchain-ollama 사용 (권장, deprecated 경고 없음)
+            from langchain_ollama import OllamaLLM
             print(f"[연결] Ollama LLM: {settings.ollama_base_url} (모델: {settings.ollama_model})")
-            _ollama_llm = Ollama(
+            _ollama_llm = OllamaLLM(
                 base_url=settings.ollama_base_url,
                 model=settings.ollama_model,
                 temperature=settings.llm_temperature
             )
-            print("[완료] Ollama LLM 연결 완료")
+            print("[완료] Ollama LLM 연결 완료 (langchain-ollama)")
         except ImportError:
             try:
-                # 대안: langchain-ollama 사용
-                from langchain_ollama import OllamaLLM
-                _ollama_llm = OllamaLLM(
+                # 대안: langchain-community의 Ollama 사용 (deprecated)
+                from langchain_community.llms import Ollama
+                print(f"[경고] langchain-ollama를 사용할 수 없습니다. deprecated된 langchain_community.llms.Ollama를 사용합니다.")
+                print(f"[연결] Ollama LLM: {settings.ollama_base_url} (모델: {settings.ollama_model})")
+                _ollama_llm = Ollama(
                     base_url=settings.ollama_base_url,
                     model=settings.ollama_model,
                     temperature=settings.llm_temperature
                 )
-                print("[완료] Ollama LLM 연결 완료 (langchain-ollama)")
+                print("[완료] Ollama LLM 연결 완료")
             except ImportError:
-                raise ImportError("Ollama 지원이 설치되지 않았습니다. pip install langchain-community 또는 pip install langchain-ollama")
+                raise ImportError("Ollama 지원이 설치되지 않았습니다. pip install langchain-ollama 또는 pip install langchain-community")
         except Exception as e:
             raise Exception(f"Ollama 연결 실패: {str(e)}\n[팁] Ollama가 실행 중인지 확인하세요: ollama serve")
     return _ollama_llm
