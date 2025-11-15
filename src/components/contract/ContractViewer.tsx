@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useEffect, useRef } from 'react'
+import { FileText } from 'lucide-react'
 import type { LegalIssue } from '@/types/legal'
 
 interface ContractViewerProps {
@@ -98,14 +99,16 @@ export function ContractViewer({
       // 하이라이트된 이슈 텍스트 (줄바꿈 포함)
       const issueText = text.substring(relativeStart, relativeEnd)
       const issueTextParts = issueText.split('\n')
+      
+      // 위험도별 색상 통일 (해커톤용 강화)
       const severityClass = issue.severity === 'high' 
-        ? 'bg-red-100/60 border-b-2 border-red-400 text-red-900 font-medium' 
+        ? 'bg-red-50 border-l-4 border-red-400 pl-2 text-red-900 font-medium underline decoration-red-400' 
         : issue.severity === 'medium'
-        ? 'bg-yellow-100/60 border-b-2 border-yellow-400 text-yellow-900'
-        : 'bg-orange-100/60 border-b-2 border-orange-400 text-orange-900'
+        ? 'bg-amber-50 border-l-4 border-amber-400 pl-2 text-amber-900 border-b border-amber-400'
+        : 'bg-sky-50 border-l-4 border-sky-400 pl-2 text-sky-900'
 
       const selectedClass = isSelected 
-        ? 'bg-red-200/80 border-l-4 border-red-600 pl-3 shadow-sm' 
+        ? 'ring-2 ring-red-400 ring-offset-2 shadow-lg animate-pulse' 
         : ''
 
       // 이슈 텍스트를 줄바꿈 단위로 분리하여 렌더링
@@ -124,7 +127,7 @@ export function ContractViewer({
                   highlightedRefs.current.delete(issue.id)
                 }
               } : undefined}
-              className={`risk-highlight ${severityClass} ${selectedClass} cursor-pointer hover:bg-opacity-90 transition-all duration-200 px-1 py-0.5 rounded-sm`}
+              className={`risk-highlight ${severityClass} ${selectedClass} cursor-pointer hover:bg-opacity-90 transition-all duration-200 px-1 py-0.5 rounded-sm relative group`}
               onClick={() => onIssueClick?.(issue.id)}
               title={`${getCategoryLabel(issue.category)} 관련 위험 (위험도: ${getSeverityLabel(issue.severity)}) - 자세히 보려면 클릭`}
             >
@@ -196,28 +199,38 @@ export function ContractViewer({
   return (
     <div
       ref={containerRef}
-      className="h-full overflow-y-auto bg-slate-50/50 p-6 sm:p-8"
+      className="h-full overflow-y-auto bg-gradient-to-b from-slate-50/80 to-white p-6 sm:p-8"
       role="article"
       aria-label="계약서 전문"
     >
       <div className="max-w-4xl mx-auto">
-        <div className="sticky top-0 bg-slate-50/95 backdrop-blur-sm z-10 pb-4 mb-6 border-b border-slate-200">
-          <h2 className="text-2xl sm:text-3xl font-bold text-slate-900">계약서 전문</h2>
-          <p className="text-sm text-slate-600 mt-1">위험 조항은 색상으로 표시됩니다</p>
+        <div className="sticky top-0 bg-white/95 backdrop-blur-md z-10 pb-5 mb-6 border-b border-slate-200/60 shadow-sm rounded-b-lg">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg shadow-md">
+              <FileText className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h2 className="text-2xl sm:text-3xl font-bold text-slate-900">계약서 전문</h2>
+              <p className="text-sm text-slate-600 mt-0.5">위험 조항은 색상으로 표시됩니다</p>
+            </div>
+          </div>
         </div>
         {paragraphs.length === 0 ? (
-          <div className="text-center py-16 text-slate-500">
-            <p className="text-lg">계약서 내용이 없습니다.</p>
+          <div className="text-center py-20">
+            <div className="p-4 bg-slate-100 rounded-full w-20 h-20 mx-auto mb-4 flex items-center justify-center">
+              <FileText className="w-10 h-10 text-slate-400" />
+            </div>
+            <p className="text-lg font-medium text-slate-600">계약서 내용이 없습니다.</p>
           </div>
         ) : (
-          <div className="space-y-6 sm:space-y-7 bg-white rounded-lg p-6 sm:p-8 shadow-sm">
+          <div className="space-y-6 sm:space-y-7 bg-white rounded-xl p-6 sm:p-8 shadow-sm border border-slate-100">
             {paragraphs.map((paragraph, index) => {
               const clauseNumber = detectClauseNumber(paragraph.trim())
               return (
                 <div key={index} className="relative">
                   {clauseNumber && (
-                    <div className="flex items-start gap-3 mb-2">
-                      <span className="flex-shrink-0 w-12 h-12 flex items-center justify-center bg-blue-100 text-blue-700 font-bold text-lg rounded-lg border-2 border-blue-200">
+                    <div className="flex items-start gap-4 mb-3">
+                      <span className="flex-shrink-0 w-14 h-14 flex items-center justify-center bg-gradient-to-br from-blue-500 to-indigo-600 text-white font-bold text-lg rounded-xl shadow-md ring-2 ring-blue-100">
                         {clauseNumber}
                       </span>
                       <div className="flex-1 pt-1">

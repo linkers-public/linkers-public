@@ -6,6 +6,8 @@ import { Loader2, AlertCircle, ChevronUp, ChevronDown, MessageSquare } from 'luc
 import { ContractViewer } from '@/components/contract/ContractViewer'
 import { AnalysisPanel } from '@/components/contract/AnalysisPanel'
 import { ContractChat } from '@/components/contract/ContractChat'
+import { RiskOverviewBar } from '@/components/contract/RiskOverviewBar'
+import { cn } from '@/lib/utils'
 import type { LegalIssue, ContractAnalysisResult } from '@/types/legal'
 
 export default function ContractDetailPage() {
@@ -18,6 +20,7 @@ export default function ContractDetailPage() {
   const [error, setError] = useState<string | null>(null)
   const [chatIssueId, setChatIssueId] = useState<string | undefined>()
   const [isChatOpen, setIsChatOpen] = useState(false)
+  const [prefilledQuestion, setPrefilledQuestion] = useState<string | undefined>()
 
   // 분석 결과 로드
   useEffect(() => {
@@ -188,14 +191,16 @@ export default function ContractDetailPage() {
   // 분석 전 상태
   if (loading) {
     return (
-      <div className="h-screen flex items-center justify-center bg-slate-50">
+      <div className="h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50">
         <div className="text-center">
-          <div className="relative">
-            <Loader2 className="w-12 h-12 animate-spin text-blue-600 mx-auto mb-4" />
-            <div className="absolute inset-0 w-12 h-12 border-4 border-blue-100 rounded-full mx-auto"></div>
+          <div className="relative mb-6">
+            <div className="absolute inset-0 bg-gradient-to-r from-blue-400 to-indigo-400 rounded-full blur-3xl opacity-30 animate-pulse"></div>
+            <div className="relative">
+              <Loader2 className="w-16 h-16 animate-spin text-blue-600 mx-auto" />
+            </div>
           </div>
-          <p className="text-gray-700 font-medium">계약 조항 분석 중...</p>
-          <p className="text-sm text-gray-500 mt-2">근로시간/보수/수습/스톡옵션 항목별로 조항을 분석하는 중입니다…</p>
+          <p className="text-lg font-semibold text-slate-900 mb-2">계약 조항 분석 중...</p>
+          <p className="text-sm text-slate-600">근로시간/보수/수습/스톡옵션 항목별로 조항을 분석하는 중입니다</p>
         </div>
       </div>
     )
@@ -204,11 +209,14 @@ export default function ContractDetailPage() {
   // 에러 상태
   if (error || !analysisResult) {
     return (
-      <div className="h-screen flex items-center justify-center bg-slate-50">
-        <div className="text-center max-w-md">
-          <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-          <h2 className="text-xl font-bold text-slate-900 mb-2">분석 결과를 불러올 수 없습니다</h2>
-          <p className="text-slate-600 mb-4">{error || '알 수 없는 오류가 발생했습니다.'}</p>
+      <div className="h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-red-50/20 to-slate-50">
+        <div className="text-center max-w-md px-6">
+          <div className="relative mb-6">
+            <div className="absolute inset-0 bg-red-200 rounded-full blur-2xl opacity-20"></div>
+            <AlertCircle className="relative w-20 h-20 text-red-500 mx-auto" />
+          </div>
+          <h2 className="text-2xl font-bold text-slate-900 mb-3">분석 결과를 불러올 수 없습니다</h2>
+          <p className="text-slate-600 mb-6">{error || '알 수 없는 오류가 발생했습니다.'}</p>
         </div>
       </div>
     )
@@ -216,28 +224,25 @@ export default function ContractDetailPage() {
 
   // 분석 완료 상태 - 2-컬럼 레이아웃
   return (
-    <div className="h-screen flex flex-col bg-slate-50">
-      {/* 상단 배너 */}
-      {analysisResult.totalIssues > 0 ? (
-        <div className="bg-blue-50 border-b border-blue-200 px-4 sm:px-6 py-2 sm:py-3">
-          <p className="text-xs sm:text-sm text-blue-900">
-            총 <strong>{analysisResult.totalIssues}개</strong>의 위험 또는 주의가 필요한 조항을 발견했습니다.
-          </p>
-        </div>
-      ) : (
-        <div className="bg-yellow-50 border-b border-yellow-200 px-4 sm:px-6 py-2 sm:py-3">
-          <p className="text-xs sm:text-sm text-yellow-900">
-            분석된 위험 조항이 없습니다. 계약서를 다시 확인하거나 다른 계약서를 업로드해보세요.
-          </p>
-        </div>
-      )}
+    <div className="h-screen flex flex-col bg-gradient-to-br from-slate-50 via-white to-slate-50">
+      {/* 상단 요약 헤더 */}
+      <RiskOverviewBar 
+        analysisResult={analysisResult}
+        onCategoryClick={(category) => {
+          // 해당 카테고리로 필터링하고 조항별 탭으로 이동
+          const categoryIssue = analysisResult.issues.find(i => i.category === category)
+          if (categoryIssue) {
+            setSelectedIssueId(categoryIssue.id)
+          }
+        }}
+      />
 
       {/* 메인 컨텐츠 영역 */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* 상단: 2-컬럼 레이아웃 (계약서 + 분석 결과) */}
-        <div className="flex-1 flex flex-col lg:flex-row overflow-hidden border-b border-slate-200">
+        <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
           {/* 왼쪽: 계약서 뷰어 */}
-          <div className="w-full lg:w-1/2 border-b lg:border-b-0 lg:border-r border-slate-200 flex-shrink-0 overflow-hidden">
+          <div className="w-full lg:w-1/2 flex-shrink-0 overflow-hidden bg-white border-r border-slate-200/60 shadow-sm">
             <ContractViewer
               contractText={analysisResult.contractText}
               issues={analysisResult.issues}
@@ -247,7 +252,7 @@ export default function ContractDetailPage() {
           </div>
 
           {/* 오른쪽: 분석 결과 패널 */}
-          <div className="w-full lg:w-1/2 flex-shrink-0 overflow-hidden">
+          <div className="w-full lg:w-1/2 flex-shrink-0 overflow-hidden bg-white shadow-sm">
             <AnalysisPanel
               issues={analysisResult.issues}
               totalIssues={analysisResult.totalIssues}
@@ -256,10 +261,28 @@ export default function ContractDetailPage() {
               lowRiskCount={analysisResult.lowRiskCount}
               selectedIssueId={selectedIssueId}
               onIssueSelect={setSelectedIssueId}
-              onAskAboutIssue={(issueId) => {
+              onCategoryClick={(category) => {
+                const categoryIssue = analysisResult.issues.find(i => i.category === category)
+                if (categoryIssue) {
+                  setSelectedIssueId(categoryIssue.id)
+                }
+              }}
+              onAskAboutIssue={(issueId, prefilledText) => {
                 setChatIssueId(issueId)
                 setSelectedIssueId(issueId)
                 setIsChatOpen(true) // 채팅 열기
+                
+                // 자동 프리필 질문 설정
+                if (prefilledText) {
+                  setPrefilledQuestion(prefilledText)
+                } else {
+                  const issue = analysisResult.issues.find(i => i.id === issueId)
+                  if (issue) {
+                    const prefilled = `다음 조항이 왜 위험한지와 현실적으로 어떤 협상 포인트를 잡을 수 있을지 알려줘.\n\n[문제 조항]\n${issue.originalText || issue.summary}`
+                    setPrefilledQuestion(prefilled)
+                  }
+                }
+                
                 // 채팅 영역으로 스크롤
                 setTimeout(() => {
                   const chatElement = document.getElementById('contract-chat')
@@ -273,36 +296,53 @@ export default function ContractDetailPage() {
         </div>
 
         {/* 하단: 채팅 UI (접기/펼치기 가능) */}
-        <div className="border-t border-slate-200 bg-white">
+        <div className="border-t border-slate-200/60 bg-white/80 backdrop-blur-sm shadow-lg">
           {/* 채팅 토글 버튼 */}
           <button
             onClick={() => setIsChatOpen(!isChatOpen)}
-            className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-50 transition-colors"
-          >
-            <div className="flex items-center gap-2">
-              <MessageSquare className="w-5 h-5 text-blue-600" />
-              <span className="font-medium text-slate-900">AI 법률 상담</span>
-              <span className="text-xs text-slate-500">
-                위험 조항에 대해 구체적으로 질문하세요
-              </span>
-            </div>
-            {isChatOpen ? (
-              <ChevronUp className="w-5 h-5 text-slate-500" />
-            ) : (
-              <ChevronDown className="w-5 h-5 text-slate-500" />
+            className={cn(
+              "w-full px-5 py-4 flex items-center justify-between",
+              "bg-gradient-to-r from-blue-50/50 to-indigo-50/50",
+              "hover:from-blue-50 hover:to-indigo-50",
+              "transition-all duration-200",
+              "border-b border-slate-200/60"
             )}
+          >
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg shadow-md">
+                <MessageSquare className="w-5 h-5 text-white" />
+              </div>
+              <div className="text-left">
+                <span className="font-semibold text-slate-900 block">AI 법률 상담</span>
+                <span className="text-xs text-slate-500">
+                  위험 조항에 대해 구체적으로 질문하세요
+                </span>
+              </div>
+            </div>
+            <div className={cn(
+              "p-2 rounded-lg transition-all duration-200",
+              isChatOpen ? "bg-blue-100 text-blue-600 rotate-180" : "bg-slate-100 text-slate-500"
+            )}>
+              {isChatOpen ? (
+                <ChevronUp className="w-5 h-5" />
+              ) : (
+                <ChevronDown className="w-5 h-5" />
+              )}
+            </div>
           </button>
 
           {/* 채팅 컨텐츠 (접기/펼치기) */}
           {isChatOpen && (
             <div 
               id="contract-chat" 
-              className="h-[400px] lg:h-[450px] overflow-hidden flex flex-col border-t border-slate-200"
+              className="h-[400px] lg:h-[450px] overflow-hidden flex flex-col animate-in slide-in-from-bottom-2 duration-300"
             >
               <ContractChat
                 docId={docId}
                 analysisResult={analysisResult}
                 selectedIssueId={chatIssueId || selectedIssueId}
+                prefilledQuestion={prefilledQuestion}
+                onQuestionPrefilled={() => setPrefilledQuestion(undefined)}
               />
             </div>
           )}

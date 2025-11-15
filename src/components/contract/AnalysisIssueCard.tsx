@@ -11,7 +11,7 @@ interface AnalysisIssueCardProps {
   isSelected?: boolean
   onSelect?: () => void
   onShowAmendment?: () => void
-  onAskAboutIssue?: (issueId: string) => void
+  onAskAboutIssue?: (issueId: string, prefilledText?: string) => void
 }
 
 export function AnalysisIssueCard({
@@ -81,10 +81,10 @@ export function AnalysisIssueCard({
 
   return (
     <div
-      className={`border rounded-lg p-3 sm:p-4 mb-3 sm:mb-4 transition-all cursor-pointer ${
+      className={`border rounded-xl p-4 sm:p-5 mb-4 transition-all cursor-pointer ${
         isSelected
-          ? 'border-blue-500 bg-blue-50 shadow-md'
-          : 'border-slate-200 bg-white hover:border-slate-300'
+          ? 'border-blue-400 bg-gradient-to-br from-blue-50 to-indigo-50 shadow-lg ring-2 ring-blue-200'
+          : 'border-slate-200 bg-white hover:border-blue-200 hover:shadow-md hover:bg-slate-50/50'
       }`}
       onClick={onSelect}
       role="button"
@@ -101,16 +101,23 @@ export function AnalysisIssueCard({
       <div className="flex items-start justify-between mb-3">
         <div className="flex-1">
           {/* 카테고리 & 위험도 */}
-          <div className="flex items-center gap-2 mb-2">
-            <span className="px-2 py-1 text-xs font-medium rounded bg-slate-100 text-slate-700">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-gradient-to-r from-slate-100 to-slate-50 text-slate-700 border border-slate-200">
               {categoryLabels[issue.category] || issue.category}
             </span>
             <span
-              className={`px-2 py-1 text-xs font-medium rounded border ${severityColors[issue.severity]}`}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg border-2 shadow-sm ${severityColors[issue.severity]}`}
             >
-              {severityLabels[issue.severity]}
+              {severityLabels[issue.severity].toUpperCase()}
             </span>
           </div>
+
+          {/* 연결된 조항 */}
+          {issue.location.clauseNumber && (
+            <p className="text-xs text-blue-600 font-medium mb-1">
+              연결 조항: 제 {issue.location.clauseNumber}조 계약의 해지
+            </p>
+          )}
 
           {/* 요약 */}
           <p className="text-sm font-medium text-slate-900 mb-2">{issue.summary}</p>
@@ -163,21 +170,18 @@ export function AnalysisIssueCard({
       </div>
 
       {/* 액션 버튼 */}
-      <div className="flex gap-2">
+      <div className="flex gap-2 mt-3">
         <Button
           variant="outline"
           size="sm"
           onClick={(e) => {
             e.stopPropagation()
             onSelect?.()
-            // 스크롤이 제대로 작동하도록 약간의 지연 후 포커스
-            setTimeout(() => {
-              // ContractViewer가 스크롤할 시간을 줌
-            }, 50)
+            setTimeout(() => {}, 50)
           }}
-          className="flex-1"
+          className="flex-1 border-slate-300 hover:bg-slate-50 hover:border-blue-300"
         >
-          <Eye className="w-4 h-4 mr-1" />
+          <Eye className="w-4 h-4 mr-1.5" />
           해당 조항 보기
         </Button>
         {onAskAboutIssue && (
@@ -186,11 +190,12 @@ export function AnalysisIssueCard({
             size="sm"
             onClick={(e) => {
               e.stopPropagation()
-              onAskAboutIssue(issue.id)
+              const prefilled = `다음 조항이 왜 위험한지와 현실적으로 어떤 협상 포인트를 잡을 수 있을지 알려줘.\n\n[문제 조항]\n${issue.originalText || issue.summary}`
+              onAskAboutIssue(issue.id, prefilled)
             }}
-            className="bg-blue-600 hover:bg-blue-700 text-white"
+            className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-md hover:shadow-lg transition-all"
           >
-            <MessageSquare className="w-4 h-4 mr-1" />
+            <MessageSquare className="w-4 h-4 mr-1.5" />
             이 부분 질문하기
           </Button>
         )}
@@ -201,9 +206,9 @@ export function AnalysisIssueCard({
             e.stopPropagation()
             onShowAmendment?.()
           }}
-          className="flex-1"
+          className="flex-1 border-slate-300 hover:bg-slate-50 hover:border-blue-300"
         >
-          <FileEdit className="w-4 h-4 mr-1" />
+          <FileEdit className="w-4 h-4 mr-1.5" />
           수정안 보기
         </Button>
       </div>
@@ -213,11 +218,79 @@ export function AnalysisIssueCard({
         <div className="mt-4 pt-4 border-t border-slate-200 space-y-3">
           {/* 원문 */}
           <div>
-            <p className="text-xs font-medium text-slate-500 mb-1">현재 조항</p>
-            <p className="text-sm text-slate-700 bg-slate-50 p-2 rounded border border-slate-200">
-              {issue.originalText}
-            </p>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-semibold text-slate-600">문제되는 문장 (원문 발췌)</p>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onSelect?.()
+                }}
+                className="text-xs h-7 px-3 hover:bg-blue-50 text-blue-600"
+              >
+                원문 위치로 이동 →
+              </Button>
+            </div>
+            <div className="text-sm text-slate-700 bg-gradient-to-br from-slate-50 to-slate-100/50 p-4 rounded-xl border border-slate-200 shadow-sm">
+              <p className="whitespace-pre-wrap leading-relaxed">{issue.originalText}</p>
+            </div>
           </div>
+
+          {/* 위험 분석 */}
+          {issue.rationale && (
+            <div>
+              <p className="text-xs font-medium text-slate-500 mb-1">위험 분석 (왜 문제인지)</p>
+              <ul className="text-sm text-slate-700 space-y-1 list-disc list-inside">
+                {issue.rationale.split('\n').filter(line => line.trim()).map((line, idx) => (
+                  <li key={idx} className="text-slate-700">{line.trim().replace(/^[-•]\s*/, '')}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* 수정 제안 */}
+          {issue.suggestedText && (
+            <div>
+              <p className="text-xs font-semibold text-slate-600 mb-2">수정 제안 (이렇게 고쳐보면 좋음)</p>
+              <div className="bg-gradient-to-br from-emerald-50 to-green-50 border-2 border-emerald-200 rounded-xl p-4 shadow-sm relative">
+                <p className="text-sm text-slate-800 whitespace-pre-wrap mb-3 leading-relaxed font-medium">{issue.suggestedText}</p>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      navigator.clipboard.writeText(issue.suggestedText || '')
+                      toast({
+                        title: '복사 완료',
+                        description: '제안 문구가 클립보드에 복사되었습니다.',
+                      })
+                    }}
+                    className="flex-1 text-xs h-8 border-emerald-300 hover:bg-emerald-100"
+                  >
+                    <Copy className="w-3.5 h-3.5 mr-1.5" />
+                    제안 문구 복사
+                  </Button>
+                  {onAskAboutIssue && (
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        const prefilled = `다음 조항이 왜 위험한지와 현실적으로 어떤 협상 포인트를 잡을 수 있을지 알려줘.\n\n[문제 조항]\n${issue.originalText || issue.summary}`
+                        onAskAboutIssue(issue.id, prefilled)
+                      }}
+                      className="flex-1 text-xs h-8 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-md"
+                    >
+                      <MessageSquare className="w-3.5 h-3.5 mr-1.5" />
+                      이 문장으로 질문하기
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* 근거 */}
           {issue.legalBasis && issue.legalBasis.length > 0 && (
