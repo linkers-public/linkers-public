@@ -1,8 +1,10 @@
 'use client'
 
-import { Loader2 } from 'lucide-react'
+import { Loader2, Download } from 'lucide-react'
 import type { QueryResponse } from '@/types/rag'
 import { MarkdownTable } from '@/components/rag/MarkdownTable'
+import { MarkdownRenderer } from '@/components/rag/MarkdownRenderer'
+import { Button } from '@/components/ui/button'
 import {
   TechStackCard,
   BudgetCard,
@@ -74,13 +76,13 @@ export default function RAGQueryResultView({
     <div className="space-y-6">
       {/* 추출된 정보 카드들 */}
       {info?.techStack && info.techStack.length > 0 && (
-        <div className="rounded-2xl border border-slate-200 p-5 bg-white shadow-sm">
-          <h3 className="text-lg font-semibold mb-4">요구기술</h3>
-          <div className="flex flex-wrap gap-2">
+        <div className="rounded-2xl border border-slate-200/60 p-6 bg-white shadow-sm hover:shadow-md transition-shadow duration-200">
+          <h3 className="text-lg font-bold text-gray-900 mb-4">요구기술</h3>
+          <div className="flex flex-wrap gap-2.5">
             {info.techStack.map((tech, i) => (
               <span
                 key={i}
-                className="inline-flex items-center px-3 py-1 rounded-xl text-sm font-medium bg-blue-100 text-blue-700 border border-blue-200"
+                className="inline-flex items-center px-3.5 py-1.5 rounded-lg text-sm font-semibold bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 border border-blue-200/60 hover:border-blue-300 hover:from-blue-100 hover:to-indigo-100 transition-all duration-200"
               >
                 {tech}
               </span>
@@ -106,22 +108,63 @@ export default function RAGQueryResultView({
 
       {/* 상세 분석 결과 */}
       {analysis.answer && (
-        <div className="rounded-2xl border border-slate-200 p-5 bg-white shadow-sm">
-          <h3 className="text-lg font-semibold mb-4">상세 분석</h3>
+        <div className="rounded-2xl border border-slate-200/60 p-6 bg-white shadow-sm hover:shadow-md transition-shadow duration-200">
+          <div className="flex items-center justify-between mb-5">
+            <h3 className="text-lg font-bold text-gray-900">상세 분석</h3>
+            <Button
+              onClick={async () => {
+                try {
+                  const markdown = analysis.markdown || analysis.answer
+                  const title = analysis.query || '분석_결과'
+                  
+                  const response = await fetch('/api/rag/query/download', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                      markdown,
+                      title,
+                    }),
+                  })
+
+                  if (!response.ok) {
+                    throw new Error('다운로드 실패')
+                  }
+
+                  const blob = await response.blob()
+                  const url = window.URL.createObjectURL(blob)
+                  const a = document.createElement('a')
+                  a.href = url
+                  a.download = `${title.replace(/[^a-zA-Z0-9가-힣\s]/g, '_')}_${new Date().toISOString().split('T')[0]}.md`
+                  document.body.appendChild(a)
+                  a.click()
+                  window.URL.revokeObjectURL(url)
+                  document.body.removeChild(a)
+                } catch (error) {
+                  console.error('다운로드 오류:', error)
+                  alert('다운로드 중 오류가 발생했습니다.')
+                }
+              }}
+              variant="outline"
+              size="sm"
+              className="gap-2"
+            >
+              <Download className="w-4 h-4" />
+              마크다운 다운로드
+            </Button>
+          </div>
           
           {/* 표가 있는 경우 표로 렌더링 */}
           <MarkdownTable content={analysis.answer} />
           
-          {/* 일반 텍스트 렌더링 */}
-          <div 
-            className="prose max-w-none text-sm text-slate-700 whitespace-pre-wrap mt-4"
-            dangerouslySetInnerHTML={{ 
-              __html: analysis.answer
-                .replace(/\|.+\|[\n\r]+/g, '') // 표 제거 (표는 별도 컴포넌트로 렌더링)
-                .replace(/\n/g, '<br />')
-                .replace(/\[id:(\d+)\]/g, '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono bg-blue-100 text-blue-700 border border-blue-200">[id:$1]</span>')
-            }}
-          />
+          {/* 마크다운 렌더링 */}
+          <div className="mt-4">
+            <MarkdownRenderer 
+              content={analysis.answer.replace(/\|.+\|[\n\r]+/g, '')} 
+              className="text-slate-700"
+            />
+          </div>
         </div>
       )}
     </div>

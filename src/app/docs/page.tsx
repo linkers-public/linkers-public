@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Header from '@/components/layout/Header'
 import Footer from '@/components/layout/Footer'
-import { Loader2, FileText, Calendar, Building2, Search } from 'lucide-react'
+import { Loader2, FileText, Calendar, Building2, Search, Download } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 interface Document {
@@ -145,11 +145,13 @@ export default function DocsPage() {
             {filteredDocuments.map((doc) => (
               <div
                 key={doc.id}
-                onClick={() => handleDocumentClick(doc)}
-                className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md hover:border-blue-300 transition-all cursor-pointer group"
+                className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md hover:border-blue-300 transition-all group"
               >
                 <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center gap-3">
+                  <div 
+                    className="flex items-center gap-3 flex-1 cursor-pointer"
+                    onClick={() => handleDocumentClick(doc)}
+                  >
                     <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center group-hover:bg-blue-200 transition-colors">
                       <FileText className="w-6 h-6 text-blue-600" />
                     </div>
@@ -159,6 +161,16 @@ export default function DocsPage() {
                       </h3>
                     </div>
                   </div>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      window.open(`/api/rag/docs/${doc.id}/download?format=txt`, '_blank')
+                    }}
+                    className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                    title="문서 다운로드"
+                  >
+                    <Download className="w-5 h-5" />
+                  </button>
                 </div>
 
                 <div className="space-y-2 mb-4">

@@ -105,7 +105,12 @@ class SupabaseVectorStore:
             "budget_max": meta.get("budget_max"),
             "version": version,
             "content_hash": content_hash,
-            "status": "active"
+            "status": "active",
+            # Storage 파일 정보 (meta에 포함된 경우)
+            "storage_file_path": meta.get("storage_file_path"),
+            "storage_bucket": meta.get("storage_bucket", "announcements"),
+            "file_name": meta.get("file_name"),
+            "file_mime_type": meta.get("file_mime_type")
         }
         
         # 날짜 필드 처리 (None이거나 빈 문자열이면 제외)

@@ -26,6 +26,7 @@ export default function AnalysisPage() {
   const [isCustomMode, setIsCustomMode] = useState(false)
   const [announcementAnalysis, setAnnouncementAnalysis] = useState<any>(null)
   const [loadingAnnouncement, setLoadingAnnouncement] = useState(true)
+  const [autoAnalysisExecuted, setAutoAnalysisExecuted] = useState(false)
   const [examplePrompts] = useState([
     '아래 공고 PDF와 과거 3년간 유사 공공 IT사업 데이터를 바탕으로, 주요 기술 요구사항과 적정 예산 범위, 예상 수행기간을 요약해줘.',
     '아래 기업/프리랜서 이력 데이터 중 기술스택, 평점, 지역 경력을 비교해 상위 3개 팀 추천 이유를 표로 요약해줘.',
@@ -34,9 +35,13 @@ export default function AnalysisPage() {
   ])
 
   useEffect(() => {
-    loadAnalysis()
     loadDocInfo()
     loadAnnouncementAnalysis()
+    // 자동으로 기본 분석 실행 (마크다운 형식으로 요청)
+    if (!autoAnalysisExecuted) {
+      loadAnalysis('이 공고의 핵심 요구사항, 예산 범위, 예상 기간을 마크다운 형식으로 구조화하여 요약해주세요. 제목과 내용을 명확히 구분해주세요.', false)
+      setAutoAnalysisExecuted(true)
+    }
   }, [docId])
 
   const loadDocInfo = async () => {
@@ -224,21 +229,26 @@ export default function AnalysisPage() {
         currentStep={2}
         totalSteps={5}
       />
-      <main className="flex-1 container mx-auto px-6 py-8 max-w-7xl">
+      <main className="flex-1 container mx-auto px-4 sm:px-6 py-6 sm:py-8 max-w-7xl">
         {/* 프롬프트 입력 섹션 */}
-        <div className="mb-6 rounded-2xl border border-slate-200 p-6 bg-white shadow-sm">
-          <div className="flex items-center gap-2 mb-4">
-            <Sparkles className="w-5 h-5 text-purple-500" />
-            <h2 className="text-xl font-semibold">커스텀 분석 프롬프트</h2>
+        <div className="mb-8 rounded-2xl border border-slate-200/60 p-6 bg-gradient-to-br from-white to-slate-50/50 shadow-sm hover:shadow-md transition-shadow duration-200">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2 bg-purple-100 rounded-lg">
+              <Sparkles className="w-5 h-5 text-purple-600" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-gray-900">커스텀 분석 프롬프트</h2>
+              <p className="text-sm text-gray-500 mt-0.5">추가 질문이나 분석을 원하시면 입력해주세요</p>
+            </div>
           </div>
           
           <div className="space-y-4">
-            <div className="flex gap-2">
+            <div className="flex gap-3">
               <textarea
                 value={customQuery}
                 onChange={(e) => setCustomQuery(e.target.value)}
                 placeholder="예: 아래 공고 PDF와 과거 3년간 유사 공공 IT사업 데이터를 바탕으로, 주요 기술 요구사항과 적정 예산 범위, 예상 수행기간을 요약해줘."
-                className="flex-1 min-h-[100px] px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                className="flex-1 min-h-[110px] px-4 py-3 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none transition-all duration-200 bg-white text-gray-900 placeholder:text-gray-400"
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
                     handleCustomQuery()
@@ -248,7 +258,7 @@ export default function AnalysisPage() {
               <Button
                 onClick={handleCustomQuery}
                 disabled={loading || !customQuery.trim()}
-                className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-6 py-3 h-auto"
+                className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl px-6 py-3 h-auto shadow-md hover:shadow-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? (
                   <Loader2 className="w-5 h-5 animate-spin" />
@@ -263,14 +273,17 @@ export default function AnalysisPage() {
 
             {/* 예시 프롬프트 */}
             <div>
-              <p className="text-sm text-slate-600 mb-2">💡 예시 프롬프트:</p>
+              <p className="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
+                <span className="text-lg">💡</span>
+                예시 프롬프트
+              </p>
               <div className="flex flex-wrap gap-2">
                 {examplePrompts.map((example, idx) => (
                   <button
                     key={idx}
                     onClick={() => handleExampleClick(example)}
                     disabled={loading}
-                    className="text-xs px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="text-xs px-3 py-2 bg-white border border-slate-200 hover:border-blue-300 hover:bg-blue-50 text-slate-700 hover:text-blue-700 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm hover:shadow"
                   >
                     {example.substring(0, 40)}...
                   </button>
@@ -280,23 +293,58 @@ export default function AnalysisPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* 중앙: 분석 카드들 */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* 공고 분석 결과 (기본 표시) */}
-            <AnnouncementAnalysisView
-              analysis={announcementAnalysis}
-              loading={loadingAnnouncement}
-            />
+        {/* 로딩 상태 표시 (초기 로딩) */}
+        {loading && !analysis && (
+          <div className="flex items-center justify-center py-20">
+            <div className="text-center">
+              <div className="relative">
+                <Loader2 className="w-12 h-12 animate-spin text-blue-600 mx-auto mb-4" />
+                <div className="absolute inset-0 w-12 h-12 border-4 border-blue-100 rounded-full mx-auto"></div>
+              </div>
+              <p className="text-gray-700 font-medium">문서를 분석하고 요약 중입니다...</p>
+              <p className="text-sm text-gray-500 mt-2">잠시만 기다려주세요</p>
+            </div>
+          </div>
+        )}
 
-            {/* RAG 쿼리 결과 (조회/요약) */}
-            {analysis && (
+        {/* 분석 결과 그리드 */}
+        {(!loading || analysis) && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
+            {/* 중앙: 분석 카드들 */}
+            <div className="lg:col-span-2 space-y-8">
+              {/* 공고 분석 결과 (기본 표시) */}
+              {announcementAnalysis && (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3 pb-3 border-b border-slate-200">
+                    <div className="p-2 bg-blue-100 rounded-lg">
+                      <Sparkles className="w-5 h-5 text-blue-600" />
+                    </div>
+                    <div>
+                      <h2 className="text-2xl font-bold text-gray-900">AI 분석 결과</h2>
+                      <p className="text-sm text-gray-500 mt-0.5">LLM이 공고문을 분석하여 주요 정보를 자동으로 추출했습니다</p>
+                    </div>
+                  </div>
+                  <AnnouncementAnalysisView
+                    analysis={announcementAnalysis}
+                    loading={loadingAnnouncement}
+                  />
+                </div>
+              )}
+
+              {/* RAG 쿼리 결과 (조회/요약) - 기본 표시 */}
               <div className="space-y-4">
-                <div className="mb-4">
-                  <h2 className="text-2xl font-bold text-gray-900 mb-2">RAG 조회 결과</h2>
-                  <p className="text-gray-600">
-                    사용자 프롬프트에 대한 RAG 기반 분석 결과입니다.
-                  </p>
+                <div className="flex items-center gap-3 pb-3 border-b border-slate-200">
+                  <div className="p-2 bg-indigo-100 rounded-lg">
+                    <Sparkles className="w-5 h-5 text-indigo-600" />
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-900">문서 분석/요약</h2>
+                    <p className="text-sm text-gray-500 mt-0.5">
+                      {isCustomMode 
+                        ? '사용자 프롬프트에 대한 RAG 기반 분석 결과입니다'
+                        : '업로드한 문서에 대한 자동 분석 및 요약 결과입니다'}
+                    </p>
+                  </div>
                 </div>
                 <RAGQueryResultView
                   analysis={analysis}
@@ -304,28 +352,31 @@ export default function AnalysisPage() {
                   onShowEvidence={handleChunkClick}
                 />
               </div>
-            )}
-          </div>
+            </div>
 
-          {/* 우측: 근거 패널 */}
-          <div className="lg:col-span-1">
-            <EvidencePanel
-              chunks={analysis?.usedChunks || []}
-              onChunkClick={handleChunkClick}
-            />
+            {/* 우측: 근거 패널 */}
+            <div className="lg:col-span-1">
+              <EvidencePanel
+                chunks={analysis?.usedChunks || []}
+                onChunkClick={handleChunkClick}
+              />
+            </div>
           </div>
-        </div>
+        )}
 
         {/* 하단 CTA */}
-        {!loading && (
-          <div className="mt-8 flex justify-end">
+        {!loading && analysis && (
+          <div className="mt-10 pt-8 border-t border-slate-200 flex justify-between items-center">
+            <p className="text-sm text-gray-500">
+              분석이 완료되었습니다. 다음 단계로 진행하세요
+            </p>
             <Button
               onClick={() => router.push(`/match/${docId}`)}
-              className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-6 py-2 font-medium shadow-sm"
+              className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white rounded-xl px-8 py-3 font-semibold shadow-lg hover:shadow-xl transition-all duration-200"
               size="lg"
             >
               팀 추천 보기
-              <ArrowRight className="w-4 h-4 ml-2" />
+              <ArrowRight className="w-5 h-5 ml-2" />
             </Button>
           </div>
         )}

@@ -53,12 +53,6 @@ export default function AnnouncementAnalysisView({
 
   return (
     <div className="space-y-4">
-      <div className="mb-4">
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">AI 분석 결과</h2>
-        <p className="text-gray-600">
-          LLM이 공고문을 분석하여 주요 정보를 자동으로 추출했습니다.
-        </p>
-      </div>
       <AnnouncementAnalysisResult analysis={analysis} loading={loading} />
     </div>
   )

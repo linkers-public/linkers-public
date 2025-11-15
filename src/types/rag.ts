@@ -67,8 +67,11 @@ export interface MatchedTeam {
 
 export interface QueryResponse {
   answer: string
+  markdown?: string  // 마크다운 형식 (다운로드용)
   usedChunks: UsedChunk[]
   teams?: MatchedTeam[]
+  query?: string
+  format?: string
 }
 
 export interface TeamUpdateRequest {

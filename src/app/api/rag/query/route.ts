@@ -40,14 +40,20 @@ export async function POST(request: NextRequest) {
       const backendData = await backendResponse.json()
       
       // 백엔드 응답을 프론트엔드 형식으로 변환
+      const answer = backendData.answer || backendData.markdown || '관련 정보를 찾을 수 없습니다.'
+      
       return NextResponse.json({
-        answer: backendData.answer || '관련 정보를 찾을 수 없습니다.',
+        answer: answer,
+        markdown: backendData.markdown || answer,  // 마크다운 형식
         usedChunks: (backendData.results || []).map((r: any, idx: number) => ({
           id: idx,
           doc_id: r.announcement_id || '',
           score: r.score || 0,
+          content: r.content?.substring(0, 200),  // 미리보기용
         })),
-      } as QueryResponse)
+        query: backendData.query || query,
+        format: backendData.format || 'markdown',
+      } as QueryResponse & { markdown?: string; format?: string })
     } catch (backendError) {
       console.error('백엔드 API 호출 실패:', backendError)
       return NextResponse.json(

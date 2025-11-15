@@ -414,7 +414,7 @@ async def search_announcements(
                 "announcement_id": result.get("announcement_id", "")
             })
         
-        # 3. LLM으로 답변 생성 (검색 결과 기반)
+        # 3. LLM으로 답변 생성 (검색 결과 기반) - 마크다운 형식
         answer = ""
         if formatted_results and not orchestrator.generator.disable_llm:
             try:
@@ -424,24 +424,45 @@ async def search_announcements(
                     for i, r in enumerate(formatted_results[:3])
                 ])
                 
-                prompt = f"""당신은 한국어로 답변하는 전문가입니다. 다음 문서들을 기반으로 질문에 답변해주세요.
+                prompt = f"""당신은 공공사업 공고 분석 전문가입니다. 다음 문서들을 기반으로 질문에 답변해주세요.
 
-중요: 반드시 한국어로만 답변하세요. 영어를 사용하지 마세요.
+중요 사항:
+- 반드시 한국어로만 답변하세요
+- 마크다운 형식으로 구조화하여 작성하세요
+- 제목과 내용을 명확히 구분하세요
+
+출력 형식 (마크다운):
+# [주요 제목]
+
+## [섹션 제목 1]
+[내용]
+
+## [섹션 제목 2]
+[내용]
+
+### [하위 제목]
+- 항목 1
+- 항목 2
 
 질문: {query}
 
 관련 문서:
 {context}
 
-위 문서들을 참고하여 질문에 대해 한국어로 상세히 답변해주세요:"""
+위 문서들을 참고하여 질문에 대해 마크다운 형식으로 구조화된 답변을 작성해주세요.
+제목과 내용을 명확히 구분하고, 표나 리스트를 활용하여 가독성을 높여주세요."""
                 
                 # LLM 호출
                 if orchestrator.generator.use_ollama:
                     from langchain_community.llms import Ollama
                     from config import settings
                     
-                    # 시스템 프롬프트 추가 (한국어 답변 강제)
-                    system_prompt = "당신은 한국어로 답변하는 AI 어시스턴트입니다. 모든 답변은 반드시 한국어로 작성해야 합니다."
+                    # 시스템 프롬프트 추가 (한국어 + 마크다운 형식 강제)
+                    system_prompt = """당신은 공공사업 공고 분석 전문가입니다. 
+- 모든 답변은 반드시 한국어로 작성해야 합니다.
+- 마크다운 형식으로 구조화하여 작성하세요.
+- 제목(#, ##, ###)과 내용을 명확히 구분하세요.
+- 표, 리스트, 강조를 적절히 활용하세요."""
                     full_prompt = f"{system_prompt}\n\n{prompt}"
                     
                     llm = Ollama(
@@ -454,13 +475,14 @@ async def search_announcements(
                     if answer and len(answer) > 0 and not any(ord(c) >= 0xAC00 and ord(c) <= 0xD7A3 for c in answer[:100]):
                         # 한국어가 없으면 더 강한 프롬프트로 재시도
                         retry_prompt = f"""당신은 한국어 전문가입니다. 다음 질문에 반드시 한국어로만 답변하세요. 영어를 사용하지 마세요.
+마크다운 형식으로 구조화하여 작성하세요.
 
 질문: {query}
 
 관련 문서:
 {context}
 
-한국어로 답변:"""
+한국어로 마크다운 형식으로 답변:"""
                         answer = llm.invoke(retry_prompt)
                 elif False:  # OpenAI 사용 안 함 (해커톤 모드만 사용)
                     from langchain_openai import ChatOpenAI
@@ -480,11 +502,14 @@ async def search_announcements(
         else:
             answer = f"검색된 {len(formatted_results)}개의 문서를 찾았습니다." if formatted_results else "관련 문서를 찾을 수 없습니다."
         
+        # 마크다운 형식으로 구조화된 응답 반환
         return {
             "answer": answer,
+            "markdown": answer,  # 마크다운 형식 (다운로드용)
             "results": formatted_results,
             "query": query,
-            "count": len(formatted_results)
+            "count": len(formatted_results),
+            "format": "markdown"  # 형식 표시
         }
         
     except Exception as e:
