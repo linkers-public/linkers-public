@@ -46,3 +46,6 @@ next-env.d.ts
 # backend data files
 backend/data/
 !backend/data/README.md
+
+# zip files
+*.zip
