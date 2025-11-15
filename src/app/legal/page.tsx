@@ -40,7 +40,7 @@ export default function LegalLandingPage() {
               </div>
 
               {/* 메인 헤드라인 */}
-              <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold mb-6 text-slate-900 leading-tight">
+              <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold mb-5 text-slate-900 leading-tight">
                 첫 입사, 첫 계약, 변호사는 못 써도
                 <br />
                 <span className="bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
@@ -51,7 +51,7 @@ export default function LegalLandingPage() {
               </h1>
 
               {/* 서브 카피 */}
-              <p className="text-base sm:text-lg text-slate-600 mb-8 leading-relaxed">
+              <p className="text-sm sm:text-base text-slate-600 mb-6 leading-relaxed">
                 근로계약서 · 프리랜서 계약 · 스톡옵션 · 직장 내 괴롭힘까지
                 <br />
                 법령·표준계약·공공 가이드를 기반으로 위험 신호와 대응 방법을 정리해 드립니다.
@@ -69,8 +69,8 @@ export default function LegalLandingPage() {
                         <Upload className="w-6 h-6 text-white" />
                       </div>
                       <div className="flex-1">
-                        <h3 className="text-lg font-bold text-slate-900 mb-2">📄 계약서 올려서 위험도 분석 받기</h3>
-                        <p className="text-sm text-slate-600 leading-relaxed">
+                        <h3 className="text-base sm:text-lg font-bold text-slate-900 mb-2">📄 계약서 올려서 위험도 분석 받기</h3>
+                        <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
                           근로·용역·프리랜서 계약서를 업로드하면, 위험 조항과 수정이 필요한 부분을 찾아드립니다.
                         </p>
                       </div>
@@ -89,8 +89,8 @@ export default function LegalLandingPage() {
                         <MessageSquare className="w-6 h-6 text-white" />
                       </div>
                       <div className="flex-1">
-                        <h3 className="text-lg font-bold text-slate-900 mb-2">💬 지금 겪는 상황부터 상담받기</h3>
-                        <p className="text-sm text-slate-600 leading-relaxed">
+                        <h3 className="text-base sm:text-lg font-bold text-slate-900 mb-2">💬 지금 겪는 상황부터 상담받기</h3>
+                        <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
                           해고 통보, 무급 야근, 괴롭힘 등 현재 상황을 한 줄로 적으면, 법적 쟁점과 행동 가이드를 정리해 드립니다.
                         </p>
                       </div>
@@ -146,8 +146,8 @@ export default function LegalLandingPage() {
         </div>
 
         {/* 이 서비스로 할 수 있는 것 3박스 섹션 */}
-        <div className="mb-20">
-          <h2 className="text-3xl md:text-4xl font-extrabold text-center mb-12 text-slate-900">
+        <div className="mb-16">
+          <h2 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-center mb-10 text-slate-900">
             이 서비스로 할 수 있는 것
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -157,7 +157,7 @@ export default function LegalLandingPage() {
                 <div className="p-3 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl w-14 h-14 mb-4 shadow-md">
                   <FileCheck className="w-8 h-8 text-white" />
                 </div>
-                <CardTitle className="text-xl font-bold">계약서 위험 신호 찾기</CardTitle>
+                <CardTitle className="text-lg sm:text-xl font-bold">계약서 위험 신호 찾기</CardTitle>
               </CardHeader>
               <CardContent>
                 <ul className="space-y-2 mb-6">
@@ -191,7 +191,7 @@ export default function LegalLandingPage() {
                 <div className="p-3 bg-gradient-to-br from-emerald-500 to-green-600 rounded-xl w-14 h-14 mb-4 shadow-md">
                   <MessageSquare className="w-8 h-8 text-white" />
                 </div>
-                <CardTitle className="text-xl font-bold">지금 겪는 상황 진단</CardTitle>
+                <CardTitle className="text-lg sm:text-xl font-bold">지금 겪는 상황 진단</CardTitle>
               </CardHeader>
               <CardContent>
                 <ul className="space-y-2 mb-6">
@@ -225,7 +225,7 @@ export default function LegalLandingPage() {
                 <div className="p-3 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-xl w-14 h-14 mb-4 shadow-md">
                   <BookOpen className="w-8 h-8 text-white" />
                 </div>
-                <CardTitle className="text-xl font-bold">비슷한 사례로 미리 공부</CardTitle>
+                <CardTitle className="text-lg sm:text-xl font-bold">비슷한 사례로 미리 공부</CardTitle>
               </CardHeader>
               <CardContent>
                 <ul className="space-y-2 mb-6">
@@ -256,8 +256,8 @@ export default function LegalLandingPage() {
         </div>
 
         {/* 이런 분에게 추천 섹션 */}
-        <div className="mb-20">
-          <h2 className="text-3xl md:text-4xl font-extrabold text-center mb-8 text-slate-900">
+        <div className="mb-16">
+          <h2 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-center mb-6 text-slate-900">
             이런 상황이라면, 먼저 Linkus Legal을 써보세요
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -281,10 +281,10 @@ export default function LegalLandingPage() {
         </div>
 
         {/* 서비스 흐름 Step 섹션 */}
-        <div className="mb-20">
-          <div className="text-center mb-12">
-            <h2 className="text-3xl md:text-4xl font-extrabold mb-4 text-slate-900">사용 흐름</h2>
-            <p className="text-lg text-slate-600 max-w-2xl mx-auto">
+        <div className="mb-16">
+          <div className="text-center mb-10">
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-extrabold mb-3 text-slate-900">사용 흐름</h2>
+            <p className="text-base sm:text-lg text-slate-600 max-w-2xl mx-auto">
               3단계만 거치면, 내 계약/상황의 위험 신호를 파악할 수 있습니다.
             </p>
           </div>
@@ -337,7 +337,7 @@ export default function LegalLandingPage() {
                     )}>
                       {stepData.step}
                     </div>
-                    <h3 className="text-xl font-bold text-slate-900">{stepData.step}. {stepData.title}</h3>
+                    <h3 className="text-lg sm:text-xl font-bold text-slate-900">{stepData.step}. {stepData.title}</h3>
                   </div>
                   <ul className="space-y-2">
                     {stepData.items.map((item, index) => (
@@ -359,15 +359,15 @@ export default function LegalLandingPage() {
         </div>
 
         {/* AI가 어떻게 판단하는지 신뢰 섹션 */}
-        <div className="mb-20">
+        <div className="mb-16">
           <Card className="border-2 border-slate-200 shadow-lg bg-gradient-to-br from-white to-slate-50/50">
-            <CardContent className="p-8 md:p-12">
-              <div className="text-center mb-8">
-                <div className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-full mb-4 shadow-lg">
-                  <Sparkles className="w-5 h-5" />
+            <CardContent className="p-6 sm:p-8 md:p-10">
+              <div className="text-center mb-6">
+                <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-full mb-3 shadow-lg text-sm">
+                  <Sparkles className="w-4 h-4" />
                   <span className="font-semibold">RAG 기반 분석</span>
                 </div>
-                <h2 className="text-3xl md:text-4xl font-extrabold mb-4 text-slate-900">
+                <h2 className="text-2xl sm:text-3xl md:text-4xl font-extrabold mb-3 text-slate-900">
                   AI가 아무 말이나 하는 게 아니라,<br />
                   근거를 보고 말하도록 설계했습니다.
                 </h2>
@@ -423,15 +423,15 @@ export default function LegalLandingPage() {
         </div>
 
         {/* 법률 자문 아님 / 디스클레이머 영역 */}
-        <div className="mb-20">
+        <div className="mb-16">
           <Card className="bg-amber-50 border-2 border-amber-200 shadow-lg">
-            <CardContent className="p-8">
-              <div className="flex items-start gap-4">
-                <div className="p-3 bg-amber-100 rounded-xl flex-shrink-0">
-                  <ShieldAlert className="w-6 h-6 text-amber-700" />
+            <CardContent className="p-6 sm:p-8">
+              <div className="flex items-start gap-3 sm:gap-4">
+                <div className="p-2.5 bg-amber-100 rounded-xl flex-shrink-0">
+                  <ShieldAlert className="w-5 h-5 sm:w-6 sm:h-6 text-amber-700" />
                 </div>
                 <div className="flex-1">
-                  <h3 className="text-lg font-bold text-amber-900 mb-3">
+                  <h3 className="text-base sm:text-lg font-bold text-amber-900 mb-2 sm:mb-3">
                     이 서비스는 변호사·노무사 등 전문 법률 자문을 대체하지 않습니다.
                   </h3>
                   <p className="text-sm text-amber-800 leading-relaxed mb-2">
@@ -449,13 +449,13 @@ export default function LegalLandingPage() {
         {/* 하단 CTA 정리 */}
         <div className="mb-12">
           <Card className="border-2 border-slate-200 shadow-xl bg-gradient-to-br from-white to-blue-50/30">
-            <CardContent className="p-8 md:p-12">
-              <div className="flex flex-col lg:flex-row items-center justify-between gap-8">
+            <CardContent className="p-6 sm:p-8 md:p-10">
+              <div className="flex flex-col lg:flex-row items-center justify-between gap-6 sm:gap-8">
                 <div className="flex-1 text-center lg:text-left">
-                  <h3 className="text-2xl font-bold text-slate-900 mb-3">
+                  <h3 className="text-xl sm:text-2xl font-bold text-slate-900 mb-2 sm:mb-3">
                     어디서부터 시작해야 할지 헷갈린다면,
                   </h3>
-                  <p className="text-lg text-slate-600">
+                  <p className="text-base sm:text-lg text-slate-600">
                     지금 가지고 있는 계약서 또는 고민되는 상황부터 한번 같이 살펴볼까요?
                   </p>
                 </div>

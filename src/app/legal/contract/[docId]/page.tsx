@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
-import { Loader2, AlertCircle, ChevronUp, ChevronDown, MessageSquare } from 'lucide-react'
+import { Loader2, AlertCircle, ChevronUp, ChevronDown, MessageSquare, GripVertical } from 'lucide-react'
 import { ContractViewer } from '@/components/contract/ContractViewer'
 import { AnalysisPanel } from '@/components/contract/AnalysisPanel'
 import { ContractChat } from '@/components/contract/ContractChat'
@@ -20,6 +20,8 @@ export default function ContractDetailPage() {
   const [chatIssueId, setChatIssueId] = useState<string | undefined>()
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [prefilledQuestion, setPrefilledQuestion] = useState<string | undefined>()
+  const [chatHeight, setChatHeight] = useState(380)
+  const [isResizing, setIsResizing] = useState(false)
 
   // 분석 결과 로드
   useEffect(() => {
@@ -187,6 +189,41 @@ export default function ContractDetailPage() {
     loadAnalysis()
   }, [docId])
 
+  // 채팅 높이 조절 핸들러
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing) return
+      
+      const windowHeight = window.innerHeight
+      const newHeight = windowHeight - e.clientY
+      
+      // 최소 200px, 최대 화면 높이의 80%
+      const minHeight = 200
+      const maxHeight = windowHeight * 0.8
+      const clampedHeight = Math.max(minHeight, Math.min(maxHeight, newHeight))
+      
+      setChatHeight(clampedHeight)
+    }
+
+    const handleMouseUp = () => {
+      setIsResizing(false)
+    }
+
+    if (isResizing) {
+      document.addEventListener('mousemove', handleMouseMove)
+      document.addEventListener('mouseup', handleMouseUp)
+      document.body.style.cursor = 'row-resize'
+      document.body.style.userSelect = 'none'
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+  }, [isResizing])
+
   // 분석 전 상태
   if (loading) {
     return (
@@ -289,49 +326,76 @@ export default function ContractDetailPage() {
 
         {/* 하단: 채팅 UI (접기/펼치기 가능) - 고정 */}
         <div className={cn(
-          "fixed bottom-0 left-0 right-0 z-30 border-t border-slate-200/60 bg-white/95 backdrop-blur-md shadow-lg",
+          "fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-md shadow-lg",
           isChatOpen ? "flex flex-col" : ""
         )}>
-          {/* 채팅 토글 버튼 */}
+          {/* 채팅 토글 버튼 - 파란색 헤더 스타일 */}
           <button
             onClick={() => setIsChatOpen(!isChatOpen)}
             className={cn(
-              "w-full px-5 py-3 flex items-center justify-between",
-              "bg-gradient-to-r from-blue-50/50 to-indigo-50/50",
-              "hover:from-blue-50 hover:to-indigo-50",
+              "w-full relative overflow-hidden",
+              "bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-600",
+              "hover:from-blue-700 hover:via-blue-600 hover:to-indigo-700",
               "transition-all duration-200",
-              isChatOpen && "border-b border-slate-200/60"
+              "border-t border-blue-400/30"
             )}
           >
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg shadow-md">
-                <MessageSquare className="w-5 h-5 text-white" />
+            <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxwYXRoIGQ9Ik0zNiAzNGMwIDIuMjA5LTEuNzkxIDQtNCA0cy00LTEuNzkxLTQtNCAxLjc5MS00IDQtNCA0IDEuNzkxIDQgNHptMTAtMTBjMCAyLjIwOS0xLjc5MSA0LTQgNHMtNC0xLjc5MS00LTQgMS43OTEtNCA0LTQgNCAxLjc5MSA0IDR6IiBmaWxsPSJyZ2JhKDI1NSwyNTUsMjU1LDAuMSkiLz48L2c+PC9zdmc+')] opacity-20"></div>
+            <div className="relative px-4 sm:px-5 py-3 sm:py-4 flex items-center justify-between">
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <div className="p-2 bg-white/20 backdrop-blur-sm rounded-xl shadow-lg flex-shrink-0">
+                  <MessageSquare className="w-5 h-5 text-white" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-base sm:text-lg font-bold text-white mb-0.5">AI 법률 상담</h2>
+                  <p className="text-xs text-blue-100 leading-relaxed">
+                    위험 조항에 대해 구체적으로 질문하시면 이해하기 쉽게 설명해드립니다
+                  </p>
+                </div>
               </div>
-              <div className="text-left">
-                <span className="font-semibold text-slate-900 block">AI 법률 상담</span>
-                <span className="text-xs text-slate-500">
-                  위험 조항에 대해 구체적으로 질문하세요
-                </span>
+              <div className={cn(
+                "p-2 rounded-lg transition-all duration-200 flex-shrink-0 ml-3",
+                isChatOpen ? "bg-white/30 text-white rotate-180" : "bg-white/20 text-white/80"
+              )}>
+                {isChatOpen ? (
+                  <ChevronUp className="w-5 h-5" />
+                ) : (
+                  <ChevronDown className="w-5 h-5" />
+                )}
               </div>
-            </div>
-            <div className={cn(
-              "p-2 rounded-lg transition-all duration-200",
-              isChatOpen ? "bg-blue-100 text-blue-600 rotate-180" : "bg-slate-100 text-slate-500"
-            )}>
-              {isChatOpen ? (
-                <ChevronUp className="w-5 h-5" />
-              ) : (
-                <ChevronDown className="w-5 h-5" />
-              )}
             </div>
           </button>
 
           {/* 채팅 컨텐츠 (접기/펼치기) */}
           {isChatOpen && (
-            <div 
-              id="contract-chat" 
-              className="h-[320px] lg:h-[380px] overflow-hidden flex flex-col animate-in slide-in-from-bottom-2 duration-300"
-            >
+            <>
+              {/* 리사이저 핸들 */}
+              <div
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  setIsResizing(true)
+                }}
+                className={cn(
+                  "h-2 cursor-row-resize bg-gradient-to-r from-blue-400/50 via-blue-500/50 to-indigo-500/50",
+                  "hover:from-blue-500 hover:via-blue-600 hover:to-indigo-600",
+                  "transition-colors duration-200",
+                  "flex items-center justify-center group relative"
+                )}
+              >
+                <div className="flex items-center gap-2">
+                  <GripVertical className="w-4 h-4 text-blue-300 group-hover:text-white transition-colors" />
+                  <span className="text-[10px] text-blue-200 group-hover:text-white font-medium transition-colors">
+                    드래그하여 높이 조절
+                  </span>
+                  <GripVertical className="w-4 h-4 text-blue-300 group-hover:text-white transition-colors" />
+                </div>
+              </div>
+              
+              <div 
+                id="contract-chat" 
+                className="overflow-hidden flex flex-col animate-in slide-in-from-bottom-2 duration-300"
+                style={{ height: `${chatHeight}px` }}
+              >
               <ContractChat
                 docId={docId}
                 analysisResult={analysisResult}
@@ -339,7 +403,8 @@ export default function ContractDetailPage() {
                 prefilledQuestion={prefilledQuestion}
                 onQuestionPrefilled={() => setPrefilledQuestion(undefined)}
               />
-            </div>
+              </div>
+            </>
           )}
         </div>
       </div>

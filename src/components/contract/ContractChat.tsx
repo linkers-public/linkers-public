@@ -202,21 +202,6 @@ export function ContractChat({
 
   return (
     <div className="h-full flex flex-col bg-white">
-      {/* 헤더 - 현대적인 그라데이션 디자인 */}
-      <div className="relative overflow-hidden bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-600 p-4 sm:p-5 flex-shrink-0">
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxwYXRoIGQ9Ik0zNiAzNGMwIDIuMjA5LTEuNzkxIDQtNCA0cy00LTEuNzkxLTQtNCAxLjc5MS00IDQtNCA0IDEuNzkxIDQgNHptMTAtMTBjMCAyLjIwOS0xLjc5MSA0LTQgNHMtNC0xLjc5MS00LTQgMS43OTEtNCA0LTQgNCAxLjc5MSA0IDR6IiBmaWxsPSJyZ2JhKDI1NSwyNTUsMjU1LDAuMSkiLz48L2c+PC9zdmc+')] opacity-20"></div>
-        <div className="relative flex items-center gap-3">
-          <div className="p-2.5 bg-white/20 backdrop-blur-sm rounded-xl shadow-lg">
-            <MessageSquare className="w-5 h-5 text-white" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <h2 className="text-lg font-bold text-white mb-0.5">AI 법률 상담</h2>
-            <p className="text-xs text-blue-100 leading-relaxed">
-              위험 조항에 대해 구체적으로 질문하시면 이해하기 쉽게 설명해드립니다
-            </p>
-          </div>
-        </div>
-      </div>
 
       {/* 추천 질문 - 현대적인 카드 디자인 */}
       {messages.length === 0 && (
