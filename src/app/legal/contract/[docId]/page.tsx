@@ -27,7 +27,6 @@ export default function ContractDetailPage() {
   const [chatLoading, setChatLoading] = useState(false)
   const [messageCount, setMessageCount] = useState(0)
   const [externalMessage, setExternalMessage] = useState<string>('')
-  const [collapsedInput, setCollapsedInput] = useState('')
 
   // 분석 결과 로드
   useEffect(() => {
@@ -385,70 +384,6 @@ export default function ContractDetailPage() {
                   )}
                 </div>
               </button>
-
-              {/* 토글이 닫혀있을 때 입력창 */}
-              {!isChatOpen && (
-                <div className="px-4 pb-3 border-t border-white/20">
-                  <div className="flex gap-2 items-end pt-3">
-                    <div className="flex-1 relative">
-                      <Textarea
-                        value={collapsedInput}
-                        onChange={(e) => setCollapsedInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && !e.shiftKey && (e.metaKey || e.ctrlKey)) {
-                            e.preventDefault()
-                            if (collapsedInput.trim()) {
-                              setExternalMessage(collapsedInput.trim())
-                              setCollapsedInput('')
-                              setIsChatOpen(true) // 자동으로 채팅 열기
-                            }
-                          }
-                        }}
-                        placeholder="질문을 입력하세요... (Ctrl+Enter로 전송)"
-                        disabled={chatLoading}
-                        className={cn(
-                          "min-h-[44px] max-h-[100px] resize-none text-sm",
-                          "border-white/30 bg-white/10 text-white placeholder:text-white/60",
-                          "focus:border-white/50 focus:ring-2 focus:ring-white/20",
-                          "rounded-lg pr-20",
-                          "transition-all duration-200"
-                        )}
-                        rows={1}
-                      />
-                      <div className="absolute bottom-1.5 right-2 flex items-center gap-1 text-[10px] text-white/60">
-                        <kbd className="px-1 py-0.5 bg-white/20 rounded text-[10px]">Ctrl</kbd>
-                        <span>+</span>
-                        <kbd className="px-1 py-0.5 bg-white/20 rounded text-[10px]">Enter</kbd>
-                      </div>
-                    </div>
-                    <Button
-                      onClick={() => {
-                        if (collapsedInput.trim()) {
-                          setExternalMessage(collapsedInput.trim())
-                          setCollapsedInput('')
-                          setIsChatOpen(true) // 자동으로 채팅 열기
-                        }
-                      }}
-                      disabled={chatLoading || !collapsedInput.trim()}
-                      size="sm"
-                      className={cn(
-                        "h-[44px] px-4 rounded-lg",
-                        "bg-white/20 hover:bg-white/30 text-white",
-                        "border border-white/30",
-                        "transition-all duration-200",
-                        "disabled:opacity-50 disabled:cursor-not-allowed",
-                        "flex-shrink-0"
-                      )}
-                    >
-                      {chatLoading ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <Send className="w-4 h-4" />
-                      )}
-                    </Button>
-                  </div>
-                </div>
-              )}
             </div>
           </div>
 
