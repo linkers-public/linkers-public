@@ -205,13 +205,13 @@ export function ContractViewer({
     >
       <div className="w-full max-w-none lg:max-w-5xl mx-auto">
         <div className="sticky top-0 bg-white/95 backdrop-blur-md z-10 pt-3 pb-3 mb-4 border-b border-slate-200/60">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="p-2 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg shadow-md">
-              <FileText className="w-5 h-5 text-white" />
+          <div className="flex items-center gap-2 sm:gap-3 mb-2">
+            <div className="p-1.5 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg shadow-md flex-shrink-0">
+              <FileText className="w-4 h-4 text-white" />
             </div>
-            <div>
-              <h2 className="text-2xl sm:text-3xl font-bold text-slate-900">계약서 전문</h2>
-              <p className="text-sm text-slate-600 mt-0.5">위험 조항은 색상으로 표시됩니다</p>
+            <div className="min-w-0">
+              <h2 className="text-base sm:text-lg lg:text-xl font-bold text-slate-900">계약서 전문</h2>
+              <p className="text-xs sm:text-sm text-slate-600 mt-0.5">위험 조항은 색상으로 표시됩니다</p>
             </div>
           </div>
         </div>

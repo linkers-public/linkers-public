@@ -6,7 +6,6 @@ import { Loader2, AlertCircle, ChevronUp, ChevronDown, MessageSquare } from 'luc
 import { ContractViewer } from '@/components/contract/ContractViewer'
 import { AnalysisPanel } from '@/components/contract/AnalysisPanel'
 import { ContractChat } from '@/components/contract/ContractChat'
-import { RiskOverviewBar } from '@/components/contract/RiskOverviewBar'
 import { cn } from '@/lib/utils'
 import type { LegalIssue, ContractAnalysisResult } from '@/types/legal'
 
@@ -225,20 +224,8 @@ export default function ContractDetailPage() {
   // 분석 완료 상태 - 2-컬럼 레이아웃
   return (
     <div className="min-h-screen h-screen flex flex-col bg-gradient-to-br from-slate-50 via-white to-slate-50">
-      {/* 상단 요약 헤더 */}
-      <RiskOverviewBar 
-        analysisResult={analysisResult}
-        onCategoryClick={(category) => {
-          // 해당 카테고리로 필터링하고 조항별 탭으로 이동
-          const categoryIssue = analysisResult.issues.find(i => i.category === category)
-          if (categoryIssue) {
-            setSelectedIssueId(categoryIssue.id)
-          }
-        }}
-      />
-
       {/* 메인 컨텐츠 영역 */}
-      <div className="flex-1 flex flex-col overflow-hidden min-h-0">
+      <div className="flex-1 flex flex-col overflow-hidden min-h-0 pb-16">
         {/* 상단: 2-컬럼 레이아웃 (계약서 + 분석 결과) */}
         <div className={cn(
           "flex flex-col lg:flex-row overflow-hidden",
@@ -264,6 +251,8 @@ export default function ContractDetailPage() {
               lowRiskCount={analysisResult.lowRiskCount}
               selectedIssueId={selectedIssueId}
               onIssueSelect={setSelectedIssueId}
+              riskScore={analysisResult.riskScore}
+              contractText={analysisResult.contractText}
               onCategoryClick={(category) => {
                 const categoryIssue = analysisResult.issues.find(i => i.category === category)
                 if (categoryIssue) {
@@ -298,9 +287,9 @@ export default function ContractDetailPage() {
           </div>
         </div>
 
-        {/* 하단: 채팅 UI (접기/펼치기 가능) */}
+        {/* 하단: 채팅 UI (접기/펼치기 가능) - 고정 */}
         <div className={cn(
-          "border-t border-slate-200/60 bg-white/80 backdrop-blur-sm flex-shrink-0",
+          "fixed bottom-0 left-0 right-0 z-30 border-t border-slate-200/60 bg-white/95 backdrop-blur-md shadow-lg",
           isChatOpen ? "flex flex-col" : ""
         )}>
           {/* 채팅 토글 버튼 */}
