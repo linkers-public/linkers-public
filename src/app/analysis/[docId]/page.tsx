@@ -5,16 +5,14 @@ import { useParams, useRouter } from 'next/navigation'
 import Header from '@/components/layout/Header'
 import Footer from '@/components/layout/Footer'
 import SubHeader from '@/components/layout/SubHeader'
-import {
-  TechStackCard,
-  BudgetCard,
-  PeriodCard,
-  AnalysisSummaryCard,
-} from '@/components/rag/AnalysisSummaryCard'
 import { Button } from '@/components/ui/button'
 import { Loader2, ArrowRight, Send, Sparkles } from 'lucide-react'
 import type { QueryResponse } from '@/types/rag'
-import { MarkdownTable } from '@/components/rag/MarkdownTable'
+import AnnouncementAnalysisView from '@/components/AnnouncementAnalysisView'
+import RAGQueryResultView from '@/components/rag/RAGQueryResultView'
+import EvidencePanel from '@/components/rag/EvidencePanel'
+import { getAnnouncement } from '@/apis/public-announcement.service'
+import { createSupabaseBrowserClient } from '@/supabase/supabase-client'
 
 export default function AnalysisPage() {
   const params = useParams()
@@ -26,6 +24,8 @@ export default function AnalysisPage() {
   const [docInfo, setDocInfo] = useState<any>(null)
   const [customQuery, setCustomQuery] = useState('')
   const [isCustomMode, setIsCustomMode] = useState(false)
+  const [announcementAnalysis, setAnnouncementAnalysis] = useState<any>(null)
+  const [loadingAnnouncement, setLoadingAnnouncement] = useState(true)
   const [examplePrompts] = useState([
     '아래 공고 PDF와 과거 3년간 유사 공공 IT사업 데이터를 바탕으로, 주요 기술 요구사항과 적정 예산 범위, 예상 수행기간을 요약해줘.',
     '아래 기업/프리랜서 이력 데이터 중 기술스택, 평점, 지역 경력을 비교해 상위 3개 팀 추천 이유를 표로 요약해줘.',
@@ -36,6 +36,7 @@ export default function AnalysisPage() {
   useEffect(() => {
     loadAnalysis()
     loadDocInfo()
+    loadAnnouncementAnalysis()
   }, [docId])
 
   const loadDocInfo = async () => {
@@ -63,6 +64,96 @@ export default function AnalysisPage() {
         organization: '',
         publishedAt: new Date().toISOString(),
       })
+    }
+  }
+
+  const loadAnnouncementAnalysis = async () => {
+    try {
+      setLoadingAnnouncement(true)
+      
+      // UUID인 경우 public_announcements 테이블에서 조회 시도
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(docId)
+      
+      if (isUUID) {
+        // Supabase에서 UUID로 조회
+        const supabase = createSupabaseBrowserClient()
+        const { data, error } = await supabase
+          .from('public_announcements')
+          .select('*')
+          .eq('id', docId)
+          .maybeSingle()
+        
+        if (!error && data) {
+          // 분석 결과가 있으면 변환
+          if (data.ai_analysis || data.required_skills || data.budget_min || data.budget_max) {
+            setAnnouncementAnalysis({
+              summary: data.ai_analysis?.summary || data.raw_text?.substring(0, 200) + '...',
+              requiredSkills: data.required_skills || data.ai_analysis?.requiredSkills || data.ai_analysis?.essential_skills || [],
+              budgetMin: data.budget_min || data.ai_analysis?.budgetMin,
+              budgetMax: data.budget_max || data.ai_analysis?.budgetMax,
+              durationMonths: data.duration_months || data.ai_analysis?.durationMonths,
+              organizationName: data.organization_name || data.ai_analysis?.organizationName,
+              deadline: data.deadline || data.ai_analysis?.deadline,
+              location: data.location || data.ai_analysis?.location,
+            })
+          }
+        } else {
+          // 백엔드 API로 시도
+          const backendUrl = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://localhost:8000'
+          try {
+            const response = await fetch(`${backendUrl}/api/v2/announcements/${docId}/analysis`, {
+              method: 'GET',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+            })
+            
+            if (response.ok) {
+              const backendData = await response.json()
+              const analysis = backendData.data || backendData
+              
+              setAnnouncementAnalysis({
+                summary: analysis.summary || analysis.project_name || '',
+                requiredSkills: analysis.required_skills || analysis.essential_skills || [],
+                budgetMin: analysis.budget_min,
+                budgetMax: analysis.budget_max,
+                durationMonths: analysis.duration_months,
+                organizationName: analysis.organization_name || analysis.agency,
+                deadline: analysis.deadline,
+                location: analysis.location,
+              })
+            }
+          } catch (backendError) {
+            console.error('백엔드 분석 조회 실패:', backendError)
+          }
+        }
+      } else {
+        // 숫자 ID인 경우
+        const numericId = parseInt(docId)
+        if (!isNaN(numericId)) {
+          try {
+            const data = await getAnnouncement(numericId)
+            if (data) {
+              setAnnouncementAnalysis({
+                summary: data.ai_analysis?.summary || data.raw_text?.substring(0, 200) + '...',
+                requiredSkills: data.required_skills || data.ai_analysis?.requiredSkills || data.ai_analysis?.essential_skills || [],
+                budgetMin: data.budget_min || data.ai_analysis?.budgetMin,
+                budgetMax: data.budget_max || data.ai_analysis?.budgetMax,
+                durationMonths: data.duration_months || data.ai_analysis?.durationMonths,
+                organizationName: data.organization_name || data.ai_analysis?.organizationName,
+                deadline: data.deadline || data.ai_analysis?.deadline,
+                location: data.location || data.ai_analysis?.location,
+              })
+            }
+          } catch (error) {
+            console.error('공고 분석 로드 실패:', error)
+          }
+        }
+      }
+    } catch (error) {
+      console.error('공고 분석 로드 실패:', error)
+    } finally {
+      setLoadingAnnouncement(false)
     }
   }
 
@@ -118,44 +209,10 @@ export default function AnalysisPage() {
     loadAnalysis(example, true)
   }
 
-  // 분석 결과에서 정보 추출 (간단한 파싱)
-  const extractInfo = () => {
-    if (!analysis?.answer) return null
-
-    const answer = analysis.answer
-    const techStack: string[] = []
-    const budget: { min?: number; max?: number; evidenceId?: number } = {}
-    const period: { months?: number; evidenceId?: number } = {}
-    const risks: Array<{ label: string; value: string; evidenceId?: number }> = []
-
-    // 간단한 파싱 (실제로는 더 정교한 파싱 필요)
-    const techKeywords = ['React', 'Node.js', 'Python', 'Java', 'AWS', 'Docker']
-    techKeywords.forEach((tech) => {
-      if (answer.includes(tech)) techStack.push(tech)
-    })
-
-    const budgetMatch = answer.match(/(\d+)\s*만?원?\s*[~-]\s*(\d+)\s*만?원?/i)
-    if (budgetMatch) {
-      budget.min = parseInt(budgetMatch[1]) * 10000
-      budget.max = parseInt(budgetMatch[2]) * 10000
-    }
-
-    const periodMatch = answer.match(/(\d+)\s*개월/i)
-    if (periodMatch) {
-      period.months = parseInt(periodMatch[1])
-    }
-
-    // 근거 ID 추출
-    const evidenceIds = answer.match(/\[id:(\d+)\]/g)?.map((m) => parseInt(m.replace(/\[id:|\]/g, ''))) || []
-    if (evidenceIds.length > 0) {
-      budget.evidenceId = evidenceIds[0]
-      period.evidenceId = evidenceIds[0]
-    }
-
-    return { techStack, budget, period, risks }
+  const handleChunkClick = (chunkId: number) => {
+    // 근거 청크 클릭 시 처리 (필요시 구현)
+    console.log('Chunk clicked:', chunkId)
   }
-
-  const info = extractInfo()
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -223,87 +280,41 @@ export default function AnalysisPage() {
           </div>
         </div>
 
-        {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* 중앙: 분석 카드들 */}
-            <div className="lg:col-span-2 space-y-6">
-              {info?.techStack && info.techStack.length > 0 && (
-                <div className="rounded-2xl border border-slate-200 p-5 bg-white shadow-sm">
-                  <h3 className="text-lg font-semibold mb-4">요구기술</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {info.techStack.map((tech, i) => (
-                      <span
-                        key={i}
-                        className="inline-flex items-center px-3 py-1 rounded-xl text-sm font-medium bg-blue-100 text-blue-700 border border-blue-200"
-                      >
-                        {tech}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* 중앙: 분석 카드들 */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* 공고 분석 결과 (기본 표시) */}
+            <AnnouncementAnalysisView
+              analysis={announcementAnalysis}
+              loading={loadingAnnouncement}
+            />
 
-              {info?.budget && (info.budget.min || info.budget.max) && (
-                <BudgetCard
-                  min={info.budget.min}
-                  max={info.budget.max}
-                  evidenceId={info.budget.evidenceId}
+            {/* RAG 쿼리 결과 (조회/요약) */}
+            {analysis && (
+              <div className="space-y-4">
+                <div className="mb-4">
+                  <h2 className="text-2xl font-bold text-gray-900 mb-2">RAG 조회 결과</h2>
+                  <p className="text-gray-600">
+                    사용자 프롬프트에 대한 RAG 기반 분석 결과입니다.
+                  </p>
+                </div>
+                <RAGQueryResultView
+                  analysis={analysis}
+                  loading={loading}
+                  onShowEvidence={handleChunkClick}
                 />
-              )}
-
-              {info?.period && info.period.months && (
-                <PeriodCard
-                  months={info.period.months}
-                  evidenceId={info.period.evidenceId}
-                />
-              )}
-
-              {analysis?.answer && (
-                <div className="rounded-2xl border border-slate-200 p-5 bg-white shadow-sm">
-                  <h3 className="text-lg font-semibold mb-4">상세 분석</h3>
-                  
-                  {/* 표가 있는 경우 표로 렌더링 */}
-                  <MarkdownTable content={analysis.answer} />
-                  
-                  {/* 일반 텍스트 렌더링 */}
-                  <div 
-                    className="prose max-w-none text-sm text-slate-700 whitespace-pre-wrap mt-4"
-                    dangerouslySetInnerHTML={{ 
-                      __html: analysis.answer
-                        .replace(/\|.+\|[\n\r]+/g, '') // 표 제거 (표는 별도 컴포넌트로 렌더링)
-                        .replace(/\n/g, '<br />')
-                        .replace(/\[id:(\d+)\]/g, '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono bg-blue-100 text-blue-700 border border-blue-200">[id:$1]</span>')
-                    }}
-                  />
-                </div>
-              )}
-            </div>
-
-            {/* 우측: 근거 패널 */}
-            <div className="lg:col-span-1">
-              <div className="rounded-2xl border border-slate-200 p-5 bg-white shadow-sm sticky top-24">
-                <h3 className="text-lg font-semibold mb-4">사용된 근거</h3>
-                <div className="space-y-2">
-                  {analysis?.usedChunks.map((chunk) => (
-                    <button
-                      key={chunk.id}
-                      className="w-full text-left p-2 rounded-lg hover:bg-slate-50 text-sm"
-                    >
-                      <div className="font-mono text-blue-600">[id:{chunk.id}]</div>
-                      <div className="text-xs text-slate-500">
-                        문서 {chunk.doc_id} · {(chunk.score * 100).toFixed(1)}%
-                      </div>
-                    </button>
-                  ))}
-                </div>
               </div>
-            </div>
+            )}
           </div>
-        )}
+
+          {/* 우측: 근거 패널 */}
+          <div className="lg:col-span-1">
+            <EvidencePanel
+              chunks={analysis?.usedChunks || []}
+              onChunkClick={handleChunkClick}
+            />
+          </div>
+        </div>
 
         {/* 하단 CTA */}
         {!loading && (

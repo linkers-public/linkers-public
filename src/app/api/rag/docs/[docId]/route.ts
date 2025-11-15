@@ -31,23 +31,25 @@ export async function GET(
     let error: any = null
 
     if (isUUID) {
-      // UUID로 조회 (announcement_id 또는 id 컬럼)
+      // UUID로 조회 (announcements 테이블)
       const { data: docByUuid, error: errorUuid } = await supabase
-        .from('docs')
+        .from('announcements')
         .select('*')
-        .or(`announcement_id.eq.${docIdParam},id.eq.${docIdParam}`)
+        .eq('id', docIdParam)
+        .eq('status', 'active')
         .maybeSingle()
       
       doc = docByUuid
       error = errorUuid
     } else if (isNumeric) {
-      // 숫자 ID로 조회
-      const docId = parseInt(docIdParam)
+      // 숫자 ID는 UUID가 아니므로 announcements 테이블에서는 사용 불가
+      // 대신 external_id로 검색 시도
       const { data: docById, error: errorId } = await supabase
-        .from('docs')
+        .from('announcements')
         .select('*')
-        .eq('id', docId)
-        .single()
+        .eq('external_id', docIdParam)
+        .eq('status', 'active')
+        .maybeSingle()
       
       doc = docById
       error = errorId

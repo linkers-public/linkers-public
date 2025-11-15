@@ -1,13 +1,25 @@
 'use client'
 
 import { useState } from 'react'
-import { Upload, FileText, Link as LinkIcon, Loader2, CheckCircle } from 'lucide-react'
+import { Upload, FileText, Link as LinkIcon, Loader2, CheckCircle, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { uploadAnnouncement, extractPdfText, analyzeAnnouncement } from '@/apis/public-announcement.service'
+import AnnouncementAnalysisResult from '@/components/AnnouncementAnalysisResult'
 
 interface PublicAnnouncementUploadProps {
   onUploadComplete?: (announcementId: number) => void
+}
+
+interface AnalysisResult {
+  summary?: string
+  requiredSkills?: string[]
+  budgetMin?: number
+  budgetMax?: number
+  durationMonths?: number
+  organizationName?: string
+  deadline?: string
+  location?: string
 }
 
 export default function PublicAnnouncementUpload({
@@ -19,6 +31,7 @@ export default function PublicAnnouncementUpload({
   const [loading, setLoading] = useState(false)
   const [step, setStep] = useState<'upload' | 'analyzing' | 'complete'>('upload')
   const [announcementId, setAnnouncementId] = useState<number | null>(null)
+  const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null)
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -75,7 +88,19 @@ export default function PublicAnnouncementUpload({
       }
 
       // 3. AI 분석
-      await analyzeAnnouncement(id, rawText)
+      const analysis = await analyzeAnnouncement(id, rawText)
+      
+      // 분석 결과 저장
+      setAnalysisResult({
+        summary: analysis.summary,
+        requiredSkills: analysis.requiredSkills,
+        budgetMin: analysis.budgetMin,
+        budgetMax: analysis.budgetMax,
+        durationMonths: analysis.durationMonths,
+        organizationName: analysis.organizationName,
+        deadline: analysis.deadline,
+        location: analysis.location,
+      })
 
       setStep('complete')
       onUploadComplete?.(id)
@@ -147,39 +172,111 @@ export default function PublicAnnouncementUpload({
 
       {/* 상태 표시 */}
       {step === 'analyzing' && (
-        <div className="flex items-center gap-2 text-blue-600">
-          <Loader2 className="w-5 h-5 animate-spin" />
-          <span>AI가 공고를 분석 중입니다...</span>
+        <div className="p-6 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="flex items-center gap-3 text-blue-700 mb-2">
+            <Sparkles className="w-6 h-6 animate-pulse" />
+            <span className="text-lg font-semibold">AI가 공고를 분석 중입니다...</span>
+          </div>
+          <p className="text-sm text-blue-600 ml-9">
+            공고문을 요약하고 주요 정보를 추출하고 있습니다. 잠시만 기다려주세요.
+          </p>
+          <div className="mt-4 space-y-2 ml-9">
+            <div className="flex items-center gap-2 text-sm text-blue-600">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>텍스트 추출 중...</span>
+            </div>
+            <div className="flex items-center gap-2 text-sm text-blue-600">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>요약 생성 중...</span>
+            </div>
+            <div className="flex items-center gap-2 text-sm text-blue-600">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>기술 요구사항 추출 중...</span>
+            </div>
+            <div className="flex items-center gap-2 text-sm text-blue-600">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span>예산 및 기간 분석 중...</span>
+            </div>
+          </div>
         </div>
       )}
 
       {step === 'complete' && (
-        <div className="flex items-center gap-2 text-green-600">
-          <CheckCircle className="w-5 h-5" />
-          <span>분석이 완료되었습니다!</span>
+        <div className="space-y-4">
+          <div className="flex items-center gap-2 text-green-600 p-4 bg-green-50 border border-green-200 rounded-lg">
+            <CheckCircle className="w-6 h-6" />
+            <span className="text-lg font-semibold">분석이 완료되었습니다!</span>
+          </div>
+          
+          {/* 분석 결과 표시 */}
+          {analysisResult && (
+            <div className="mt-6">
+              <div className="mb-4">
+                <h3 className="text-2xl font-bold text-gray-900 mb-2">AI 분석 결과</h3>
+                <p className="text-gray-600">
+                  LLM이 공고문을 분석하여 주요 정보를 자동으로 추출했습니다.
+                </p>
+              </div>
+              <AnnouncementAnalysisResult analysis={analysisResult} />
+            </div>
+          )}
         </div>
       )}
 
-      {/* 업로드 버튼 */}
-      <Button
-        onClick={handleSubmit}
-        disabled={loading || (uploadType === 'file' && !file) || (uploadType === 'url' && !url)}
-        className="w-full"
-      >
-        {loading ? (
-          <>
-            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            처리 중...
-          </>
-        ) : (
-          <>
-            <Upload className="w-4 h-4 mr-2" />
-            업로드 및 분석 시작
-          </>
-        )}
-      </Button>
+      {/* 업로드 버튼 - 분석 중이 아닐 때만 표시 */}
+      {step !== 'analyzing' && step !== 'complete' && (
+        <Button
+          onClick={handleSubmit}
+          disabled={loading || (uploadType === 'file' && !file) || (uploadType === 'url' && !url)}
+          className="w-full"
+          size="lg"
+        >
+          {loading ? (
+            <>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              처리 중...
+            </>
+          ) : (
+            <>
+              <Upload className="w-4 h-4 mr-2" />
+              업로드 및 AI 분석 시작
+            </>
+          )}
+        </Button>
+      )}
 
-      {announcementId && (
+      {/* 완료 후 상세 페이지로 이동 버튼 */}
+      {step === 'complete' && announcementId && (
+        <div className="flex gap-3">
+          <Button
+            onClick={() => {
+              if (onUploadComplete) {
+                onUploadComplete(announcementId)
+              }
+            }}
+            className="flex-1"
+            size="lg"
+          >
+            <FileText className="w-4 h-4 mr-2" />
+            상세 페이지 보기
+          </Button>
+          <Button
+            onClick={() => {
+              setStep('upload')
+              setFile(null)
+              setUrl('')
+              setAnalysisResult(null)
+              setAnnouncementId(null)
+            }}
+            variant="outline"
+            size="lg"
+          >
+            새 공고 업로드
+          </Button>
+        </div>
+      )}
+
+      {announcementId && step !== 'complete' && (
         <div className="text-sm text-gray-500">
           공고 ID: {announcementId}
         </div>

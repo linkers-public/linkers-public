@@ -15,6 +15,7 @@ import {
   Clock,
   Shield,
   CheckCircle2,
+  FolderOpen,
 } from 'lucide-react'
 
 export default function HomePage() {
@@ -124,12 +125,13 @@ export default function HomePage() {
                   무료로 시작하기
                 </Button>
                 <Button
-                  onClick={() => router.push('/upload')}
+                  onClick={() => router.push('/docs')}
                   variant="outline"
                   className="border-2 border-slate-300 rounded-xl px-8 py-4 text-lg font-semibold hover:bg-slate-50"
                   size="lg"
                 >
-                  데모 보기
+                  <FolderOpen className="w-5 h-5 mr-2" />
+                  문서 목록 보기
                 </Button>
               </div>
             </div>

@@ -182,17 +182,17 @@ class BatchIngester:
                 file_type = None  # 자동 감지
             
             # 1. 원본 파일 처리 (텍스트 추출)
-            result = self.orchestrator.processor.process_file(
+            process_result = self.orchestrator.processor.process_file(
                 file_path=str(file_path),
                 file_type=file_type
             )
             
             # process_file은 (text, chunks) 튜플 반환
-            if isinstance(result, tuple):
-                text, chunks = result
+            if isinstance(process_result, tuple):
+                text, chunks = process_result
             else:
                 # 호환성을 위해
-                text = result
+                text = process_result
                 chunks = []
             
             # 2. processed/ 폴더에 저장 (텍스트 + 메타데이터) - 선택사항

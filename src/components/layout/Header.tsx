@@ -2,13 +2,14 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { FileText, Search, BarChart3, FileCheck } from 'lucide-react'
+import { FileText, Search, BarChart3, FileCheck, FolderOpen } from 'lucide-react'
 
 export default function Header() {
   const pathname = usePathname()
 
   const navItems = [
     { href: '/upload', label: '업로드', icon: FileText },
+    { href: '/docs', label: '문서 목록', icon: FolderOpen },
     { href: '/match', label: '매칭', icon: Search },
     { href: '/compare', label: '비교', icon: BarChart3 },
   ]

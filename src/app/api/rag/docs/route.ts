@@ -23,10 +23,11 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '20')
     const offset = parseInt(searchParams.get('offset') || '0')
 
-    // 문서 목록 조회
+    // 문서 목록 조회 (announcements 테이블 사용)
     const { data: docs, error } = await supabase
-      .from('docs')
+      .from('announcements')
       .select('*')
+      .eq('status', 'active')
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1)
 
