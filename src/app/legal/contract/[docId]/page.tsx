@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
-import { Loader2, AlertCircle, MessageSquare, FileText, X } from 'lucide-react'
+import { Loader2, AlertCircle, MessageSquare, FileText, X, ChevronDown } from 'lucide-react'
 import { ContractViewer } from '@/components/contract/ContractViewer'
 import { AnalysisPanel } from '@/components/contract/AnalysisPanel'
 import { ContractChat } from '@/components/contract/ContractChat'
@@ -408,21 +408,37 @@ export default function ContractDetailPage() {
 
           {/* 오른쪽: 분석 결과 패널 */}
           <div className="w-full lg:w-1/2 flex-shrink-0 overflow-hidden bg-white shadow-sm flex flex-col">
-            {/* 조항 목록 (있는 경우) */}
+            {/* 조항 목록 (있는 경우) - 접을 수 있는 섹션 */}
             {clauses.length > 0 && (
-              <div className="p-4 border-b bg-slate-50 max-h-[200px] overflow-y-auto">
-                <ClauseList
-                  clauses={clauses}
-                  selectedClauseId={selectedClauseId}
-                  onClauseClick={(clauseId) => {
-                    setSelectedClauseId(clauseId)
-                    // 해당 조항으로 스크롤 (나중에 구현)
-                  }}
-                />
+              <div className="border-b bg-gradient-to-br from-slate-50 to-white">
+                <details className="group" open={false}>
+                  <summary className="px-4 py-3 cursor-pointer hover:bg-slate-100/50 transition-colors flex items-center justify-between list-none">
+                    <div className="flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-blue-600" />
+                      <span className="text-sm font-semibold text-slate-900">
+                        조항 목록
+                      </span>
+                      <span className="text-xs text-slate-500 bg-slate-200 px-2 py-0.5 rounded-full">
+                        {clauses.length}개
+                      </span>
+                    </div>
+                    <ChevronDown className="w-4 h-4 text-slate-400 group-open:rotate-180 transition-transform" />
+                  </summary>
+                  <div className="px-4 pb-4 max-h-[300px] overflow-y-auto">
+                    <ClauseList
+                      clauses={clauses}
+                      selectedClauseId={selectedClauseId}
+                      onClauseClick={(clauseId) => {
+                        setSelectedClauseId(clauseId)
+                        // 해당 조항으로 스크롤 (나중에 구현)
+                      }}
+                    />
+                  </div>
+                </details>
               </div>
             )}
             
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto min-h-0">
               <AnalysisPanel
                 issues={analysisResult.issues}
                 totalIssues={analysisResult.totalIssues}

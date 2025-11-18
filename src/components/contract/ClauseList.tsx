@@ -30,13 +30,7 @@ export function ClauseList({ clauses, selectedClauseId, onClauseClick }: ClauseL
 
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-2 mb-4">
-        <FileText className="w-5 h-5 text-blue-600" />
-        <h3 className="text-lg font-semibold">조항 목록</h3>
-        <span className="text-sm text-slate-500">({clauses.length}개)</span>
-      </div>
-      
-      <div className="space-y-1 max-h-[600px] overflow-y-auto">
+      <div className="space-y-1.5">
         {clauses.map((clause) => (
           <button
             key={clause.id}
