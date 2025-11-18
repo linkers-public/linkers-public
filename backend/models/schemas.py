@@ -267,6 +267,26 @@ class SituationResponseV2(BaseModel):
     relatedCases: List[RelatedCaseV2]
 
 
+class ClauseV2(BaseModel):
+    """계약서 조항 (v2)"""
+    id: str
+    title: str  # "제1조 (목적)"
+    content: str  # 조항 본문
+    articleNumber: Optional[int] = None  # 조 번호
+    startIndex: int = 0  # 원문에서 시작 위치
+    endIndex: int = 0  # 원문에서 종료 위치
+    category: Optional[str] = None  # "working_hours", "wage" 등
+
+
+class HighlightedTextV2(BaseModel):
+    """하이라이트된 텍스트"""
+    text: str
+    startIndex: int
+    endIndex: int
+    severity: str  # "low" | "medium" | "high"
+    issueId: str  # 연결된 issue ID
+
+
 class ContractIssueV2(BaseModel):
     """계약서 이슈 (v2)"""
     id: str
@@ -277,6 +297,9 @@ class ContractIssueV2(BaseModel):
     legalBasis: List[str]
     explanation: str
     suggestedRevision: str
+    clauseId: Optional[str] = None  # 연결된 조항 ID
+    startIndex: Optional[int] = None  # 원문에서 시작 위치
+    endIndex: Optional[int] = None  # 원문에서 종료 위치
 
 
 class ContractAnalysisResponseV2(BaseModel):
@@ -290,4 +313,36 @@ class ContractAnalysisResponseV2(BaseModel):
     summary: str
     retrievedContexts: List[dict]
     contractText: str = ""  # 계약서 원문 텍스트 (기본값: 빈 문자열, Optional 제거)
+    clauses: List[ClauseV2] = []  # 조항 목록 (자동 분류)
+    highlightedTexts: List[HighlightedTextV2] = []  # 하이라이트된 텍스트
     createdAt: str
+
+
+class ContractComparisonRequestV2(BaseModel):
+    """계약서 비교 요청 (v2)"""
+    oldContractId: str  # 이전 계약서 docId
+    newContractId: str  # 새 계약서 docId
+
+
+class ContractComparisonResponseV2(BaseModel):
+    """계약서 비교 응답 (v2)"""
+    oldContract: ContractAnalysisResponseV2
+    newContract: ContractAnalysisResponseV2
+    changedClauses: List[dict]  # 변경된 조항
+    riskChange: dict  # 위험도 변화
+    summary: str  # 비교 요약
+
+
+class ClauseRewriteRequestV2(BaseModel):
+    """조항 리라이트 요청 (v2)"""
+    clauseId: str
+    originalText: str
+    issueId: Optional[str] = None  # 관련 issue ID
+
+
+class ClauseRewriteResponseV2(BaseModel):
+    """조항 리라이트 응답 (v2)"""
+    originalText: str
+    rewrittenText: str
+    explanation: str  # 수정 이유
+    legalBasis: List[str]  # 법적 근거

@@ -19,10 +19,17 @@ from models.schemas import (
     SituationResponseV2,
     ContractAnalysisResponseV2,
     ContractIssueV2,
+    ClauseV2,
+    HighlightedTextV2,
+    ContractComparisonRequestV2,
+    ContractComparisonResponseV2,
+    ClauseRewriteRequestV2,
+    ClauseRewriteResponseV2,
 )
 from core.legal_rag_service import LegalRAGService
 from core.document_processor_v2 import DocumentProcessor
 from core.contract_storage import ContractStorageService
+from core.tools import ClauseLabelingTool, HighlightTool, RewriteTool
 
 router = APIRouter(
     prefix="/api/v2/legal",
@@ -187,12 +194,15 @@ async def analyze_contract(
         # issues 변환
         issues = []
         for idx, issue in enumerate(result.issues):
+            # originalText 추출 시도
+            original_text = issue.description[:200] if issue.description else ""  # 간단한 추출
+            
             issue_v2 = ContractIssueV2(
                 id=f"issue-{idx+1}",
                 category=issue.name.lower().replace(" ", "_"),
                 severity=issue.severity,
                 summary=issue.description,
-                originalText="",  # 원본 텍스트는 별도로 추출 필요
+                originalText=original_text,
                 legalBasis=issue.legal_basis,
                 explanation=issue.rationale or issue.description,
                 suggestedRevision=issue.suggested_text or "",
@@ -207,6 +217,69 @@ async def analyze_contract(
                 "title": chunk.title,
                 "snippet": chunk.snippet,
             })
+        
+        # 조항 자동 분류 및 하이라이트
+        clauses = []
+        highlighted_texts = []
+        
+        try:
+            # 1. 조항 자동 분류
+            labeling_tool = ClauseLabelingTool()
+            labeling_result = await labeling_tool.execute(
+                contract_text=extracted_text,
+                issues=[issue.model_dump() for issue in issues]
+            )
+            
+            clauses = [
+                ClauseV2(
+                    id=clause["id"],
+                    title=clause["title"],
+                    content=clause["content"],
+                    articleNumber=clause.get("articleNumber"),
+                    startIndex=clause.get("startIndex", 0),
+                    endIndex=clause.get("endIndex", 0),
+                    category=clause.get("category")
+                )
+                for clause in labeling_result.get("clauses", [])
+            ]
+            
+            # issue에 clauseId 매핑
+            issue_clause_mapping = labeling_result.get("issue_clause_mapping", {})
+            for issue_v2 in issues:
+                matched_clause_ids = issue_clause_mapping.get(issue_v2.id, [])
+                if matched_clause_ids:
+                    issue_v2.clauseId = matched_clause_ids[0]  # 첫 번째 매칭된 조항
+            
+            # 2. 위험 조항 하이라이트
+            highlight_tool = HighlightTool()
+            highlight_result = await highlight_tool.execute(
+                contract_text=extracted_text,
+                issues=[issue.model_dump() for issue in issues]
+            )
+            
+            highlighted_texts = [
+                HighlightedTextV2(
+                    text=ht["text"],
+                    startIndex=ht["startIndex"],
+                    endIndex=ht["endIndex"],
+                    severity=ht["severity"],
+                    issueId=ht["issueId"]
+                )
+                for ht in highlight_result.get("highlightedTexts", [])
+            ]
+            
+            # issue에 startIndex, endIndex 추가
+            for issue_v2 in issues:
+                for ht in highlighted_texts:
+                    if ht.issueId == issue_v2.id:
+                        issue_v2.startIndex = ht.startIndex
+                        issue_v2.endIndex = ht.endIndex
+                        break
+            
+            logger.info(f"[계약서 분석] 조항 분류 완료: {len(clauses)}개 조항, {len(highlighted_texts)}개 하이라이트")
+        except Exception as e:
+            logger.warning(f"[계약서 분석] 조항 분류/하이라이트 실패: {str(e)}", exc_info=True)
+            # 실패해도 계속 진행
         
         # 결과 저장 (DB에 저장)
         # contractText 설정 전 확인
@@ -226,6 +299,8 @@ async def analyze_contract(
             summary=result.summary,
             retrievedContexts=retrieved_contexts,
             contractText=contract_text_value,  # 계약서 원문 텍스트 포함 (None이면 빈 문자열)
+            clauses=clauses,  # 조항 목록
+            highlightedTexts=highlighted_texts,  # 하이라이트된 텍스트
             createdAt=datetime.utcnow().isoformat() + "Z",
         )
         
@@ -306,6 +381,149 @@ async def analyze_contract(
         # 임시 파일 삭제
         if temp_path and os.path.exists(temp_path):
             os.unlink(temp_path)
+
+
+@router.post("/compare-contracts", response_model=ContractComparisonResponseV2)
+async def compare_contracts(
+    request: ContractComparisonRequestV2,
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id", description="사용자 ID"),
+):
+    """
+    계약서 버전 비교 (이전 vs 새 계약서)
+    """
+    try:
+        storage_service = get_storage_service()
+        
+        # 이전 계약서 조회
+        old_contract = await storage_service.get_contract_analysis(request.oldContractId)
+        if not old_contract:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"이전 계약서를 찾을 수 없습니다: {request.oldContractId}"
+            )
+        
+        # 새 계약서 조회
+        new_contract = await storage_service.get_contract_analysis(request.newContractId)
+        if not new_contract:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"새 계약서를 찾을 수 없습니다: {request.newContractId}"
+            )
+        
+        # 변경된 조항 찾기
+        changed_clauses = []
+        old_clauses = {clause.get("id"): clause for clause in old_contract.get("clauses", [])}
+        new_clauses = {clause.get("id"): clause for clause in new_contract.get("clauses", [])}
+        
+        # 새로 추가된 조항
+        for clause_id, clause in new_clauses.items():
+            if clause_id not in old_clauses:
+                changed_clauses.append({
+                    "type": "added",
+                    "clauseId": clause_id,
+                    "title": clause.get("title"),
+                    "content": clause.get("content")
+                })
+        
+        # 삭제된 조항
+        for clause_id, clause in old_clauses.items():
+            if clause_id not in new_clauses:
+                changed_clauses.append({
+                    "type": "removed",
+                    "clauseId": clause_id,
+                    "title": clause.get("title"),
+                    "content": clause.get("content")
+                })
+        
+        # 수정된 조항
+        for clause_id in old_clauses.keys() & new_clauses.keys():
+            old_clause = old_clauses[clause_id]
+            new_clause = new_clauses[clause_id]
+            if old_clause.get("content") != new_clause.get("content"):
+                changed_clauses.append({
+                    "type": "modified",
+                    "clauseId": clause_id,
+                    "title": new_clause.get("title"),
+                    "oldContent": old_clause.get("content"),
+                    "newContent": new_clause.get("content")
+                })
+        
+        # 위험도 변화
+        risk_change = {
+            "oldRiskScore": old_contract.get("riskScore", 0),
+            "newRiskScore": new_contract.get("riskScore", 0),
+            "oldRiskLevel": old_contract.get("riskLevel", "medium"),
+            "newRiskLevel": new_contract.get("riskLevel", "medium"),
+            "riskScoreDelta": new_contract.get("riskScore", 0) - old_contract.get("riskScore", 0)
+        }
+        
+        # 비교 요약 생성
+        summary = f"총 {len(changed_clauses)}개 조항이 변경되었습니다. "
+        summary += f"위험도: {risk_change['oldRiskScore']:.1f} → {risk_change['newRiskScore']:.1f} "
+        summary += f"({risk_change['riskScoreDelta']:+.1f})"
+        
+        # 응답 생성
+        old_contract_response = ContractAnalysisResponseV2(**old_contract)
+        new_contract_response = ContractAnalysisResponseV2(**new_contract)
+        
+        return ContractComparisonResponseV2(
+            oldContract=old_contract_response,
+            newContract=new_contract_response,
+            changedClauses=changed_clauses,
+            riskChange=risk_change,
+            summary=summary
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"계약서 비교 중 오류 발생: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"계약서 비교 중 오류가 발생했습니다: {str(e)}",
+        )
+
+
+@router.post("/rewrite-clause", response_model=ClauseRewriteResponseV2)
+async def rewrite_clause(
+    request: ClauseRewriteRequestV2,
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id", description="사용자 ID"),
+):
+    """
+    조항 자동 리라이트 (위험 조항을 안전한 문구로 수정)
+    """
+    try:
+        rewrite_tool = RewriteTool()
+        
+        # issue 정보 가져오기 (있는 경우)
+        legal_basis = []
+        if request.issueId:
+            storage_service = get_storage_service()
+            # issue 정보 조회 (간단한 구현)
+            # 실제로는 issue를 조회해서 legalBasis를 가져와야 함
+            pass
+        
+        # 리라이트 실행
+        result = await rewrite_tool.execute(
+            original_text=request.originalText,
+            issue_id=request.issueId,
+            legal_basis=legal_basis,
+            contract_type="employment"  # 기본값
+        )
+        
+        return ClauseRewriteResponseV2(
+            originalText=result["originalText"],
+            rewrittenText=result["rewrittenText"],
+            explanation=result["explanation"],
+            legalBasis=result["legalBasis"]
+        )
+        
+    except Exception as e:
+        logger.error(f"조항 리라이트 중 오류 발생: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"조항 리라이트 중 오류가 발생했습니다: {str(e)}",
+        )
 
 
 @router.get("/contracts/history", response_model=List[dict])

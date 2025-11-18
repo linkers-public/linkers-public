@@ -1,9 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { AlertTriangle, Eye, FileEdit, Copy, ChevronDown, ChevronUp, MessageSquare } from 'lucide-react'
+import { AlertTriangle, Eye, FileEdit, Copy, ChevronDown, ChevronUp, MessageSquare, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/hooks/use-toast'
+import { RewriteModal } from './RewriteModal'
 import type { LegalIssue } from '@/types/legal'
 
 interface AnalysisIssueCardProps {
@@ -22,6 +23,7 @@ export function AnalysisIssueCard({
   onAskAboutIssue,
 }: AnalysisIssueCardProps) {
   const [isExpanded, setIsExpanded] = useState(false)
+  const [showRewriteModal, setShowRewriteModal] = useState(false)
   const { toast } = useToast()
 
   const severityColors = {
@@ -133,7 +135,9 @@ export function AnalysisIssueCard({
             e.stopPropagation()
             setIsExpanded(!isExpanded)
           }}
-          className="ml-2 p-1 hover:bg-slate-100 rounded"
+          aria-expanded={isExpanded}
+          aria-label={isExpanded ? "상세 정보 접기" : "상세 정보 펼치기"}
+          className="ml-2 p-1 hover:bg-slate-100 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
         >
           {isExpanded ? (
             <ChevronUp className="w-4 h-4 text-slate-500" />
@@ -179,9 +183,10 @@ export function AnalysisIssueCard({
             onSelect?.()
             setTimeout(() => {}, 50)
           }}
+          aria-label="계약서에서 해당 조항 위치 보기"
           className="flex-1 border-slate-300 hover:bg-slate-50 hover:border-blue-300"
         >
-          <Eye className="w-4 h-4 mr-1.5" />
+          <Eye className="w-4 h-4 mr-1.5" aria-hidden="true" />
           해당 조항 보기
         </Button>
         {onAskAboutIssue && (
@@ -193,9 +198,10 @@ export function AnalysisIssueCard({
               const prefilled = `다음 조항이 왜 위험한지와 현실적으로 어떤 협상 포인트를 잡을 수 있을지 알려줘.\n\n[문제 조항]\n${issue.originalText || issue.summary}`
               onAskAboutIssue(issue.id, prefilled)
             }}
+            aria-label={`${issue.summary}에 대해 AI에게 질문하기`}
             className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-md hover:shadow-lg transition-all"
           >
-            <MessageSquare className="w-4 h-4 mr-1.5" />
+            <MessageSquare className="w-4 h-4 mr-1.5" aria-hidden="true" />
             이 부분 질문하기
           </Button>
         )}
@@ -206,12 +212,38 @@ export function AnalysisIssueCard({
             e.stopPropagation()
             onShowAmendment?.()
           }}
+          aria-label="이 조항의 수정 제안 보기"
           className="flex-1 border-slate-300 hover:bg-slate-50 hover:border-blue-300"
         >
-          <FileEdit className="w-4 h-4 mr-1.5" />
+          <FileEdit className="w-4 h-4 mr-1.5" aria-hidden="true" />
           수정안 보기
         </Button>
+        {issue.originalText && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation()
+              setShowRewriteModal(true)
+            }}
+            aria-label="AI 조항 리라이트"
+            className="flex-1 border-blue-300 hover:bg-blue-50 hover:border-blue-400"
+          >
+            <Sparkles className="w-4 h-4 mr-1.5" aria-hidden="true" />
+            AI 수정
+          </Button>
+        )}
       </div>
+      
+      {/* 리라이트 모달 */}
+      {showRewriteModal && issue.originalText && (
+        <RewriteModal
+          clauseId={issue.id}
+          originalText={issue.originalText}
+          issueId={issue.id}
+          onClose={() => setShowRewriteModal(false)}
+        />
+      )}
 
       {/* 확장된 내용 */}
       {isExpanded && (

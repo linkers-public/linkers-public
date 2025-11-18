@@ -2,10 +2,11 @@
 
 import React, { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
-import { Loader2, AlertCircle, ChevronUp, ChevronDown, MessageSquare, GripVertical, Send, FileText } from 'lucide-react'
+import { Loader2, AlertCircle, MessageSquare, FileText, X } from 'lucide-react'
 import { ContractViewer } from '@/components/contract/ContractViewer'
 import { AnalysisPanel } from '@/components/contract/AnalysisPanel'
 import { ContractChat } from '@/components/contract/ContractChat'
+import { ClauseList } from '@/components/contract/ClauseList'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
@@ -18,15 +19,16 @@ export default function ContractDetailPage() {
   const [loading, setLoading] = useState(true)
   const [analysisResult, setAnalysisResult] = useState<ContractAnalysisResult | null>(null)
   const [selectedIssueId, setSelectedIssueId] = useState<string | undefined>()
+  const [selectedClauseId, setSelectedClauseId] = useState<string | undefined>()  // ✨ 추가
   const [error, setError] = useState<string | null>(null)
   const [chatIssueId, setChatIssueId] = useState<string | undefined>()
   const [isChatOpen, setIsChatOpen] = useState(false)
   const [prefilledQuestion, setPrefilledQuestion] = useState<string | undefined>()
-  const [chatHeight, setChatHeight] = useState(380)
-  const [isResizing, setIsResizing] = useState(false)
   const [chatLoading, setChatLoading] = useState(false)
   const [messageCount, setMessageCount] = useState(0)
   const [externalMessage, setExternalMessage] = useState<string>('')
+  const [clauses, setClauses] = useState<any[]>([])  // ✨ 추가
+  const [highlightedTexts, setHighlightedTexts] = useState<any[]>([])  // ✨ 추가
 
   // 분석 결과 로드
   useEffect(() => {
@@ -100,6 +102,8 @@ export default function ContractDetailPage() {
           contractText: v2Data.contractText || '',
           contract_text: v2Data.contractText || '', // 호환성을 위해 둘 다 설정
           issues: v2Data.issues || [], // v2 형식의 issues 배열 확실히 포함
+          clauses: v2Data.clauses || [], // ✨ 조항 목록
+          highlightedTexts: v2Data.highlightedTexts || [], // ✨ 하이라이트된 텍스트
           recommendations: [],
           createdAt: v2Data.createdAt,
           fileUrl: null,
@@ -289,6 +293,10 @@ export default function ContractDetailPage() {
             lowRiskCount: issues.filter(i => i.severity === 'low').length,
           }
 
+          // ✨ clauses와 highlightedTexts 저장
+          setClauses(normalizedData.clauses || [])
+          setHighlightedTexts(normalizedData.highlightedTexts || [])
+
           setAnalysisResult(result)
         } else {
           setError('분석 결과를 찾을 수 없습니다.')
@@ -303,41 +311,6 @@ export default function ContractDetailPage() {
 
     loadAnalysis()
   }, [docId])
-
-  // 채팅 높이 조절 핸들러
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isResizing) return
-      
-      const windowHeight = window.innerHeight
-      const newHeight = windowHeight - e.clientY
-      
-      // 최소 200px, 최대 화면 높이의 80%
-      const minHeight = 200
-      const maxHeight = windowHeight * 0.8
-      const clampedHeight = Math.max(minHeight, Math.min(maxHeight, newHeight))
-      
-      setChatHeight(clampedHeight)
-    }
-
-    const handleMouseUp = () => {
-      setIsResizing(false)
-    }
-
-    if (isResizing) {
-      document.addEventListener('mousemove', handleMouseMove)
-      document.addEventListener('mouseup', handleMouseUp)
-      document.body.style.cursor = 'row-resize'
-      document.body.style.userSelect = 'none'
-    }
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove)
-      document.removeEventListener('mouseup', handleMouseUp)
-      document.body.style.cursor = ''
-      document.body.style.userSelect = ''
-    }
-  }, [isResizing])
 
   // 분석 전 상태
   if (loading) {
@@ -372,19 +345,35 @@ export default function ContractDetailPage() {
       </div>
     )
   }
+
+  // analysisResult가 없으면 에러 표시
+  if (!analysisResult) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-red-50/20 to-slate-50">
+        <div className="text-center max-w-md px-6">
+          <div className="relative mb-6">
+            <div className="absolute inset-0 bg-red-200 rounded-full blur-2xl opacity-20"></div>
+            <AlertCircle className="relative w-20 h-20 text-red-500 mx-auto" />
+          </div>
+          <h2 className="text-2xl font-bold text-slate-900 mb-3">분석 결과를 불러올 수 없습니다</h2>
+          <p className="text-slate-600 mb-6">분석 결과가 없습니다.</p>
+        </div>
+      </div>
+    )
+  }
   
   // 요약만 있는 상태 (contractText가 없지만 summary는 있음)
-  const isSummaryOnly = analysisResult && (!analysisResult.contractText || analysisResult.contractText.trim().length === 0)
+  const isSummaryOnly = !analysisResult.contractText || analysisResult.contractText.trim().length === 0
 
   // 분석 완료 상태 - 2-컬럼 레이아웃
   return (
-    <div className="min-h-screen h-screen flex flex-col bg-gradient-to-br from-slate-50 via-white to-slate-50">
+    <div className="min-h-screen h-screen flex flex-col bg-gradient-to-br from-slate-50 via-white to-slate-50 relative">
       {/* 메인 컨텐츠 영역 */}
-      <div className="flex-1 flex flex-col overflow-hidden min-h-0 pb-16">
+      <div className="flex-1 flex flex-col overflow-hidden min-h-0">
         {/* 상단: 2-컬럼 레이아웃 (계약서 + 분석 결과) */}
         <div className={cn(
-          "flex flex-col lg:flex-row overflow-hidden",
-          isChatOpen ? "flex-1 min-h-0" : "flex-[1.2] min-h-0"
+          "flex flex-col lg:flex-row overflow-hidden flex-1",
+          isChatOpen ? "lg:mr-[400px]" : ""
         )}>
           {/* 왼쪽: 계약서 뷰어 */}
           <div className="w-full lg:w-1/2 flex-shrink-0 overflow-hidden bg-white border-r border-slate-200/60 shadow-sm">
@@ -412,163 +401,160 @@ export default function ContractDetailPage() {
                 issues={analysisResult.issues}
                 selectedIssueId={selectedIssueId}
                 onIssueClick={setSelectedIssueId}
+                highlightedTexts={highlightedTexts}  // ✨ 추가
               />
             )}
           </div>
 
           {/* 오른쪽: 분석 결과 패널 */}
-          <div className="w-full lg:w-1/2 flex-shrink-0 overflow-hidden bg-white shadow-sm">
-            <AnalysisPanel
-              issues={analysisResult.issues}
-              totalIssues={analysisResult.totalIssues}
-              highRiskCount={analysisResult.highRiskCount}
-              mediumRiskCount={analysisResult.mediumRiskCount}
-              lowRiskCount={analysisResult.lowRiskCount}
-              selectedIssueId={selectedIssueId}
-              onIssueSelect={setSelectedIssueId}
-              riskScore={analysisResult.riskScore}
-              contractText={analysisResult.contractText}
-              onCategoryClick={(category) => {
-                const categoryIssue = analysisResult.issues.find(i => i.category === category)
-                if (categoryIssue) {
-                  setSelectedIssueId(categoryIssue.id)
-                }
-              }}
-              onAskAboutIssue={(issueId, prefilledText) => {
-                setChatIssueId(issueId)
-                setSelectedIssueId(issueId)
-                setIsChatOpen(true) // 채팅 열기
-                
-                // 자동 프리필 질문 설정
-                if (prefilledText) {
-                  setPrefilledQuestion(prefilledText)
-                } else {
-                  const issue = analysisResult.issues.find(i => i.id === issueId)
-                  if (issue) {
-                    const prefilled = `다음 조항이 왜 위험한지와 현실적으로 어떤 협상 포인트를 잡을 수 있을지 알려줘.\n\n[문제 조항]\n${issue.originalText || issue.summary}`
-                    setPrefilledQuestion(prefilled)
-                  }
-                }
-                
-                // 채팅 영역으로 스크롤
-                setTimeout(() => {
-                  const chatElement = document.getElementById('contract-chat')
-                  if (chatElement) {
-                    chatElement.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                  }
-                }, 100)
-              }}
-            />
-          </div>
-        </div>
-
-        {/* 하단: 채팅 UI (접기/펼치기 가능) - 고정 */}
-        <div className={cn(
-          "fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-md shadow-lg",
-          isChatOpen ? "flex flex-col" : ""
-        )}>
-          {/* 채팅 토글 버튼 - 파란색 헤더 스타일 */}
-          <div className="relative overflow-hidden bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-600 border-t border-blue-400/30">
-            <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxwYXRoIGQ9Ik0zNiAzNGMwIDIuMjA5LTEuNzkxIDQtNCA0cy00LTEuNzkxLTQtNCAxLjc5MS00IDQtNCA0IDEuNzkxIDQgNHptMTAtMTBjMCAyLjIwOS0xLjc5MSA0LTQgNHMtNC0xLjc5MS00LTQgMS43OTEtNCA0LTQgNCAxLjc5MSA0IDR6IiBmaWxsPSJyZ2JhKDI1NSwyNTUsMjU1LDAuMSkiLz48L2c+PC9zdmc+')] opacity-20"></div>
-            <div className="relative">
-              <button
-                onClick={() => setIsChatOpen(!isChatOpen)}
-                className={cn(
-                  "w-full px-4 sm:px-5 py-3 sm:py-4 flex items-center justify-between",
-                  "hover:from-blue-700 hover:via-blue-600 hover:to-indigo-700",
-                  "transition-all duration-200"
-                )}
-              >
-                <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <div className="p-2 bg-white/20 backdrop-blur-sm rounded-xl shadow-lg flex-shrink-0">
-                    <MessageSquare className="w-5 h-5 text-white" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <h2 className="text-base sm:text-lg font-bold text-white">AI 법률 상담</h2>
-                      {messageCount > 0 && (
-                        <span className="px-2 py-0.5 bg-white/30 rounded-full text-[10px] font-medium text-white">
-                          {messageCount}개 대화
-                        </span>
-                      )}
-                      {chatLoading && (
-                        <div className="flex items-center gap-1.5 px-2 py-0.5 bg-white/30 rounded-full">
-                          <Loader2 className="w-3 h-3 text-white animate-spin" />
-                          <span className="text-[10px] font-medium text-white">답변 대기 중...</span>
-                        </div>
-                      )}
-                    </div>
-                    <p className="text-xs text-blue-100 leading-relaxed">
-                      {isChatOpen 
-                        ? "위험 조항에 대해 구체적으로 질문하시면 이해하기 쉽게 설명해드립니다"
-                        : "토글을 열어 대화를 확인하거나, 아래에서 바로 질문하세요"
-                      }
-                    </p>
-                  </div>
-                </div>
-                <div className={cn(
-                  "p-2 rounded-lg transition-all duration-200 flex-shrink-0 ml-3",
-                  isChatOpen ? "bg-white/30 text-white rotate-180" : "bg-white/20 text-white/80"
-                )}>
-                  {isChatOpen ? (
-                    <ChevronUp className="w-5 h-5" />
-                  ) : (
-                    <ChevronDown className="w-5 h-5" />
-                  )}
-                </div>
-              </button>
-            </div>
-          </div>
-
-          {/* 채팅 컨텐츠 (접기/펼치기) - 항상 렌더링하되 높이로 제어 */}
-          <>
-            {/* 리사이저 핸들 */}
-            {isChatOpen && (
-              <div
-                onMouseDown={(e) => {
-                  e.preventDefault()
-                  setIsResizing(true)
-                }}
-                className={cn(
-                  "h-2 cursor-row-resize bg-gradient-to-r from-blue-400/50 via-blue-500/50 to-indigo-500/50",
-                  "hover:from-blue-500 hover:via-blue-600 hover:to-indigo-600",
-                  "transition-colors duration-200",
-                  "flex items-center justify-center group relative"
-                )}
-              >
-                <div className="flex items-center gap-2">
-                  <GripVertical className="w-4 h-4 text-blue-300 group-hover:text-white transition-colors" />
-                  <span className="text-[10px] text-blue-200 group-hover:text-white font-medium transition-colors">
-                    드래그하여 높이 조절
-                  </span>
-                  <GripVertical className="w-4 h-4 text-blue-300 group-hover:text-white transition-colors" />
-                </div>
+          <div className="w-full lg:w-1/2 flex-shrink-0 overflow-hidden bg-white shadow-sm flex flex-col">
+            {/* 조항 목록 (있는 경우) */}
+            {clauses.length > 0 && (
+              <div className="p-4 border-b bg-slate-50 max-h-[200px] overflow-y-auto">
+                <ClauseList
+                  clauses={clauses}
+                  selectedClauseId={selectedClauseId}
+                  onClauseClick={(clauseId) => {
+                    setSelectedClauseId(clauseId)
+                    // 해당 조항으로 스크롤 (나중에 구현)
+                  }}
+                />
               </div>
             )}
             
-            <div 
-              id="contract-chat" 
-              className={cn(
-                "overflow-hidden flex flex-col transition-all duration-300",
-                isChatOpen ? "animate-in slide-in-from-bottom-2" : "h-0"
-              )}
-              style={isChatOpen ? { height: `${chatHeight}px` } : { height: '0px' }}
-            >
-              <ContractChat
-                docId={docId}
-                analysisResult={analysisResult}
-                selectedIssueId={chatIssueId || selectedIssueId}
-                prefilledQuestion={prefilledQuestion}
-                onQuestionPrefilled={() => setPrefilledQuestion(undefined)}
-                externalMessage={externalMessage}
-                onExternalMessageSent={() => setExternalMessage('')}
-                onLoadingChange={setChatLoading}
-                onMessageCountChange={setMessageCount}
+            <div className="flex-1 overflow-y-auto">
+              <AnalysisPanel
+                issues={analysisResult.issues}
+                totalIssues={analysisResult.totalIssues}
+                highRiskCount={analysisResult.highRiskCount}
+                mediumRiskCount={analysisResult.mediumRiskCount}
+                lowRiskCount={analysisResult.lowRiskCount}
+                selectedIssueId={selectedIssueId}
+                onIssueSelect={setSelectedIssueId}
+                riskScore={analysisResult.riskScore}
+                contractText={analysisResult.contractText}
+                onCategoryClick={(category) => {
+                  const categoryIssue = analysisResult.issues.find(i => i.category === category)
+                  if (categoryIssue) {
+                    setSelectedIssueId(categoryIssue.id)
+                  }
+                }}
+                onAskAboutIssue={(issueId, prefilledText) => {
+                  setChatIssueId(issueId)
+                  setSelectedIssueId(issueId)
+                  setIsChatOpen(true) // 채팅 열기
+                  
+                  // 자동 프리필 질문 설정
+                  if (prefilledText) {
+                    setPrefilledQuestion(prefilledText)
+                  } else {
+                    const issue = analysisResult.issues.find(i => i.id === issueId)
+                    if (issue) {
+                      const prefilled = `다음 조항이 왜 위험한지와 현실적으로 어떤 협상 포인트를 잡을 수 있을지 알려줘.\n\n[문제 조항]\n${issue.originalText || issue.summary}`
+                      setPrefilledQuestion(prefilled)
+                    }
+                  }
+                  
+                  // 채팅 영역으로 스크롤
+                  setTimeout(() => {
+                    const chatElement = document.getElementById('contract-chat')
+                    if (chatElement) {
+                      chatElement.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                    }
+                  }, 100)
+                }}
               />
             </div>
-          </>
+          </div>
         </div>
       </div>
+
+      {/* 오른쪽: 채팅 UI (토글 가능한 사이드바) */}
+      <div className={cn(
+        "fixed right-0 w-[400px] z-40 bg-white shadow-2xl border-l border-slate-200",
+        "transition-transform duration-300 ease-in-out",
+        isChatOpen ? "translate-x-0" : "translate-x-full"
+      )}
+      style={{ top: '64px', height: 'calc(100vh - 64px)' }}
+      >
+        {/* 채팅 헤더 */}
+        <div className="relative overflow-hidden bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-600 border-b border-blue-400/30">
+          <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxwYXRoIGQ9Ik0zNiAzNGMwIDIuMjA5LTEuNzkxIDQtNCA0cy00LTEuNzkxLTQtNCAxLjc5MS00IDQtNCA0IDEuNzkxIDQgNHptMTAtMTBjMCAyLjIwOS0xLjc5MSA0LTQgNHMtNC0xLjc5MS00LTQgMS43OTEtNCA0LTQgNCAxLjc5MSA0IDR6IiBmaWxsPSJyZ2JhKDI1NSwyNTUsMjU1LDAuMSkiLz48L2c+PC9zdmc+')] opacity-20"></div>
+          <div className="relative px-4 py-4 flex items-center justify-between">
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+              <div className="p-2 bg-white/20 backdrop-blur-sm rounded-xl shadow-lg flex-shrink-0">
+                <MessageSquare className="w-5 h-5 text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h2 className="text-lg font-bold text-white">AI 법률 상담</h2>
+                <p className="text-xs text-blue-100 mt-0.5">
+                  위험 조항에 대해 질문하세요
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {messageCount > 0 && (
+                <span className="px-2 py-0.5 bg-white/30 rounded-full text-[10px] font-medium text-white">
+                  {messageCount}개 대화
+                </span>
+              )}
+              <button
+                onClick={() => setIsChatOpen(false)}
+                className="p-2 rounded-lg hover:bg-white/20 transition-colors text-white"
+                aria-label="채팅 닫기"
+                title="채팅 닫기"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* 채팅 컨텐츠 */}
+        <div 
+          id="contract-chat" 
+          role="region"
+          aria-label="AI 법률 상담 채팅"
+          aria-live="polite"
+          className="h-[calc(100%-80px)] overflow-hidden flex flex-col"
+        >
+          <ContractChat
+            docId={docId}
+            analysisResult={analysisResult}
+            selectedIssueId={chatIssueId || selectedIssueId}
+            prefilledQuestion={prefilledQuestion}
+            onQuestionPrefilled={() => setPrefilledQuestion(undefined)}
+            externalMessage={externalMessage}
+            onExternalMessageSent={() => setExternalMessage('')}
+            onLoadingChange={setChatLoading}
+            onMessageCountChange={setMessageCount}
+          />
+        </div>
+      </div>
+
+      {/* 채팅 열기 버튼 (오른쪽 하단 고정) */}
+      {!isChatOpen && (
+        <button
+          onClick={() => setIsChatOpen(true)}
+          className={cn(
+            "fixed bottom-6 right-6 z-30",
+            "bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-600",
+            "hover:from-blue-700 hover:via-blue-600 hover:to-indigo-700",
+            "text-white rounded-full p-4 shadow-lg",
+            "transition-all duration-200 hover:scale-110",
+            "flex items-center gap-2",
+            "focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+          )}
+          aria-label="AI 법률 상담 열기"
+        >
+          <MessageSquare className="w-6 h-6" />
+          {messageCount > 0 && (
+            <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+              {messageCount}
+            </span>
+          )}
+        </button>
+      )}
     </div>
   )
 }

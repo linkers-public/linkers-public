@@ -279,6 +279,7 @@ export function ContractChat({
                 key={index}
                 onClick={() => handleSendMessage(question)}
                 disabled={chatLoading}
+                aria-label={`추천 질문: ${question}`}
                 className={cn(
                   "group relative px-4 py-2.5 text-xs font-medium",
                   "bg-white border border-slate-200 rounded-xl",
@@ -286,6 +287,7 @@ export function ContractChat({
                   "hover:shadow-md hover:scale-[1.02]",
                   "transition-all duration-200",
                   "disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100",
+                  "focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2",
                   "text-left"
                 )}
               >
@@ -349,8 +351,11 @@ export function ContractChat({
                 >
                   {/* 아바타 - 사용자는 오른쪽, AI는 왼쪽 */}
                   {message.role === 'assistant' && (
-                    <div className="flex-shrink-0 w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg ring-2 ring-white">
-                      <Bot className="w-5 h-5 text-white" />
+                    <div 
+                      className="flex-shrink-0 w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg ring-2 ring-white"
+                      aria-label="AI 어시스턴트"
+                    >
+                      <Bot className="w-5 h-5 text-white" aria-hidden="true" />
                     </div>
                   )}
 
@@ -389,8 +394,11 @@ export function ContractChat({
 
                   {/* 사용자 아바타 */}
                   {message.role === 'user' && (
-                    <div className="flex-shrink-0 w-9 h-9 rounded-full bg-gradient-to-br from-slate-400 to-slate-500 flex items-center justify-center shadow-lg ring-2 ring-white">
-                      <User className="w-5 h-5 text-white" />
+                    <div 
+                      className="flex-shrink-0 w-9 h-9 rounded-full bg-gradient-to-br from-slate-400 to-slate-500 flex items-center justify-center shadow-lg ring-2 ring-white"
+                      aria-label="사용자"
+                    >
+                      <User className="w-5 h-5 text-white" aria-hidden="true" />
                     </div>
                   )}
                 </div>
@@ -398,13 +406,16 @@ export function ContractChat({
               
               {/* 로딩 상태 */}
               {chatLoading && (
-                <div className="flex gap-3 sm:gap-4 justify-start animate-in fade-in slide-in-from-bottom-2">
-                  <div className="flex-shrink-0 w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg ring-2 ring-white">
-                    <Bot className="w-5 h-5 text-white" />
+                <div className="flex gap-3 sm:gap-4 justify-start animate-in fade-in slide-in-from-bottom-2" role="status" aria-live="polite">
+                  <div 
+                    className="flex-shrink-0 w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg ring-2 ring-white"
+                    aria-label="AI 어시스턴트"
+                  >
+                    <Bot className="w-5 h-5 text-white" aria-hidden="true" />
                   </div>
                   <div className="bg-white border border-slate-200 rounded-2xl rounded-bl-md px-4 py-3 shadow-sm">
                     <div className="flex items-center gap-2.5">
-                      <div className="flex gap-1">
+                      <div className="flex gap-1" aria-hidden="true">
                         <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
                         <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
                         <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
@@ -429,6 +440,8 @@ export function ContractChat({
                 onKeyDown={handleKeyPress}
                 placeholder="질문을 입력하세요..."
                 disabled={chatLoading}
+                aria-label="AI에게 질문 입력"
+                aria-describedby="chat-input-hint"
                 className={cn(
                   "min-h-[60px] max-h-[140px] resize-none text-sm",
                   "border-slate-300 focus:border-blue-400 focus:ring-2 focus:ring-blue-100",
@@ -437,6 +450,9 @@ export function ContractChat({
                 )}
                 rows={2}
               />
+              <span id="chat-input-hint" className="sr-only">
+                질문을 입력하고 Ctrl+Enter를 눌러 전송하세요
+              </span>
               <div className="absolute bottom-2 right-2 flex items-center gap-1.5 text-xs text-slate-400">
                 <kbd className="px-1.5 py-0.5 bg-slate-100 rounded text-xs">Ctrl</kbd>
                 <span>+</span>
@@ -447,19 +463,27 @@ export function ContractChat({
               onClick={() => handleSendMessage()}
               disabled={chatLoading || !inputMessage.trim()}
               size="lg"
+              aria-label="질문 전송"
               className={cn(
                 "h-[60px] px-6 rounded-xl",
                 "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700",
                 "text-white shadow-lg hover:shadow-xl",
                 "transition-all duration-200",
                 "disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-lg",
+                "focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-blue-600",
                 "flex-shrink-0"
               )}
             >
               {chatLoading ? (
-                <Loader2 className="w-5 h-5 animate-spin" />
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" aria-hidden="true" />
+                  <span className="sr-only">전송 중</span>
+                </>
               ) : (
-                <Send className="w-5 h-5" />
+                <>
+                  <Send className="w-5 h-5" aria-hidden="true" />
+                  <span className="sr-only">전송</span>
+                </>
               )}
             </Button>
           </div>

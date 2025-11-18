@@ -17,9 +17,13 @@ export default function LegalLayout({
   const pathname = usePathname()
   const router = useRouter()
   const [user, setUser] = useState<SupabaseUser | null>(null)
-  const supabase = createSupabaseBrowserClient()
 
   useEffect(() => {
+    // 클라이언트에서만 Supabase 클라이언트 생성
+    if (typeof window === 'undefined') return
+
+    const supabase = createSupabaseBrowserClient()
+
     const getUser = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser()
@@ -40,10 +44,12 @@ export default function LegalLayout({
     return () => {
       subscription.unsubscribe()
     }
-  }, [supabase])
+  }, [])
 
   const handleLogout = async () => {
     try {
+      if (typeof window === 'undefined') return
+      const supabase = createSupabaseBrowserClient()
       await supabase.auth.signOut()
       setUser(null)
       router.push('/legal')
@@ -138,7 +144,7 @@ export default function LegalLayout({
                 </div>
               ) : (
                 <Button
-                  onClick={() => router.push('/auth?role=maker')}
+                  onClick={() => router.push('/auth')}
                   className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-sm"
                   size="sm"
                 >

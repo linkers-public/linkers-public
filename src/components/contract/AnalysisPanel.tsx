@@ -339,10 +339,18 @@ export function AnalysisPanel({
                 <button
                   key={category}
                   onClick={() => onCategoryClick?.(category)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      onCategoryClick?.(category)
+                    }
+                  }}
+                  aria-label={`${categoryLabels[category]} 카테고리, ${badgeConfig.label} 이슈 발견`}
                   className={cn(
                     "group px-2.5 py-1.5 rounded-lg border text-[10px] font-semibold",
                     "transition-all duration-200 hover:shadow-md hover:scale-105",
                     "flex items-center gap-1.5",
+                    "focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2",
                     badgeConfig.bg,
                     badgeConfig.border,
                     badgeConfig.text
@@ -383,17 +391,29 @@ export function AnalysisPanel({
 
         {/* 탭 네비게이션 */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="w-full grid grid-cols-3">
-            <TabsTrigger value="summary" className="flex items-center gap-1.5">
-              <FileText className="w-4 h-4" />
+          <TabsList className="w-full grid grid-cols-3" role="tablist" aria-label="분석 결과 탭">
+            <TabsTrigger 
+              value="summary" 
+              className="flex items-center gap-1.5"
+              aria-label="분석 요약 보기"
+            >
+              <FileText className="w-4 h-4" aria-hidden="true" />
               <span className="hidden sm:inline">요약</span>
             </TabsTrigger>
-            <TabsTrigger value="issues" className="flex items-center gap-1.5">
-              <AlertTriangle className="w-4 h-4" />
+            <TabsTrigger 
+              value="issues" 
+              className="flex items-center gap-1.5"
+              aria-label="조항별 분석 보기"
+            >
+              <AlertTriangle className="w-4 h-4" aria-hidden="true" />
               <span className="hidden sm:inline">조항별</span>
             </TabsTrigger>
-            <TabsTrigger value="legal" className="flex items-center gap-1.5">
-              <Scale className="w-4 h-4" />
+            <TabsTrigger 
+              value="legal" 
+              className="flex items-center gap-1.5"
+              aria-label="법령 및 표준계약서 비교 보기"
+            >
+              <Scale className="w-4 h-4" aria-hidden="true" />
               <span className="hidden sm:inline">법령·표준</span>
             </TabsTrigger>
           </TabsList>
@@ -522,7 +542,14 @@ export function AnalysisPanel({
                   <button
                     key={category}
                     onClick={() => handleCategoryCardClick(category)}
-                    className="w-full text-left p-5 bg-white border-2 border-slate-200 rounded-xl hover:border-blue-400 hover:shadow-lg hover:bg-gradient-to-br hover:from-blue-50/50 hover:to-indigo-50/50 transition-all duration-200 group"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        handleCategoryCardClick(category)
+                      }
+                    }}
+                    aria-label={`${categoryLabels[category]} 카테고리 상세 보기, ${severityInfo.label}`}
+                    className="w-full text-left p-5 bg-white border-2 border-slate-200 rounded-xl hover:border-blue-400 hover:shadow-lg hover:bg-gradient-to-br hover:from-blue-50/50 hover:to-indigo-50/50 transition-all duration-200 group focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
                   >
                     <div className="flex items-center justify-between mb-3">
                       <span className="font-bold text-slate-900 text-base group-hover:text-blue-700 transition-colors">{categoryLabels[category]}</span>
@@ -577,7 +604,10 @@ export function AnalysisPanel({
                     key={issue.id}
                     className="bg-white border border-slate-200 rounded-lg overflow-hidden"
                   >
-                    <summary className="p-4 cursor-pointer hover:bg-slate-50 transition-colors flex items-center justify-between">
+                    <summary 
+                      className="p-4 cursor-pointer hover:bg-slate-50 transition-colors flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                      aria-label={`${issue.summary} 법적 근거 보기`}
+                    >
                       <div>
                         <span className="font-semibold text-slate-900">{issue.summary}</span>
                         <span className="text-xs text-slate-500 ml-2">

@@ -3,11 +3,17 @@
  * Supabase Storage 및 DB와 통신
  */
 
-import { supabaseBrowserClient } from '@/supabase/supabase-client'
+import { createSupabaseBrowserClient } from '@/supabase/supabase-client'
 import type { LegalAnalysisResult } from './legal.service'
 
-// 싱글톤 클라이언트 직접 사용
-const supabase = supabaseBrowserClient
+// 클라이언트를 지연 초기화하는 헬퍼 함수
+const getSupabase = () => {
+  // 브라우저 환경에서만 클라이언트 생성
+  if (typeof window === 'undefined') {
+    throw new Error('contract-history.service는 브라우저 환경에서만 사용할 수 있습니다.')
+  }
+  return createSupabaseBrowserClient()
+}
 
 const handleError = (message: string, error?: any) => {
   console.error(message, error)
@@ -16,6 +22,7 @@ const handleError = (message: string, error?: any) => {
 
 const checkSession = async (): Promise<string | null> => {
   try {
+    const supabase = getSupabase()
     const { data: sessionData, error } = await supabase.auth.getSession()
     if (error || !sessionData || !sessionData.session) {
       // 로그인하지 않은 경우 null 반환 (에러 발생하지 않음)
@@ -34,6 +41,7 @@ const checkSession = async (): Promise<string | null> => {
  */
 export const uploadContractFile = async (file: File): Promise<string | null> => {
   try {
+    const supabase = getSupabase()
     const userId = await checkSession()
 
     // 파일 확장자 추출
@@ -106,6 +114,7 @@ export const saveContractAnalysis = async (
   analysisResult: LegalAnalysisResult & { contract_text?: string }
 ): Promise<string> => {
   try {
+    const supabase = getSupabase()
     const userId = await checkSession()
 
     // 분석 결과 저장 (user_id는 nullable이므로 null 허용)
@@ -147,6 +156,7 @@ export const saveContractAnalysis = async (
  */
 export const getContractAnalysisHistory = async (limit: number = 20) => {
   try {
+    const supabase = getSupabase()
     const userId = await checkSession()
 
     // 로그인한 경우에만 DB에서 조회
@@ -196,6 +206,7 @@ export const getContractAnalysisHistory = async (limit: number = 20) => {
  */
 export const getContractAnalysis = async (analysisId: string) => {
   try {
+    const supabase = getSupabase()
     const userId = await checkSession()
 
     // 로그인한 경우 DB에서 조회
@@ -252,6 +263,7 @@ export const getContractAnalysis = async (analysisId: string) => {
  */
 export const deleteContractAnalysis = async (analysisId: string) => {
   try {
+    const supabase = getSupabase()
     const userId = await checkSession()
 
     const { error } = await supabase

@@ -446,13 +446,23 @@ export default function ContractAnalysisPage() {
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
                   onClick={() => !file && document.getElementById('file-input')?.click()}
+                  onKeyDown={(e) => {
+                    if ((e.key === 'Enter' || e.key === ' ') && !file) {
+                      e.preventDefault()
+                      document.getElementById('file-input')?.click()
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  aria-label="계약서 파일 업로드 영역"
+                  aria-describedby="upload-instructions"
                   className={cn(
                     "border-2 border-dashed rounded-2xl p-12 text-center transition-all cursor-pointer relative",
                     isDragging 
                       ? "border-blue-500 bg-blue-50/50 shadow-lg" 
                       : file 
                         ? "border-slate-300 bg-slate-50" 
-                        : "border-slate-300 bg-white hover:border-blue-400 hover:bg-blue-50/30"
+                        : "border-slate-300 bg-white hover:border-blue-400 hover:bg-blue-50/30 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
                   )}
                 >
                   <input
@@ -461,6 +471,7 @@ export default function ContractAnalysisPage() {
                     accept=".pdf,.hwpx,.hwp"
                     onChange={handleFileSelect}
                     className="hidden"
+                    aria-label="계약서 파일 선택"
                   />
 
                   {!file ? (
@@ -476,10 +487,13 @@ export default function ContractAnalysisPage() {
                           isDragging ? "text-white" : "text-slate-400"
                         )} />
                       </div>
-                      <p className={cn(
-                        "text-lg font-bold mb-2 transition-colors",
-                        isDragging ? "text-blue-700" : "text-slate-700"
-                      )}>
+                      <p 
+                        id="upload-instructions"
+                        className={cn(
+                          "text-lg font-bold mb-2 transition-colors",
+                          isDragging ? "text-blue-700" : "text-slate-700"
+                        )}
+                      >
                         {isDragging 
                           ? "파일을 여기로 가져오면 바로 분석을 시작할 수 있어요." 
                           : "여기에 파일을 드래그하거나 클릭해서 선택하세요"}
@@ -708,9 +722,10 @@ export default function ContractAnalysisPage() {
                         setTimeout(() => document.getElementById('file-input')?.click(), 500)
                       }}
                       className="text-blue-600 hover:text-blue-700"
+                      aria-label="첫 계약서 분석 시작하기"
                     >
                       첫 분석 시작하기
-                      <ArrowRight className="w-4 h-4 ml-2" />
+                      <ArrowRight className="w-4 h-4 ml-2" aria-hidden="true" />
                     </Button>
                   </div>
                 ) : (
@@ -721,7 +736,16 @@ export default function ContractAnalysisPage() {
                         <Card
                           key={item.id}
                           onClick={() => router.push(`/legal/contract/${item.id}`)}
-                          className="border-2 border-slate-200 rounded-xl hover:border-blue-400 hover:shadow-md transition-all cursor-pointer bg-white group"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault()
+                              router.push(`/legal/contract/${item.id}`)
+                            }
+                          }}
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`${item.file_name || '계약서'} 분석 결과 보기, 위험도: ${getRiskLabel(item.risk_level)}, 점수: ${item.risk_score}점`}
+                          className="border-2 border-slate-200 rounded-xl hover:border-blue-400 hover:shadow-md transition-all cursor-pointer bg-white group focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
                         >
                           <CardContent className="p-4">
                             <div className="flex items-start justify-between mb-3">

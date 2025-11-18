@@ -4,11 +4,20 @@ import React, { useEffect, useRef } from 'react'
 import { FileText } from 'lucide-react'
 import type { LegalIssue } from '@/types/legal'
 
+interface HighlightedText {
+  text: string
+  startIndex: number
+  endIndex: number
+  severity: 'low' | 'medium' | 'high'
+  issueId: string
+}
+
 interface ContractViewerProps {
   contractText: string
   issues: LegalIssue[]
   selectedIssueId?: string
   onIssueClick?: (issueId: string) => void
+  highlightedTexts?: HighlightedText[]  // ✨ 추가
 }
 
 export function ContractViewer({
@@ -16,6 +25,7 @@ export function ContractViewer({
   issues,
   selectedIssueId,
   onIssueClick,
+  highlightedTexts = [],  // ✨ 추가
 }: ContractViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const highlightedRefs = useRef<Map<string, HTMLSpanElement>>(new Map())
@@ -50,6 +60,43 @@ export function ContractViewer({
     const bIndex = b.location.startIndex ?? 0
     return aIndex - bIndex
   })
+  
+  // highlightedTexts와 issues를 병합하여 하이라이트 정보 생성
+  const allHighlights = [
+    ...highlightedTexts.map(ht => ({
+      startIndex: ht.startIndex,
+      endIndex: ht.endIndex,
+      severity: ht.severity,
+      issueId: ht.issueId,
+      text: ht.text,
+    })),
+    ...sortedIssues.map(issue => ({
+      startIndex: issue.location.startIndex ?? 0,
+      endIndex: issue.location.endIndex ?? (issue.location.startIndex ?? 0) + (issue.originalText?.length ?? 0),
+      severity: issue.severity,
+      issueId: issue.id,
+      text: issue.originalText || '',
+    })),
+  ].sort((a, b) => a.startIndex - b.startIndex)
+  
+  // 중복 제거 (같은 위치의 하이라이트는 하나만)
+  const uniqueHighlights = allHighlights.reduce((acc, highlight) => {
+    const existing = acc.find(h => 
+      h.startIndex === highlight.startIndex && 
+      h.endIndex === highlight.endIndex
+    )
+    if (!existing) {
+      acc.push(highlight)
+    } else {
+      // severity가 더 높으면 교체
+      const severityPriority = { high: 3, medium: 2, low: 1 }
+      if (severityPriority[highlight.severity] > severityPriority[existing.severity]) {
+        const index = acc.indexOf(existing)
+        acc[index] = highlight
+      }
+    }
+    return acc
+  }, [] as typeof allHighlights)
 
   // 텍스트에 하이라이트 적용
   const renderTextWithHighlights = (text: string, paragraphIndex: number) => {
@@ -57,15 +104,15 @@ export function ContractViewer({
     // 문단의 실제 끝 위치 계산 (원본 텍스트 기준)
     const paragraphEnd = paragraphStart + text.length
 
-    // 이 문단과 겹치는 이슈 찾기 (경계를 넘어가는 경우도 포함)
-    const paragraphIssues = sortedIssues.filter(issue => {
-      const start = issue.location.startIndex ?? 0
-      const end = issue.location.endIndex ?? start + (issue.originalText?.length ?? 0)
-      // 겹치는 경우: 이슈가 문단 범위와 겹치면 포함
+    // 이 문단과 겹치는 하이라이트 찾기 (경계를 넘어가는 경우도 포함)
+    const paragraphHighlights = uniqueHighlights.filter(highlight => {
+      const start = highlight.startIndex
+      const end = highlight.endIndex
+      // 겹치는 경우: 하이라이트가 문단 범위와 겹치면 포함
       return (start < paragraphEnd && end > paragraphStart)
     })
 
-    if (paragraphIssues.length === 0) {
+    if (paragraphHighlights.length === 0) {
       // 줄바꿈을 보존하기 위해 whitespace-pre-line 사용
       return <p className="mb-5 leading-loose text-base text-slate-800 whitespace-pre-line">{text}</p>
     }
@@ -73,18 +120,18 @@ export function ContractViewer({
     // 하이라이트 적용
     let lastIndex = 0
     const elements: React.ReactNode[] = []
-    const sortedParagraphIssues = paragraphIssues.sort(
-      (a, b) => (a.location.startIndex ?? 0) - (b.location.startIndex ?? 0)
+    const sortedParagraphHighlights = paragraphHighlights.sort(
+      (a, b) => a.startIndex - b.startIndex
     )
 
-    sortedParagraphIssues.forEach((issue, idx) => {
-      const issueStart = issue.location.startIndex ?? 0
-      const issueEnd = issue.location.endIndex ?? issueStart + (issue.originalText?.length ?? 0)
+    sortedParagraphHighlights.forEach((highlight, idx) => {
+      const issueStart = highlight.startIndex
+      const issueEnd = highlight.endIndex
       
       // 문단 내 상대 위치 계산
       const relativeStart = Math.max(0, issueStart - paragraphStart)
       const relativeEnd = Math.min(text.length, issueEnd - paragraphStart)
-      const isSelected = issue.id === selectedIssueId
+      const isSelected = highlight.issueId === selectedIssueId
 
       // 이슈 앞의 텍스트 (줄바꿈 보존)
       if (relativeStart > lastIndex) {
@@ -105,14 +152,14 @@ export function ContractViewer({
         })
       }
 
-      // 하이라이트된 이슈 텍스트 (줄바꿈 포함)
-      const issueText = text.substring(relativeStart, relativeEnd)
-      const issueTextParts = issueText.split('\n')
+      // 하이라이트된 텍스트 (줄바꿈 포함)
+      const highlightText = text.substring(relativeStart, relativeEnd)
+      const highlightTextParts = highlightText.split('\n')
       
-      // 위험도별 색상 통일 (해커톤용 강화)
-      const severityClass = issue.severity === 'high' 
+      // 위험도별 색상 통일
+      const severityClass = highlight.severity === 'high' 
         ? 'bg-red-50 border-l-4 border-red-400 pl-2 text-red-900 font-medium underline decoration-red-400' 
-        : issue.severity === 'medium'
+        : highlight.severity === 'medium'
         ? 'bg-amber-50 border-l-4 border-amber-400 pl-2 text-amber-900 border-b border-amber-400'
         : 'bg-sky-50 border-l-4 border-sky-400 pl-2 text-sky-900'
 
@@ -120,25 +167,34 @@ export function ContractViewer({
         ? 'ring-2 ring-red-400 ring-offset-2 shadow-lg animate-pulse' 
         : ''
 
-      // 이슈 텍스트를 줄바꿈 단위로 분리하여 렌더링
-      issueTextParts.forEach((part, partIdx) => {
+      // 하이라이트 텍스트를 줄바꿈 단위로 분리하여 렌더링
+      highlightTextParts.forEach((part, partIdx) => {
         if (partIdx > 0) {
-          elements.push(<br key={`br-issue-${issue.id}-${partIdx}`} />)
+          elements.push(<br key={`br-highlight-${highlight.issueId}-${partIdx}`} />)
         }
         if (part.length > 0) {
           elements.push(
             <span
-              key={`issue-${issue.id}-${partIdx}`}
+              key={`highlight-${highlight.issueId}-${partIdx}`}
               ref={partIdx === 0 ? (el) => {
                 if (el) {
-                  highlightedRefs.current.set(issue.id, el)
+                  highlightedRefs.current.set(highlight.issueId, el)
                 } else {
-                  highlightedRefs.current.delete(issue.id)
+                  highlightedRefs.current.delete(highlight.issueId)
                 }
               } : undefined}
-              className={`risk-highlight ${severityClass} ${selectedClass} cursor-pointer hover:bg-opacity-90 transition-all duration-200 px-1 py-0.5 rounded-sm relative group`}
-              onClick={() => onIssueClick?.(issue.id)}
-              title={`${getCategoryLabel(issue.category)} 관련 위험 (위험도: ${getSeverityLabel(issue.severity)}) - 자세히 보려면 클릭`}
+              role="button"
+              tabIndex={0}
+              aria-label={`위험 조항, 위험도: ${getSeverityLabel(highlight.severity)}`}
+              className={`risk-highlight ${severityClass} ${selectedClass} cursor-pointer hover:bg-opacity-90 transition-all duration-200 px-1 py-0.5 rounded-sm relative group focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2`}
+              onClick={() => onIssueClick?.(highlight.issueId)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  onIssueClick?.(highlight.issueId)
+                }
+              }}
+              title={`위험 조항 (위험도: ${getSeverityLabel(highlight.severity)}) - 자세히 보려면 클릭`}
             >
               {part}
             </span>
@@ -211,6 +267,7 @@ export function ContractViewer({
       className="h-full overflow-y-auto bg-gradient-to-b from-slate-50/80 to-white px-4 sm:px-6 lg:px-8 pb-4 sm:pb-6 lg:pb-8"
       role="article"
       aria-label="계약서 전문"
+      aria-live="polite"
     >
       <div className="w-full max-w-none lg:max-w-5xl mx-auto">
         <div className="sticky top-0 bg-white/95 backdrop-blur-md z-10 pt-3 pb-3 mb-4 border-b border-slate-200/60">

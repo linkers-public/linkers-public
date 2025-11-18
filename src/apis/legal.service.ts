@@ -279,6 +279,27 @@ export interface ContractIssueV2 {
   legalBasis: string[];
   explanation: string;
   suggestedRevision: string;
+  clauseId?: string;  // 연결된 조항 ID
+  startIndex?: number;  // 원문에서 시작 위치
+  endIndex?: number;  // 원문에서 종료 위치
+}
+
+export interface ClauseV2 {
+  id: string;
+  title: string;  // "제1조 (목적)"
+  content: string;
+  articleNumber?: number;
+  startIndex: number;
+  endIndex: number;
+  category?: string;
+}
+
+export interface HighlightedTextV2 {
+  text: string;
+  startIndex: number;
+  endIndex: number;
+  severity: 'low' | 'medium' | 'high';
+  issueId: string;
 }
 
 export interface ContractAnalysisResponseV2 {
@@ -300,7 +321,48 @@ export interface ContractAnalysisResponseV2 {
     snippet: string;
   }>;
   contractText?: string;  // 계약서 원문 텍스트
+  clauses?: ClauseV2[];  // 조항 목록 (자동 분류)
+  highlightedTexts?: HighlightedTextV2[];  // 하이라이트된 텍스트
   createdAt: string;
+}
+
+export interface ContractComparisonRequestV2 {
+  oldContractId: string;
+  newContractId: string;
+}
+
+export interface ContractComparisonResponseV2 {
+  oldContract: ContractAnalysisResponseV2;
+  newContract: ContractAnalysisResponseV2;
+  changedClauses: Array<{
+    type: 'added' | 'removed' | 'modified';
+    clauseId: string;
+    title: string;
+    content?: string;
+    oldContent?: string;
+    newContent?: string;
+  }>;
+  riskChange: {
+    oldRiskScore: number;
+    newRiskScore: number;
+    oldRiskLevel: string;
+    newRiskLevel: string;
+    riskScoreDelta: number;
+  };
+  summary: string;
+}
+
+export interface ClauseRewriteRequestV2 {
+  clauseId: string;
+  originalText: string;
+  issueId?: string;
+}
+
+export interface ClauseRewriteResponseV2 {
+  originalText: string;
+  rewrittenText: string;
+  explanation: string;
+  legalBasis: string[];
 }
 
 /**
@@ -483,6 +545,78 @@ export const analyzeContractV2 = async (
     throw error;
   }
 };
+
+/**
+ * 계약서 비교 (v2)
+ */
+export const compareContractsV2 = async (
+  oldContractId: string,
+  newContractId: string
+): Promise<ContractComparisonResponseV2> => {
+  try {
+    const url = `${LEGAL_API_BASE_V2}/compare-contracts`
+    const authHeaders = await getAuthHeaders()
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        ...authHeaders,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        oldContractId,
+        newContractId,
+      }),
+    })
+    
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`계약서 비교 실패: ${response.status} - ${errorText}`)
+    }
+    
+    return await response.json()
+  } catch (error) {
+    console.error('계약서 비교 오류:', error)
+    throw error
+  }
+}
+
+/**
+ * 조항 리라이트 (v2)
+ */
+export const rewriteClauseV2 = async (
+  clauseId: string,
+  originalText: string,
+  issueId?: string
+): Promise<ClauseRewriteResponseV2> => {
+  try {
+    const url = `${LEGAL_API_BASE_V2}/rewrite-clause`
+    const authHeaders = await getAuthHeaders()
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        ...authHeaders,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        clauseId,
+        originalText,
+        issueId,
+      }),
+    })
+    
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`조항 리라이트 실패: ${response.status} - ${errorText}`)
+    }
+    
+    return await response.json()
+  } catch (error) {
+    console.error('조항 리라이트 오류:', error)
+    throw error
+  }
+}
 
 /**
  * 계약서 상세 조회 (v2)

@@ -10,7 +10,7 @@ const AuthUI = ({ role }: { role: string }) => {
   const isMounted = useHydration()
   const [user, setUser] = useState<User | null>(null)
   const [checkingProfile, setCheckingProfile] = useState(true)
-  const supabaseClient = createSupabaseBrowserClient()
+  const [supabaseClient, setSupabaseClient] = useState<ReturnType<typeof createSupabaseBrowserClient> | null>(null)
 
   useEffect(() => {
     // ✅ 브라우저 환경에서만 실행 (SSR 방지)
@@ -19,15 +19,26 @@ const AuthUI = ({ role }: { role: string }) => {
       return
     }
 
+    // ✅ 클라이언트 생성
+    let client: ReturnType<typeof createSupabaseBrowserClient>
+    try {
+      client = createSupabaseBrowserClient()
+      setSupabaseClient(client)
+    } catch (error) {
+      console.error('[AuthUI] Supabase 클라이언트 생성 실패:', error)
+      setCheckingProfile(false)
+      return
+    }
+
     // ✅ supabaseClient가 없으면 실행하지 않음
-    if (!supabaseClient) {
+    if (!client) {
       setCheckingProfile(false)
       return
     }
 
     const checkUser = async () => {
       try {
-        const { data: { user: currentUser }, error: authError } = await supabaseClient.auth.getUser()
+        const { data: { user: currentUser }, error: authError } = await client.auth.getUser()
         
         // 403 에러는 쿠키 파싱 오류 또는 손상된 세션을 의미
         if (authError) {
@@ -35,7 +46,7 @@ const AuthUI = ({ role }: { role: string }) => {
             console.warn('[AuthUI] 403 에러 감지, 손상된 세션 정리 중:', authError.message)
             // 손상된 세션 정리
             try {
-              await supabaseClient.auth.signOut({ scope: 'local' })
+              await client.auth.signOut({ scope: 'local' })
               // 로컬 스토리지 정리
               if (typeof window !== 'undefined') {
                 const keys = Object.keys(localStorage)
@@ -69,17 +80,19 @@ const AuthUI = ({ role }: { role: string }) => {
     }
 
     checkUser()
-  }, [supabaseClient])
+  }, [])
 
-  if (!isMounted) return null
+  if (!isMounted || !supabaseClient) return null
 
   const getUserInfo = async () => {
+    if (!supabaseClient) return
     const result = await supabaseClient.auth.getUser()
     // @ts-ignore
     if (result?.data?.user) setUser(result?.data?.user)
   }
 
   const handleLogout = async () => {
+    if (!supabaseClient) return
     // 완전한 로그아웃: 모든 스토리지 정리
     await supabaseClient.auth.signOut({ scope: 'global' })
     
@@ -106,20 +119,29 @@ const AuthUI = ({ role }: { role: string }) => {
   }
 
   const signInWithGoogle = async () => {
+    if (!supabaseClient) {
+      console.error('[AuthUI] Supabase 클라이언트가 초기화되지 않았습니다.')
+      return
+    }
+
     // 환경에 따른 site URL 설정
     const siteUrl = getSiteUrl()
 
     // legal 서비스는 프로필 타입 선택 없이 바로 로그인
     const redirectUrl = `${siteUrl}/auth/callback?next=/legal`
 
-    await supabaseClient.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: redirectUrl,
-        // Google OAuth: 항상 계정 선택 화면 표시
-        queryParams: { prompt: 'select_account' },
-      },
-    })
+    try {
+      await supabaseClient.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: redirectUrl,
+          // Google OAuth: 항상 계정 선택 화면 표시
+          queryParams: { prompt: 'select_account' },
+        },
+      })
+    } catch (error) {
+      console.error('[AuthUI] Google 로그인 실패:', error)
+    }
   }
 
   const handleGoogleLogin = async () => {
