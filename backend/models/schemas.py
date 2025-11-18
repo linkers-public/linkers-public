@@ -1,7 +1,7 @@
 # backend/models/schemas.py
 
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from datetime import datetime
 
 
@@ -267,6 +267,7 @@ class ScriptsV2(BaseModel):
 
 class SituationResponseV2(BaseModel):
     """상황 분석 응답 (v2)"""
+    id: Optional[str] = Field(None, description="상황 분석 ID (situation_analyses 테이블의 id)")
     riskScore: float
     riskLevel: str  # "low" | "medium" | "high"
     tags: List[str]
@@ -274,6 +275,15 @@ class SituationResponseV2(BaseModel):
     checklist: List[str]
     scripts: Optional[ScriptsV2] = None
     relatedCases: List[RelatedCaseV2]
+
+
+class ConversationRequestV2(BaseModel):
+    """대화 메시지 저장 요청 (v2)"""
+    report_id: str = Field(..., description="리포트 ID (situation_analyses의 id)")
+    message: str = Field(..., description="메시지 내용")
+    sender_type: str = Field(..., description="발신자 타입 ('user' 또는 'assistant')")
+    sequence_number: int = Field(..., description="메시지 순서")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="추가 메타데이터")
 
 
 class ClauseV2(BaseModel):

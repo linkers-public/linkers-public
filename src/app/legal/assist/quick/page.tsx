@@ -33,7 +33,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
-import { analyzeSituationV2, type SituationRequestV2, chatWithContractV2, getSituationReports, deleteSituationReport, saveSituationReport, type SituationReport } from '@/apis/legal.service'
+import { analyzeSituationV2, type SituationRequestV2, chatWithContractV2, saveConversationV2, getSituationHistoryV2, getConversationsV2 } from '@/apis/legal.service'
 import { MarkdownRenderer } from '@/components/rag/MarkdownRenderer'
 import type { SituationAnalysisResponse } from '@/types/legal'
 
@@ -177,6 +177,7 @@ interface ConversationSession {
   messages: ChatMessage[]
   createdAt: Date
   updatedAt: Date
+  reportId?: string  // situation_analyses의 ID (DB 저장용)
 }
 
 export default function QuickAssistPage() {
@@ -205,87 +206,296 @@ export default function QuickAssistPage() {
     workPeriod?: string
     socialInsurance?: string
   } | null>(null)
+  
 
-  // localStorage에서 대화 내역 로드 및 상황 분석 결과 확인
+  // localStorage 및 DB에서 대화 내역 로드
   useEffect(() => {
     if (typeof window === 'undefined') return
     
-    try {
-      const stored = localStorage.getItem('legal_assist_conversations')
-      if (stored) {
-        const parsed = JSON.parse(stored)
-        const sessions = parsed.map((s: any) => ({
-          ...s,
-          createdAt: new Date(s.createdAt),
-          updatedAt: new Date(s.updatedAt),
-          messages: s.messages.map((m: any) => ({
-            ...m,
-            timestamp: new Date(m.timestamp),
-          })),
-        }))
-        setConversations(sessions)
-      }
-
-      // 리포트 로드 (Supabase에서)
-      const loadReports = async () => {
-        try {
-          const situationReports = await getSituationReports(50)
-          const reports: Report[] = situationReports.map((r: SituationReport) => ({
-            id: r.id,
-            question: r.question,
-            answer: r.answer,
-            legalBasis: r.legal_basis || [],
-            recommendations: r.recommendations || [],
-            riskScore: r.risk_score,
-            tags: r.tags || [],
-            createdAt: new Date(r.created_at),
-            // Supabase에서는 만료일 없음
+    const loadConversations = async () => {
+      try {
+        // 1. localStorage에서 대화 로드
+        const stored = localStorage.getItem('legal_assist_conversations')
+        let localConversations: ConversationSession[] = []
+        
+        if (stored) {
+          const parsed = JSON.parse(stored)
+          localConversations = parsed.map((s: any) => ({
+            ...s,
+            createdAt: new Date(s.createdAt),
+            updatedAt: new Date(s.updatedAt),
+            messages: s.messages.map((m: any) => ({
+              ...m,
+              timestamp: new Date(m.timestamp),
+            })),
           }))
-          setReports(reports)
-        } catch (error) {
-          console.error('리포트 로드 실패:', error)
-          // 실패 시 빈 배열로 설정
-          setReports([])
         }
-      }
-      loadReports()
 
-      // 상황 분석 결과 확인 (situation 페이지에서 전달된 경우)
-      const situationData = localStorage.getItem('legal_situation_for_quick')
-      if (situationData) {
+        // 2. DB에서 상황 분석 히스토리 가져오기
         try {
-          const parsed = JSON.parse(situationData)
-          if (parsed.analysisResult) {
-            setSituationAnalysis(parsed.analysisResult)
-            setSituationContext({
-              summary: parsed.summary || '',
-              details: parsed.details || '',
-              categoryHint: parsed.categoryHint || 'unknown',
-              employmentType: parsed.employmentType,
-              workPeriod: parsed.workPeriod,
-              socialInsurance: parsed.socialInsurance,
+          const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client')
+          const supabase = createSupabaseBrowserClient()
+          const { data: { user } } = await supabase.auth.getUser()
+          const userId = user?.id || null
+
+          if (userId) {
+            // 상황 분석 히스토리 조회
+            const situationHistory = await getSituationHistoryV2(50, 0, userId)
+            
+            // 각 상황 분석에 대해 대화 메시지 가져오기 (병렬 처리로 성능 개선)
+            const dbConversations: ConversationSession[] = []
+            
+            // 병렬로 대화 메시지 조회 (성능 최적화)
+            const conversationPromises = situationHistory.map(async (situation) => {
+              try {
+                // 대화 메시지 조회
+                const messages = await getConversationsV2(situation.id, userId)
+                
+                // 메시지가 없으면 null 반환
+                if (messages.length === 0) {
+                  return null
+                }
+                
+                // 메시지를 ChatMessage 형식으로 변환
+                const chatMessages: ChatMessage[] = messages
+                  .sort((a, b) => a.sequence_number - b.sequence_number)
+                  .map((msg) => ({
+                    id: msg.id,
+                    role: msg.sender_type,
+                    content: msg.message,
+                    timestamp: new Date(msg.created_at),
+                    reportId: msg.report_id,
+                  }))
+                
+                // 대화 세션 생성
+                const conversation: ConversationSession = {
+                  id: `db-${situation.id}`,  // DB에서 온 대화임을 표시
+                  title: (situation.situation || situation.summary || '상황 분석').substring(0, 30),
+                  messages: chatMessages,
+                  createdAt: new Date(situation.created_at),
+                  updatedAt: new Date(situation.created_at),
+                  reportId: situation.id,  // situation_analyses의 ID
+                }
+                
+                return conversation
+              } catch (error) {
+                console.warn(`대화 메시지 조회 실패 (situation_id: ${situation.id}):`, error)
+                return null
+              }
             })
-            // 사용 후 삭제 (한 번만 사용)
-            localStorage.removeItem('legal_situation_for_quick')
+            
+            // 모든 대화 메시지 조회 완료 대기
+            const conversationResults = await Promise.all(conversationPromises)
+            
+            // null이 아닌 결과만 필터링
+            for (const result of conversationResults) {
+              if (result) {
+                dbConversations.push(result)
+              }
+            }
+            
+            // 3. localStorage와 DB 대화 병합
+            // reportId가 같은 경우 DB 데이터로 덮어쓰기 (최신 데이터 우선)
+            const mergedConversations: ConversationSession[] = []
+            const reportIdSet = new Set<string>()
+            
+            // DB 대화를 먼저 추가 (최신 데이터)
+            for (const dbConv of dbConversations) {
+              if (dbConv.reportId) {
+                reportIdSet.add(dbConv.reportId)
+                mergedConversations.push(dbConv)
+              }
+            }
+            
+            // localStorage 대화 추가 (reportId가 없거나 DB에 없는 경우만)
+            for (const localConv of localConversations) {
+              if (!localConv.reportId || !reportIdSet.has(localConv.reportId)) {
+                mergedConversations.push(localConv)
+              }
+            }
+            
+            // 생성일 기준으로 정렬 (최신순)
+            mergedConversations.sort((a, b) => 
+              b.createdAt.getTime() - a.createdAt.getTime()
+            )
+            
+            setConversations(mergedConversations)
+            
+            // localStorage 업데이트 (DB 데이터 포함)
+            localStorage.setItem('legal_assist_conversations', JSON.stringify(mergedConversations))
+          } else {
+            // 사용자 ID가 없으면 localStorage만 사용
+            setConversations(localConversations)
           }
-        } catch (error) {
-          console.error('상황 분석 결과 로드 실패:', error)
+        } catch (dbError) {
+          console.warn('DB에서 대화 로드 실패, localStorage만 사용:', dbError)
+          setConversations(localConversations)
         }
+
+        // 4. 상황 분석 결과 확인 (situation 페이지에서 전달된 경우)
+        const situationData = localStorage.getItem('legal_situation_for_quick')
+        if (situationData) {
+          try {
+            const parsed = JSON.parse(situationData)
+            if (parsed.analysisResult) {
+              setSituationAnalysis(parsed.analysisResult)
+              setSituationContext({
+                summary: parsed.summary || '',
+                details: parsed.details || '',
+                categoryHint: parsed.categoryHint || 'unknown',
+                employmentType: parsed.employmentType,
+                workPeriod: parsed.workPeriod,
+                socialInsurance: parsed.socialInsurance,
+              })
+              
+              // 자동으로 대화 세션 생성
+              // DB에서 이미 저장된 메시지가 있는지 확인
+              let dbMessages: ChatMessage[] = []
+              if (parsed.situationAnalysisId) {
+                try {
+                  const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client')
+                  const supabase = createSupabaseBrowserClient()
+                  const { data: { user } } = await supabase.auth.getUser()
+                  const userId = user?.id || null
+                  
+                  if (userId) {
+                    const messages = await getConversationsV2(parsed.situationAnalysisId, userId)
+                    dbMessages = messages
+                      .sort((a, b) => a.sequence_number - b.sequence_number)
+                      .map((msg) => ({
+                        id: msg.id,
+                        role: msg.sender_type,
+                        content: msg.message,
+                        timestamp: new Date(msg.created_at),
+                        reportId: msg.report_id,
+                      }))
+                  }
+                } catch (error) {
+                  console.warn('DB에서 메시지 조회 실패, 로컬 메시지 사용:', error)
+                }
+              }
+              
+              // DB 메시지가 있으면 사용, 없으면 로컬 메시지 생성
+              let finalMessages: ChatMessage[] = []
+              if (dbMessages.length > 0) {
+                // DB 메시지 사용 (트리거가 이미 저장한 메시지)
+                finalMessages = dbMessages
+              } else {
+                // 로컬 메시지 생성 (DB 메시지가 없는 경우에만)
+                const userInput = [parsed.summary, parsed.details].filter(Boolean).join('\n\n')
+                const aiResponse = parsed.analysisResult.summary || '분석이 완료되었습니다.'
+                
+                finalMessages = [
+                  {
+                    id: `msg-${Date.now()}-user`,
+                    role: 'user',
+                    content: userInput,
+                    timestamp: new Date(),
+                  },
+                  {
+                    id: `msg-${Date.now()}-ai`,
+                    role: 'assistant',
+                    content: aiResponse,
+                    timestamp: new Date(),
+                    reportId: parsed.situationAnalysisId,
+                  }
+                ]
+              }
+              
+              const newSessionId = parsed.situationAnalysisId ? `db-${parsed.situationAnalysisId}` : `conv-${Date.now()}`
+              const newConversation: ConversationSession = {
+                id: newSessionId,
+                title: parsed.summary?.substring(0, 30) || '상황 분석',
+                messages: finalMessages,
+                createdAt: new Date(),
+                updatedAt: new Date(),
+                reportId: parsed.situationAnalysisId,  // situation_analyses의 ID
+              }
+              
+              // 대화 세션 추가
+              setConversations((prev) => {
+                const updated = [newConversation, ...prev]
+                localStorage.setItem('legal_assist_conversations', JSON.stringify(updated))
+                return updated
+              })
+              setSelectedConversationId(newSessionId)
+              setMessages(finalMessages)
+              setHasInitialGreeting(true)
+              
+              // 사용 후 삭제 (한 번만 사용)
+              localStorage.removeItem('legal_situation_for_quick')
+            }
+          } catch (error) {
+            console.error('상황 분석 결과 로드 실패:', error)
+          }
+        }
+      } catch (error) {
+        console.error('데이터 로드 실패:', error)
       }
-    } catch (error) {
-      console.error('데이터 로드 실패:', error)
     }
+    
+    loadConversations()
   }, [])
 
   // Supabase에서는 만료일이 없으므로 정리 로직 제거
 
-  // 선택된 대화의 메시지 로드
+  // 선택된 대화의 메시지 로드 (DB에서 최신 메시지 가져오기)
   useEffect(() => {
     if (selectedConversationId) {
       const conversation = conversations.find(c => c.id === selectedConversationId)
       if (conversation) {
-        setMessages(conversation.messages)
-        setHasInitialGreeting(true)
+        // reportId가 있으면 DB에서 최신 메시지 가져오기
+        if (conversation.reportId) {
+          const loadLatestMessages = async () => {
+            try {
+              const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client')
+              const supabase = createSupabaseBrowserClient()
+              const { data: { user } } = await supabase.auth.getUser()
+              const userId = user?.id || null
+              
+              if (userId) {
+                const messages = await getConversationsV2(conversation.reportId!, userId)
+                
+                // 메시지를 ChatMessage 형식으로 변환
+                const chatMessages: ChatMessage[] = messages
+                  .sort((a, b) => a.sequence_number - b.sequence_number)
+                  .map((msg) => ({
+                    id: msg.id,
+                    role: msg.sender_type,
+                    content: msg.message,
+                    timestamp: new Date(msg.created_at),
+                    reportId: msg.report_id,
+                  }))
+                
+                // 대화 세션 업데이트
+                setConversations((prev) => 
+                  prev.map((c) => 
+                    c.id === selectedConversationId
+                      ? { ...c, messages: chatMessages, updatedAt: new Date() }
+                      : c
+                  )
+                )
+                
+                setMessages(chatMessages)
+                setHasInitialGreeting(true)
+              } else {
+                // 사용자 ID가 없으면 기존 메시지 사용
+                setMessages(conversation.messages)
+                setHasInitialGreeting(true)
+              }
+            } catch (error) {
+              console.warn('DB에서 최신 메시지 로드 실패, 기존 메시지 사용:', error)
+              setMessages(conversation.messages)
+              setHasInitialGreeting(true)
+            }
+          }
+          
+          loadLatestMessages()
+        } else {
+          // reportId가 없으면 기존 메시지 사용 (localStorage만)
+          setMessages(conversation.messages)
+          setHasInitialGreeting(true)
+        }
       }
     } else {
       setMessages([])
@@ -397,7 +607,8 @@ export default function QuickAssistPage() {
     e.stopPropagation() // 버튼 클릭 시 리포트 선택 방지
     
     try {
-      await deleteSituationReport(reportId)
+      // 리포트 삭제는 situation_analyses 테이블을 사용하도록 변경됨
+      // 필요시 백엔드 API 추가 필요
       const updatedReports = reports.filter(r => r.id !== reportId)
       setReports(updatedReports)
       
@@ -493,6 +704,70 @@ export default function QuickAssistPage() {
           content: chatResult.answer || '답변을 생성할 수 없습니다.',
           timestamp: new Date(),
         }
+        
+        // DB에 메시지 저장 (reportId가 있는 경우)
+        if (currentSession.reportId) {
+          try {
+            const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client')
+            const supabase = createSupabaseBrowserClient()
+            const { data: { user } } = await supabase.auth.getUser()
+            const userId = user?.id || null
+            
+            if (userId) {
+              // DB에서 실제 메시지 수를 확인하여 sequence_number 계산
+              try {
+                const dbMessages = await getConversationsV2(currentSession.reportId, userId)
+                const maxSequenceNumber = dbMessages.length > 0 
+                  ? Math.max(...dbMessages.map(m => m.sequence_number))
+                  : -1
+                
+                // 다음 sequence_number 계산 (트리거가 이미 0, 1을 저장했으므로 최소 2부터 시작)
+                const baseSequenceNumber = Math.max(2, maxSequenceNumber + 1)
+                
+                // 사용자 메시지 저장
+                await saveConversationV2(
+                  currentSession.reportId,
+                  userMessage.content,
+                  'user',
+                  baseSequenceNumber,
+                  userId
+                )
+                
+                // AI 메시지 저장
+                await saveConversationV2(
+                  currentSession.reportId,
+                  assistantMessage.content,
+                  'assistant',
+                  baseSequenceNumber + 1,
+                  userId
+                )
+              } catch (dbError) {
+                console.warn('DB 메시지 조회 실패, 로컬 메시지 수로 계산:', dbError)
+                // DB 조회 실패 시 로컬 메시지 수로 계산 (fallback)
+                const existingMessages = currentSession.messages.length
+                const baseSequenceNumber = Math.max(2, existingMessages - 2)
+                
+                await saveConversationV2(
+                  currentSession.reportId,
+                  userMessage.content,
+                  'user',
+                  baseSequenceNumber,
+                  userId
+                )
+                
+                await saveConversationV2(
+                  currentSession.reportId,
+                  assistantMessage.content,
+                  'assistant',
+                  baseSequenceNumber + 1,
+                  userId
+                )
+              }
+            }
+          } catch (saveError) {
+            console.warn('대화 메시지 DB 저장 실패 (계속 진행):', saveError)
+          }
+        }
       } else {
         // 일반 상황 분석 API 호출
         const request: SituationRequestV2 = {
@@ -509,45 +784,39 @@ export default function QuickAssistPage() {
           content: result.analysis.summary,
           timestamp: new Date(),
         }
+        
+        // 새로운 상황 분석인 경우 reportId 업데이트
+        if (result.id) {
+          currentSession.reportId = result.id
+          
+          // 백엔드가 이미 초기 메시지(sequence_number 0, 1)를 저장했으므로
+          // 프론트엔드는 추가 메시지만 저장하거나 저장하지 않음
+          // 백엔드의 트리거가 자동으로 초기 메시지를 저장하므로 여기서는 저장하지 않음
+          // 추후 추가 대화 메시지는 sequence_number 2부터 시작
+        }
 
         // 리포트 생성 여부 판단 (위험도가 높거나 특정 키워드가 있는 경우)
         const shouldGenerateReport = result.riskScore > 50 || 
           ['해고', '임금', '체불', '위반', '불법'].some(keyword => inputMessage.includes(keyword))
 
-        if (shouldGenerateReport) {
-          // 리포트를 Supabase에 저장
-          try {
-            const savedReport = await saveSituationReport({
-              question: inputMessage.trim(),
-              answer: result.analysis.summary,
-              summary: result.analysis.summary,
-              risk_score: result.riskScore,
-              classified_type: result.tags[0] || 'unknown',
-              legal_basis: result.analysis.legalBasis.map(b => b.snippet),
-              recommendations: result.analysis.recommendations,
-              tags: result.tags || [],
-            })
-            
-            assistantMessage.reportId = savedReport.id
+        if (shouldGenerateReport && result.id) {
+          // 리포트는 백엔드에서 자동으로 situation_analyses 테이블에 저장됨
+          assistantMessage.reportId = result.id
 
-            // 로컬 상태 업데이트
-            const report: Report = {
-              id: savedReport.id,
-              question: savedReport.question,
-              answer: savedReport.answer,
-              legalBasis: savedReport.legal_basis || [],
-              recommendations: savedReport.recommendations || [],
-              riskScore: savedReport.risk_score,
-              tags: savedReport.tags || [],
-              createdAt: new Date(savedReport.created_at),
-            }
-
-            const updatedReports = [report, ...reports].slice(0, 50) // 최근 50개만 유지
-            setReports(updatedReports)
-          } catch (saveError: any) {
-            console.error('리포트 저장 실패:', saveError)
-            // 저장 실패해도 메시지는 표시
+          // 로컬 상태 업데이트
+          const report: Report = {
+            id: result.id,
+            question: inputMessage.trim(),
+            answer: result.analysis.summary,
+            legalBasis: result.analysis.legalBasis.map(b => b.snippet) || [],
+            recommendations: result.analysis.recommendations || [],
+            riskScore: result.riskScore,
+            tags: result.tags || [],
+            createdAt: new Date(),
           }
+
+          const updatedReports = [report, ...reports].slice(0, 50) // 최근 50개만 유지
+          setReports(updatedReports)
         }
       }
 
@@ -655,17 +924,18 @@ export default function QuickAssistPage() {
   }
 
   // 날짜 포맷팅
-  const formatDate = (date: Date): string => {
+  const formatDate = (date: Date | string): string => {
+    const dateObj = typeof date === 'string' ? new Date(date) : date
     const today = new Date()
     const yesterday = new Date(today)
     yesterday.setDate(yesterday.getDate() - 1)
 
-    if (date.toDateString() === today.toDateString()) {
+    if (dateObj.toDateString() === today.toDateString()) {
       return '오늘'
-    } else if (date.toDateString() === yesterday.toDateString()) {
+    } else if (dateObj.toDateString() === yesterday.toDateString()) {
       return '어제'
     } else {
-      return `${date.getMonth() + 1}/${date.getDate()}`
+      return `${dateObj.getMonth() + 1}/${dateObj.getDate()}`
     }
   }
 

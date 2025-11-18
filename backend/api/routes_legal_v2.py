@@ -31,6 +31,7 @@ from models.schemas import (
     LegalChatResponseV2,
     UsedChunksV2,
     UsedChunkV2,
+    ConversationRequestV2,
 )
 from core.legal_rag_service import LegalRAGService
 from core.document_processor_v2 import DocumentProcessor
@@ -765,6 +766,10 @@ async def analyze_situation(
     """
     텍스트 기반 상황 설명 + 메타 정보 → 맞춤형 상담 분석
     """
+    # logger를 명시적으로 참조 (스코프 문제 방지)
+    import logging
+    _logger = logging.getLogger(__name__)
+    
     try:
         service = get_legal_service()
         
@@ -834,8 +839,49 @@ async def analyze_situation(
         # tags 추출 (classified_type 기반)
         tags = [result.get("classified_type", "unknown")]
         
-        # v2 응답 생성
+        # DB에 저장 (비동기, 실패해도 응답은 반환)
+        situation_analysis_id = None
+        try:
+            storage_service = get_storage_service()
+            analysis_summary = result.get("summary", "")
+            situation_analysis_id = await storage_service.save_situation_analysis(
+                situation=payload.situation,
+                category=payload.category,
+                employment_type=payload.employmentType,
+                company_size=payload.companySize,
+                work_period=payload.workPeriod,
+                has_written_contract=payload.hasWrittenContract,
+                social_insurance=payload.socialInsurance,
+                risk_score=float(result["risk_score"]),
+                risk_level=risk_level,
+                analysis={
+                    "summary": analysis_summary,
+                    "legalBasis": legal_basis,
+                    "recommendations": recommendations,
+                },
+                checklist=checklist,
+                related_cases=related_cases,
+                user_id=x_user_id,
+                # situation_reports 통합 필드
+                question=payload.situation,  # question은 situation과 동일
+                answer=analysis_summary,  # answer는 analysis.summary
+                details=None,  # details는 현재 제공되지 않음
+                category_hint=payload.category,  # category_hint는 category와 동일
+                classified_type=result.get("classified_type", "unknown"),
+            )
+            _logger.info(f"상황 분석 결과 DB 저장 완료 (id: {situation_analysis_id}, user_id: {x_user_id})")
+            
+            # 대화 메시지는 트리거가 자동으로 저장하므로 수동 저장 불필요
+            # 트리거가 answer 필드를 sequence_number 0으로 저장함
+            # 사용자 입력 메시지는 프론트엔드에서 저장하거나 별도로 저장할 수 있음
+            # 여기서는 트리거에 의존하므로 수동 저장하지 않음
+        except Exception as save_error:
+            # DB 저장 실패해도 분석 결과는 반환
+            _logger.warning(f"상황 분석 결과 DB 저장 실패 (응답은 정상 반환): {str(save_error)}")
+        
+        # v2 응답 생성 (DB 저장 후 ID 포함)
         response = SituationResponseV2(
+            id=situation_analysis_id,  # DB 저장 후 ID 포함
             riskScore=float(result["risk_score"]),
             riskLevel=risk_level,
             tags=tags,
@@ -849,39 +895,115 @@ async def analyze_situation(
             relatedCases=related_cases,
         )
         
-        # DB에 저장 (비동기, 실패해도 응답은 반환)
-        try:
-            storage_service = get_storage_service()
-            await storage_service.save_situation_analysis(
-                situation=payload.situation,
-                category=payload.category,
-                employment_type=payload.employmentType,
-                company_size=payload.companySize,
-                work_period=payload.workPeriod,
-                has_written_contract=payload.hasWrittenContract,
-                social_insurance=payload.socialInsurance,
-                risk_score=float(result["risk_score"]),
-                risk_level=risk_level,
-                analysis={
-                    "summary": result.get("summary", ""),
-                    "legalBasis": legal_basis,
-                    "recommendations": recommendations,
-                },
-                checklist=checklist,
-                related_cases=related_cases,
-                user_id=x_user_id,
-            )
-            logger.info(f"상황 분석 결과 DB 저장 완료 (user_id: {x_user_id})")
-        except Exception as save_error:
-            # DB 저장 실패해도 분석 결과는 반환
-            logger.warning(f"상황 분석 결과 DB 저장 실패 (응답은 정상 반환): {str(save_error)}")
-        
         return response
     except Exception as e:
-        logger.error(f"상황 분석 중 오류 발생: {str(e)}", exc_info=True)
+        _logger.error(f"상황 분석 중 오류 발생: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"상황 분석 중 오류가 발생했습니다: {str(e)}",
+        )
+
+
+@router.get("/situations/history", response_model=List[dict])
+async def get_situation_history(
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id", description="사용자 ID"),
+    limit: int = Query(20, ge=1, le=100, description="조회 개수"),
+    offset: int = Query(0, ge=0, description="오프셋"),
+):
+    """
+    사용자별 상황 분석 히스토리 조회
+    """
+    try:
+        if not x_user_id:
+            logger.warning("사용자 ID가 제공되지 않아 빈 배열 반환")
+            return []
+        
+        storage_service = get_storage_service()
+        history = await storage_service.get_user_situation_analyses(
+            user_id=x_user_id,
+            limit=limit,
+            offset=offset,
+        )
+        return history
+    except Exception as e:
+        logger.error(f"상황 분석 히스토리 조회 중 오류 발생: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"히스토리 조회 중 오류가 발생했습니다: {str(e)}",
+        )
+
+
+@router.get("/situations/{situation_id}", response_model=dict)
+async def get_situation_analysis(
+    situation_id: str,
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id", description="사용자 ID"),
+):
+    """
+    특정 상황 분석 결과 조회
+    """
+    try:
+        storage_service = get_storage_service()
+        analysis = await storage_service.get_situation_analysis(situation_id, x_user_id)
+        if not analysis:
+            raise HTTPException(status_code=404, detail="분석 결과를 찾을 수 없습니다.")
+        return analysis
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"상황 분석 조회 중 오류 발생: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"분석 결과 조회 중 오류가 발생했습니다: {str(e)}",
+        )
+
+
+@router.post("/conversations", response_model=dict)
+async def save_conversation(
+    payload: ConversationRequestV2,
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id", description="사용자 ID"),
+):
+    """
+    상황 분석 대화 메시지 저장
+    """
+    try:
+        storage_service = get_storage_service()
+        conversation_id = await storage_service.save_situation_conversation(
+            report_id=payload.report_id,
+            message=payload.message,
+            sender_type=payload.sender_type,
+            sequence_number=payload.sequence_number,
+            user_id=x_user_id,
+            metadata=payload.metadata,
+        )
+        return {"id": conversation_id, "success": True}
+    except Exception as e:
+        logger.error(f"대화 메시지 저장 중 오류 발생: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"대화 메시지 저장 중 오류가 발생했습니다: {str(e)}",
+        )
+
+
+@router.get("/conversations/{report_id}", response_model=List[dict])
+async def get_conversations(
+    report_id: str,
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id", description="사용자 ID"),
+):
+    """
+    상황 분석 대화 메시지 조회
+    """
+    try:
+        storage_service = get_storage_service()
+        conversations = await storage_service.get_situation_conversations(
+            report_id=report_id,
+            user_id=x_user_id,
+        )
+        return conversations
+    except Exception as e:
+        logger.error(f"대화 메시지 조회 중 오류 발생: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"대화 메시지 조회 중 오류가 발생했습니다: {str(e)}",
         )
 
 

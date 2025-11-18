@@ -1,7 +1,7 @@
 'use client'
 
-import React, { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import React, { useState, useEffect, useCallback } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Slider } from '@/components/ui/slider'
 import { Loader2, AlertTriangle, CheckCircle2, Copy, FileText, Sparkles, Info, ChevronDown, ChevronUp, Scale, Clock, DollarSign, Users, Briefcase, TrendingUp, Zap, MessageSquare } from 'lucide-react'
-import { analyzeSituationV2, type SituationRequestV2, type SituationResponseV2, saveSituationReport } from '@/apis/legal.service'
+import { analyzeSituationV2, type SituationRequestV2, type SituationResponseV2, getSituationAnalysisByIdV2 } from '@/apis/legal.service'
 import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
 import { MarkdownRenderer } from '@/components/rag/MarkdownRenderer'
@@ -175,6 +175,7 @@ const getSummaryPlaceholder = (category: SituationCategory): string => {
 
 export default function SituationAnalysisPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { toast } = useToast()
 
   // 폼 상태
@@ -191,7 +192,110 @@ export default function SituationAnalysisPage() {
   // 분석 결과 상태
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [analysisResult, setAnalysisResult] = useState<SituationAnalysisResponse | null>(null)
+  const [analysisId, setAnalysisId] = useState<string | null>(null)  // situation_analyses의 ID 저장
   const [checkedItems, setCheckedItems] = useState<Set<string>>(new Set())
+  const [isLoadingAnalysis, setIsLoadingAnalysis] = useState(false)
+
+  // analysisId로 분석 결과 불러오기
+  const loadAnalysisById = useCallback(async (analysisId: string) => {
+    try {
+      setIsLoadingAnalysis(true)
+      const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client')
+      const supabase = createSupabaseBrowserClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      const userId = user?.id || null
+      
+      const analysis = await getSituationAnalysisByIdV2(analysisId, userId) as any
+      
+      if (!analysis) {
+        toast({
+          title: '분석 결과를 찾을 수 없습니다',
+          description: '요청하신 분석 결과가 존재하지 않습니다.',
+          variant: 'destructive',
+        })
+        return
+      }
+      
+      // 분석 ID 저장
+      setAnalysisId(analysisId)
+      
+      // v2 응답을 v1 형식으로 변환
+      const v1Format: SituationAnalysisResponse = {
+        classifiedType: (analysis?.tags?.[0] || 'unknown') as SituationCategory,
+        riskScore: analysis?.riskScore ?? analysis?.risk_score ?? 0,
+        summary: analysis?.analysis?.summary || '',
+        criteria: (analysis?.analysis?.legalBasis || []).map((basis: any) => ({
+          name: basis?.title || '',
+          status: (basis?.status || 'likely') as 'likely' | 'unclear' | 'unlikely',
+          reason: basis?.snippet || '',
+        })),
+        actionPlan: {
+          steps: [
+            {
+              title: '즉시 조치',
+              items: (analysis?.checklist || []).slice(0, 3),
+            },
+            {
+              title: '권고사항',
+              items: analysis?.analysis?.recommendations || [],
+            },
+          ],
+        },
+        scripts: {
+          toCompany: undefined,
+          toAdvisor: undefined,
+        },
+        relatedCases: (analysis?.relatedCases || []).map((c: any) => ({
+          id: c?.id || '',
+          title: c?.title || '',
+          summary: c?.summary || '',
+        })),
+      }
+      
+      setAnalysisResult(v1Format)
+      
+      // 원본 상황 텍스트도 표시
+      if (analysis.situation) {
+        const situationParts = analysis.situation.split('\n\n')
+        if (situationParts.length > 0) {
+          setSummary(situationParts[0])
+        }
+        if (situationParts.length > 1) {
+          setDetails(situationParts.slice(1).join('\n\n'))
+        }
+      }
+      
+      // 카테고리 설정
+      if (analysis.category) {
+        setCategoryHint(analysis.category as SituationCategory)
+      }
+      
+      // 스크롤을 결과 영역으로 이동
+      setTimeout(() => {
+        const resultElement = document.getElementById('analysis-result')
+        if (resultElement) {
+          resultElement.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }
+      }, 100)
+    } catch (error: any) {
+      console.error('분석 결과 로드 오류:', error)
+      toast({
+        title: '오류',
+        description: error?.message || '분석 결과를 불러오는 중 오류가 발생했습니다.',
+        variant: 'destructive',
+      })
+    } finally {
+      setIsLoadingAnalysis(false)
+    }
+  }, [toast])
+
+  // analysisId 쿼리 파라미터가 있으면 해당 분석 불러오기
+  useEffect(() => {
+    const analysisId = searchParams.get('analysisId')
+    if (analysisId) {
+      loadAnalysisById(analysisId)
+    }
+  }, [searchParams, loadAnalysisById])
 
   // 템플릿 선택 핸들러
   const handleTemplateSelect = (template: typeof SITUATION_TEMPLATES[0]) => {
@@ -289,7 +393,13 @@ export default function SituationAnalysisPage() {
         socialInsurance: socialInsurance ? [socialInsurance] : undefined,
       }
 
-      const result = await analyzeSituationV2(request)
+      // 사용자 ID 가져오기
+      const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client')
+      const supabase = createSupabaseBrowserClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      const userId = user?.id || null
+      
+      const result = await analyzeSituationV2(request, userId)
       
       console.log('분석 결과:', result)
       console.log('summary 필드:', result.analysis.summary)
@@ -331,39 +441,29 @@ export default function SituationAnalysisPage() {
       console.log('변환된 리포트:', v1Format)
       setAnalysisResult(v1Format)
       
-      // 리포트를 Supabase에 저장
-      try {
-        const savedReport = await saveSituationReport({
-          question: summary,
-          answer: result.analysis.summary,
-          summary: result.analysis.summary,
-          details: details,
-          category_hint: categoryHint,
-          employment_type: employmentType,
-          work_period: workPeriod,
-          social_insurance: socialInsurance,
-          risk_score: result.riskScore,
-          classified_type: result.tags[0] || 'unknown',
-          legal_basis: result.analysis.legalBasis.map(b => b.snippet),
-          recommendations: result.analysis.recommendations,
-          tags: result.tags,
-          analysis_result: {
-            criteria: v1Format.criteria,
-            actionPlan: v1Format.actionPlan,
-            scripts: v1Format.scripts,
-            relatedCases: v1Format.relatedCases,
-          },
-        })
-        console.log('리포트 저장 성공:', savedReport.id)
-      } catch (saveError: any) {
-        console.error('리포트 저장 실패:', saveError)
-        // 저장 실패해도 분석 결과는 표시
-        toast({
-          title: '리포트 저장 실패',
-          description: saveError.message || '분석은 완료되었지만 리포트 저장에 실패했습니다. 콘솔을 확인해주세요.',
-          variant: 'destructive',
-        })
+      // 분석 결과 ID 저장
+      const resultId = (result as any).id
+      if (resultId) {
+        setAnalysisId(resultId)
       }
+      
+      // 분석 완료 시 자동으로 대화 세션 데이터 준비 (quick 페이지로 이동 시 사용)
+      if (typeof window !== 'undefined') {
+        const situationData = {
+          analysisResult: v1Format,
+          summary: summary,
+          details: details,
+          categoryHint: categoryHint,
+          employmentType: employmentType,
+          workPeriod: workPeriod,
+          socialInsurance: socialInsurance,
+          situationAnalysisId: resultId,  // situation_analyses의 ID (DB 저장용)
+        }
+        localStorage.setItem('legal_situation_for_quick', JSON.stringify(situationData))
+      }
+      
+      // 리포트는 백엔드에서 자동으로 situation_analyses 테이블에 저장됨
+      // 중복 저장 방지를 위해 프론트엔드에서는 저장하지 않음
     } catch (error: any) {
       console.error('분석 오류:', error)
       toast({
@@ -904,8 +1004,17 @@ export default function SituationAnalysisPage() {
         )}
 
         {/* 분석 결과 */}
-        {analysisResult && (
-          <div className="space-y-6">
+        {isLoadingAnalysis && (
+          <div className="space-y-4 py-12">
+            <div className="flex flex-col items-center justify-center gap-4">
+              <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+              <p className="text-lg font-medium text-slate-700">분석 결과를 불러오는 중...</p>
+            </div>
+          </div>
+        )}
+
+        {analysisResult && !isLoadingAnalysis && (
+          <div id="analysis-result" className="space-y-6">
             {/* 결과 섹션 헤더 */}
             <div className="mb-8">
               <div className="text-center mb-6">
@@ -1216,6 +1325,9 @@ export default function SituationAnalysisPage() {
                     onClick={() => {
                       // 리포트 결과를 localStorage에 저장
                       if (typeof window !== 'undefined' && analysisResult) {
+                        // 분석 완료 시 저장한 ID 사용 (state에서 가져오기)
+                        const situationAnalysisId = analysisId || searchParams.get('analysisId') || undefined
+                        
                         const situationData = {
                           analysisResult: analysisResult,
                           summary: summary,
@@ -1224,6 +1336,7 @@ export default function SituationAnalysisPage() {
                           employmentType: employmentType,
                           workPeriod: workPeriod,
                           socialInsurance: socialInsurance,
+                          situationAnalysisId: situationAnalysisId,  // situation_analyses의 ID 추가
                         }
                         localStorage.setItem('legal_situation_for_quick', JSON.stringify(situationData))
                       }

@@ -267,12 +267,22 @@ class ContractStorageService:
         checklist: List[str],
         related_cases: List[Dict[str, Any]],
         user_id: Optional[str] = None,
+        question: Optional[str] = None,
+        answer: Optional[str] = None,
+        details: Optional[str] = None,
+        category_hint: Optional[str] = None,
+        classified_type: Optional[str] = None,
     ) -> str:
         """
         상황 분석 결과를 DB에 저장
         
         Args:
             user_id: 사용자 ID (옵션)
+            question: 사용자가 입력한 상황 요약 (situation과 동일할 수 있음)
+            answer: 리포트 내용 (analysis.summary와 동일할 수 있음)
+            details: 상세 설명
+            category_hint: 상황 카테고리 힌트 (category와 동일할 수 있음)
+            classified_type: 분류된 유형
         
         Returns:
             situation_analysis_id (UUID)
@@ -280,6 +290,9 @@ class ContractStorageService:
         self._ensure_initialized()
         
         try:
+            # analysis에서 summary 추출 (answer가 없을 경우)
+            analysis_summary = analysis.get("summary", "") if isinstance(analysis, dict) else ""
+            
             data = {
                 "situation": situation,
                 "category": category,
@@ -293,6 +306,12 @@ class ContractStorageService:
                 "analysis": analysis,
                 "checklist": checklist,
                 "related_cases": related_cases,
+                # 새로운 필드들 (situation_reports 통합)
+                "question": question or situation,  # question이 없으면 situation 사용
+                "answer": answer or analysis_summary,  # answer가 없으면 analysis.summary 사용
+                "details": details,
+                "category_hint": category_hint or category,  # category_hint가 없으면 category 사용
+                "classified_type": classified_type,
             }
             
             # user_id가 제공된 경우 추가
@@ -381,4 +400,216 @@ class ContractStorageService:
         except Exception as e:
             logger.error(f"사용자별 계약서 분석 조회 중 오류: {str(e)}", exc_info=True)
             return []
+    
+    async def get_user_situation_analyses(
+        self,
+        user_id: str,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> List[Dict[str, Any]]:
+        """
+        사용자별 상황 분석 히스토리 조회
+        
+        Args:
+            user_id: 사용자 ID
+            limit: 조회 개수
+            offset: 오프셋
+        
+        Returns:
+            상황 분석 결과 리스트
+        """
+        self._ensure_initialized()
+        
+        try:
+            result = (
+                self.sb.table("situation_analyses")
+                .select("*")
+                .eq("user_id", user_id)
+                .order("created_at", desc=True)
+                .limit(limit)
+                .offset(offset)
+                .execute()
+            )
+            
+            analyses = []
+            if result.data:
+                for analysis in result.data:
+                    # analysis 필드에서 summary 추출
+                    analysis_data = analysis.get("analysis", {})
+                    summary = ""
+                    if isinstance(analysis_data, dict):
+                        summary = analysis_data.get("summary", "")
+                    
+                    analyses.append({
+                        "id": analysis["id"],
+                        "situation": analysis.get("situation", "")[:100],  # 미리보기용
+                        "category": analysis.get("category", "unknown"),
+                        "risk_score": int(analysis.get("risk_score", 0)),
+                        "risk_level": analysis.get("risk_level", "low"),
+                        "summary": summary[:200] if summary else "",  # 미리보기용
+                        "created_at": analysis.get("created_at"),
+                    })
+            
+            return analyses
+        except Exception as e:
+            logger.error(f"상황 분석 히스토리 조회 중 오류: {str(e)}", exc_info=True)
+            raise
+    
+    async def get_situation_analysis(
+        self,
+        situation_id: str,
+        user_id: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        특정 상황 분석 결과 조회
+        
+        Args:
+            situation_id: 상황 분석 ID
+            user_id: 사용자 ID (선택, 권한 확인용)
+        
+        Returns:
+            상황 분석 결과 또는 None
+        """
+        self._ensure_initialized()
+        
+        try:
+            query = self.sb.table("situation_analyses").select("*").eq("id", situation_id)
+            
+            # user_id가 제공된 경우 권한 확인
+            if user_id:
+                query = query.eq("user_id", user_id)
+            
+            result = query.execute()
+            
+            if not result.data or len(result.data) == 0:
+                return None
+            
+            analysis = result.data[0]
+            
+            # v2 API 형식으로 변환
+            analysis_data = analysis.get("analysis", {})
+            legal_basis = analysis_data.get("legalBasis", []) if isinstance(analysis_data, dict) else []
+            recommendations = analysis_data.get("recommendations", []) if isinstance(analysis_data, dict) else []
+            summary = analysis_data.get("summary", "") if isinstance(analysis_data, dict) else ""
+            
+            return {
+                "id": analysis["id"],
+                "situation": analysis.get("situation", ""),
+                "category": analysis.get("category", "unknown"),
+                "risk_score": float(analysis.get("risk_score", 0)),
+                "risk_level": analysis.get("risk_level", "low"),
+                "tags": [analysis.get("category", "unknown")],
+                "analysis": {
+                    "summary": summary,
+                    "legalBasis": legal_basis,
+                    "recommendations": recommendations,
+                },
+                "checklist": analysis.get("checklist", []),
+                "relatedCases": analysis.get("related_cases", []),
+                "created_at": analysis.get("created_at"),
+            }
+        except Exception as e:
+            logger.error(f"상황 분석 조회 중 오류: {str(e)}", exc_info=True)
+            raise
+    
+    async def save_situation_conversation(
+        self,
+        report_id: str,
+        message: str,
+        sender_type: str,
+        sequence_number: int,
+        user_id: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        """
+        상황 분석 대화 메시지 저장
+        
+        Args:
+            report_id: 리포트 ID (situation_analyses의 id 또는 situation_reports의 id)
+            message: 메시지 내용
+            sender_type: 발신자 타입 ('user' 또는 'assistant')
+            sequence_number: 메시지 순서
+            user_id: 사용자 ID (옵션)
+            metadata: 추가 메타데이터 (옵션)
+        
+        Returns:
+            conversation_id (UUID)
+        """
+        self._ensure_initialized()
+        
+        try:
+            data = {
+                "report_id": report_id,
+                "message": message,
+                "sender_type": sender_type,
+                "sequence_number": sequence_number,
+            }
+            
+            if user_id:
+                data["user_id"] = user_id
+            
+            if metadata:
+                data["metadata"] = metadata
+            
+            result = self.sb.table("situation_conversations").insert(data).execute()
+            
+            if not result.data or len(result.data) == 0:
+                raise ValueError("대화 메시지 저장 실패")
+            
+            conversation_id = result.data[0]["id"]
+            logger.info(f"대화 메시지 저장 완료: id={conversation_id}, report_id={report_id}, sender_type={sender_type}")
+            return conversation_id
+            
+        except Exception as e:
+            logger.error(f"대화 메시지 저장 중 오류: {str(e)}", exc_info=True)
+            raise
+    
+    async def get_situation_conversations(
+        self,
+        report_id: str,
+        user_id: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        상황 분석 대화 메시지 조회
+        
+        Args:
+            report_id: 리포트 ID
+            user_id: 사용자 ID (옵션, 권한 확인용)
+        
+        Returns:
+            대화 메시지 리스트 (sequence_number 순서대로 정렬)
+        """
+        self._ensure_initialized()
+        
+        try:
+            query = (
+                self.sb.table("situation_conversations")
+                .select("*")
+                .eq("report_id", report_id)
+                .order("sequence_number", desc=False)
+            )
+            
+            if user_id:
+                query = query.eq("user_id", user_id)
+            
+            result = query.execute()
+            
+            conversations = []
+            if result.data:
+                for conv in result.data:
+                    conversations.append({
+                        "id": conv["id"],
+                        "report_id": conv["report_id"],
+                        "user_id": conv.get("user_id"),
+                        "message": conv["message"],
+                        "sender_type": conv["sender_type"],
+                        "sequence_number": conv["sequence_number"],
+                        "metadata": conv.get("metadata"),
+                        "created_at": conv.get("created_at"),
+                    })
+            
+            return conversations
+        except Exception as e:
+            logger.error(f"대화 메시지 조회 중 오류: {str(e)}", exc_info=True)
+            raise
 

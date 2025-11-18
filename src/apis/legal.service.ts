@@ -268,6 +268,7 @@ export interface ScriptsV2 {
 }
 
 export interface SituationResponseV2 {
+  id?: string;  // situation_analyses 테이블의 ID
   riskScore: number;
   riskLevel: 'low' | 'medium' | 'high';
   tags: string[];
@@ -749,6 +750,185 @@ export const getContractHistoryV2 = async (
     return data;
   } catch (error) {
     console.error('히스토리 조회 오류:', error);
+    throw error;
+  }
+};
+
+/**
+ * 사용자별 상황 분석 히스토리 조회 (v2)
+ */
+export const getSituationHistoryV2 = async (
+  limit: number = 20,
+  offset: number = 0,
+  userId?: string | null
+): Promise<Array<{
+  id: string;
+  situation: string;
+  category: string;
+  risk_score: number;
+  risk_level: string;
+  summary: string;
+  created_at: string;
+}>> => {
+  try {
+    const url = `${LEGAL_API_BASE_V2}/situations/history`;
+    
+    const authHeaders = await getAuthHeaders();
+    authHeaders['Content-Type'] = 'application/json';
+    
+    if (userId !== undefined) {
+      authHeaders['X-User-Id'] = userId;
+    }
+    
+    if (!authHeaders['X-User-Id']) {
+      console.warn('사용자 ID가 없어 히스토리를 조회할 수 없습니다.');
+      return [];
+    }
+    
+    const params = new URLSearchParams({
+      limit: limit.toString(),
+      offset: offset.toString(),
+    });
+
+    const response = await fetch(`${url}?${params}`, {
+      method: 'GET',
+      headers: authHeaders,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`히스토리 조회 실패: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('히스토리 조회 오류:', error);
+    throw error;
+  }
+};
+
+/**
+ * 특정 상황 분석 결과 조회 (v2)
+ */
+export const getSituationAnalysisByIdV2 = async (
+  situationId: string,
+  userId?: string | null
+): Promise<SituationResponseV2> => {
+  try {
+    const url = `${LEGAL_API_BASE_V2}/situations/${situationId}`;
+    
+    const authHeaders = await getAuthHeaders();
+    authHeaders['Content-Type'] = 'application/json';
+    
+    if (userId !== undefined) {
+      authHeaders['X-User-Id'] = userId;
+    }
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: authHeaders,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`분석 결과 조회 실패: ${response.status} - ${errorText}`);
+    }
+
+    const data: SituationResponseV2 = await response.json();
+    return data;
+  } catch (error) {
+    console.error('분석 결과 조회 오류:', error);
+    throw error;
+  }
+};
+
+/**
+ * 상황 분석 대화 메시지 저장 (v2)
+ */
+export const saveConversationV2 = async (
+  reportId: string,
+  message: string,
+  senderType: 'user' | 'assistant',
+  sequenceNumber: number,
+  userId?: string | null,
+  metadata?: any
+): Promise<{ id: string; success: boolean }> => {
+  try {
+    const url = `${LEGAL_API_BASE_V2}/conversations`;
+    
+    const authHeaders = await getAuthHeaders();
+    authHeaders['Content-Type'] = 'application/json';
+    
+    if (userId !== undefined) {
+      authHeaders['X-User-Id'] = userId;
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify({
+        report_id: reportId,
+        message: message,
+        sender_type: senderType,
+        sequence_number: sequenceNumber,
+        metadata: metadata,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`대화 메시지 저장 실패: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('대화 메시지 저장 오류:', error);
+    throw error;
+  }
+};
+
+/**
+ * 상황 분석 대화 메시지 조회 (v2)
+ */
+export const getConversationsV2 = async (
+  reportId: string,
+  userId?: string | null
+): Promise<Array<{
+  id: string;
+  report_id: string;
+  user_id: string | null;
+  message: string;
+  sender_type: 'user' | 'assistant';
+  sequence_number: number;
+  metadata: any;
+  created_at: string;
+}>> => {
+  try {
+    const url = `${LEGAL_API_BASE_V2}/conversations/${reportId}`;
+    
+    const authHeaders = await getAuthHeaders();
+    authHeaders['Content-Type'] = 'application/json';
+    
+    if (userId !== undefined) {
+      authHeaders['X-User-Id'] = userId;
+    }
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: authHeaders,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`대화 메시지 조회 실패: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('대화 메시지 조회 오류:', error);
     throw error;
   }
 };
