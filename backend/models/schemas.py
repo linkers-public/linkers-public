@@ -346,3 +346,38 @@ class ClauseRewriteResponseV2(BaseModel):
     rewrittenText: str
     explanation: str  # 수정 이유
     legalBasis: List[str]  # 법적 근거
+
+
+class LegalChatRequestV2(BaseModel):
+    """법률 상담 챗 요청 (v2)"""
+    query: str = Field(..., description="사용자 질문")
+    docIds: List[str] = Field(default_factory=list, description="계약서 문서 ID 목록")
+    selectedIssueId: Optional[str] = Field(None, description="선택된 이슈 ID")
+    selectedIssue: Optional[dict] = Field(None, description="선택된 이슈 정보")
+    analysisSummary: Optional[str] = Field(None, description="분석 요약")
+    riskScore: Optional[int] = Field(None, description="위험도 점수")
+    totalIssues: Optional[int] = Field(None, description="총 이슈 개수")
+    topK: int = Field(8, description="RAG 검색 결과 개수")
+
+
+class UsedChunkV2(BaseModel):
+    """사용된 RAG 청크 (v2)"""
+    id: Optional[str] = None
+    source_type: Optional[str] = None
+    title: Optional[str] = None
+    content: Optional[str] = None
+    score: Optional[float] = None
+
+
+class UsedChunksV2(BaseModel):
+    """사용된 RAG 청크 그룹 (v2)"""
+    contract: List[UsedChunkV2] = Field(default_factory=list, description="계약서 내부 청크")
+    legal: List[UsedChunkV2] = Field(default_factory=list, description="법령 청크")
+
+
+class LegalChatResponseV2(BaseModel):
+    """법률 상담 챗 응답 (v2)"""
+    answer: str = Field(..., description="AI 답변 (마크다운 형식)")
+    markdown: Optional[str] = Field(None, description="마크다운 형식 답변")
+    query: str = Field(..., description="원본 질문")
+    usedChunks: Optional[UsedChunksV2] = Field(None, description="사용된 RAG 청크 (Dual RAG)")

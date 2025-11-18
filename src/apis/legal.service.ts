@@ -747,6 +747,77 @@ export const getContractHistoryV2 = async (
 };
 
 /**
+ * 법률 상담 챗 (v2) - Dual RAG 지원
+ */
+export interface LegalChatRequestV2 {
+  query: string
+  docIds: string[]
+  selectedIssueId?: string
+  selectedIssue?: {
+    category: string
+    summary: string
+    severity: string
+    originalText: string
+    legalBasis: string[]
+  }
+  analysisSummary?: string
+  riskScore?: number
+  totalIssues?: number
+  topK?: number
+}
+
+export interface LegalChatResponseV2 {
+  answer: string
+  markdown?: string
+  query: string
+  usedChunks?: {
+    contract: Array<{
+      id?: string
+      source_type?: string
+      title?: string
+      content?: string
+      score?: number
+    }>
+    legal: Array<{
+      id?: string
+      source_type?: string
+      title?: string
+      content?: string
+      score?: number
+    }>
+  }
+}
+
+export const chatWithContractV2 = async (
+  request: LegalChatRequestV2
+): Promise<LegalChatResponseV2> => {
+  try {
+    const url = `${LEGAL_API_BASE_V2}/chat`
+    
+    // 인증 헤더 가져오기
+    const authHeaders = await getAuthHeaders()
+    authHeaders['Content-Type'] = 'application/json'
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify(request),
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`법률 상담 챗 실패: ${response.status} - ${errorText}`)
+    }
+
+    const data: LegalChatResponseV2 = await response.json()
+    return data
+  } catch (error) {
+    console.error('법률 상담 챗 오류:', error)
+    throw error
+  }
+}
+
+/**
  * 헬스 체크 (v2)
  */
 export const healthCheckV2 = async (): Promise<{ status: string; message: string }> => {

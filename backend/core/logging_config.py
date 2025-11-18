@@ -9,6 +9,22 @@ from datetime import datetime
 from pathlib import Path
 
 
+class AccessLogFilter(logging.Filter):
+    """
+    access 로그 필터: OPTIONS 요청과 정상 응답(200)은 제외
+    """
+    def filter(self, record):
+        message = record.getMessage()
+        # OPTIONS 요청 제외
+        if '"OPTIONS ' in message:
+            return False
+        # 200 응답 제외 (정상 요청)
+        if '" 200' in message:
+            return False
+        # 나머지는 기록 (에러, 경고 등)
+        return True
+
+
 def setup_logging(
     log_dir: str = "./logs",
     log_level: int = logging.INFO,
@@ -70,29 +86,53 @@ def setup_logging(
         file_handler.setFormatter(formatter)
         root_logger.addHandler(file_handler)
     
-    # uvicorn 로거 설정
+    # uvicorn 로거 설정 (propagate=False로 중복 로그 방지)
     uvicorn_logger = logging.getLogger("uvicorn")
     uvicorn_logger.setLevel(log_level)
-    if enable_file_logging:
-        uvicorn_logger.addHandler(file_handler)
-    uvicorn_logger.propagate = True
+    uvicorn_logger.propagate = False  # 중복 로그 방지
     
     uvicorn_access_logger = logging.getLogger("uvicorn.access")
-    uvicorn_access_logger.setLevel(log_level)
-    if enable_file_logging:
-        uvicorn_access_logger.addHandler(file_handler)
-    uvicorn_access_logger.propagate = True
+    # access 로그는 필터로 노이즈 제거 (OPTIONS, 200 응답 제외)
+    uvicorn_access_logger.setLevel(logging.INFO)
+    # 필터 추가
+    access_filter = AccessLogFilter()
+    uvicorn_access_logger.addFilter(access_filter)
+    uvicorn_access_logger.propagate = False  # 중복 로그 방지
     
     uvicorn_error_logger = logging.getLogger("uvicorn.error")
     uvicorn_error_logger.setLevel(log_level)
-    if enable_file_logging:
-        uvicorn_error_logger.addHandler(file_handler)
-    uvicorn_error_logger.propagate = True
+    uvicorn_error_logger.propagate = False  # 중복 로그 방지
+    
+    # 불필요한 라이브러리 로그 필터링
+    # watchfiles: 파일 변경 감지 로그 (WARNING 이상만)
+    watchfiles_logger = logging.getLogger("watchfiles")
+    watchfiles_logger.setLevel(logging.WARNING)
+    watchfiles_logger.propagate = False
+    
+    # httpx: HTTP 클라이언트 로그 (WARNING 이상만)
+    httpx_logger = logging.getLogger("httpx")
+    httpx_logger.setLevel(logging.WARNING)
+    httpx_logger.propagate = False
+    
+    # sentence_transformers: 모델 로딩 로그 (WARNING 이상만)
+    sentence_transformers_logger = logging.getLogger("sentence_transformers")
+    sentence_transformers_logger.setLevel(logging.WARNING)
+    sentence_transformers_logger.propagate = False
+    
+    # transformers: 트랜스포머 라이브러리 로그 (WARNING 이상만)
+    transformers_logger = logging.getLogger("transformers")
+    transformers_logger.setLevel(logging.WARNING)
+    transformers_logger.propagate = False
     
     # uvicorn log_config 생성
     log_config = {
         "version": 1,
         "disable_existing_loggers": False,
+        "filters": {
+            "access_filter": {
+                "()": AccessLogFilter,
+            },
+        },
         "formatters": {
             "default": {
                 "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -113,6 +153,7 @@ def setup_logging(
                 "formatter": "access",
                 "class": "logging.StreamHandler",
                 "stream": "ext://sys.stdout",
+                "filters": ["access_filter"],
             },
         },
         "loggers": {
@@ -128,7 +169,28 @@ def setup_logging(
             },
             "uvicorn.access": {
                 "handlers": ["access"],
-                "level": logging.getLevelName(log_level),
+                "level": "INFO",  # 필터로 노이즈 제거
+                "propagate": False,
+            },
+            # 불필요한 라이브러리 로그 필터링
+            "watchfiles": {
+                "handlers": [],
+                "level": "WARNING",
+                "propagate": False,
+            },
+            "httpx": {
+                "handlers": [],
+                "level": "WARNING",
+                "propagate": False,
+            },
+            "sentence_transformers": {
+                "handlers": [],
+                "level": "WARNING",
+                "propagate": False,
+            },
+            "transformers": {
+                "handlers": [],
+                "level": "WARNING",
                 "propagate": False,
             },
         },
@@ -151,9 +213,11 @@ def setup_logging(
             "maxBytes": max_bytes,
             "backupCount": backup_count,
             "encoding": "utf-8",
+            "filters": ["access_filter"],
         }
         log_config["loggers"]["uvicorn"]["handlers"].append("file")
         log_config["loggers"]["uvicorn.error"]["handlers"].append("file")
+        # access 로그는 필터로 노이즈 제거 (OPTIONS, 200 응답 제외)
         log_config["loggers"]["uvicorn.access"]["handlers"].append("access_file")
     
     return log_config

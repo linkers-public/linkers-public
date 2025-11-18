@@ -8,6 +8,7 @@ from typing import Optional, List
 import tempfile
 import os
 import logging
+import asyncio
 from pathlib import Path
 from datetime import datetime
 import uuid
@@ -25,6 +26,10 @@ from models.schemas import (
     ContractComparisonResponseV2,
     ClauseRewriteRequestV2,
     ClauseRewriteResponseV2,
+    LegalChatRequestV2,
+    LegalChatResponseV2,
+    UsedChunksV2,
+    UsedChunkV2,
 )
 from core.legal_rag_service import LegalRAGService
 from core.document_processor_v2 import DocumentProcessor
@@ -164,16 +169,79 @@ async def analyze_contract(
                 detail="업로드된 파일에서 텍스트를 추출할 수 없습니다.",
             )
 
-        # 법률 리스크 분석
-        service = get_legal_service()
-        result = await service.analyze_contract(
-            extracted_text=extracted_text,
-            description=None,
-        )
-        
-        # v2 스펙에 맞춰 변환
+        # 계약서 조항 단위 청킹 및 벡터 저장 (Dual RAG를 위해)
         doc_id = str(uuid.uuid4())
         doc_title = title or file.filename or "계약서"
+        
+        # 비동기 병렬 처리: 청킹/임베딩 저장과 법률 분석을 병렬로 시작
+        async def prepare_contract_chunks():
+            """계약서 청킹 및 벡터 저장 (백그라운드 작업)"""
+            try:
+                # 1. 조항 단위 청킹
+                processor = get_processor()
+                contract_chunks = processor.to_contract_chunks(
+                    text=extracted_text,
+                    base_meta={
+                        "contract_id": doc_id,
+                        "title": doc_title,
+                        "filename": file.filename,
+                    }
+                )
+                
+                # 2. 임베딩 생성 (비동기로 실행하여 블로킹 방지)
+                from core.generator_v2 import LLMGenerator
+                generator = LLMGenerator()
+                chunk_texts = [chunk.content for chunk in contract_chunks]
+                embeddings = await asyncio.to_thread(generator.embed, chunk_texts)
+                
+                # 3. contract_chunks 테이블에 저장
+                from core.supabase_vector_store import SupabaseVectorStore
+                vector_store = SupabaseVectorStore()
+                
+                chunk_payload = []
+                for idx, chunk in enumerate(contract_chunks):
+                    chunk_payload.append({
+                        "article_number": chunk.metadata.get("article_number", 0),
+                        "paragraph_index": chunk.metadata.get("paragraph_index"),
+                        "content": chunk.content,
+                        "chunk_index": chunk.index,
+                        "chunk_type": chunk.metadata.get("chunk_type", "article"),
+                        "embedding": embeddings[idx],
+                        "metadata": chunk.metadata,
+                    })
+                
+                vector_store.bulk_upsert_contract_chunks(
+                    contract_id=doc_id,
+                    chunks=chunk_payload
+                )
+                logger.info(f"[계약서 분석] contract_chunks 저장 완료: {len(chunk_payload)}개 청크")
+            except Exception as chunk_error:
+                logger.warning(f"[계약서 분석] contract_chunks 저장 실패 (계속 진행): {str(chunk_error)}", exc_info=True)
+                # 청크 저장 실패해도 분석은 계속 진행
+        
+        async def analyze_contract_risk():
+            """법률 리스크 분석 (Dual RAG 지원)"""
+            service = get_legal_service()
+            # doc_id를 전달하여 contract_chunks도 검색 (청킹 완료 여부와 관계없이 시도)
+            return await service.analyze_contract(
+                extracted_text=extracted_text,
+                description=None,
+                doc_id=doc_id,  # Dual RAG를 위해 doc_id 전달
+            )
+        
+        # 병렬 실행: 청킹/임베딩 저장과 분석을 동시에 시작
+        # 분석 결과는 즉시 필요하므로 await, 청킹은 백그라운드로 실행
+        # 주의: contract_chunks가 아직 저장되지 않았을 수 있으므로, 없으면 legal_chunks만 사용
+        result, _ = await asyncio.gather(
+            analyze_contract_risk(),
+            prepare_contract_chunks(),
+            return_exceptions=True
+        )
+        
+        # result가 예외인 경우 처리
+        if isinstance(result, Exception):
+            logger.error(f"[계약서 분석] 분석 실패: {str(result)}", exc_info=True)
+            raise result
         
         # 영역별 점수 계산 (기존 result에서 추출 또는 기본값)
         sections = {
@@ -544,11 +612,14 @@ async def get_contract_history(
 
 
 @router.get("/contracts/{doc_id}", response_model=ContractAnalysisResponseV2)
-async def get_contract_analysis(doc_id: str):
+async def get_contract_analysis(
+    doc_id: str,
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id", description="사용자 ID"),
+):
     """
     계약서 분석 결과 조회
     """
-    logger.info(f"[계약서 조회] doc_id={doc_id} 조회 시작")
+    logger.info(f"[계약서 조회] doc_id={doc_id}, user_id={x_user_id} 조회 시작")
     
     # 임시 ID인 경우 메모리에서만 조회
     if doc_id.startswith("temp-"):
@@ -568,15 +639,15 @@ async def get_contract_analysis(doc_id: str):
     # DB에서 조회 시도
     try:
         storage_service = get_storage_service()
-        result = await storage_service.get_contract_analysis(doc_id)
+        result = await storage_service.get_contract_analysis(doc_id, user_id=x_user_id)
         if result:
             contract_text_length = len(result.get('contractText', '')) if result.get('contractText') else 0
-            logger.info(f"[계약서 조회] DB에서 찾음: doc_id={doc_id}, contractText 길이={contract_text_length}")
+            logger.info(f"[계약서 조회] DB에서 찾음: doc_id={doc_id}, user_id={x_user_id}, contractText 길이={contract_text_length}")
             return ContractAnalysisResponseV2(**result)
         else:
-            logger.warning(f"[계약서 조회] DB에서 찾을 수 없음: doc_id={doc_id}")
+            logger.warning(f"[계약서 조회] DB에서 찾을 수 없음: doc_id={doc_id}, user_id={x_user_id}")
     except Exception as e:
-        logger.warning(f"[계약서 조회] DB 조회 실패: {str(e)}", exc_info=True)
+        logger.error(f"[계약서 조회] DB 조회 실패: {str(e)}", exc_info=True)
     
     # Fallback: 메모리에서 조회
     if doc_id in _contract_analyses:
@@ -585,7 +656,7 @@ async def get_contract_analysis(doc_id: str):
         logger.info(f"[계약서 조회] 메모리에서 찾음: doc_id={doc_id}, contractText 길이={contract_text_length}")
         return result
     
-    logger.error(f"[계약서 조회] 어디서도 찾을 수 없음: doc_id={doc_id}")
+    logger.error(f"[계약서 조회] 어디서도 찾을 수 없음: doc_id={doc_id}, user_id={x_user_id}")
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
         detail=f"분석 결과를 찾을 수 없습니다. (doc_id: {doc_id})",
@@ -673,5 +744,85 @@ async def analyze_situation(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"상황 분석 중 오류가 발생했습니다: {str(e)}",
+        )
+
+
+@router.post("/chat", response_model=LegalChatResponseV2)
+async def chat_with_contract(
+    payload: LegalChatRequestV2,
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id", description="사용자 ID"),
+):
+    """
+    계약서 기반 법률 상담 챗 (Dual RAG 지원)
+    
+    - 계약서 내부 청크 검색 (contract_chunks)
+    - 외부 법령 청크 검색 (legal_chunks)
+    - 선택된 이슈 기반 boosting
+    - 구조화된 프롬프트로 답변 생성
+    """
+    try:
+        service = get_legal_service()
+        
+        # selected_issue 변환 (프론트엔드 형식 → 백엔드 형식)
+        selected_issue = None
+        if payload.selectedIssue:
+            selected_issue = {
+                "category": payload.selectedIssue.get("category"),
+                "summary": payload.selectedIssue.get("summary"),
+                "severity": payload.selectedIssue.get("severity"),
+                "originalText": payload.selectedIssue.get("originalText"),
+                "legalBasis": payload.selectedIssue.get("legalBasis", []),
+            }
+        
+        # Dual RAG 검색 및 답변 생성
+        result = await service.chat_with_context(
+            query=payload.query,
+            doc_ids=payload.docIds or [],
+            selected_issue_id=payload.selectedIssueId,
+            selected_issue=selected_issue,
+            analysis_summary=payload.analysisSummary,
+            risk_score=payload.riskScore,
+            total_issues=payload.totalIssues,
+            top_k=payload.topK or 8,
+        )
+        
+        # used_chunks 변환 (프론트엔드 형식)
+        used_chunks_v2 = None
+        if result.get("used_chunks"):
+            used_chunks = result["used_chunks"]
+            used_chunks_v2 = UsedChunksV2(
+                contract=[
+                    UsedChunkV2(
+                        id=chunk.get("id"),
+                        source_type="contract",
+                        title=f"제{chunk.get('article_number', '')}조",
+                        content=chunk.get("content", "")[:500],
+                        score=chunk.get("score"),
+                    )
+                    for chunk in used_chunks.get("contract", [])
+                ],
+                legal=[
+                    UsedChunkV2(
+                        id=chunk.get("id"),
+                        source_type=chunk.get("source_type", "law"),
+                        title=chunk.get("title", ""),
+                        content=chunk.get("content", "")[:500],
+                        score=chunk.get("score"),
+                    )
+                    for chunk in used_chunks.get("legal", [])
+                ],
+            )
+        
+        return LegalChatResponseV2(
+            answer=result.get("answer", ""),
+            markdown=result.get("markdown", result.get("answer", "")),
+            query=result.get("query", payload.query),
+            usedChunks=used_chunks_v2,
+        )
+    except Exception as e:
+        logger.error(f"법률 상담 챗 중 오류 발생: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"법률 상담 챗 중 오류가 발생했습니다: {str(e)}",
         )
 

@@ -1,6 +1,21 @@
 # Linkus Public RAG Backend
 
-공공입찰 자동 분석 및 팀 매칭을 위한 RAG 파이프라인 백엔드 서버입니다.
+## ⚠️ 현재 운영 중인 기능
+
+**법률/계약서 RAG 시스템** - 계약서 분석 및 법률 상담을 위한 RAG 파이프라인
+
+### ✅ 활성 기능
+- **계약서 업로드 및 분석**: PDF/HWPX 계약서를 업로드하여 위험도 분석
+- **법률 문서 검색**: 근로기준법, 표준계약서, 가이드라인 검색
+- **AI 법률 상담**: 계약서 기반 질문에 대한 법률 상담
+- **이슈 기반 분석**: 계약서 조항별 위험도 및 개선안 제시
+
+### ⚠️ 레거시 기능 (사용하지 않음)
+- 공고 업로드/검색 (`/api/announcements/*`)
+- 팀 매칭 (`/api/v2/teams/*`)
+- 공고 분석 (`/api/analysis/*`)
+
+**레거시 기능은 더 이상 개발/유지보수되지 않으며, 향후 제거될 예정입니다.**
 
 ## 📑 목차
 
@@ -61,17 +76,19 @@ OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=llama3
 USE_OLLAMA=true
 
-# Embedding Model (선택, 기본값: BAAI/bge-small-en-v1.5)
-LOCAL_EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
+# Embedding Model (법률/계약서 전용, 기본값: BAAI/bge-m3)
+# 법률 문서는 다국어 지원 모델 사용 권장
+LOCAL_EMBEDDING_MODEL=BAAI/bge-m3
 USE_LOCAL_EMBEDDING=true
 
 # LLM Model (선택, 기본값: gpt-4o-mini)
 LLM_MODEL=gpt-4o-mini
 LLM_TEMPERATURE=0.1
 
-# Chunk Settings (선택)
-CHUNK_SIZE=1000
-CHUNK_OVERLAP=200
+# Chunk Settings (법률/계약서 전용)
+# 계약서는 조항 단위로 청킹되므로, 이 값은 조항 내부 문단 분할에 사용됨
+CHUNK_SIZE=1500  # 조항 내부 문단 분할 시 사용
+CHUNK_OVERLAP=300  # 조항 내부 문단 오버랩
 
 # Server Settings (선택)
 HOST=0.0.0.0
@@ -155,12 +172,13 @@ backend/
 │   ├── error_handler.py      # 공통 에러 핸들러
 │   ├── logging_config.py     # 로깅 설정 통합
 │   ├── dependencies.py       # 의존성 주입 패턴
-│   ├── document_processor_v2.py  # 문서 처리
+│   ├── document_processor_v2.py  # 문서 처리 (조항 단위 청킹)
 │   ├── supabase_vector_store.py   # 벡터 DB (Supabase)
 │   ├── generator_v2.py       # LLM 생성
-│   ├── orchestrator_v2.py    # RAG 통합
-│   ├── legal_rag_service.py  # 법률 RAG 서비스
+│   ├── orchestrator_v2.py    # RAG 통합 (레거시)
+│   ├── legal_rag_service.py  # 법률 RAG 서비스 (Dual RAG)
 │   ├── contract_storage.py   # 계약서 저장 서비스
+│   ├── prompts.py            # LLM 프롬프트 템플릿
 │   ├── async_tasks.py        # 비동기 작업 관리
 │   └── tools/                # 계약서 분석 도구들
 │
@@ -184,13 +202,31 @@ backend/
 
 API 엔드포인트에 대한 상세 설명은 [API_REFERENCE.md](./API_REFERENCE.md)를 참고하세요.
 
-**주요 엔드포인트:**
-- `POST /api/announcements/upload` - 공고 업로드 및 분석
-- `GET /api/announcements/{announcement_id}/match` - 팀 매칭
-- `POST /api/estimates/generate` - 견적서 생성
-- `POST /api/v2/legal/analyze-contract` - 계약서 분석
+### ✅ 현재 활성 엔드포인트 (법률/계약서 RAG)
+
+**계약서 분석:**
+- `POST /api/v2/legal/analyze-contract` - 계약서 업로드 및 분석
 - `GET /api/v2/legal/contracts/{doc_id}` - 계약서 분석 결과 조회
 - `GET /api/v2/legal/contracts/history` - 계약서 히스토리 조회
+
+**법률 검색:**
+- `GET /api/v2/legal/search` - 법률 문서 검색 (근로기준법, 표준계약서 등)
+
+**법률 상담:**
+- `POST /api/v2/legal/chat` - 계약서 기반 AI 법률 상담
+- `POST /api/v2/legal/analyze-situation` - 상황 분석
+
+### ⚠️ 레거시 엔드포인트 (사용하지 않음)
+
+**공고 관련 (deprecated):**
+- `POST /api/announcements/upload` - 공고 업로드 (레거시)
+- `GET /api/v2/announcements/search` - 공고 검색 (레거시)
+- `GET /api/announcements/{announcement_id}/analysis` - 공고 분석 (레거시)
+
+**팀 매칭 (deprecated):**
+- `POST /api/v2/teams/embedding` - 팀 임베딩 저장 (레거시)
+- `GET /api/v2/teams/search` - 팀 검색 (레거시)
+- `GET /api/v2/announcements/{announcement_id}/match-teams` - 팀 매칭 (레거시)
 
 **API 문서:** http://localhost:8000/docs
 
@@ -224,19 +260,28 @@ API 엔드포인트에 대한 상세 설명은 [API_REFERENCE.md](./API_REFERENC
 
 ## 📝 주요 기능
 
-1. **문서 처리**: PDF/HWP/HWPX 업로드 및 텍스트 추출
-2. **벡터 저장**: Supabase pgvector를 사용한 임베딩 저장
-3. **유사도 검색**: 벡터 유사도 기반 검색
-4. **LLM 생성**: Ollama/OpenAI를 사용한 분석 및 견적 생성
-5. **팀 매칭**: 요구사항 기반 팀 추천
-6. **법률 리스크 분석**: 계약서 위험도 분석 및 조항 검토
-7. **계약서 히스토리 관리**: 분석 결과 자동 저장 및 조회
+### ✅ 현재 활성 기능 (법률/계약서 RAG)
+
+1. **계약서 처리**: PDF/HWPX 계약서 업로드 및 텍스트 추출
+2. **조항 단위 청킹**: 계약서를 조항(제n조) 단위로 분할하여 분석
+3. **법률 문서 벡터 저장**: Supabase pgvector를 사용한 법률 문서 임베딩 저장
+4. **법률 문서 검색**: 벡터 유사도 기반 법령/표준계약서 검색
+5. **계약서 위험도 분석**: LLM을 사용한 계약서 위험도 분석 및 조항 검토
+6. **이슈 기반 분석**: 계약서 조항별 위험 이슈 식별 및 개선안 제시
+7. **AI 법률 상담**: 계약서 기반 질문에 대한 법률 상담 (RAG 기반)
+8. **계약서 히스토리 관리**: 분석 결과 자동 저장 및 조회
    - 분석 완료 시 자동으로 DB에 저장
    - 사용자별 히스토리 조회 지원
    - 프론트엔드에서 로컬 스토리지 fallback 지원
-8. **공통 에러 핸들러**: 일관된 에러 응답 형식
-9. **로깅 통합**: 중앙화된 로깅 설정 및 파일 로테이션
-10. **의존성 주입**: 싱글톤 패턴 기반 서비스 관리
+9. **공통 에러 핸들러**: 일관된 에러 응답 형식
+10. **로깅 통합**: 중앙화된 로깅 설정 및 파일 로테이션
+11. **의존성 주입**: 싱글톤 패턴 기반 서비스 관리
+
+### ⚠️ 레거시 기능 (사용하지 않음)
+
+- 공고 업로드/검색
+- 팀 매칭
+- 공고 분석
 
 ## 🏗️ 아키텍처
 
@@ -259,6 +304,96 @@ API 엔드포인트에 대한 상세 설명은 [API_REFERENCE.md](./API_REFERENC
 - ChromaDB 관련 문제
 - OpenAI API 관련 문제
 - PDF 처리 관련 문제
+
+### 임베딩 모델 관련 문제
+
+#### PyTorch 메타 텐서 오류 (`Cannot copy out of meta tensor`)
+**증상:**
+```
+NotImplementedError: Cannot copy out of meta tensor; no data! 
+Please use torch.nn.Module.to_empty() instead of torch.nn.Module.to() 
+when moving module from meta to a different device.
+```
+
+**원인:**
+- PyTorch 버전 호환성 문제
+- sentence-transformers 모델 로딩 시 디바이스 이동 문제
+
+**해결 방법:**
+1. **PyTorch 재설치:**
+   ```bash
+   pip uninstall torch torchvision torchaudio
+   pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+   ```
+
+2. **sentence-transformers 재설치:**
+   ```bash
+   pip uninstall sentence-transformers
+   pip install sentence-transformers
+   ```
+
+3. **환경 변수 설정 (Windows):**
+   ```bash
+   set PYTORCH_ENABLE_MPS_FALLBACK=1
+   ```
+
+4. **모델 캐시 삭제 후 재다운로드:**
+   ```bash
+   # Windows
+   rmdir /s "%USERPROFILE%\.cache\huggingface"
+   
+   # Linux/Mac
+   rm -rf ~/.cache/huggingface
+   ```
+
+#### 임베딩 생성 속도 문제
+**증상:**
+- 임베딩 생성이 매우 느림 (CPU 모드)
+
+**원인:**
+- `BAAI/bge-m3` 모델은 큰 모델(568MB)이라 CPU에서 실행 시 느림
+- 배치 크기가 작음
+
+**해결 방법:**
+1. **배치 크기 최적화 (이미 적용됨):**
+   - `generator_v2.py`에서 `batch_size=64`로 설정
+   - `show_progress_bar=True`로 진행 상황 표시
+
+2. **GPU 사용 (권장):**
+   - CUDA 지원 GPU가 있으면 자동으로 사용
+   - PyTorch CUDA 버전 설치:
+     ```bash
+     pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+     ```
+
+3. **더 작은 모델 사용 (품질 저하 가능):**
+   - 환경 변수에서 `LOCAL_EMBEDDING_MODEL=BAAI/bge-small-en-v1.5` 설정
+   - 주의: 384차원으로 변경되므로 DB 스키마도 변경 필요
+
+#### 임베딩 차원 불일치 오류
+**증상:**
+```
+expected 384 dimensions, not 1024
+```
+
+**원인:**
+- `BAAI/bge-m3`는 1024차원, `BAAI/bge-small-en-v1.5`는 384차원
+- DB 스키마와 모델 차원이 불일치
+
+**해결 방법:**
+1. **DB 스키마 업데이트 (1024차원으로 변경):**
+   ```sql
+   -- Supabase SQL Editor에서 실행
+   ALTER TABLE public.legal_chunks 
+   DROP COLUMN IF EXISTS embedding;
+   
+   ALTER TABLE public.legal_chunks 
+   ADD COLUMN embedding vector(1024);
+   ```
+
+2. **또는 모델을 384차원 모델로 변경:**
+   - 환경 변수: `LOCAL_EMBEDDING_MODEL=BAAI/bge-small-en-v1.5`
+   - 기존 1024차원 데이터는 삭제 후 재처리 필요
 
 ---
 

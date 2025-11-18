@@ -97,6 +97,231 @@ class SimpleTextSplitter:
         return chunks if chunks else [text]
 
 
+class ContractArticleSplitter:
+    """계약서 조항 단위 분할기 (제n조 패턴 기반)"""
+    
+    # 조항 패턴: "제1조", "제 1 조", "제1조 (제목)" 등 다양한 형식 지원
+    ARTICLE_PATTERN = re.compile(
+        r'(제\s*\d+\s*조(?:\s*\([^)]+\))?[^\n]*)'  # 조항 헤더 (제1조 (제목))
+        r'([\s\S]*?)'  # 조항 본문
+        r'(?=제\s*\d+\s*조|$)',  # 다음 조항 또는 끝까지
+        re.MULTILINE
+    )
+    
+    def __init__(self, max_article_length: int = 2000):
+        """
+        Args:
+            max_article_length: 조항이 이 길이를 초과하면 문단으로 추가 분할
+        """
+        self.max_article_length = max_article_length
+        self.paragraph_splitter = ArticleParagraphSplitter()
+    
+    def split_contract_by_articles(self, text: str) -> List[Dict[str, Any]]:
+        """
+        계약서를 조항 단위로 분할
+        
+        Returns:
+            [{
+                "content": str,
+                "article_number": int,
+                "article_header": str,
+                "chunk_index": int,
+                "type": "article" | "paragraph",
+                "paragraph_index": int (optional)
+            }]
+        """
+        chunks = []
+        matches = list(self.ARTICLE_PATTERN.finditer(text))
+        
+        if not matches:
+            # 조항 패턴이 없으면 전체를 하나의 청크로
+            return [{
+                "content": text.strip(),
+                "article_number": 0,
+                "article_header": "",
+                "chunk_index": 0,
+                "type": "article"
+            }]
+        
+        for idx, match in enumerate(matches):
+            header = match.group(1).strip()
+            body = match.group(2).strip()
+            full_content = f"{header}\n{body}".strip()
+            
+            # 조항 번호 추출
+            article_num_match = re.search(r'제\s*(\d+)\s*조', header)
+            article_number = int(article_num_match.group(1)) if article_num_match else idx + 1
+            
+            # 조항이 너무 길면 문단으로 분할
+            if len(full_content) > self.max_article_length:
+                paragraph_chunks = self.paragraph_splitter.split_article_into_paragraphs(
+                    full_content, article_number
+                )
+                chunks.extend(paragraph_chunks)
+            else:
+                chunks.append({
+                    "content": full_content,
+                    "article_number": article_number,
+                    "article_header": header,
+                    "chunk_index": idx,
+                    "type": "article"
+                })
+        
+        return chunks
+    
+    @staticmethod
+    def extract_article_number(header: str) -> int:
+        """조항 헤더에서 조항 번호 추출"""
+        match = re.search(r'제\s*(\d+)\s*조', header)
+        return int(match.group(1)) if match else 0
+
+
+class ArticleParagraphSplitter:
+    """조항 내부 문단 분할기"""
+    
+    # 문단 구분자: \n\n, ①, ②, 1., 2. 등
+    PARAGRAPH_PATTERNS = [
+        r'\n\s*\n',  # 빈 줄
+        r'[①-⑳]',  # 원문자
+        r'\d+[\.\)]\s+',  # 번호 (1. 또는 1))
+        r'[가-힣][\.\)]\s+',  # 한글 번호 (가. 또는 가))
+    ]
+    
+    def __init__(self, chunk_size: int = None, chunk_overlap: int = None):
+        self.chunk_size = chunk_size or int(os.getenv("CHUNK_SIZE", "1500"))
+        self.chunk_overlap = chunk_overlap or int(os.getenv("CHUNK_OVERLAP", "300"))
+    
+    def split_article_into_paragraphs(
+        self, 
+        article_text: str, 
+        article_number: int
+    ) -> List[Dict[str, Any]]:
+        """
+        조항을 문단 단위로 분할
+        
+        Args:
+            article_text: 조항 전체 텍스트
+            article_number: 조항 번호
+        
+        Returns:
+            [{
+                "content": str,
+                "article_number": int,
+                "paragraph_index": int,
+                "chunk_index": int,
+                "type": "paragraph"
+            }]
+        """
+        chunks = []
+        
+        # 먼저 \n\n으로 문단 분할 시도
+        paragraphs = re.split(r'\n\s*\n+', article_text)
+        
+        # 각 문단이 여전히 길면 번호 패턴으로 추가 분할
+        all_paragraphs = []
+        for para in paragraphs:
+            para = para.strip()
+            if not para:
+                continue
+            
+            # 번호 패턴으로 분할 시도
+            numbered_parts = self._split_by_numbered_patterns(para)
+            all_paragraphs.extend(numbered_parts)
+        
+        # 문단이 없으면 전체를 하나로
+        if not all_paragraphs:
+            all_paragraphs = [article_text]
+        
+        # 각 문단을 청크로 변환
+        for p_idx, paragraph in enumerate(all_paragraphs):
+            paragraph = paragraph.strip()
+            if not paragraph:
+                continue
+            
+            # 문단이 너무 길면 chunk_size로 강제 분할
+            if len(paragraph) > self.chunk_size:
+                sub_chunks = self._split_long_paragraph(paragraph, article_number, p_idx)
+                chunks.extend(sub_chunks)
+            else:
+                chunks.append({
+                    "content": paragraph,
+                    "article_number": article_number,
+                    "paragraph_index": p_idx,
+                    "chunk_index": len(chunks),
+                    "type": "paragraph"
+                })
+        
+        return chunks
+    
+    def _split_by_numbered_patterns(self, text: str) -> List[str]:
+        """번호 패턴으로 텍스트 분할"""
+        # 원문자 패턴으로 분할
+        parts = re.split(r'([①-⑳])', text)
+        if len(parts) > 1:
+            # 원문자와 함께 재결합
+            result = []
+            for i in range(0, len(parts) - 1, 2):
+                if i + 1 < len(parts):
+                    result.append(parts[i] + parts[i + 1] + (parts[i + 2] if i + 2 < len(parts) else ""))
+            if result:
+                return [p.strip() for p in result if p.strip()]
+        
+        # 숫자 번호 패턴으로 분할
+        parts = re.split(r'(\d+[\.\)]\s+)', text)
+        if len(parts) > 1:
+            result = []
+            for i in range(0, len(parts) - 1, 2):
+                if i + 1 < len(parts):
+                    result.append(parts[i] + parts[i + 1] + (parts[i + 2] if i + 2 < len(parts) else ""))
+            if result:
+                return [p.strip() for p in result if p.strip()]
+        
+        return [text]
+    
+    def _split_long_paragraph(
+        self, 
+        paragraph: str, 
+        article_number: int, 
+        paragraph_index: int
+    ) -> List[Dict[str, Any]]:
+        """긴 문단을 chunk_size 단위로 분할"""
+        chunks = []
+        current_pos = 0
+        chunk_idx = 0
+        
+        while current_pos < len(paragraph):
+            chunk_end = min(current_pos + self.chunk_size, len(paragraph))
+            
+            # 문장 끝에서 분할 시도
+            if chunk_end < len(paragraph):
+                # 마지막 문장 끝 찾기
+                last_period = paragraph.rfind('.', current_pos, chunk_end)
+                last_newline = paragraph.rfind('\n', current_pos, chunk_end)
+                split_pos = max(last_period, last_newline)
+                
+                if split_pos > current_pos + self.chunk_size * 0.5:
+                    chunk_end = split_pos + 1
+            
+            chunk_text = paragraph[current_pos:chunk_end].strip()
+            if chunk_text:
+                chunks.append({
+                    "content": chunk_text,
+                    "article_number": article_number,
+                    "paragraph_index": paragraph_index,
+                    "chunk_index": chunk_idx,
+                    "type": "paragraph",
+                    "sub_chunk": True
+                })
+                chunk_idx += 1
+            
+            # 오버랩 고려
+            current_pos = max(current_pos + self.chunk_size - self.chunk_overlap, chunk_end)
+            if current_pos >= len(paragraph):
+                break
+        
+        return chunks
+
+
 class DocumentProcessor:
     """문서 처리기 - PDF/텍스트 → 청크"""
     
@@ -117,6 +342,11 @@ class DocumentProcessor:
         self.splitter = SimpleTextSplitter(
             chunk_size=self.chunk_size,
             chunk_overlap=self.chunk_overlap
+        )
+        
+        # 계약서 조항 단위 분할기
+        self.contract_splitter = ContractArticleSplitter(
+            max_article_length=int(os.getenv("CONTRACT_MAX_ARTICLE_LENGTH", "2000"))
         )
     
     def pdf_to_text(self, pdf_path: str) -> str:
@@ -546,6 +776,77 @@ class DocumentProcessor:
         except Exception as e:
             # 더 자세한 오류 정보 제공
             error_msg = f"청크 생성 중 오류 발생: {str(e)}"
+            if isinstance(e, ValueError):
+                raise ValueError(error_msg)
+            else:
+                raise Exception(error_msg)
+    
+    def to_contract_chunks(self, text: str, base_meta: Dict[str, Any] = None) -> List[Chunk]:
+        """
+        계약서 텍스트 → 조항 단위 청크 변환
+        
+        계약서를 조항(제n조) 단위로 분할하고, 조항이 너무 길면 문단 단위로 추가 분할합니다.
+        
+        Args:
+            text: 계약서 원본 텍스트
+            base_meta: 기본 메타데이터
+        
+        Returns:
+            조항 단위 청크 리스트 (article_number, paragraph_index 등 메타데이터 포함)
+        """
+        if base_meta is None:
+            base_meta = {}
+        
+        # 텍스트 유효성 검사
+        if text is None:
+            raise ValueError("텍스트가 None입니다. 파일에서 텍스트를 추출하지 못했습니다.")
+        
+        if not isinstance(text, str):
+            raise ValueError(f"텍스트가 문자열이 아닙니다. 타입: {type(text)}")
+        
+        text_stripped = text.strip()
+        if not text_stripped:
+            raise ValueError("텍스트가 비어있습니다. 파일이 비어있거나 텍스트 추출에 실패했습니다.")
+        
+        try:
+            # 조항 단위로 분할
+            article_chunks = self.contract_splitter.split_contract_by_articles(text_stripped)
+            
+            # Chunk 모델로 변환
+            chunks = []
+            for chunk_data in article_chunks:
+                chunk_meta = {
+                    **base_meta,
+                    "article_number": chunk_data.get("article_number", 0),
+                    "article_header": chunk_data.get("article_header", ""),
+                    "chunk_type": chunk_data.get("type", "article"),
+                    "chunk_size": len(chunk_data.get("content", "")),
+                    "total_chunks": len(article_chunks)
+                }
+                
+                # 문단 정보 추가
+                if "paragraph_index" in chunk_data:
+                    chunk_meta["paragraph_index"] = chunk_data["paragraph_index"]
+                
+                if chunk_data.get("sub_chunk"):
+                    chunk_meta["sub_chunk"] = True
+                
+                chunks.append(Chunk(
+                    index=chunk_data.get("chunk_index", len(chunks)),
+                    content=chunk_data.get("content", ""),
+                    metadata=chunk_meta
+                ))
+            
+            # 빈 청크 필터링
+            chunks = [chunk for chunk in chunks if chunk.content.strip()]
+            
+            if not chunks:
+                raise ValueError("모든 청크가 비어있습니다. 계약서 텍스트에서 조항을 추출하지 못했습니다.")
+            
+            return chunks
+            
+        except Exception as e:
+            error_msg = f"계약서 청크 생성 중 오류 발생: {str(e)}"
             if isinstance(e, ValueError):
                 raise ValueError(error_msg)
             else:

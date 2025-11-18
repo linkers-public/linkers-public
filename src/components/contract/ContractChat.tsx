@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Loader2, Send, MessageSquare, Sparkles, Bot, User, FileText, Zap, RefreshCw, AlertCircle } from 'lucide-react'
@@ -8,7 +8,6 @@ import { MarkdownRenderer } from '@/components/rag/MarkdownRenderer'
 import { cn } from '@/lib/utils'
 import { PRIMARY_GRADIENT, PRIMARY_GRADIENT_HOVER, FOCUS_STYLE } from './contract-design-tokens'
 import type { LegalIssue, ContractAnalysisResult } from '@/types/legal'
-import type { QueryResponse } from '@/types/rag'
 
 interface Message {
   id: string
@@ -79,31 +78,6 @@ export function ContractChat({
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true)
   const [isUserScrolling, setIsUserScrolling] = useState(false)
 
-  // 초기 메시지 개수 알림
-  useEffect(() => {
-    const initialMessages = loadMessages()
-    onMessageCountChange?.(initialMessages.length)
-  }, [docId, onMessageCountChange])
-
-  // 메시지가 변경될 때마다 저장
-  useEffect(() => {
-    saveMessages(messages)
-    onMessageCountChange?.(messages.length)
-  }, [messages, docId, onMessageCountChange])
-
-  // 외부에서 메시지 전송 요청
-  useEffect(() => {
-    if (externalMessage && externalMessage.trim()) {
-      handleSendMessage(undefined, externalMessage)
-      onExternalMessageSent?.()
-    }
-  }, [externalMessage, onExternalMessageSent])
-
-  // 로딩 상태 변경 알림
-  useEffect(() => {
-    onLoadingChange?.(chatLoading)
-  }, [chatLoading, onLoadingChange])
-
   // 분석 결과 기반 추천 질문 생성 (해커톤용 강화)
   const generateSuggestedQuestions = (): string[] => {
     const questions: string[] = []
@@ -140,7 +114,7 @@ export function ContractChat({
   const suggestedQuestions = generateSuggestedQuestions()
 
   // 메시지 전송 (해커톤용 강화 - 자동 프리필 지원)
-  const handleSendMessage = async (question?: string, prefilledText?: string) => {
+  const handleSendMessage = useCallback(async (question?: string, prefilledText?: string) => {
     const query = question || prefilledText || inputMessage.trim()
     if (!query) return
 
@@ -164,52 +138,32 @@ export function ContractChat({
       // 분석 요약 생성
       const analysisSummary = `위험도: ${analysisResult.riskScore}점, 총 ${analysisResult.totalIssues}개 조항 발견. ${analysisResult.summary || ''}`
 
-      // API 요청 본문 구성
-      const requestBody: any = {
-        mode: 'legal_contract_chat',
+      // v2 API 직접 호출 (Dual RAG 지원)
+      const { chatWithContractV2 } = await import('@/apis/legal.service')
+      const data = await chatWithContractV2({
         query: query,
         docIds: [docId],
-        topK: 8,
-        withTeams: false,
-      }
-
-      // 선택된 이슈가 있으면 컨텍스트 추가
-      if (selectedIssue) {
-        requestBody.selectedIssueId = selectedIssue.id
-        requestBody.selectedIssue = {
+        selectedIssueId: selectedIssue?.id,
+        selectedIssue: selectedIssue ? {
           category: selectedIssue.category,
           summary: selectedIssue.summary,
           severity: selectedIssue.severity,
           originalText: selectedIssue.originalText,
           legalBasis: selectedIssue.legalBasis,
-        }
-      }
-
-      // 분석 요약 추가
-      requestBody.analysisSummary = analysisSummary
-      requestBody.riskScore = analysisResult.riskScore
-      requestBody.totalIssues = analysisResult.totalIssues
-
-      const response = await fetch('/api/rag/query', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody),
+        } : undefined,
+        analysisSummary: analysisSummary,
+        riskScore: analysisResult.riskScore,
+        totalIssues: analysisResult.totalIssues,
+        topK: 8,
       })
-
-      if (response.ok) {
-        const data: QueryResponse = await response.json()
-        const assistantMessage: Message = {
-          id: (Date.now() + 1).toString(),
-          role: 'assistant',
-          content: data.answer || '답변을 생성할 수 없습니다.',
-          timestamp: new Date(),
-        }
-        setMessages((prev) => [...prev, assistantMessage])
-      } else {
-        throw new Error('답변 생성 실패')
+      
+      const assistantMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: 'assistant',
+        content: data.answer || '답변을 생성할 수 없습니다.',
+        timestamp: new Date(),
       }
+      setMessages((prev) => [...prev, assistantMessage])
     } catch (error) {
       console.error('메시지 전송 실패:', error)
       const errorMessage: Message = {
@@ -225,10 +179,10 @@ export function ContractChat({
     } finally {
       setChatLoading(false)
     }
-  }
+  }, [docId, selectedIssueId, analysisResult, inputMessage])
 
   // 재시도 함수
-  const handleRetry = (originalQuery: string) => {
+  const handleRetry = useCallback((originalQuery: string) => {
     // 마지막 에러 메시지만 제거
     setMessages((prev) => {
       const filtered = [...prev]
@@ -240,7 +194,32 @@ export function ContractChat({
     })
     // 메시지 재전송
     handleSendMessage(undefined, originalQuery)
-  }
+  }, [handleSendMessage])
+
+  // 초기 메시지 개수 알림
+  useEffect(() => {
+    const initialMessages = loadMessages()
+    onMessageCountChange?.(initialMessages.length)
+  }, [docId, onMessageCountChange])
+
+  // 메시지가 변경될 때마다 저장
+  useEffect(() => {
+    saveMessages(messages)
+    onMessageCountChange?.(messages.length)
+  }, [messages, docId, onMessageCountChange])
+
+  // 외부에서 메시지 전송 요청
+  useEffect(() => {
+    if (externalMessage && externalMessage.trim()) {
+      handleSendMessage(undefined, externalMessage)
+      onExternalMessageSent?.()
+    }
+  }, [externalMessage, onExternalMessageSent, handleSendMessage])
+
+  // 로딩 상태 변경 알림
+  useEffect(() => {
+    onLoadingChange?.(chatLoading)
+  }, [chatLoading, onLoadingChange])
 
   // 프리필된 질문이 있으면 입력창에 설정
   useEffect(() => {
@@ -465,7 +444,7 @@ export function ContractChat({
                               </div>
                               {message.retryable && message.originalQuery && (
                                 <Button
-                                  onClick={() => handleRetry(message.originalQuery)}
+                                  onClick={() => handleRetry(message.originalQuery!)}
                                   disabled={chatLoading}
                                   size="sm"
                                   className="w-full bg-red-600 hover:bg-red-700 text-white"

@@ -19,9 +19,61 @@ def _get_local_embedding_model():
     if _local_embedding_model is None:
         try:
             from sentence_transformers import SentenceTransformer
+            import torch
+            import os
+            
             print(f"[로딩] 로컬 임베딩 모델: {settings.local_embedding_model}")
-            _local_embedding_model = SentenceTransformer(settings.local_embedding_model)
-            print("[완료] 로컬 임베딩 모델 로드 완료")
+            
+            # GPU 우선 사용 (CUDA 사용 가능 시)
+            if torch.cuda.is_available():
+                device = "cuda"
+                device_name = torch.cuda.get_device_name(0)
+                print(f"[GPU] CUDA 사용 가능: {device_name}")
+            else:
+                device = "cpu"
+                print(f"[CPU] CUDA 사용 불가, CPU 사용")
+            
+            # 환경 변수로 device 강제 지정 (meta tensor 문제 방지)
+            os.environ.setdefault("TORCH_DEVICE", device)
+            
+            try:
+                # 첫 번째 시도: device를 명시적으로 지정 (GPU 우선)
+                _local_embedding_model = SentenceTransformer(
+                    settings.local_embedding_model,
+                    device=device
+                )
+                print(f"[완료] 로컬 임베딩 모델 로드 완료 (device: {device})")
+            except Exception as e:
+                # meta tensor 에러 발생 시 다른 방법으로 재시도
+                if "meta tensor" in str(e).lower() or "to_empty" in str(e).lower():
+                    print(f"[경고] 모델 로딩 에러 발생 (meta tensor), 재시도 중...: {str(e)}")
+                    # 모델 캐시를 우회하고 직접 로드 시도
+                    try:
+                        # GPU가 있으면 GPU로, 없으면 CPU로 재시도
+                        retry_device = "cuda" if torch.cuda.is_available() else "cpu"
+                        _local_embedding_model = SentenceTransformer(
+                            settings.local_embedding_model,
+                            device=retry_device,
+                            trust_remote_code=True
+                        )
+                        print(f"[완료] 로컬 임베딩 모델 재로드 완료 (device: {retry_device})")
+                    except Exception as retry_e:
+                        # 최종 시도: GPU가 있으면 GPU로, 없으면 CPU로
+                        if torch.cuda.is_available():
+                            print(f"[경고] 재시도 실패, GPU로 최종 시도 중...: {str(retry_e)}")
+                            final_device = "cuda"
+                        else:
+                            print(f"[경고] 재시도 실패, CPU로 최종 시도 중...: {str(retry_e)}")
+                            final_device = "cpu"
+                        
+                        _local_embedding_model = SentenceTransformer(
+                            settings.local_embedding_model,
+                            trust_remote_code=True,
+                            device=final_device
+                        )
+                        print(f"[완료] 로컬 임베딩 모델 최종 로드 완료 (device: {final_device})")
+                else:
+                    raise
         except ImportError:
             raise ImportError("sentence-transformers가 설치되지 않았습니다. pip install sentence-transformers")
     return _local_embedding_model
@@ -126,7 +178,15 @@ class LLMGenerator:
                 # 모델 타입에 따라 다른 모델 사용 (선택사항)
                 # 현재는 기본 모델 사용, 추후 확장 가능
                 model = _get_local_embedding_model()
-                embeddings = model.encode(texts, convert_to_numpy=True, show_progress_bar=False)
+                # 배치 크기 조정으로 속도 개선 (큰 배치는 더 빠름, 메모리 사용량 증가)
+                batch_size = min(64, len(texts))  # 최대 64개씩 배치 처리
+                embeddings = model.encode(
+                    texts, 
+                    convert_to_numpy=True, 
+                    show_progress_bar=True,  # 진행 상황 표시
+                    batch_size=batch_size,
+                    normalize_embeddings=True  # 정규화로 품질 향상
+                )
                 return embeddings.tolist()
             except Exception as e:
                 raise Exception(f"로컬 임베딩 생성 실패: {str(e)}")

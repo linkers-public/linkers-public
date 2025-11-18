@@ -831,4 +831,311 @@ class SupabaseVectorStore:
         except Exception as e:
             print(f"[경고] legal 벡터 검색 실패: {str(e)}")
             return []
+    
+    def search_similar_contract_chunks(
+        self,
+        contract_id: str,
+        query_embedding: List[float],
+        top_k: int = 5,
+        filters: Optional[Dict[str, Any]] = None,
+        boost_article: Optional[int] = None,
+        boost_factor: float = 1.5
+    ) -> List[Dict[str, Any]]:
+        """
+        계약서 내부 청크 검색 (벡터 코사인 유사도)
+        
+        Args:
+            contract_id: 계약서 ID (doc_id)
+            query_embedding: 쿼리 임베딩 벡터
+            top_k: 반환할 최대 개수
+            filters: 필터 (예: {"article_number": 5})
+            boost_article: 가점을 줄 조항 번호 (issue 기반 boosting)
+            boost_factor: 가점 배율 (기본값: 1.5)
+        
+        Returns:
+            [{
+                id: str,
+                contract_id: str,
+                article_number: int,
+                paragraph_index: int (optional),
+                content: str,
+                chunk_index: int,
+                metadata: Dict,
+                score: float (similarity, boosting 적용)
+            }]
+        """
+        self._ensure_initialized()
+        
+        try:
+            # 필터 조건 구성
+            query = self.sb.table("contract_chunks")\
+                .select("id, contract_id, article_number, paragraph_index, content, chunk_index, metadata, embedding")\
+                .eq("contract_id", contract_id)
+            
+            # article_number 필터
+            if filters and "article_number" in filters:
+                query = query.eq("article_number", filters["article_number"])
+            
+            # 모든 청크 조회
+            result = query.limit(1000).execute()
+            
+            if not result.data:
+                return []
+            
+            # 벡터 유사도 계산
+            import numpy as np
+            import json
+            
+            # query_embedding을 numpy 배열로 변환
+            try:
+                if isinstance(query_embedding, str):
+                    try:
+                        query_embedding = json.loads(query_embedding)
+                    except json.JSONDecodeError:
+                        try:
+                            import ast
+                            query_embedding = ast.literal_eval(query_embedding)
+                        except:
+                            print(f"[경고] 쿼리 임베딩 파싱 실패")
+                            return []
+                
+                if not isinstance(query_embedding, (list, np.ndarray)):
+                    print(f"[경고] 쿼리 임베딩이 리스트가 아닙니다: {type(query_embedding)}")
+                    return []
+                
+                query_vec = np.array(query_embedding, dtype=np.float32)
+                
+                if len(query_vec) == 0:
+                    print(f"[경고] 쿼리 임베딩이 비어있습니다.")
+                    return []
+                
+            except Exception as e:
+                print(f"[경고] 쿼리 임베딩 변환 실패: {str(e)}")
+                return []
+            
+            # 각 청크와의 유사도 계산
+            results = []
+            for chunk in result.data:
+                if not chunk.get("embedding"):
+                    continue
+                
+                try:
+                    chunk_embedding = chunk["embedding"]
+                    if isinstance(chunk_embedding, str):
+                        chunk_embedding = json.loads(chunk_embedding)
+                    
+                    chunk_vec = np.array(chunk_embedding, dtype=np.float32)
+                    
+                    # 코사인 유사도 계산
+                    dot_product = np.dot(query_vec, chunk_vec)
+                    norm_query = np.linalg.norm(query_vec)
+                    norm_chunk = np.linalg.norm(chunk_vec)
+                    
+                    if norm_query == 0 or norm_chunk == 0:
+                        continue
+                    
+                    similarity = float(dot_product / (norm_query * norm_chunk))
+                    
+                    # Issue 기반 boosting: 같은 조항이면 가점
+                    if boost_article is not None:
+                        chunk_article = chunk.get("article_number")
+                        if chunk_article == boost_article:
+                            similarity *= boost_factor
+                    
+                    # 최소 유사도 임계값 (0.5)
+                    if similarity > 0.5:
+                        results.append({
+                            "id": chunk.get("id"),
+                            "contract_id": chunk.get("contract_id"),
+                            "article_number": chunk.get("article_number"),
+                            "paragraph_index": chunk.get("paragraph_index"),
+                            "content": chunk.get("content", ""),
+                            "chunk_index": chunk.get("chunk_index", 0),
+                            "metadata": chunk.get("metadata", {}),
+                            "score": similarity
+                        })
+                
+                except Exception as e:
+                    print(f"[경고] 청크 유사도 계산 실패: {str(e)}")
+                    continue
+            
+            # 유사도 순 정렬
+            results.sort(key=lambda x: x["score"], reverse=True)
+            
+            return results[:top_k]
+        
+        except Exception as e:
+            error_msg = str(e)
+            # 테이블이 없는 경우 재시도
+            if "Could not find the table" in error_msg or "PGRST205" in error_msg:
+                print(f"[경고] contract_chunks 테이블을 찾을 수 없습니다. 스키마 캐시 갱신 중...")
+                self._reinitialize_client()
+                try:
+                    # 재시도
+                    query = self.sb.table("contract_chunks")\
+                        .select("id, contract_id, article_number, paragraph_index, content, chunk_index, metadata, embedding")\
+                        .eq("contract_id", contract_id)
+                    
+                    if filters and "article_number" in filters:
+                        query = query.eq("article_number", filters["article_number"])
+                    
+                    result = query.limit(1000).execute()
+                    
+                    if not result.data:
+                        return []
+                    
+                    # 벡터 유사도 계산 (위의 로직과 동일)
+                    import numpy as np
+                    import json
+                    
+                    try:
+                        if isinstance(query_embedding, str):
+                            try:
+                                query_embedding = json.loads(query_embedding)
+                            except json.JSONDecodeError:
+                                try:
+                                    import ast
+                                    query_embedding = ast.literal_eval(query_embedding)
+                                except:
+                                    print(f"[경고] 쿼리 임베딩 파싱 실패")
+                                    return []
+                        
+                        if not isinstance(query_embedding, (list, np.ndarray)):
+                            print(f"[경고] 쿼리 임베딩이 리스트가 아닙니다: {type(query_embedding)}")
+                            return []
+                        
+                        query_vec = np.array(query_embedding, dtype=np.float32)
+                        
+                        if len(query_vec) == 0:
+                            print(f"[경고] 쿼리 임베딩이 비어있습니다.")
+                            return []
+                        
+                    except Exception as e2:
+                        print(f"[경고] 쿼리 임베딩 변환 실패: {str(e2)}")
+                        return []
+                    
+                    results = []
+                    for chunk in result.data:
+                        if not chunk.get("embedding"):
+                            continue
+                        
+                        try:
+                            chunk_embedding = chunk["embedding"]
+                            if isinstance(chunk_embedding, str):
+                                chunk_embedding = json.loads(chunk_embedding)
+                            
+                            chunk_vec = np.array(chunk_embedding, dtype=np.float32)
+                            
+                            dot_product = np.dot(query_vec, chunk_vec)
+                            norm_query = np.linalg.norm(query_vec)
+                            norm_chunk = np.linalg.norm(chunk_vec)
+                            
+                            if norm_query == 0 or norm_chunk == 0:
+                                continue
+                            
+                            similarity = float(dot_product / (norm_query * norm_chunk))
+                            
+                            if boost_article is not None:
+                                chunk_article = chunk.get("article_number")
+                                if chunk_article == boost_article:
+                                    similarity *= boost_factor
+                            
+                            if similarity > 0.5:
+                                results.append({
+                                    "id": chunk.get("id"),
+                                    "contract_id": chunk.get("contract_id"),
+                                    "article_number": chunk.get("article_number"),
+                                    "paragraph_index": chunk.get("paragraph_index"),
+                                    "content": chunk.get("content", ""),
+                                    "chunk_index": chunk.get("chunk_index", 0),
+                                    "metadata": chunk.get("metadata", {}),
+                                    "score": similarity
+                                })
+                        
+                        except Exception as e2:
+                            print(f"[경고] 청크 유사도 계산 실패: {str(e2)}")
+                            continue
+                    
+                    results.sort(key=lambda x: x["score"], reverse=True)
+                    return results[:top_k]
+                    
+                except Exception as e2:
+                    print(f"[경고] 계약서 청크 검색 재시도 실패: {str(e2)}")
+                    print(f"[해결] contract_chunks 테이블이 생성되어 있는지 확인하세요.")
+                    print(f"[해결] backend/scripts/create_contract_chunks_table.sql 파일을 Supabase SQL Editor에서 실행하세요.")
+                    return []
+            else:
+                print(f"[경고] 계약서 청크 검색 오류: {error_msg}")
+                return []
+    
+    def bulk_upsert_contract_chunks(
+        self,
+        contract_id: str,
+        chunks: List[Dict[str, Any]]
+    ):
+        """
+        계약서 청크 및 임베딩 일괄 저장
+        
+        Args:
+            contract_id: 계약서 ID (doc_id)
+            chunks: [{
+                content: str,
+                embedding: List[float],
+                article_number: int,
+                paragraph_index: int (optional),
+                chunk_index: int,
+                chunk_type: str ('article' | 'paragraph'),
+                metadata: Dict (optional)
+            }]
+        """
+        self._ensure_initialized()
+        if not chunks:
+            return
+        
+        # 기존 청크 삭제 (contract_id 기준)
+        try:
+            self.sb.table("contract_chunks")\
+                .delete()\
+                .eq("contract_id", contract_id)\
+                .execute()
+        except Exception as e:
+            error_msg = str(e)
+            if "Could not find the table" in error_msg or "PGRST205" in error_msg:
+                self._reinitialize_client()
+                try:
+                    self.sb.table("contract_chunks")\
+                        .delete()\
+                        .eq("contract_id", contract_id)\
+                        .execute()
+                except:
+                    print(f"[경고] contract_chunks 테이블이 없습니다. 먼저 SQL 스크립트를 실행하세요.")
+                    return
+            else:
+                print(f"[경고] 기존 청크 삭제 실패: {str(e)}")
+        
+        # 새 청크 삽입
+        payload = []
+        for c in chunks:
+            payload.append({
+                "contract_id": contract_id,
+                "article_number": c.get("article_number"),
+                "paragraph_index": c.get("paragraph_index"),
+                "content": c["content"],
+                "chunk_index": c.get("chunk_index", 0),
+                "chunk_type": c.get("chunk_type", "article"),
+                "embedding": c["embedding"],
+                "metadata": c.get("metadata", {})
+            })
+        
+        try:
+            self.sb.table("contract_chunks")\
+                .insert(payload)\
+                .execute()
+        except Exception as e:
+            error_msg = str(e)
+            if "Could not find the table" in error_msg or "PGRST205" in error_msg:
+                print(f"[경고] contract_chunks 테이블이 없습니다. 먼저 SQL 스크립트를 실행하세요.")
+                print(f"[해결] backend/scripts/create_contract_chunks_table.sql 파일을 Supabase SQL Editor에서 실행하세요.")
+            else:
+                raise Exception(f"계약서 청크 저장 실패: {str(e)}")
 

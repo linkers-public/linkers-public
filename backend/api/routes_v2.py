@@ -1,6 +1,16 @@
 """
 API Routes v2 - 실전형
-공고 업로드 및 처리
+
+⚠️ DEPRECATED: 공고 관련 기능은 레거시입니다.
+현재 프로젝트는 법률/계약서 RAG에 집중하고 있습니다.
+
+레거시 엔드포인트:
+- /api/announcements/* (공고 업로드/검색)
+- /api/v2/announcements/* (공고 v2)
+- /api/v2/teams/* (팀 매칭)
+
+현재 활성 엔드포인트:
+- /api/v2/legal/* (법률/계약서 RAG) - routes_legal_v2.py 참조
 """
 
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, BackgroundTasks
@@ -38,7 +48,8 @@ TEMP_DIR = "./data/temp"
 os.makedirs(TEMP_DIR, exist_ok=True)
 
 
-@router_v2.post("/announcements/upload", response_model=APIResponse)
+# ⚠️ DEPRECATED: 공고 관련 기능은 레거시입니다. 더 이상 사용하지 않습니다.
+@router_v2.post("/announcements/upload", response_model=APIResponse, deprecated=True)
 async def upload_announcement_v2(
     file: UploadFile = File(...),
     source: str = Form("streamlit_upload"),
@@ -137,7 +148,8 @@ async def upload_announcement_v2(
         )
 
 
-@router.post("/announcements/upload", response_model=APIResponse)
+# ⚠️ DEPRECATED: 공고 관련 기능은 레거시입니다. 더 이상 사용하지 않습니다.
+@router.post("/announcements/upload", response_model=APIResponse, deprecated=True)
 async def upload_announcement(
     file: UploadFile = File(...),
     source: str = Form("manual"),
@@ -228,7 +240,8 @@ async def upload_announcement(
         )
 
 
-@router.post("/announcements/text", response_model=APIResponse)
+# ⚠️ DEPRECATED: 공고 관련 기능은 레거시입니다. 더 이상 사용하지 않습니다.
+@router.post("/announcements/text", response_model=APIResponse, deprecated=True)
 async def upload_announcement_text(
     text: str = Form(...),
     source: str = Form("manual"),
@@ -270,13 +283,14 @@ async def upload_announcement_text(
         )
 
 
-@router.post("/analysis/start", response_model=APIResponse)
+# ⚠️ DEPRECATED: 공고 분석 기능은 레거시입니다. 더 이상 사용하지 않습니다.
+@router.post("/analysis/start", response_model=APIResponse, deprecated=True)
 async def start_analysis(
     request: dict,
     background_tasks: BackgroundTasks
 ):
     """
-    공고 분석 작업 시작 (비동기)
+    공고 분석 작업 시작 (비동기) - 레거시
     """
     doc_id = request.get('doc_id') or request.get('announcement_id')
     if not doc_id:
@@ -292,10 +306,11 @@ async def start_analysis(
     )
 
 
-@router.get("/analysis/stream/{job_id}")
+# ⚠️ DEPRECATED: 공고 분석 기능은 레거시입니다. 더 이상 사용하지 않습니다.
+@router.get("/analysis/stream/{job_id}", deprecated=True)
 async def stream_analysis_progress(job_id: str):
     """
-    분석 진행 상황 스트리밍 (Server-Sent Events)
+    분석 진행 상황 스트리밍 (Server-Sent Events) - 레거시
     """
     async def event_generator():
         while True:
@@ -340,9 +355,10 @@ async def stream_analysis_progress(job_id: str):
     )
 
 
-@router.get("/analysis/status/{job_id}")
+# ⚠️ DEPRECATED: 공고 분석 기능은 레거시입니다. 더 이상 사용하지 않습니다.
+@router.get("/analysis/status/{job_id}", deprecated=True)
 async def get_analysis_status(job_id: str):
-    """분석 작업 상태 조회"""
+    """분석 작업 상태 조회 (레거시)"""
     task_manager = get_task_manager_dep()
     task_status = task_manager.get_task_status(job_id)
     
@@ -355,9 +371,10 @@ async def get_analysis_status(job_id: str):
     )
 
 
-@router.get("/announcements/{announcement_id}/analysis")
+# ⚠️ DEPRECATED: 공고 관련 기능은 레거시입니다. 더 이상 사용하지 않습니다.
+@router.get("/announcements/{announcement_id}/analysis", deprecated=True)
 async def get_announcement_analysis(announcement_id: str):
-    """공고 분석 결과 조회"""
+    """공고 분석 결과 조회 (레거시)"""
     try:
         analysis = get_orchestrator().get_announcement_analysis(announcement_id)
         
@@ -379,7 +396,8 @@ async def get_announcement_analysis(announcement_id: str):
         )
 
 
-@router.get("/v2/announcements/search")
+# ⚠️ DEPRECATED: 공고 관련 기능은 레거시입니다. 더 이상 사용하지 않습니다.
+@router.get("/v2/announcements/search", deprecated=True)
 async def search_announcements(
     query: str,
     limit: int = 5,
@@ -546,7 +564,8 @@ async def search_announcements(
         )
 
 
-@router_v2.post("/teams/embedding", response_model=APIResponse)
+# ⚠️ DEPRECATED: 팀 매칭 기능은 레거시입니다. 더 이상 사용하지 않습니다.
+@router_v2.post("/teams/embedding", response_model=APIResponse, deprecated=True)
 async def upsert_team_embedding(
     team_id: int = Form(...),
     summary: str = Form(...),
@@ -589,7 +608,8 @@ async def upsert_team_embedding(
         )
 
 
-@router_v2.get("/teams/search")
+# ⚠️ DEPRECATED: 팀 매칭 기능은 레거시입니다. 더 이상 사용하지 않습니다.
+@router_v2.get("/teams/search", deprecated=True)
 async def search_teams(
     query: str,
     top_k: int = 5
@@ -625,7 +645,8 @@ async def search_teams(
         )
 
 
-@router_v2.get("/announcements/{announcement_id}/match-teams")
+# ⚠️ DEPRECATED: 팀 매칭 기능은 레거시입니다. 더 이상 사용하지 않습니다.
+@router_v2.get("/announcements/{announcement_id}/match-teams", deprecated=True)
 async def match_teams_for_announcement(
     announcement_id: str,
     top_k: int = 5

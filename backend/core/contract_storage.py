@@ -69,7 +69,7 @@ class ContractStorageService:
                 "title": title,
                 "original_filename": original_filename,
                 "doc_type": doc_type,
-                "risk_score": float(risk_score),
+                "risk_score": int(round(float(risk_score))),  # DB는 integer 타입이므로 변환
                 "risk_level": risk_level,
                 "sections": sections,
                 "summary": summary,
@@ -91,12 +91,13 @@ class ContractStorageService:
             
             contract_analysis_id = result.data[0]["id"]
             
-            # 2. contract_issues 테이블에 이슈들 저장
+            # 2. contract_issues 테이블에 이슈들 저장 (테이블이 있는 경우에만)
             if issues:
-                issues_data = []
-                for issue in issues:
-                    issues_data.append({
-                        "contract_analysis_id": contract_analysis_id,
+                try:
+                    issues_data = []
+                    for issue in issues:
+                        issues_data.append({
+                            "contract_analysis_id": contract_analysis_id,
                         "issue_id": issue.get("id", ""),
                         "category": issue.get("category", ""),
                         "severity": issue.get("severity", "medium"),
@@ -107,8 +108,11 @@ class ContractStorageService:
                         "suggested_revision": issue.get("suggestedRevision", ""),
                     })
                 
-                if issues_data:
-                    self.sb.table("contract_issues").insert(issues_data).execute()
+                    if issues_data:
+                        self.sb.table("contract_issues").insert(issues_data).execute()
+                except Exception as issues_error:
+                    # contract_issues 테이블이 없으면 무시 (선택적 기능)
+                    logger.warning(f"contract_issues 저장 실패 (계속 진행): {str(issues_error)}")
             
             logger.info(f"계약서 분석 결과 저장 완료: doc_id={doc_id}, analysis_id={contract_analysis_id}")
             return contract_analysis_id
@@ -117,9 +121,13 @@ class ContractStorageService:
             logger.error(f"계약서 분석 결과 저장 중 오류: {str(e)}", exc_info=True)
             raise
     
-    async def get_contract_analysis(self, doc_id: str) -> Optional[Dict[str, Any]]:
+    async def get_contract_analysis(self, doc_id: str, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """
         계약서 분석 결과를 DB에서 조회
+        
+        Args:
+            doc_id: 문서 ID
+            user_id: 사용자 ID (옵션, 필터링용)
         
         Returns:
             계약서 분석 결과 딕셔너리 또는 None
@@ -129,7 +137,13 @@ class ContractStorageService:
         try:
             # contract_analyses 테이블에서 조회
             # doc_id로 먼저 시도, 없으면 id로 시도 (기존 데이터 호환성)
-            result = self.sb.table("contract_analyses").select("*").eq("doc_id", doc_id).execute()
+            query = self.sb.table("contract_analyses").select("*").eq("doc_id", doc_id)
+            
+            # user_id가 제공된 경우 필터링
+            if user_id:
+                query = query.eq("user_id", user_id)
+            
+            result = query.execute()
             
             # doc_id로 찾지 못한 경우, id로 시도 (UUID 형식인 경우)
             if not result.data or len(result.data) == 0:
@@ -137,37 +151,45 @@ class ContractStorageService:
                     # UUID 형식인지 확인
                     import uuid
                     uuid.UUID(doc_id)
-                    result = self.sb.table("contract_analyses").select("*").eq("id", doc_id).execute()
+                    query = self.sb.table("contract_analyses").select("*").eq("id", doc_id)
+                    if user_id:
+                        query = query.eq("user_id", user_id)
+                    result = query.execute()
                 except (ValueError, AttributeError):
                     pass
             
             if not result.data or len(result.data) == 0:
+                logger.warning(f"계약서 분석 결과를 찾을 수 없음: doc_id={doc_id}, user_id={user_id}")
                 return None
             
             analysis = result.data[0]
             contract_analysis_id = analysis["id"]
             
-            # contract_issues 테이블에서 이슈들 조회
-            issues_result = (
-                self.sb.table("contract_issues")
-                .select("*")
-                .eq("contract_analysis_id", contract_analysis_id)
-                .execute()
-            )
-            
+            # contract_issues 테이블에서 이슈들 조회 (테이블이 있는 경우에만)
             issues = []
-            if issues_result.data:
-                for issue in issues_result.data:
-                    issues.append({
-                        "id": issue.get("issue_id", ""),
-                        "category": issue.get("category", ""),
-                        "severity": issue.get("severity", "medium"),
-                        "summary": issue.get("summary", ""),
-                        "originalText": issue.get("original_text", ""),
-                        "legalBasis": issue.get("legal_basis", []),
-                        "explanation": issue.get("explanation", ""),
-                        "suggestedRevision": issue.get("suggested_revision", ""),
-                    })
+            try:
+                issues_result = (
+                    self.sb.table("contract_issues")
+                    .select("*")
+                    .eq("contract_analysis_id", contract_analysis_id)
+                    .execute()
+                )
+                
+                if issues_result.data:
+                    for issue in issues_result.data:
+                        issues.append({
+                            "id": issue.get("issue_id", ""),
+                            "category": issue.get("category", ""),
+                            "severity": issue.get("severity", "medium"),
+                            "summary": issue.get("summary", ""),
+                            "originalText": issue.get("original_text", ""),
+                            "legalBasis": issue.get("legal_basis", []),
+                            "explanation": issue.get("explanation", ""),
+                            "suggestedRevision": issue.get("suggested_revision", ""),
+                        })
+            except Exception:
+                # contract_issues 테이블이 없으면 빈 리스트로 설정
+                issues = []
             
             # v2 응답 형식으로 변환
             # doc_id가 없으면 id를 사용 (기존 데이터 호환성)
@@ -226,7 +248,7 @@ class ContractStorageService:
                 "work_period": work_period,
                 "has_written_contract": has_written_contract,
                 "social_insurance": social_insurance or [],
-                "risk_score": float(risk_score),
+                "risk_score": int(round(float(risk_score))),  # DB는 integer 타입이므로 변환
                 "risk_level": risk_level,
                 "analysis": analysis,
                 "checklist": checklist,
@@ -285,13 +307,19 @@ class ContractStorageService:
                 for analysis in result.data:
                     contract_analysis_id = analysis["id"]
                     
-                    # 이슈 개수 조회
-                    issues_result = (
-                        self.sb.table("contract_issues")
-                        .select("id", count="exact")
-                        .eq("contract_analysis_id", contract_analysis_id)
-                        .execute()
-                    )
+                    # 이슈 개수 조회 (contract_issues 테이블이 있는 경우에만)
+                    issue_count = 0
+                    try:
+                        issues_result = (
+                            self.sb.table("contract_issues")
+                            .select("id", count="exact")
+                            .eq("contract_analysis_id", contract_analysis_id)
+                            .execute()
+                        )
+                        issue_count = issues_result.count if hasattr(issues_result, 'count') else 0
+                    except Exception:
+                        # contract_issues 테이블이 없으면 0으로 설정
+                        issue_count = 0
                     
                     # doc_id가 없으면 id를 사용 (기존 데이터 호환성)
                     doc_id_value = analysis.get("doc_id") or str(analysis["id"])
@@ -305,7 +333,7 @@ class ContractStorageService:
                         "risk_level": analysis.get("risk_level", "medium"),
                         "summary": analysis.get("summary", ""),
                         "created_at": analysis.get("created_at", ""),
-                        "issue_count": issues_result.count if hasattr(issues_result, 'count') else 0,
+                        "issue_count": issue_count,
                     })
             
             return analyses

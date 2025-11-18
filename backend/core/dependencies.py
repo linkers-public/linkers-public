@@ -45,7 +45,10 @@ def get_legal_service() -> LegalRAGService:
     """
     global _legal_service_instance
     if _legal_service_instance is None:
-        _legal_service_instance = LegalRAGService()
+        from config import settings
+        _legal_service_instance = LegalRAGService(
+            embedding_cache_size=settings.embedding_cache_size
+        )
     return _legal_service_instance
 
 

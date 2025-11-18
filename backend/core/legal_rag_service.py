@@ -3,8 +3,11 @@ Legal RAG Service - 법률 도메인 RAG 서비스
 계약서 분석, 상황 분석, 케이스 검색 기능 제공
 """
 
-from typing import List, Optional
+from typing import List, Optional, OrderedDict
 from pathlib import Path
+from collections import OrderedDict as OrderedDictType
+import asyncio
+import logging
 
 from models.schemas import (
     LegalAnalysisResult,
@@ -16,9 +19,63 @@ from models.schemas import (
 from core.supabase_vector_store import SupabaseVectorStore
 from core.generator_v2 import LLMGenerator
 from core.document_processor_v2 import DocumentProcessor
+from core.prompts import (
+    build_legal_chat_prompt,
+    build_contract_analysis_prompt,
+    build_situation_analysis_prompt,
+)
 
 
 LEGAL_BASE_PATH = Path(__file__).resolve().parent.parent / "data" / "legal"
+
+logger = logging.getLogger(__name__)
+
+
+class LRUEmbeddingCache:
+    """
+    LRU (Least Recently Used) 캐시를 사용한 임베딩 캐시
+    메모리 사용량을 제한하기 위해 최대 크기를 설정할 수 있음
+    """
+    
+    def __init__(self, max_size: int = 100):
+        """
+        Args:
+            max_size: 최대 캐시 항목 수 (기본값: 100)
+        """
+        self.max_size = max_size
+        self._cache: OrderedDictType[str, List[float]] = OrderedDictType()
+    
+    def get(self, key: str) -> Optional[List[float]]:
+        """캐시에서 값을 가져오고, 사용된 항목을 최신으로 이동"""
+        if key in self._cache:
+            # OrderedDict에서 항목을 제거하고 다시 추가하여 최신으로 이동
+            value = self._cache.pop(key)
+            self._cache[key] = value
+            return value
+        return None
+    
+    def put(self, key: str, value: List[float]) -> None:
+        """캐시에 값을 저장하고, 크기 제한을 초과하면 가장 오래된 항목 제거"""
+        if key in self._cache:
+            # 이미 존재하면 제거하고 다시 추가 (최신으로 이동)
+            self._cache.pop(key)
+        elif len(self._cache) >= self.max_size:
+            # 캐시가 가득 차면 가장 오래된 항목 제거 (FIFO)
+            self._cache.popitem(last=False)  # last=False: 가장 오래된 항목
+        
+        self._cache[key] = value
+    
+    def clear(self) -> None:
+        """캐시 전체 삭제"""
+        self._cache.clear()
+    
+    def size(self) -> int:
+        """현재 캐시 크기 반환"""
+        return len(self._cache)
+    
+    def __contains__(self, key: str) -> bool:
+        """캐시에 키가 있는지 확인"""
+        return key in self._cache
 
 
 class LegalRAGService:
@@ -29,33 +86,63 @@ class LegalRAGService:
     - cases/: 우리가 만든 시나리오 md 파일
     """
 
-    def __init__(self):
-        """벡터스토어/임베딩/LLM 클라이언트 초기화"""
+    def __init__(self, embedding_cache_size: int = 100):
+        """
+        벡터스토어/임베딩/LLM 클라이언트 초기화
+        
+        Args:
+            embedding_cache_size: 임베딩 캐시 최대 크기 (기본값: 100)
+        """
         self.vector_store = SupabaseVectorStore()
         self.generator = LLMGenerator()
         self.processor = DocumentProcessor()
+        # LRU 캐시를 사용한 임베딩 캐시 (메모리 사용량 제한)
+        self._embedding_cache = LRUEmbeddingCache(max_size=embedding_cache_size)
 
     # 1) 계약서 + 상황 설명 기반 분석
     async def analyze_contract(
         self,
         extracted_text: str,
         description: Optional[str] = None,
+        doc_id: Optional[str] = None,
     ) -> LegalAnalysisResult:
         """
+        계약서 분석 (Dual RAG 지원)
+        
         - extracted_text: 업로드된 계약서 OCR/파싱 결과 텍스트
         - description: 사용자가 덧붙인 상황 설명
+        - doc_id: 계약서 ID (있으면 contract_chunks도 검색)
         """
         # 1. 쿼리 문장 구성
         query = self._build_query_from_contract(extracted_text, description)
 
-        # 2. RAG 검색 (laws + manuals + cases)
-        grounding_chunks = await self._search_legal_chunks(query=query, top_k=8)
+        # 2. Dual RAG 검색: 계약서 내부 + 외부 법령
+        contract_chunks = []
+        legal_chunks = []
+        
+        # 2-1. 계약서 내부 검색 (doc_id가 있고 contract_chunks가 저장된 경우)
+        if doc_id:
+            try:
+                contract_chunks = await self._search_contract_chunks(
+                    doc_id=doc_id,
+                    query=query,
+                    top_k=5,  # 분석 시에는 상위 5개 사용
+                    selected_issue=None
+                )
+            except Exception as e:
+                # contract_chunks가 아직 저장되지 않았거나 오류 발생 시 무시
+                logger.warning(f"[계약서 분석] contract_chunks 검색 실패 (계속 진행): {str(e)}")
+                contract_chunks = []
+        
+        # 2-2. 외부 법령 검색
+        legal_chunks = await self._search_legal_chunks(query=query, top_k=8)
 
-        # 3. LLM으로 리스크 요약/분류
+        # 3. LLM으로 리스크 요약/분류 (Dual RAG 컨텍스트 포함)
         result = await self._llm_summarize_risk(
             query=query,
             contract_text=extracted_text,
-            grounding_chunks=grounding_chunks,
+            contract_chunks=contract_chunks,
+            grounding_chunks=legal_chunks,
         )
         return result
 
@@ -67,6 +154,7 @@ class LegalRAGService:
             query=query,
             contract_text=None,
             grounding_chunks=grounding_chunks,
+            contract_chunks=None,  # 상황 분석에는 계약서 청크 없음
         )
         return result
 
@@ -97,7 +185,7 @@ class LegalRAGService:
                 "related_cases": List[RelatedCase]
             }
         """
-        # 1. RAG 검색 (법률 문서에서 관련 정보 검색)
+        # 1. 쿼리 텍스트 구성
         # summary와 details가 있으면 우선 사용, 없으면 situation_text 사용
         query_text = situation_text
         if summary:
@@ -105,10 +193,61 @@ class LegalRAGService:
             if details:
                 query_text = f"{summary}\n\n{details}"
         
-        grounding_chunks = await self._search_legal_chunks(query=query_text, top_k=8)
+        # 2. 병렬 처리: RAG 검색과 케이스 검색을 동시에 실행
+        # 같은 쿼리를 사용하므로 임베딩을 한 번만 생성하고 재사용
+        query_embedding = await self._get_embedding(query_text)
         
-        # 2. 유사 케이스 검색
-        related_cases = await self.search_cases(query=query_text, limit=3)
+        # 임베딩을 공유하여 병렬 검색
+        async def search_legal_with_embedding():
+            rows = self.vector_store.search_similar_legal_chunks(
+                query_embedding=query_embedding,
+                top_k=8,
+                filters=None
+            )
+            results: List[LegalGroundingChunk] = []
+            for r in rows:
+                source_type = r.get("source_type", "law")
+                title = r.get("title", "제목 없음")
+                content = r.get("content", "")
+                score = r.get("score", 0.0)
+                results.append(
+                    LegalGroundingChunk(
+                        source_id=r.get("id", ""),
+                        source_type=source_type,
+                        title=title,
+                        snippet=content[:300],
+                        score=score,
+                    )
+                )
+            return results
+        
+        async def search_cases_with_embedding():
+            rows = self.vector_store.search_similar_legal_chunks(
+                query_embedding=query_embedding,
+                top_k=3,
+                filters={"source_type": "case"}
+            )
+            cases: List[LegalCasePreview] = []
+            for row in rows:
+                external_id = row.get("external_id", "")
+                title = row.get("title", "제목 없음")
+                content = row.get("content", "")
+                metadata = row.get("metadata", {})
+                cases.append(
+                    LegalCasePreview(
+                        id=external_id,
+                        title=title,
+                        situation=metadata.get("situation", content[:200]),
+                        main_issues=metadata.get("issues", []),
+                    )
+                )
+            return cases
+        
+        grounding_chunks, related_cases = await asyncio.gather(
+            search_legal_with_embedding(),
+            search_cases_with_embedding(),
+            return_exceptions=False
+        )
         
         # 3. LLM으로 상세 진단 수행
         result = await self._llm_situation_diagnosis(
@@ -167,13 +306,86 @@ class LegalRAGService:
                 "used_chunks": List[dict]
             }
         """
-        # 1. RAG 검색 (법률 문서에서 관련 정보 검색)
-        grounding_chunks = await self._search_legal_chunks(query=query, top_k=top_k)
+        # 1. Dual RAG 검색: 내 계약서 + 외부 법령
+        # 같은 쿼리를 사용하므로 임베딩을 한 번만 생성하고 재사용
+        query_embedding = await self._get_embedding(query)
+        
+        contract_chunks = []
+        legal_chunks = []
+        
+        # 1-1. 계약서 내부 검색 (doc_ids가 있는 경우)
+        async def search_contract_with_embedding():
+            if doc_ids and len(doc_ids) > 0:
+                doc_id = doc_ids[0]
+                # Issue 기반 boosting
+                boost_article = None
+                if selected_issue:
+                    boost_article = selected_issue.get("article_number")
+                    if isinstance(boost_article, str):
+                        import re
+                        match = re.search(r'(\d+)', str(boost_article))
+                        if match:
+                            boost_article = int(match.group(1))
+                        else:
+                            boost_article = None
+                    elif not isinstance(boost_article, int):
+                        boost_article = None
+                
+                return self.vector_store.search_similar_contract_chunks(
+                    contract_id=doc_id,
+                    query_embedding=query_embedding,
+                    top_k=3,
+                    boost_article=boost_article,
+                    boost_factor=1.5
+                )
+            return []
+        
+        # 1-2. 외부 법령 검색
+        async def search_legal_with_embedding():
+            rows = self.vector_store.search_similar_legal_chunks(
+                query_embedding=query_embedding,
+                top_k=top_k,
+                filters=None
+            )
+            results: List[LegalGroundingChunk] = []
+            for r in rows:
+                source_type = r.get("source_type", "law")
+                title = r.get("title", "제목 없음")
+                content = r.get("content", "")
+                score = r.get("score", 0.0)
+                results.append(
+                    LegalGroundingChunk(
+                        source_id=r.get("id", ""),
+                        source_type=source_type,
+                        title=title,
+                        snippet=content[:300],
+                        score=score,
+                    )
+                )
+            return results
+        
+        # 병렬 검색
+        contract_chunks, legal_chunks_raw = await asyncio.gather(
+            search_contract_with_embedding(),
+            search_legal_with_embedding(),
+            return_exceptions=False
+        )
+        legal_chunks = [
+            {
+                "id": chunk.source_id,
+                "source_type": chunk.source_type,
+                "title": chunk.title,
+                "content": chunk.snippet,
+                "score": chunk.score,
+            }
+            for chunk in legal_chunks_raw
+        ]
         
         # 2. LLM으로 답변 생성 (컨텍스트 포함)
         answer = await self._llm_chat_response(
             query=query,
-            grounding_chunks=grounding_chunks,
+            contract_chunks=contract_chunks,
+            legal_chunks=legal_chunks_raw,
             selected_issue=selected_issue,
             analysis_summary=analysis_summary,
             risk_score=risk_score,
@@ -184,16 +396,10 @@ class LegalRAGService:
             "answer": answer,
             "markdown": answer,
             "query": query,
-            "used_chunks": [
-                {
-                    "id": chunk.source_id,
-                    "source_type": chunk.source_type,
-                    "title": chunk.title,
-                    "content": chunk.snippet,
-                    "score": chunk.score,
-                }
-                for chunk in grounding_chunks
-            ],
+            "used_chunks": {
+                "contract": contract_chunks,
+                "legal": legal_chunks
+            },
         }
 
     # 4) 시나리오/케이스 검색
@@ -201,8 +407,8 @@ class LegalRAGService:
         """
         cases/*.md 에서만 검색하는 라이트한 검색 (새 스키마).
         """
-        # 쿼리 임베딩 생성
-        query_embedding = self.generator.embed_one(query)
+        # 쿼리 임베딩 생성 (캐싱 지원)
+        query_embedding = await self._get_embedding(query)
         
         # 벡터 검색 (case 타입만 필터링)
         rows = self.vector_store.search_similar_legal_chunks(
@@ -230,6 +436,83 @@ class LegalRAGService:
         return cases
 
     # ================= 내부 유틸 =================
+    
+    async def _get_embeddings_batch(
+        self,
+        queries: List[str],
+        use_cache: bool = True
+    ) -> List[List[float]]:
+        """
+        여러 쿼리의 임베딩을 배치로 생성 (캐싱 지원)
+        
+        Args:
+            queries: 쿼리 텍스트 리스트
+            use_cache: 캐시 사용 여부
+        
+        Returns:
+            임베딩 벡터 리스트
+        """
+        if not queries:
+            return []
+        
+        # 캐시에서 찾기
+        uncached_queries = []
+        uncached_indices = []
+        embeddings = [None] * len(queries)
+        
+        for idx, query in enumerate(queries):
+            if use_cache:
+                cached_embedding = self._embedding_cache.get(query)
+                if cached_embedding is not None:
+                    embeddings[idx] = cached_embedding
+                    continue
+            uncached_queries.append(query)
+            uncached_indices.append(idx)
+        
+        # 캐시에 없는 쿼리만 배치로 생성
+        if uncached_queries:
+            # 배치 임베딩 생성 (비동기로 실행)
+            new_embeddings = await asyncio.to_thread(
+                self.generator.embed,
+                uncached_queries
+            )
+            
+            # 결과를 올바른 위치에 배치하고 캐시에 저장
+            for cache_idx, original_idx in enumerate(uncached_indices):
+                embedding = new_embeddings[cache_idx]
+                embeddings[original_idx] = embedding
+                if use_cache:
+                    self._embedding_cache.put(uncached_queries[cache_idx], embedding)
+        
+        return embeddings
+    
+    async def _get_embedding(
+        self,
+        query: str,
+        use_cache: bool = True
+    ) -> List[float]:
+        """
+        단일 쿼리 임베딩 생성 (캐싱 지원)
+        
+        Args:
+            query: 쿼리 텍스트
+            use_cache: 캐시 사용 여부
+        
+        Returns:
+            임베딩 벡터
+        """
+        if use_cache:
+            cached_embedding = self._embedding_cache.get(query)
+            if cached_embedding is not None:
+                return cached_embedding
+        
+        # 비동기로 실행하여 블로킹 방지
+        embedding = await asyncio.to_thread(self.generator.embed_one, query)
+        
+        if use_cache:
+            self._embedding_cache.put(query, embedding)
+        
+        return embedding
 
     def _build_query_from_contract(
         self,
@@ -242,6 +525,55 @@ class LegalRAGService:
             return f"사용자 설명: {description}\n\n계약서 주요 내용:\n{snippet}"
         return f"계약서 주요 내용:\n{snippet}"
 
+    async def _search_contract_chunks(
+        self,
+        doc_id: str,
+        query: str,
+        top_k: int = 3,
+        selected_issue: Optional[dict] = None
+    ) -> List[dict]:
+        """
+        계약서 내부 청크 검색 (issue 기반 boosting)
+        
+        Args:
+            doc_id: 계약서 ID
+            query: 검색 쿼리
+            top_k: 반환할 최대 개수
+            selected_issue: 선택된 이슈 (article_number 포함)
+        
+        Returns:
+            계약서 청크 리스트
+        """
+        # 쿼리 임베딩 생성 (캐싱 지원)
+        query_embedding = await self._get_embedding(query)
+        
+        # Issue 기반 boosting: 같은 조항이면 가점
+        boost_article = None
+        if selected_issue:
+            # selected_issue에서 article_number 추출
+            boost_article = selected_issue.get("article_number")
+            if isinstance(boost_article, str):
+                # "제5조" 형식에서 숫자 추출
+                import re
+                match = re.search(r'(\d+)', str(boost_article))
+                if match:
+                    boost_article = int(match.group(1))
+                else:
+                    boost_article = None
+            elif not isinstance(boost_article, int):
+                boost_article = None
+        
+        # 벡터 검색
+        chunks = self.vector_store.search_similar_contract_chunks(
+            contract_id=doc_id,
+            query_embedding=query_embedding,
+            top_k=top_k,
+            boost_article=boost_article,
+            boost_factor=1.5
+        )
+        
+        return chunks
+    
     async def _search_legal_chunks(
         self,
         query: str,
@@ -254,8 +586,8 @@ class LegalRAGService:
         - cases
         섞어서 검색 (새 스키마).
         """
-        # 쿼리 임베딩 생성
-        query_embedding = self.generator.embed_one(query)
+        # 쿼리 임베딩 생성 (캐싱 지원)
+        query_embedding = await self._get_embedding(query)
         
         # 벡터 검색 (모든 source_type 검색)
         rows = self.vector_store.search_similar_legal_chunks(
@@ -288,6 +620,7 @@ class LegalRAGService:
         query: str,
         contract_text: Optional[str],
         grounding_chunks: List[LegalGroundingChunk],
+        contract_chunks: Optional[List[dict]] = None,
     ) -> LegalAnalysisResult:
         """
         LLM 프롬프트를 통해:
@@ -316,62 +649,14 @@ class LegalRAGService:
                 grounding=grounding_chunks,
             )
         
-        # LLM 프롬프트 구성
-        context_parts = []
-        for chunk in grounding_chunks[:5]:  # 상위 5개만 사용
-            context_parts.append(
-                f"[{chunk.source_type}] {chunk.title}\n{chunk.snippet}"
-            )
-        context = "\n\n".join(context_parts)
+        # 프롬프트 템플릿 사용 (Dual RAG 지원)
+        prompt = build_contract_analysis_prompt(
+            contract_text=contract_text or "",
+            grounding_chunks=grounding_chunks,
+            contract_chunks=contract_chunks,
+            description=query if query else None,
+        )
         
-        contract_snippet = ""
-        if contract_text:
-            contract_snippet = f"\n\n계약서 내용:\n{contract_text[:2000]}"
-        
-        prompt = f"""당신은 법률 전문가입니다. 다음 정보를 바탕으로 법적 리스크를 분석해주세요.
-
-사용자 질문/상황:
-{query}
-{contract_snippet}
-
-관련 법령/가이드/케이스:
-{context}
-
-다음 JSON 형식으로 분석 결과를 반환하세요:
-{{
-    "risk_score": 0~100 사이의 숫자,
-    "risk_level": "low" 또는 "medium" 또는 "high",
-    "summary": "전체 요약 (200자 이내)",
-    "issues": [
-        {{
-            "name": "법적 이슈명 (예: 수습기간 해지 조건 미명시)",
-            "description": "이슈 상세 설명 및 계약서 내 해당 조항의 구체적인 내용",
-            "severity": "low|medium|high",
-            "legal_basis": ["관련 법 조항 (예: 근로기준법 제27조)"],
-            "suggested_text": "권장 수정 문구 (선택사항)",
-            "rationale": "왜 이렇게 수정해야 하는지 이유 (선택사항)",
-            "suggested_questions": ["회사에 이렇게 질문할 수 있는 문구 (선택사항)"]
-        }}
-    ],
-    "recommendations": [
-        {{
-            "title": "권고사항 제목",
-            "description": "권고사항 설명",
-            "steps": ["단계1", "단계2"]
-        }}
-    ]
-}}
-
-중요 사항:
-1. 모든 응답은 한국어로 작성하세요.
-2. legal_basis 필드에는 한국어 법령명과 조항을 명확히 표기하세요.
-   예: "근로기준법 제56조", "퇴직급여법 제8조", "국민연금법 제2조" 등
-3. 영어 법령명이 나오면 한국어로 번역하여 표기하세요.
-   - "Labor Standards Act" → "근로기준법"
-   - "Pension Fund Act" → "퇴직급여법" 또는 "국민연금법"
-   - "Employment Insurance Act" → "고용보험법"
-
-JSON 형식만 반환하세요."""
 
         try:
             # Ollama 사용
@@ -479,25 +764,46 @@ JSON 형식만 반환하세요."""
     async def _llm_chat_response(
         self,
         query: str,
-        grounding_chunks: List[LegalGroundingChunk],
+        contract_chunks: Optional[List[dict]] = None,
+        legal_chunks: Optional[List[LegalGroundingChunk]] = None,
+        grounding_chunks: Optional[List[LegalGroundingChunk]] = None,  # 레거시 호환
         selected_issue: Optional[dict] = None,
         analysis_summary: Optional[str] = None,
         risk_score: Optional[int] = None,
         total_issues: Optional[int] = None,
     ) -> str:
         """
-        법률 상담 챗용 LLM 응답 생성
+        법률 상담 챗용 LLM 응답 생성 (Dual RAG 지원)
+        
+        Args:
+            contract_chunks: 계약서 내부 청크 (새로운 방식)
+            legal_chunks: 법령 청크 (새로운 방식)
+            grounding_chunks: 법령 청크 (레거시 호환)
         """
         if self.generator.disable_llm:
             # LLM 비활성화 시 기본 응답
-            return f"LLM 분석이 비활성화되어 있습니다. RAG 검색 결과는 {len(grounding_chunks)}개 발견되었습니다."
+            total_chunks = len(legal_chunks or grounding_chunks or []) + len(contract_chunks or [])
+            return f"LLM 분석이 비활성화되어 있습니다. RAG 검색 결과는 {total_chunks}개 발견되었습니다."
         
         # 컨텍스트 구성
         context_parts = []
-        for chunk in grounding_chunks[:5]:  # 상위 5개만 사용
-            context_parts.append(
-                f"[{chunk.source_type}] {chunk.title}\n{chunk.snippet}"
-            )
+        
+        # 계약서 청크 추가
+        if contract_chunks:
+            context_parts.append("=== 계약서 내용 ===")
+            for chunk in contract_chunks[:3]:  # 상위 3개만 사용
+                article_num = chunk.get("article_number", "")
+                content = chunk.get("content", "")[:500]  # 500자로 제한
+                context_parts.append(f"제{article_num}조:\n{content}")
+        
+        # 법령 청크 추가
+        chunks_to_use = legal_chunks or grounding_chunks or []
+        if chunks_to_use:
+            context_parts.append("\n=== 관련 법령/가이드라인 ===")
+            for chunk in chunks_to_use[:5]:  # 상위 5개만 사용
+                context_parts.append(
+                    f"[{chunk.source_type}] {chunk.title}\n{chunk.snippet}"
+                )
         context = "\n\n".join(context_parts)
         
         # 선택된 이슈 정보 추가
@@ -512,38 +818,16 @@ JSON 형식만 반환하세요."""
 - 관련 법령: {', '.join(selected_issue.get('legalBasis', [])[:3])}
 """
         
-        # 분석 요약 추가
-        analysis_context = ""
-        if analysis_summary:
-            analysis_context = f"\n전체 분석 요약: {analysis_summary}"
-        if risk_score is not None:
-            analysis_context += f"\n전체 위험도: {risk_score}점"
-        if total_issues is not None:
-            analysis_context += f"\n발견된 위험 조항 수: {total_issues}개"
-        
-        prompt = f"""당신은 법률 상담 전문가입니다. 사용자의 질문에 대해 이해하기 쉽고 실용적인 답변을 제공해주세요.
-
-**중요한 원칙:**
-1. 이 서비스는 법률 자문이 아닙니다. 정보 안내와 가이드를 제공하는 것입니다.
-2. 항상 관련 법령/가이드를 근거로 설명하세요.
-3. 답변 마지막에 "전문가 상담 권장" 문구를 포함하세요.
-4. 마크다운 형식을 사용하여 가독성을 높이세요 (제목, 리스트, 강조 등).
-
-사용자 질문:
-{query}
-{issue_context}
-{analysis_context}
-
-관련 법령/가이드/케이스:
-{context}
-
-위 정보를 바탕으로 사용자의 질문에 대해:
-1. 명확하고 이해하기 쉬운 설명
-2. 구체적인 행동 가이드
-3. 관련 법령 근거
-4. 추가 확인이 필요한 사항
-
-을 포함하여 답변해주세요. 마크다운 형식으로 작성하세요."""
+        # 프롬프트 템플릿 사용
+        prompt = build_legal_chat_prompt(
+            query=query,
+            contract_chunks=contract_chunks,
+            legal_chunks=chunks_to_use,
+            selected_issue=selected_issue,
+            analysis_summary=analysis_summary,
+            risk_score=risk_score,
+            total_issues=total_issues,
+        )
 
         try:
             # Ollama 사용
@@ -606,98 +890,18 @@ JSON 형식만 반환하세요."""
                 "related_cases": [],
             }
         
-        # 컨텍스트 구성
-        context_parts = []
-        for chunk in grounding_chunks[:5]:
-            context_parts.append(
-                f"[{chunk.source_type}] {chunk.title}\n{chunk.snippet}"
-            )
-        context = "\n\n".join(context_parts)
+        # 프롬프트 템플릿 사용
+        prompt = build_situation_analysis_prompt(
+            situation_text=situation_text,
+            category_hint=category_hint,
+            grounding_chunks=grounding_chunks,
+            employment_type=employment_type,
+            work_period=work_period,
+            weekly_hours=weekly_hours,
+            is_probation=is_probation,
+            social_insurance=social_insurance,
+        )
         
-        # 사용자 정보 요약
-        user_info = []
-        if employment_type:
-            user_info.append(f"고용 형태: {employment_type}")
-        if work_period:
-            user_info.append(f"근무 기간: {work_period}")
-        if weekly_hours:
-            user_info.append(f"주당 근로시간: {weekly_hours}시간")
-        if is_probation is not None:
-            user_info.append(f"수습 여부: {'수습 중' if is_probation else '수습 아님'}")
-        if social_insurance:
-            user_info.append(f"4대보험: {social_insurance}")
-        user_info_text = "\n".join(user_info) if user_info else "정보 없음"
-        
-        # 카테고리 라벨 매핑
-        category_labels = {
-            "harassment": "직장 내 괴롭힘 / 모욕",
-            "unpaid_wage": "임금체불 / 수당 미지급",
-            "unfair_dismissal": "부당해고 / 계약해지",
-            "overtime": "근로시간 / 야근 / 휴게시간 문제",
-            "probation": "수습·인턴 관련 문제",
-            "unknown": "기타 / 잘 모르겠음",
-        }
-        category_label = category_labels.get(category_hint, category_hint)
-        
-        prompt = f"""당신은 법률 진단 전문가입니다. 사용자가 설명한 상황을 분석하여 법적 위험도를 진단하고 행동 가이드를 제공해주세요.
-
-**중요한 원칙:**
-1. 이 서비스는 법률 자문이 아닙니다. 정보 안내와 가이드를 제공하는 것입니다.
-2. 항상 관련 법령/가이드를 근거로 판단하세요.
-3. 구체적이고 실용적인 행동 가이드를 제공하세요.
-
-사용자 정보:
-{user_info_text}
-
-상황 카테고리 힌트: {category_label}
-
-상황 설명:
-{situation_text}
-
-관련 법령/가이드/케이스:
-{context}
-
-다음 JSON 형식으로 진단 결과를 반환하세요:
-{{
-    "classified_type": "harassment|unpaid_wage|unfair_dismissal|overtime|probation|unknown",
-    "risk_score": 0~100 사이의 숫자,
-    "summary": "한 줄 요약 (예: '설명하신 상황은, 직장 내 괴롭힘 매뉴얼 기준 상 괴롭힘에 해당할 가능성이 높습니다.')",
-    "criteria": [
-        {{
-            "name": "판단 기준명 (예: 반복성 여부)",
-            "status": "likely|unclear|unlikely",
-            "reason": "판단 이유 및 설명"
-        }}
-    ],
-    "action_plan": {{
-        "steps": [
-            {{
-                "title": "증거 수집",
-                "items": ["○○, △△, 카톡/이메일 캡처", "출퇴근 기록 등을 남기세요"]
-            }},
-            {{
-                "title": "1차 대응",
-                "items": ["가능하다면 감정 섞지 않고 이런 식으로 문제를 제기해보는 것도 방법입니다."]
-            }},
-            {{
-                "title": "상담/신고 루트",
-                "items": ["고용노동부 1350 상담센터", "청년노동센터", "노무사 상담"]
-            }}
-        ]
-    }},
-    "scripts": {{
-        "to_company": "회사에 보낼 정중한 문제 제기 문구 템플릿 (예: '현재 계약상 주당 근로시간이 ○시간으로 기재되어 있으나, 실제로는 ○시간 이상 근무하고 있으며 연장근로 수당은 별도로 지급받지 못하고 있습니다. 이 부분에 대해 근로기준법 기준에 맞게 조정이 가능할지 검토를 요청드립니다.')",
-        "to_advisor": "노무사/기관에 상담할 때 쓸 설명 템플릿"
-    }}
-}}
-
-중요 사항:
-1. 모든 응답은 한국어로 작성하세요.
-2. criteria는 3~5개 정도로 구성하세요.
-3. action_plan의 steps는 3단계 정도로 구성하세요.
-4. scripts는 실제로 사용할 수 있는 구체적인 문구로 작성하세요.
-
-JSON 형식만 반환하세요."""
 
         try:
             # Ollama 사용
