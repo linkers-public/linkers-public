@@ -3,6 +3,14 @@
 ## 개요
 이 문서는 백엔드의 핵심 로직인 청킹(Chunking), RAG 구성, 벡터 검색에 대해 상세히 설명합니다.
 
+## ⚠️ 중요 사항
+
+**현재 프로젝트는 법률 리스크 분석에 집중하고 있으며, 공고 관련 기능은 레거시입니다.**
+
+- ✅ **현재 사용 중**: `legal_chunks` 테이블 (법률 문서 검색)
+- ⚠️ **레거시 (사용 안 함)**: `announcement_chunks` 테이블 (공고 검색)
+- ✅ **현재 사용 중**: `contract_analyses`, `contract_issues` 테이블 (계약서 분석 결과)
+
 ## 📄 1. 문서 처리 및 청킹 (Chunking)
 
 ### 1.1 문서 처리 파이프라인
@@ -178,24 +186,43 @@ def embed(self, texts: List[str]) -> List[List[float]]:
 
 **저장소:**
 - **Supabase pgvector**: PostgreSQL의 pgvector 확장 사용
-- **테이블 구조:**
-  - `announcement_chunks`: 공고 청크 및 임베딩
-  - `legal_chunks`: 법률 문서 청크 및 임베딩
-  - `team_embeddings`: 팀 임베딩
+- **현재 사용 중인 테이블:**
+  - ✅ `legal_chunks`: 법률 문서 청크 및 임베딩 (현재 사용 중)
+  - ⚠️ `announcement_chunks`: 공고 청크 및 임베딩 (레거시, 사용하지 않음)
+  - ⚠️ `team_embeddings`: 팀 임베딩 (레거시, 사용하지 않음)
 
 **코드 위치:** `core/supabase_vector_store.py`
 
+**법률 문서 청크 저장 예시:**
 ```python
-def bulk_upsert_chunks(announcement_id, chunks):
+# legal_chunks 테이블에 저장
+def upsert_legal_chunks(chunks):
+    payload = [{
+        "external_id": chunk["external_id"],
+        "source_type": chunk["source_type"],  # "law", "manual", "case"
+        "title": chunk["title"],
+        "content": chunk["content"],
+        "embedding": chunk["embedding"],  # float[] 배열 (384차원)
+        "metadata": chunk.get("metadata", {}),
+        "chunk_index": chunk.get("chunk_index", 0)
+    } for chunk in chunks]
+    
+    sb.table("legal_chunks").upsert(payload, on_conflict="external_id,chunk_index").execute()
+```
+
+**레거시 코드 (참고용):**
+```python
+# announcement_chunks는 더 이상 사용하지 않음
+def bulk_upsert_chunks(announcement_id, chunks):  # 레거시
     payload = [{
         "announcement_id": announcement_id,
         "chunk_index": c["chunk_index"],
         "content": c["content"],
-        "embedding": c["embedding"],  # float[] 배열
+        "embedding": c["embedding"],
         "metadata": c.get("metadata", {})
     } for c in chunks]
     
-    sb.table("announcement_chunks").insert(payload).execute()
+    sb.table("announcement_chunks").insert(payload).execute()  # 사용 안 함
 ```
 
 ## 🔎 3. 벡터 검색 (Vector Search)
@@ -212,30 +239,62 @@ def bulk_upsert_chunks(announcement_id, chunks):
 
 **코드 위치:** `core/supabase_vector_store.py`
 
-#### 방법 1: Supabase RPC 함수 사용 (권장)
+#### ✅ 현재 사용 중: 법률 문서 검색 (`legal_chunks`)
 
 ```python
-def search_similar_chunks(query_embedding, top_k=5, filters=None):
-    rpc_params = {
-        "query_embedding": query_embedding,  # float[] 배열
-        "match_threshold": 0.7,  # 최소 유사도 임계값
-        "match_count": top_k,
-        "filters": filters or {}
-    }
+def search_similar_legal_chunks(query_embedding, top_k=5, filters=None):
+    # legal_chunks 테이블에서 검색
+    query = sb.table("legal_chunks").select("*")
     
-    result = sb.rpc("match_announcement_chunks", rpc_params).execute()
-    return result.data
+    # source_type 필터링 (law, manual, case 등)
+    if filters and "source_type" in filters:
+        query = query.eq("source_type", filters["source_type"])
+    
+    chunks = query.execute().data
+    
+    # 클라이언트 측 코사인 유사도 계산
+    import numpy as np
+    query_vec = np.array(query_embedding, dtype=np.float32)
+    
+    results = []
+    for chunk in chunks:
+        if chunk.get("embedding"):
+            chunk_vec = np.array(chunk["embedding"], dtype=np.float32)
+            
+            # 코사인 유사도 = dot product / (norm1 * norm2)
+            similarity = np.dot(query_vec, chunk_vec) / (
+                np.linalg.norm(query_vec) * np.linalg.norm(chunk_vec)
+            )
+            
+            if similarity > 0.7:  # 임계값
+                results.append({
+                    "id": chunk["id"],
+                    "external_id": chunk.get("external_id", ""),
+                    "source_type": chunk.get("source_type", "law"),
+                    "title": chunk.get("title", ""),
+                    "content": chunk.get("content", ""),
+                    "score": float(similarity),
+                    "metadata": chunk.get("metadata", {})
+                })
+    
+    # 유사도 순 정렬
+    results.sort(key=lambda x: x["score"], reverse=True)
+    return results[:top_k]
 ```
 
-**Supabase RPC 함수 예시 (SQL):**
+**Supabase RPC 함수 예시 (SQL) - legal_chunks용:**
 ```sql
-CREATE OR REPLACE FUNCTION match_announcement_chunks(
+CREATE OR REPLACE FUNCTION match_legal_chunks(
     query_embedding vector(384),
     match_threshold float,
-    match_count int
+    match_count int,
+    source_type_filter text DEFAULT NULL
 )
 RETURNS TABLE (
     id uuid,
+    external_id text,
+    source_type text,
+    title text,
     content text,
     similarity float,
     metadata jsonb
@@ -245,50 +304,36 @@ AS $$
 BEGIN
     RETURN QUERY
     SELECT
-        ac.id,
-        ac.content,
-        1 - (ac.embedding <=> query_embedding) as similarity,
-        ac.metadata
-    FROM announcement_chunks ac
-    WHERE 1 - (ac.embedding <=> query_embedding) > match_threshold
-    ORDER BY ac.embedding <=> query_embedding
+        lc.id,
+        lc.external_id,
+        lc.source_type,
+        lc.title,
+        lc.content,
+        1 - (lc.embedding <=> query_embedding) as similarity,
+        lc.metadata
+    FROM legal_chunks lc
+    WHERE 1 - (lc.embedding <=> query_embedding) > match_threshold
+        AND (source_type_filter IS NULL OR lc.source_type = source_type_filter)
+    ORDER BY lc.embedding <=> query_embedding
     LIMIT match_count;
 END;
 $$;
 ```
 
-#### 방법 2: 클라이언트 측 계산 (Fallback)
-
-RPC 함수가 없는 경우, 모든 청크를 가져와서 클라이언트에서 유사도 계산:
+#### ⚠️ 레거시: 공고 검색 (`announcement_chunks` - 사용하지 않음)
 
 ```python
-# 모든 청크 가져오기
-chunks = sb.table("announcement_chunks").select("*").execute()
-
-# 코사인 유사도 계산
-import numpy as np
-query_vec = np.array(query_embedding, dtype=np.float32)
-
-results = []
-for chunk in chunks:
-    chunk_vec = np.array(chunk["embedding"], dtype=np.float32)
+# 레거시 코드 (참고용, 더 이상 사용하지 않음)
+def search_similar_chunks(query_embedding, top_k=5, filters=None):  # 레거시
+    rpc_params = {
+        "query_embedding": query_embedding,
+        "match_threshold": 0.7,
+        "match_count": top_k,
+        "filters": filters or {}
+    }
     
-    # 코사인 유사도 = dot product / (norm1 * norm2)
-    similarity = np.dot(query_vec, chunk_vec) / (
-        np.linalg.norm(query_vec) * np.linalg.norm(chunk_vec)
-    )
-    
-    if similarity > threshold:
-        results.append({
-            "id": chunk["id"],
-            "content": chunk["content"],
-            "similarity": float(similarity),
-            "metadata": chunk["metadata"]
-        })
-
-# 유사도 순 정렬
-results.sort(key=lambda x: x["similarity"], reverse=True)
-return results[:top_k]
+    result = sb.rpc("match_announcement_chunks", rpc_params).execute()  # 사용 안 함
+    return result.data
 ```
 
 ### 3.3 코사인 유사도 (Cosine Similarity)
@@ -309,35 +354,40 @@ similarity = (A · B) / (||A|| × ||B||)
 
 ### 3.4 검색 최적화
 
-#### 인덱싱
+#### 인덱싱 (현재 사용 중)
+
 ```sql
--- 벡터 인덱스 생성 (IVFFlat)
-CREATE INDEX ON announcement_chunks 
+-- legal_chunks 벡터 인덱스 (IVFFlat)
+CREATE INDEX IF NOT EXISTS legal_chunks_embedding_idx 
+ON legal_chunks 
 USING ivfflat (embedding vector_cosine_ops)
 WITH (lists = 100);
+
+-- source_type 인덱스
+CREATE INDEX IF NOT EXISTS legal_chunks_source_type_idx 
+ON legal_chunks (source_type);
 ```
 
-#### 필터링
+#### 필터링 (현재 사용 중)
+
 ```python
-# 메타데이터 필터 적용
+# 법률 문서 검색 필터
 filters = {
-    "source": "나라장터",
-    "budget_min": 10000000
+    "source_type": "law"  # "law", "manual", "case"
 }
 
 # Supabase 쿼리
-result = sb.table("announcement_chunks")\
+result = sb.table("legal_chunks")\
     .select("*")\
-    .eq("metadata->>source", filters["source"])\
-    .gte("metadata->>budget_min", filters["budget_min"])\
+    .eq("source_type", filters["source_type"])\
     .execute()
 ```
 
-### 3.5 법률 문서 검색
+### 3.5 법률 문서 검색 (현재 사용 중)
 
 **코드 위치:** `core/supabase_vector_store.py::search_similar_legal_chunks`
 
-법률 문서 검색은 동일한 벡터 검색 방식을 사용하지만, `legal_chunks` 테이블을 대상으로 합니다:
+법률 문서 검색은 `legal_chunks` 테이블을 사용하며, 계약서 분석과 법률 상담에 활용됩니다:
 
 ```python
 def search_similar_legal_chunks(
@@ -353,76 +403,100 @@ def search_similar_legal_chunks(
     
     chunks = query.execute().data
     
-    # 클라이언트 측 유사도 계산
-    # (RPC 함수가 있으면 사용)
+    # 클라이언트 측 코사인 유사도 계산
+    # (RPC 함수가 있으면 우선 사용)
     ...
 ```
 
+**사용 예시:**
+- 계약서 분석 시 관련 법령 검색
+- 법률 상담 챗에서 관련 조문 검색
+- 상황 분석 시 유사 케이스 검색
+
 ## 🔄 4. 전체 플로우 예시
 
-### 4.1 공고 업로드 및 인덱싱
+### 4.1 ✅ 현재 사용 중: 계약서 분석 및 법률 검색
+
+#### 계약서 분석 플로우
 
 ```
-1. 파일 업로드 (PDF)
+1. 계약서 파일 업로드 (PDF/HWPX)
    ↓
-2. 텍스트 추출 (PyMuPDF)
-   "공고 내용 텍스트..."
+2. 텍스트 추출 (PyMuPDF/HWPX 파서)
+   "제1조 (근로기간)... 제2조 (근로시간)..."
    ↓
-3. 청크 분할 (1000자씩, 200자 오버랩)
-   - 청크 1: "공고 내용 텍스트..." (0-1000자)
-   - 청크 2: "...텍스트..." (800-1800자)
-   - 청크 3: "...내용..." (1600-2600자)
+3. RAG 검색 (legal_chunks에서 관련 법령 검색)
+   - 쿼리: 계약서 본문 일부
+   - 검색: legal_chunks 테이블에서 유사 조문 검색
    ↓
-4. 임베딩 생성 (sentence-transformers)
-   - 청크 1 → [0.1, 0.2, ..., 0.9] (384차원)
-   - 청크 2 → [0.2, 0.1, ..., 0.8] (384차원)
-   - 청크 3 → [0.3, 0.2, ..., 0.7] (384차원)
+4. LLM 위험 분석 (Ollama)
+   - 검색된 법령 조문을 컨텍스트로 사용
+   - 위험 조항 식별 및 분석
    ↓
-5. 벡터 저장 (Supabase)
-   INSERT INTO announcement_chunks (embedding, content, ...)
-   ↓
-6. LLM 분석 (Ollama)
-   - 프로젝트명, 예산, 기술 스택 추출
-   ↓
-7. 분석 결과 저장
-   INSERT INTO announcement_analysis (result, ...)
+5. 분석 결과 저장
+   - contract_analyses 테이블에 저장
+   - contract_issues 테이블에 이슈별 상세 저장
 ```
 
-### 4.2 검색 및 답변 생성
+#### 법률 검색 플로우
 
 ```
 1. 사용자 쿼리
-   "React 개발자가 필요한 공고 찾아줘"
+   "수습 기간 해고 조건은 어떻게 되나요?"
    ↓
 2. 쿼리 임베딩 생성
-   "React 개발자가 필요한 공고 찾아줘" 
+   "수습 기간 해고 조건은 어떻게 되나요?"
    → [0.15, 0.25, ..., 0.85] (384차원)
    ↓
-3. 벡터 검색 (코사인 유사도)
-   - 청크 A: similarity = 0.92
-   - 청크 B: similarity = 0.88
-   - 청크 C: similarity = 0.85
+3. 벡터 검색 (legal_chunks 테이블)
+   - source_type="law" 필터링
+   - 코사인 유사도 계산
+   - 청크 A: similarity = 0.92 (근로기준법 제27조)
+   - 청크 B: similarity = 0.88 (근로기준법 시행령)
    ↓
 4. Top-K 결과 선택 (top_k=5)
-   [청크 A, 청크 B, 청크 C, ...]
+   [청크 A, 청크 B, ...]
    ↓
 5. LLM 컨텍스트 구성
-   "관련 문서:
-   - 청크 A: React 개발자 모집...
-   - 청크 B: 프론트엔드 개발...
+   "관련 법령:
+   - 근로기준법 제27조: 수습기간 중 해고...
+   - 근로기준법 시행령: 수습기간은...
    ..."
    ↓
 6. LLM 답변 생성 (Ollama)
-   "다음 공고들이 React 개발자를 모집하고 있습니다:
-   1. [공고명] - React, TypeScript 경력 3년 이상
+   "수습 기간 중 해고에 대한 법적 기준은 다음과 같습니다:
+   1. 근로기준법 제27조에 따르면...
    ..."
+```
+
+### 4.2 ⚠️ 레거시: 공고 업로드 및 인덱싱 (사용하지 않음)
+
+```
+⚠️ 이 플로우는 더 이상 사용하지 않습니다.
+
+1. 파일 업로드 (PDF)
+   ↓
+2. 텍스트 추출
+   ↓
+3. 청크 분할
+   ↓
+4. 임베딩 생성
+   ↓
+5. 벡터 저장 (announcement_chunks)  ← 레거시
+   ↓
+6. LLM 분석
+   ↓
+7. 분석 결과 저장 (announcement_analysis)  ← 레거시
 ```
 
 ## 📊 5. 데이터베이스 스키마
 
 ### 5.1 주요 테이블
 
-#### `announcements`
+#### ⚠️ 레거시 테이블 (사용하지 않음)
+
+**`announcements`** (레거시)
+- 공고 관련 기능은 더 이상 사용하지 않습니다
 - `id`: UUID (PK)
 - `source`: 출처
 - `external_id`: 외부 시스템 ID
@@ -430,7 +504,8 @@ def search_similar_legal_chunks(
 - `version`: 버전 번호
 - `content_hash`: 내용 해시 (중복 감지)
 
-#### `announcement_chunks`
+**`announcement_chunks`** (레거시)
+- 공고 청크 및 임베딩 저장 테이블 (더 이상 사용하지 않음)
 - `id`: UUID (PK)
 - `announcement_id`: 공고 ID (FK)
 - `chunk_index`: 청크 순서
@@ -438,7 +513,11 @@ def search_similar_legal_chunks(
 - `embedding`: vector(384) - 임베딩 벡터
 - `metadata`: JSONB - 메타데이터
 
-#### `legal_chunks`
+#### ✅ 현재 사용 중인 테이블
+
+**`legal_chunks`** (현재 사용 중)
+- 법률 문서 청크 및 임베딩 저장 테이블
+- 계약서 분석, 법률 검색에 사용
 - `id`: UUID (PK)
 - `external_id`: 외부 문서 ID
 - `source_type`: 문서 타입 (law, manual, case)
@@ -446,20 +525,58 @@ def search_similar_legal_chunks(
 - `content`: 청크 텍스트
 - `embedding`: vector(384) - 임베딩 벡터
 - `metadata`: JSONB - 메타데이터
+- `chunk_index`: 청크 순서
+- `file_path`: 원본 파일 경로
+
+**`contract_analyses`** (현재 사용 중)
+- 계약서 분석 결과 저장
+- `id`: UUID (PK)
+- `doc_id`: 문서 ID
+- `title`: 계약서 제목
+- `risk_score`: 위험도 점수
+- `risk_level`: 위험도 레벨
+- `contract_text`: 계약서 원문 텍스트
+- `summary`: 분석 요약
+- `user_id`: 사용자 ID (선택)
+
+**`contract_issues`** (현재 사용 중)
+- 계약서 이슈 상세 정보
+- `id`: UUID (PK)
+- `contract_analysis_id`: 계약서 분석 ID (FK)
+- `issue_id`: 이슈 ID
+- `category`: 이슈 카테고리
+- `severity`: 위험도
+- `summary`: 이슈 요약
+- `legal_basis`: 법적 근거
 
 ### 5.2 인덱스
 
+#### ✅ 현재 사용 중: legal_chunks 인덱스
+
 ```sql
--- 벡터 인덱스 (IVFFlat)
-CREATE INDEX announcement_chunks_embedding_idx 
-ON announcement_chunks 
+-- 벡터 인덱스 (IVFFlat) - legal_chunks
+CREATE INDEX IF NOT EXISTS legal_chunks_embedding_idx 
+ON legal_chunks 
 USING ivfflat (embedding vector_cosine_ops)
 WITH (lists = 100);
 
--- 메타데이터 인덱스
-CREATE INDEX announcement_chunks_metadata_idx 
-ON announcement_chunks 
-USING gin (metadata);
+-- source_type 인덱스
+CREATE INDEX IF NOT EXISTS legal_chunks_source_type_idx 
+ON legal_chunks (source_type);
+
+-- external_id 인덱스
+CREATE INDEX IF NOT EXISTS legal_chunks_external_id_idx 
+ON legal_chunks (external_id);
+```
+
+#### ⚠️ 레거시: announcement_chunks 인덱스 (사용하지 않음)
+
+```sql
+-- 벡터 인덱스 (IVFFlat) - 레거시
+-- CREATE INDEX announcement_chunks_embedding_idx 
+-- ON announcement_chunks 
+-- USING ivfflat (embedding vector_cosine_ops)
+-- WITH (lists = 100);
 ```
 
 ## 🎯 6. 검색 전략 비교
@@ -522,19 +639,23 @@ COMPANY_EMBED_MODEL=BAAI/bge-small-en-v1.5  # 384차원, 빠름
 ### 8.1 청킹
 - `core/document_processor_v2.py::to_chunks()` - 청크 분할
 - `core/document_processor_v2.py::SimpleTextSplitter` - 분할 알고리즘
+- `core/legal_chunker.py` - 법률 문서 전용 청킹 (선택사항)
 
 ### 8.2 임베딩
 - `core/generator_v2.py::embed()` - 배치 임베딩
 - `core/generator_v2.py::embed_one()` - 단일 임베딩
 
-### 8.3 벡터 검색
-- `core/supabase_vector_store.py::search_similar_chunks()` - 공고 검색
-- `core/supabase_vector_store.py::search_similar_legal_chunks()` - 법률 검색
-- `core/orchestrator_v2.py::search_similar_announcements()` - 검색 오케스트레이션
+### 8.3 벡터 검색 (현재 사용 중)
+- ✅ `core/supabase_vector_store.py::search_similar_legal_chunks()` - 법률 검색 (현재 사용)
+- ✅ `core/legal_rag_service.py::_search_legal_chunks()` - 법률 RAG 검색 (현재 사용)
+- ⚠️ `core/supabase_vector_store.py::search_similar_chunks()` - 공고 검색 (레거시, 사용 안 함)
+- ⚠️ `core/orchestrator_v2.py::search_similar_announcements()` - 공고 검색 (레거시, 사용 안 함)
 
-### 8.4 RAG 파이프라인
-- `core/orchestrator_v2.py::process_announcement()` - 전체 파이프라인
-- `core/legal_rag_service.py::analyze_contract()` - 계약서 분석 RAG
+### 8.4 RAG 파이프라인 (현재 사용 중)
+- ✅ `core/legal_rag_service.py::analyze_contract()` - 계약서 분석 RAG (현재 사용)
+- ✅ `core/legal_rag_service.py::chat_with_context()` - 법률 상담 챗 (현재 사용)
+- ✅ `core/legal_rag_service.py::analyze_situation_detailed()` - 상황 분석 (현재 사용)
+- ⚠️ `core/orchestrator_v2.py::process_announcement()` - 공고 처리 (레거시, 사용 안 함)
 
 ## 🚀 9. 성능 최적화
 
