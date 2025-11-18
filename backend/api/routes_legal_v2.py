@@ -371,10 +371,16 @@ async def analyze_contract(
         # DB에 저장 시도
         try:
             storage_service = get_storage_service()
+            # file_name 필드를 확실하게 채우기 위해 우선순위 적용
+            # original_filename은 file.filename 또는 doc_title 사용
+            original_filename_for_db = file.filename if file.filename and file.filename.strip() else doc_title
+            
+            logger.info(f"[계약서 분석] DB 저장 시도: doc_id={doc_id}, title={doc_title}, original_filename={original_filename_for_db}, file.filename={file.filename}")
+            
             await storage_service.save_contract_analysis(
                 doc_id=doc_id,
                 title=doc_title,
-                original_filename=file.filename,
+                original_filename=original_filename_for_db,  # file.filename이 None이면 doc_title 사용
                 doc_type=doc_type,
                 risk_score=result.risk_score,
                 risk_level=result.risk_level,
