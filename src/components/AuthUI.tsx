@@ -13,6 +13,18 @@ const AuthUI = ({ role }: { role: string }) => {
   const supabaseClient = createSupabaseBrowserClient()
 
   useEffect(() => {
+    // ✅ 브라우저 환경에서만 실행 (SSR 방지)
+    if (typeof window === 'undefined') {
+      setCheckingProfile(false)
+      return
+    }
+
+    // ✅ supabaseClient가 없으면 실행하지 않음
+    if (!supabaseClient) {
+      setCheckingProfile(false)
+      return
+    }
+
     const checkUser = async () => {
       try {
         const { data: { user: currentUser }, error: authError } = await supabaseClient.auth.getUser()

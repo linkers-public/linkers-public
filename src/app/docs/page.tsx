@@ -79,7 +79,7 @@ export default function DocsPage() {
 
   const handleDocumentClick = (doc: Document) => {
     const docId = doc.id
-    router.push(`/analysis/${docId}`)
+    router.push(`/legal/contract/${docId}`)
   }
 
   const formatDate = (dateString?: string) => {
