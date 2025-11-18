@@ -75,19 +75,49 @@ Linkus Legal은 단순한 프롬프트 엔지니어링이 아닌, **명확한 �
 
 ## 파이프라인 아키텍처
 
-```
-PDF/HWP 계약서
-    ↓
-DocumentParserTool (OCR + 조항 분할)
-    ↓
-    ├─→ ProvisionMatchingTool (표준계약 매칭)
-    └─→ VectorSearchTool (법령 RAG 검색)
-            ↓
-    RiskScoringTool (위험도 산정)
-            ↓
-    LLMExplanationTool (설명 + 수정 제안)
-            ↓
-    분석 결과 (UI 표시)
+```mermaid
+flowchart TD
+    A[PDF/HWP 계약서<br/>파일 업로드] --> B[DocumentParserTool<br/>OCR + 조항 분할]
+    B --> B1[텍스트 추출<br/>PyMuPDF/pdfplumber/pytesseract]
+    B1 --> B2[조항 단위 분할<br/>제n조 패턴 분석]
+    B2 --> B3[메타데이터 추출<br/>article_number, category]
+    
+    B3 --> C[병렬 처리]
+    C --> C1[ProvisionMatchingTool<br/>표준계약 매칭]
+    C --> C2[VectorSearchTool<br/>법령 RAG 검색]
+    
+    C1 --> C3[의미 기반 매칭<br/>임베딩 유사도]
+    C3 --> C4[누락/과도 조항 탐지<br/>필수 조항 체크리스트]
+    
+    C2 --> C5[Hybrid Search<br/>키워드 + 벡터]
+    C5 --> C6[MMR 재랭킹<br/>다양성 확보]
+    C6 --> C7[문서 타입 필터링<br/>laws/manuals/cases]
+    
+    C4 --> D[RiskScoringTool<br/>위험도 산정]
+    C7 --> D
+    
+    D --> D1[조항별 위험도 계산<br/>규칙 기반 50% + LLM 50%]
+    D1 --> D2[카테고리별 가중치<br/>임금 30%, 근로시간 25%<br/>해고 25%, IP 20%]
+    D2 --> D3[전체 위험 스코어<br/>가중 평균]
+    D3 --> D4[위험도 레벨 분류<br/>low/medium/high]
+    
+    D4 --> E[LLMExplanationTool<br/>설명 + 수정 제안]
+    E --> E1[위험 사유 설명<br/>200-300자]
+    E1 --> E2[법령 조문 인용<br/>관련 법령 추출]
+    E2 --> E3[수정 제안 문구<br/>법적으로 안전한 문구]
+    E3 --> E4[협상용 질문 스크립트<br/>회사에 질문할 문구 3개]
+    
+    E4 --> F[분석 결과<br/>UI 표시]
+    F --> F1[위험도 점수<br/>이슈 목록]
+    F1 --> F2[하이라이트된 계약서<br/>위험 구간 표시]
+    F2 --> F3[개선 제안<br/>수정 문구]
+    
+    style A fill:#e1f5ff
+    style B fill:#fff4e1
+    style C fill:#e8f5e9
+    style D fill:#ffebee
+    style E fill:#f3e5f5
+    style F fill:#c8e6c9
 ```
 
 ---

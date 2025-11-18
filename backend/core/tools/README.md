@@ -151,6 +151,54 @@ print(f"심각한 이슈: {len(result['critical_issues'])}개")
 
 ## 🔄 도구 조합 파이프라인
 
+### 전체 분석 파이프라인 흐름도
+
+```mermaid
+flowchart TD
+    A[계약서 파일<br/>PDF/HWP/HWPX] --> B[DocumentParserTool<br/>문서 파싱]
+    B --> B1[텍스트 추출<br/>OCR]
+    B1 --> B2[조항 단위 분할<br/>제n조 패턴]
+    B2 --> B3[메타데이터 추출<br/>article_number, category]
+    
+    B3 --> C[병렬 처리<br/>asyncio.gather]
+    C --> C1[ProvisionMatchingTool<br/>조항 매칭]
+    C --> C2[VectorSearchTool<br/>법령 검색]
+    
+    C1 --> C3[표준계약 매칭<br/>임베딩 유사도]
+    C3 --> C4[누락 조항 탐지<br/>필수 조항 체크리스트]
+    C4 --> C5[과도 조항 탐지<br/>불리한 조항 식별]
+    
+    C2 --> C6[Hybrid Search<br/>키워드 + 벡터]
+    C6 --> C7[MMR 재랭킹<br/>다양성 확보]
+    C7 --> C8[문서 타입 필터링<br/>law/standard_contract/manual]
+    
+    C5 --> D[RiskScoringTool<br/>위험도 산정]
+    C8 --> D
+    
+    D --> D1[조항별 위험도<br/>규칙 50% + LLM 50%]
+    D1 --> D2[카테고리별 가중치<br/>임금/근로시간/해고/IP]
+    D2 --> D3[전체 위험 스코어<br/>가중 평균]
+    
+    D3 --> E[LLMExplanationTool<br/>설명 생성]
+    E --> E1[위험 사유 설명<br/>200-300자]
+    E1 --> E2[법령 조문 인용<br/>관련 법령 추출]
+    E2 --> E3[수정 제안 문구<br/>법적으로 안전한 문구]
+    E3 --> E4[협상용 질문 스크립트<br/>회사에 질문할 문구 3개]
+    
+    E4 --> F[최종 결과<br/>구조화된 분석 결과]
+    F --> F1[doc_id<br/>contract_text]
+    F1 --> F2[provisions<br/>matched_provisions]
+    F2 --> F3[risk_score<br/>risk_level]
+    F3 --> F4[provision_risks<br/>legal_contexts]
+    
+    style A fill:#e1f5ff
+    style B fill:#fff4e1
+    style C fill:#e8f5e9
+    style D fill:#ffebee
+    style E fill:#f3e5f5
+    style F fill:#c8e6c9
+```
+
 ### 전체 분석 파이프라인 예시
 
 ```python

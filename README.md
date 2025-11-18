@@ -928,6 +928,46 @@ source venv/bin/activate
 현재 프로젝트는 **Monorepo 구조**입니다 (Frontend와 Backend가 같은 저장소에 있음).  
 **분리할 필요 없습니다!** 각 배포 플랫폼에서 **Root Directory** 설정만으로 원하는 폴더만 배포할 수 있습니다.
 
+#### 배포 아키텍처 다이어그램
+
+```mermaid
+flowchart TB
+    A[GitHub 저장소<br/>linkers-public] --> B[Monorepo 구조]
+    B --> B1[src/<br/>Frontend]
+    B --> B2[backend/<br/>Backend]
+    
+    B1 --> C[Vercel 배포<br/>Frontend]
+    C --> C1[Root Directory: ./<br/>자동 감지]
+    C1 --> C2[Build: npm run build<br/>Output: .next]
+    C2 --> C3[환경 변수 설정<br/>Supabase + Backend URL]
+    C3 --> C4[프로덕션 URL<br/>https://app.vercel.app]
+    
+    B2 --> D[Railway/Render 배포<br/>Backend]
+    D --> D1[Root Directory: backend<br/>Monorepo 지원]
+    D1 --> D2[Build: pip install<br/>Start: python main.py]
+    D2 --> D3[환경 변수 설정<br/>Supabase + API Keys]
+    D3 --> D4[프로덕션 URL<br/>https://backend.railway.app]
+    
+    C4 --> E[프론트엔드<br/>Next.js App]
+    D4 --> F[백엔드 API<br/>FastAPI Server]
+    
+    E --> G[사용자 요청]
+    G --> E
+    E -->|API 호출| F
+    F -->|응답| E
+    E -->|Supabase 연동| H[(Supabase<br/>Database + Storage)]
+    F -->|DB 접근| H
+    
+    style A fill:#e1f5ff
+    style C fill:#000000,color:#fff
+    style D fill:#ff6b6b
+    style E fill:#0070f3,color:#fff
+    style F fill:#009688,color:#fff
+    style H fill:#3ecf8e,color:#fff
+```
+
+#### 프로젝트 구조
+
 ```
 linkers-public/          ← GitHub 저장소 루트
 ├── src/                 ← Frontend (Vercel에서 배포)
