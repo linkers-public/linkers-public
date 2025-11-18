@@ -382,6 +382,117 @@ graph LR
    - Ollama 또는 OpenAI LLM을 사용하여 법률 상담 응답 생성
    - 계약서 위험도 분석 및 개선안 제시
 
+### [그림 5-2-2] 계약서 분석 전체 흐름도
+
+계약서 분석의 전체 파이프라인은 다음과 같은 단계로 구성됩니다:
+
+```mermaid
+flowchart TD
+    A[계약서 파일<br/>PDF/HWPX] --> B[Contract Parsing<br/>계약서 파싱]
+    B --> B1[텍스트 추출<br/>OCR/파서]
+    B1 --> C[Chunking<br/>청킹]
+    C --> C1[조항 단위 분할<br/>제n조 단위]
+    C1 --> C2[메타데이터 추출<br/>article_number, category]
+    
+    C2 --> D[Embedding<br/>임베딩 생성]
+    D --> D1[BAAI/bge-m3 모델<br/>1024차원 벡터]
+    D1 --> D2[벡터 저장<br/>contract_chunks 테이블]
+    
+    D2 --> E[Vector Search<br/>벡터 검색]
+    E --> E1[Dual RAG 검색]
+    E1 --> E2[계약서 내부 검색<br/>contract_chunks]
+    E1 --> E3[법령 검색<br/>legal_chunks]
+    E2 --> E4[유사도 기반<br/>top-k 조항/법령]
+    E3 --> E4
+    
+    E4 --> F[RAG Augmentation<br/>RAG 증강]
+    F --> F1[컨텍스트 구성<br/>계약서 조항 + 법령 조문]
+    F1 --> F2[관련 문서 묶음<br/>grounding chunks]
+    
+    F2 --> G[LLM Analysis<br/>LLM 분석]
+    G --> G1[위험 조항 식별<br/>이슈 탐지]
+    G1 --> G2[자연어 설명 생성<br/>위험 사유 분석]
+    G2 --> G3[법조문 인용<br/>근거 문서 추출]
+    
+    G3 --> H[Risk Scoring<br/>위험도 산정]
+    H --> H1[조항별 위험도 계산<br/>0-100 점수]
+    H1 --> H2[카테고리별 가중치<br/>임금/근로시간/해고/IP]
+    H2 --> H3[전체 위험도 스코어<br/>가중 평균]
+    
+    H3 --> I[Highlight Mapping<br/>하이라이트 매핑]
+    I --> I1[위험 조항 위치 매핑<br/>article_number 매칭]
+    I1 --> I2[원문 하이라이트<br/>위험 구간 표시]
+    I2 --> I3[수정 제안 매핑<br/>개선안 연결]
+    
+    I3 --> J[최종 결과<br/>분석 완료]
+    J --> J1[위험도 점수<br/>이슈 목록]
+    J1 --> J2[하이라이트된 계약서<br/>위험 구간 표시]
+    J2 --> J3[개선 제안<br/>수정 문구]
+    
+    style A fill:#e1f5ff
+    style B fill:#fff4e1
+    style C fill:#fff4e1
+    style D fill:#e8f5e9
+    style E fill:#e8f5e9
+    style F fill:#f3e5f5
+    style G fill:#f3e5f5
+    style H fill:#ffebee
+    style I fill:#ffebee
+    style J fill:#c8e6c9
+```
+
+#### 흐름도 단계별 상세 설명
+
+1. **Contract Parsing (계약서 파싱)**
+   - PDF/HWPX 파일에서 텍스트 추출 (PyMuPDF, pdfplumber, pytesseract)
+   - OCR을 통한 이미지 기반 텍스트 인식
+   - 문서 구조 분석 및 메타데이터 추출
+
+2. **Chunking (청킹)**
+   - 계약서를 조항(제n조) 단위로 자동 분할
+   - 조항 번호 패턴 분석 (제n조, 제n장, 제n절 등)
+   - 각 조항에 메타데이터 부여 (article_number, category 등)
+   - 긴 조항은 문단 단위로 추가 분할
+
+3. **Embedding (임베딩 생성)**
+   - BAAI/bge-m3 모델을 사용하여 각 청크를 1024차원 벡터로 변환
+   - 법률/계약서 도메인에 최적화된 다국어 임베딩 모델 사용
+   - 생성된 벡터를 Supabase `contract_chunks` 테이블에 저장
+
+4. **Vector Search (벡터 검색)**
+   - Dual RAG 검색 수행:
+     - **계약서 내부 검색**: `contract_chunks`에서 관련 조항 검색
+     - **법령 검색**: `legal_chunks`에서 관련 법령/표준계약서 검색
+   - 코사인 유사도 기반 top-k 결과 추출
+   - 선택된 이슈가 있으면 해당 조항에 boosting 적용
+
+5. **RAG Augmentation (RAG 증강)**
+   - 검색된 계약서 조항과 법령 조문을 컨텍스트로 구성
+   - 관련 문서들을 grounding chunks로 묶음
+   - 프롬프트에 "근거 없는 내용 생성 금지" 규칙 포함
+
+6. **LLM Analysis (LLM 분석)**
+   - Ollama 또는 OpenAI LLM을 사용하여 위험 조항 식별
+   - 각 이슈에 대한 자연어 설명 생성 (200-300자)
+   - 관련 법령 조문 자동 추출 및 인용
+   - 위험 사유 상세 분석
+
+7. **Risk Scoring (위험도 산정)**
+   - 조항별 위험도 계산 (0-100 점수)
+   - 카테고리별 가중치 적용:
+     - 임금: 30%
+     - 근로시간: 25%
+     - 해고: 25%
+     - 지적재산권: 20%
+   - 전체 위험도 스코어 산출 (가중 평균)
+   - 위험도 레벨 분류 (low/medium/high)
+
+8. **Highlight Mapping (하이라이트 매핑)**
+   - 위험 조항의 원문 위치 매핑 (article_number 기반)
+   - 계약서 원문에서 위험 구간 하이라이트 표시
+   - 각 이슈에 대한 수정 제안 문구 생성 및 연결
+   - 프론트엔드에서 시각적으로 표시할 수 있도록 구조화
+
 ## 🏗️ 아키텍처
 
 아키텍처 개선 사항에 대한 상세 내용은 [ARCHITECTURE_IMPROVEMENTS.md](./ARCHITECTURE_IMPROVEMENTS.md)를 참고하세요.
