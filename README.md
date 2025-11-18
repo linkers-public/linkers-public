@@ -52,7 +52,7 @@ AI 기반 계약/노동 리스크 분석 시스템으로, 청년 근로자들을
 - **Framework**: FastAPI
 - **Language**: Python 3.9+
 - **RAG**: LangChain
-- **Vector DB**: Supabase pgvector (기본값) 또는 ChromaDB
+- **Vector DB**: Supabase pgvector
 - **LLM**: Ollama (기본값, 무료) 또는 OpenAI (선택)
 - **Embedding**: sentence-transformers (기본값, 무료) 또는 OpenAI (선택)
 - **Document Processing**: PyPDF, pdfplumber
@@ -226,10 +226,6 @@ OLLAMA_MODEL=llama3
 # 로컬 임베딩 모델 (기본값: BAAI/bge-small-en-v1.5)
 LOCAL_EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
 
-# ChromaDB 사용하려면
-USE_CHROMADB=true
-CHROMA_PERSIST_DIR=./data/chroma_db
-
 # Server Settings (선택)
 HOST=0.0.0.0
 PORT=8000
@@ -303,10 +299,6 @@ OLLAMA_MODEL=llama3  # 또는 mistral, phi3
 
 # 로컬 임베딩 모델 (기본값: BAAI/bge-small-en-v1.5)
 LOCAL_EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
-
-# ChromaDB 사용하려면
-USE_CHROMADB=true
-CHROMA_PERSIST_DIR=./data/chroma_db
 
 # Chunk Settings (선택)
 CHUNK_SIZE=1000
@@ -1318,25 +1310,6 @@ pip install --upgrade pip
 
 # 의존성 재설치
 pip install -r requirements.txt --force-reinstall
-```
-
-### ChromaDB 오류
-
-#### 벡터 DB 디렉토리 생성 실패
-```bash
-# 수동으로 디렉토리 생성
-mkdir -p data/chroma_db
-mkdir -p data/temp
-
-# 권한 확인 (Linux/Mac)
-chmod -R 755 data/
-```
-
-#### ChromaDB 버전 호환성 문제
-```bash
-# ChromaDB 재설치
-pip uninstall chromadb
-pip install chromadb==0.4.22
 ```
 
 ### Ollama 연결 실패
