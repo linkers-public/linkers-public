@@ -493,6 +493,241 @@ flowchart TD
    - 각 이슈에 대한 수정 제안 문구 생성 및 연결
    - 프론트엔드에서 시각적으로 표시할 수 있도록 구조화
 
+### [그림 5-2-3] 법률 상담 챗 플로우
+
+계약서 기반 법률 상담 챗의 전체 흐름:
+
+```mermaid
+flowchart TD
+    A[사용자 질문<br/>예: 수습 기간 해고 조건은?] --> B[질문 임베딩 생성<br/>BAAI/bge-m3]
+    
+    B --> C[Dual RAG 검색<br/>병렬 처리]
+    C --> C1[계약서 내부 검색<br/>contract_chunks]
+    C --> C2[법령 검색<br/>legal_chunks]
+    
+    C1 --> C3[이슈 기반 Boosting<br/>selected_issue 있으면<br/>해당 조항 1.5배 가중치]
+    C3 --> C4[top-k 조항 추출<br/>계약서 조항 3개]
+    
+    C2 --> C5[top-k 법령 추출<br/>법령/표준계약서 8개]
+    
+    C4 --> D[컨텍스트 구성]
+    C5 --> D
+    D --> D1[계약서 조항 + 법령 조문<br/>분석 요약 + 위험도 점수<br/>선택된 이슈 정보]
+    
+    D1 --> E[LLM 답변 생성<br/>Ollama/GPT]
+    E --> E1[마크다운 형식 답변<br/>법조문 인용 포함]
+    E1 --> E2[근거 문서 추출<br/>used_chunks 반환]
+    
+    E2 --> F[최종 응답<br/>answer + used_chunks]
+    F --> F1[프론트엔드 표시<br/>마크다운 렌더링<br/>근거 문서 링크]
+    
+    style A fill:#e1f5ff
+    style C fill:#e8f5e9
+    style D fill:#fff4e1
+    style E fill:#f3e5f5
+    style F fill:#c8e6c9
+```
+
+#### 법률 상담 챗 단계별 설명
+
+1. **질문 입력**
+   - 사용자가 계약서 관련 질문 입력
+   - 선택된 이슈 정보가 있으면 함께 전달
+
+2. **Dual RAG 검색**
+   - **계약서 내부 검색**: `contract_chunks`에서 관련 조항 검색
+     - 선택된 이슈가 있으면 해당 조항에 1.5배 boosting 적용
+     - top-3 조항 추출
+   - **법령 검색**: `legal_chunks`에서 관련 법령/표준계약서 검색
+     - top-8 법령 추출
+   - 병렬 처리로 성능 최적화
+
+3. **컨텍스트 구성**
+   - 검색된 계약서 조항과 법령 조문 결합
+   - 분석 요약, 위험도 점수, 선택된 이슈 정보 포함
+   - 프롬프트에 "근거 없는 내용 생성 금지" 규칙 포함
+
+4. **LLM 답변 생성**
+   - Ollama 또는 OpenAI LLM 사용
+   - 마크다운 형식으로 구조화된 답변 생성
+   - 관련 법조문 자동 인용
+   - 사용된 청크 정보 반환 (used_chunks)
+
+5. **응답 반환**
+   - 마크다운 형식 답변
+   - 근거 문서 목록 (프론트엔드에서 링크 표시)
+
+### [그림 5-2-4] 상황 분석 플로우
+
+텍스트 기반 상황 진단의 전체 흐름:
+
+```mermaid
+flowchart TD
+    A[사용자 입력<br/>상황 텍스트 + 메타 정보] --> A1[고용형태<br/>employment_type]
+    A --> A2[근로기간<br/>work_period]
+    A --> A3[주 근로시간<br/>weekly_hours]
+    A --> A4[수습 여부<br/>is_probation]
+    A --> A5[사회보험<br/>social_insurance]
+    
+    A1 --> B[상황 텍스트 임베딩 생성<br/>BAAI/bge-m3]
+    A2 --> B
+    A3 --> B
+    A4 --> B
+    A5 --> B
+    
+    B --> C[병렬 검색<br/>asyncio.gather]
+    C --> C1[법령/매뉴얼 검색<br/>legal_chunks<br/>top-8]
+    C --> C2[케이스 검색<br/>legal_chunks<br/>source_type=case<br/>top-3]
+    
+    C1 --> D[LLM 상세 진단]
+    C2 --> D
+    A1 --> D
+    A2 --> D
+    A3 --> D
+    A4 --> D
+    A5 --> D
+    
+    D --> D1[위험도 점수 계산<br/>0-100]
+    D1 --> D2[카테고리 분류<br/>임금/근로시간/해고/IP]
+    D2 --> D3[법적 근거 추출<br/>criteria + legalBasis]
+    
+    D3 --> E[액션 플랜 생성]
+    E --> E1[체크리스트<br/>증거 수집 가이드]
+    E1 --> E2[권고 사항<br/>recommendations]
+    E2 --> E3[협상 스크립트<br/>scripts]
+    
+    E3 --> F[유사 케이스 연결]
+    C2 --> F
+    F --> F1[관련 케이스 3개<br/>id, title, summary]
+    
+    F1 --> G[최종 응답]
+    D1 --> G
+    D3 --> G
+    E --> G
+    F1 --> G
+    
+    G --> G1[위험도 점수<br/>risk_score]
+    G1 --> G2[법적 근거<br/>legalBasis]
+    G2 --> G3[체크리스트<br/>checklist]
+    G3 --> G4[권고 사항<br/>recommendations]
+    G4 --> G5[협상 스크립트<br/>scripts]
+    G5 --> G6[유사 케이스<br/>relatedCases]
+    
+    style A fill:#e1f5ff
+    style C fill:#e8f5e9
+    style D fill:#fff4e1
+    style E fill:#f3e5f5
+    style F fill:#ffebee
+    style G fill:#c8e6c9
+```
+
+#### 상황 분석 단계별 설명
+
+1. **사용자 입력**
+   - 상황 텍스트 (자유 입력)
+   - 메타 정보: 고용형태, 근로기간, 주 근로시간, 수습 여부, 사회보험 등
+
+2. **병렬 검색**
+   - **법령/매뉴얼 검색**: `legal_chunks`에서 관련 법령/가이드라인 검색 (top-8)
+   - **케이스 검색**: `legal_chunks`에서 유사 케이스 검색 (top-3, source_type=case)
+   - 같은 임베딩을 재사용하여 병렬 처리
+
+3. **LLM 상세 진단**
+   - 검색된 법령/케이스와 메타 정보를 컨텍스트로 제공
+   - 위험도 점수 계산 (0-100)
+   - 카테고리별 분류 (임금, 근로시간, 해고, 지적재산권)
+   - 법적 근거 추출 (criteria + legalBasis)
+
+4. **액션 플랜 생성**
+   - **체크리스트**: 증거 수집 가이드 (첫 번째 step의 items)
+   - **권고 사항**: 개선 방안 (나머지 steps의 items)
+   - **협상 스크립트**: 회사에 질문할 문구 3개
+
+5. **유사 케이스 연결**
+   - 검색된 케이스 3개를 관련 케이스로 연결
+   - 케이스 ID, 제목, 요약 정보 제공
+
+6. **최종 응답**
+   - 위험도 점수 및 레벨 (low/medium/high)
+   - 법적 근거 목록
+   - 체크리스트 및 권고 사항
+   - 협상 스크립트
+   - 유사 케이스 목록
+
+### [그림 5-2-5] API 엔드포인트 플로우
+
+전체 API 호출 흐름:
+
+```mermaid
+flowchart TD
+    A[프론트엔드] --> B[계약서 분석 API]
+    A --> C[법률 상담 API]
+    A --> D[상황 분석 API]
+    A --> E[법률 검색 API]
+    
+    B --> B1[POST /api/v2/legal/analyze-contract<br/>파일 업로드]
+    B1 --> B2[계약서 파싱<br/>Contract Parsing]
+    B2 --> B3[청킹 + 임베딩<br/>Chunking + Embedding]
+    B3 --> B4[벡터 저장<br/>contract_chunks]
+    B4 --> B5[Dual RAG 검색<br/>Vector Search]
+    B5 --> B6[LLM 분석<br/>LLM Analysis]
+    B6 --> B7[위험도 산정<br/>Risk Scoring]
+    B7 --> B8[결과 저장<br/>contract_analyses]
+    B8 --> B9[응답 반환<br/>LegalAnalysisResult]
+    
+    C --> C1[POST /api/v2/legal/chat<br/>질문 + 계약서 ID]
+    C1 --> C2[질문 임베딩<br/>Query Embedding]
+    C2 --> C3[Dual RAG 검색<br/>계약서 + 법령]
+    C3 --> C4[LLM 답변 생성<br/>Chat Response]
+    C4 --> C5[응답 반환<br/>answer + used_chunks]
+    
+    D --> D1[POST /api/v2/legal/analyze-situation<br/>상황 텍스트 + 메타]
+    D1 --> D2[상황 임베딩<br/>Situation Embedding]
+    D2 --> D3[병렬 검색<br/>법령 + 케이스]
+    D3 --> D4[LLM 진단<br/>Situation Diagnosis]
+    D4 --> D5[액션 플랜 생성<br/>Action Plan]
+    D5 --> D6[응답 반환<br/>SituationResponse]
+    
+    E --> E1[GET /api/v2/legal/search<br/>검색어]
+    E1 --> E2[검색어 임베딩<br/>Query Embedding]
+    E2 --> E3[벡터 검색<br/>legal_chunks]
+    E3 --> E4[응답 반환<br/>검색 결과 목록]
+    
+    B9 --> F[프론트엔드 표시]
+    C5 --> F
+    D6 --> F
+    E4 --> F
+    
+    style A fill:#e1f5ff
+    style B fill:#fff4e1
+    style C fill:#e8f5e9
+    style D fill:#f3e5f5
+    style E fill:#ffebee
+    style F fill:#c8e6c9
+```
+
+#### API 엔드포인트별 설명
+
+1. **계약서 분석 API** (`POST /api/v2/legal/analyze-contract`)
+   - 파일 업로드 → 파싱 → 청킹 → 임베딩 → 벡터 저장
+   - Dual RAG 검색 → LLM 분석 → 위험도 산정
+   - 결과를 DB에 저장하고 반환
+
+2. **법률 상담 API** (`POST /api/v2/legal/chat`)
+   - 질문 + 계약서 ID 입력
+   - Dual RAG 검색 (계약서 내부 + 법령)
+   - LLM 답변 생성 및 반환
+
+3. **상황 분석 API** (`POST /api/v2/legal/analyze-situation`)
+   - 상황 텍스트 + 메타 정보 입력
+   - 병렬 검색 (법령 + 케이스)
+   - LLM 진단 및 액션 플랜 생성
+
+4. **법률 검색 API** (`GET /api/v2/legal/search`)
+   - 검색어 입력
+   - 벡터 검색으로 관련 법령/표준계약서 검색
+   - 검색 결과 목록 반환
+
 ## 🏗️ 아키텍처
 
 아키텍처 개선 사항에 대한 상세 내용은 [ARCHITECTURE_IMPROVEMENTS.md](./ARCHITECTURE_IMPROVEMENTS.md)를 참고하세요.
