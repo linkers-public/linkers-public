@@ -50,6 +50,8 @@ class ContractStorageService:
         issues: List[Dict[str, Any]],
         user_id: Optional[str] = None,
         contract_text: Optional[str] = None,  # 계약서 원문 텍스트
+        clauses: Optional[List[Dict[str, Any]]] = None,  # 조항 목록
+        highlighted_texts: Optional[List[Dict[str, Any]]] = None,  # 하이라이트된 텍스트
     ) -> str:
         """
         계약서 분석 결과를 DB에 저장
@@ -96,6 +98,14 @@ class ContractStorageService:
             if contract_text:
                 analysis_data["contract_text"] = contract_text
             
+            # 조항 목록 저장 (JSONB)
+            if clauses:
+                analysis_data["clauses"] = clauses
+            
+            # 하이라이트된 텍스트 저장 (JSONB)
+            if highlighted_texts:
+                analysis_data["highlighted_texts"] = highlighted_texts
+            
             # user_id가 제공된 경우 추가
             if user_id:
                 analysis_data["user_id"] = user_id
@@ -108,27 +118,35 @@ class ContractStorageService:
             contract_analysis_id = result.data[0]["id"]
             
             # 2. contract_issues 테이블에 이슈들 저장 (테이블이 있는 경우에만)
+            logger.info(f"[DB 저장] issues 배열 길이: {len(issues) if issues else 0}")
             if issues:
                 try:
                     issues_data = []
-                    for issue in issues:
-                        issues_data.append({
+                    for idx, issue in enumerate(issues):
+                        issue_data = {
                             "contract_analysis_id": contract_analysis_id,
-                        "issue_id": issue.get("id", ""),
-                        "category": issue.get("category", ""),
-                        "severity": issue.get("severity", "medium"),
-                        "summary": issue.get("summary", ""),
-                        "original_text": issue.get("originalText", ""),
-                        "legal_basis": issue.get("legalBasis", []),
-                        "explanation": issue.get("explanation", ""),
-                        "suggested_revision": issue.get("suggestedRevision", ""),
-                    })
+                            "issue_id": issue.get("id", f"issue-{idx+1}"),
+                            "category": issue.get("category", ""),
+                            "severity": issue.get("severity", "medium"),
+                            "summary": issue.get("summary", ""),
+                            "original_text": issue.get("originalText", ""),
+                            "legal_basis": issue.get("legalBasis", []),
+                            "explanation": issue.get("explanation", ""),
+                            "suggested_revision": issue.get("suggestedRevision", ""),
+                        }
+                        issues_data.append(issue_data)
+                        logger.debug(f"[DB 저장] issue[{idx}]: id={issue_data['issue_id']}, summary={issue_data['summary'][:50] if issue_data['summary'] else '(없음)'}")
                 
                     if issues_data:
-                        self.sb.table("contract_issues").insert(issues_data).execute()
+                        result_issues = self.sb.table("contract_issues").insert(issues_data).execute()
+                        logger.info(f"[DB 저장] contract_issues 저장 완료: {len(issues_data)}개 이슈 저장됨")
+                    else:
+                        logger.warning(f"[DB 저장] issues_data가 비어있어 이슈를 저장하지 않음")
                 except Exception as issues_error:
                     # contract_issues 테이블이 없으면 무시 (선택적 기능)
-                    logger.warning(f"contract_issues 저장 실패 (계속 진행): {str(issues_error)}")
+                    logger.warning(f"contract_issues 저장 실패 (계속 진행): {str(issues_error)}", exc_info=True)
+            else:
+                logger.warning(f"[DB 저장] issues 배열이 비어있어 이슈를 저장하지 않음")
             
             logger.info(f"계약서 분석 결과 저장 완료: doc_id={doc_id}, analysis_id={contract_analysis_id}")
             return contract_analysis_id
@@ -211,6 +229,10 @@ class ContractStorageService:
             # doc_id가 없으면 id를 사용 (기존 데이터 호환성)
             doc_id_value = analysis.get("doc_id") or str(analysis["id"])
             
+            # clauses와 highlightedTexts 조회 (JSONB 컬럼)
+            clauses_data = analysis.get("clauses", [])
+            highlighted_texts_data = analysis.get("highlighted_texts", [])
+            
             return {
                 "docId": doc_id_value,
                 "title": analysis.get("title", ""),
@@ -221,6 +243,8 @@ class ContractStorageService:
                 "summary": analysis.get("summary", ""),
                 "retrievedContexts": analysis.get("retrieved_contexts", []),
                 "contractText": analysis.get("contract_text", ""),  # 계약서 원문 텍스트
+                "clauses": clauses_data if isinstance(clauses_data, list) else [],  # 조항 목록
+                "highlightedTexts": highlighted_texts_data if isinstance(highlighted_texts_data, list) else [],  # 하이라이트된 텍스트
                 "createdAt": analysis.get("created_at", ""),
             }
             

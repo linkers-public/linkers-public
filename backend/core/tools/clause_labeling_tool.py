@@ -7,6 +7,7 @@ from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 import re
 import logging
+from difflib import SequenceMatcher
 
 from .base_tool import BaseTool
 from ..legal_chunker import LegalChunker, Section
@@ -74,13 +75,21 @@ class ClauseLabelingTool(BaseTool):
             }
         
         try:
-            # 1. 조항 추출
+            # 1. 조항 추출 (issues 없이도 가능 - 제n조 패턴 기반)
             clauses = self._extract_clauses(contract_text)
             
-            # 2. issue와 조항 매핑
+            # 2. issue와 조항 매핑 (issues가 있고 originalText가 있는 경우만)
             issue_clause_mapping = {}
             if issues:
-                issue_clause_mapping = self._map_issues_to_clauses(issues, clauses, contract_text)
+                # originalText가 있는 issues만 필터링
+                valid_issues = [
+                    issue for issue in issues 
+                    if issue.get("originalText") and issue.get("originalText").strip()
+                ]
+                if valid_issues:
+                    issue_clause_mapping = self._map_issues_to_clauses(valid_issues, clauses, contract_text)
+                else:
+                    logger.warning(f"[조항 매핑] originalText가 있는 issue가 없어 조항 매핑을 건너뜁니다. 전체 issues 수: {len(issues)}")
             
             result = {
                 "clauses": [
@@ -180,7 +189,7 @@ class ClauseLabelingTool(BaseTool):
         contract_text: str
     ) -> Dict[str, List[str]]:
         """
-        issue와 조항 매핑
+        issue와 조항 매핑 (유사도 기반)
         
         Args:
             issues: 이슈 리스트
@@ -192,6 +201,9 @@ class ClauseLabelingTool(BaseTool):
         """
         issue_clause_mapping = {}
         
+        # 유사도 임계값
+        SIMILARITY_THRESHOLD = 0.6  # 60% 이상 유사하면 매칭
+        
         for issue in issues:
             issue_id = issue.get("id", "")
             original_text = issue.get("originalText", "")
@@ -199,30 +211,70 @@ class ClauseLabelingTool(BaseTool):
             if not original_text:
                 continue
             
-            # issue의 originalText가 어떤 조항에 포함되는지 찾기
-            matched_clause_ids = []
+            # issue의 originalText가 원문에서 어디에 있는지 찾기
+            issue_start = contract_text.find(original_text)
+            issue_end = issue_start + len(original_text) if issue_start >= 0 else -1
+            
+            # 각 조항과의 유사도 계산
+            clause_scores = []
             
             for clause in clauses:
-                # 조항 본문에서 originalText 검색
-                if original_text in clause.content or clause.content in original_text:
-                    matched_clause_ids.append(clause.id)
-                    clause.issues.append(issue_id)
-                # 또는 원문에서 위치 기반 매칭
-                elif clause.start_index > 0 and clause.end_index > 0:
-                    # issue의 originalText가 원문에서 어디에 있는지 찾기
-                    issue_start = contract_text.find(original_text)
-                    if issue_start >= 0:
-                        issue_end = issue_start + len(original_text)
-                        # 조항 범위와 겹치는지 확인
-                        if (clause.start_index <= issue_start <= clause.end_index) or \
-                           (clause.start_index <= issue_end <= clause.end_index) or \
-                           (issue_start <= clause.start_index and issue_end >= clause.end_index):
-                            if clause.id not in matched_clause_ids:
-                                matched_clause_ids.append(clause.id)
-                                clause.issues.append(issue_id)
+                score = 0.0
+                match_type = None
+                
+                # 1. 정확한 문자열 포함 검사 (가장 높은 우선순위)
+                if original_text in clause.content:
+                    score = 1.0
+                    match_type = "exact_contain"
+                elif clause.content in original_text:
+                    score = 0.95
+                    match_type = "clause_contained"
+                # 2. 위치 기반 매칭 (원문에서 겹치는 범위 확인)
+                elif issue_start >= 0 and clause.start_index > 0 and clause.end_index > 0:
+                    # 조항 범위와 겹치는지 확인
+                    if (clause.start_index <= issue_start <= clause.end_index) or \
+                       (clause.start_index <= issue_end <= clause.end_index) or \
+                       (issue_start <= clause.start_index and issue_end >= clause.end_index):
+                        score = 0.9
+                        match_type = "position_overlap"
+                # 3. 유사도 기반 매칭 (fuzzy matching)
+                else:
+                    # original_text와 조항 본문의 유사도 계산
+                    similarity = SequenceMatcher(None, original_text.lower(), clause.content.lower()).ratio()
+                    if similarity >= SIMILARITY_THRESHOLD:
+                        score = similarity
+                        match_type = "similarity"
+                
+                if score > 0:
+                    clause_scores.append({
+                        "clause": clause,
+                        "score": score,
+                        "match_type": match_type
+                    })
+            
+            # 유사도 순으로 정렬
+            clause_scores.sort(key=lambda x: x["score"], reverse=True)
+            
+            # 상위 매칭된 조항들 선택 (임계값 이상)
+            matched_clause_ids = []
+            for item in clause_scores:
+                if item["score"] >= SIMILARITY_THRESHOLD:
+                    clause = item["clause"]
+                    if clause.id not in matched_clause_ids:
+                        matched_clause_ids.append(clause.id)
+                        clause.issues.append(issue_id)
+                        logger.debug(
+                            f"[조항 매핑] issue={issue_id} -> clause={clause.id} "
+                            f"(score={item['score']:.2f}, type={item['match_type']})"
+                        )
             
             if matched_clause_ids:
                 issue_clause_mapping[issue_id] = matched_clause_ids
+            else:
+                logger.warning(
+                    f"[조항 매핑] issue={issue_id}에 매칭된 조항이 없습니다. "
+                    f"originalText 길이={len(original_text)}"
+                )
         
         return issue_clause_mapping
 

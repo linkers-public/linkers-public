@@ -64,6 +64,7 @@ class LegalIssue(BaseModel):
     suggested_text: Optional[str] = Field(None, description="권장 수정 문구")
     rationale: Optional[str] = Field(None, description="수정 이유/근거")
     suggested_questions: List[str] = Field(default_factory=list, description="협상/질문 스크립트")
+    original_text: Optional[str] = Field(None, description="계약서 원문에서 해당 위험 조항의 실제 텍스트")
 
 
 class LegalRecommendation(BaseModel):
@@ -240,6 +241,7 @@ class LegalBasisItem(BaseModel):
     title: str
     snippet: str
     sourceType: str
+    status: Optional[str] = Field(None, description="판단 기준 충족 여부: likely|unclear|unlikely")
 
 
 class SituationAnalysisV2(BaseModel):

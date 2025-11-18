@@ -198,7 +198,7 @@ def build_contract_analysis_prompt(
 
 위 계약서를 분석하여 다음 JSON 형식으로 응답해주세요:
 
-**중요: 모든 응답은 반드시 한국어로 작성하세요. (summary, description, rationale, title 등 모든 필드)**
+**⚠️ 매우 중요: 반드시 유효한 JSON 형식으로만 응답하세요. 설명, 마크다운, 코드 블록 등은 절대 포함하지 마세요.**
 
 {{
     "risk_score": 0-100,
@@ -207,7 +207,8 @@ def build_contract_analysis_prompt(
     "issues": [
         {{
             "name": "이슈 이름 (한국어)",
-            "description": "위험 조항 내용 (한국어)",
+            "description": "위험 조항 내용 설명 (한국어, 요약 형식)",
+            "original_text": "계약서 원문에서 해당 위험 조항의 실제 텍스트 (반드시 계약서 원문과 정확히 일치해야 함)",
             "severity": "low" | "medium" | "high",
             "legal_basis": ["근로기준법 제XX조", ...],
             "suggested_text": "개선된 조항 텍스트 (한국어)",
@@ -224,10 +225,37 @@ def build_contract_analysis_prompt(
     ]
 }}
 
-**응답 언어 규칙:**
-- summary, description, rationale, title, steps 등 모든 텍스트 필드는 반드시 한국어로 작성
-- legal_basis는 법령명이므로 "근로기준법 제XX조" 형식으로 한국어로 작성
-- JSON 형식만 반환하고, 설명이나 추가 텍스트는 포함하지 마세요.
+**응답 규칙 (반드시 준수):**
+1. **JSON 형식**: 반드시 유효한 JSON 형식으로만 응답. 설명, 마크다운, 코드 블록 등은 절대 포함하지 마세요.
+2. **언어**: summary, description, rationale, title, steps 등 모든 텍스트 필드는 반드시 한국어로 작성
+3. **legal_basis**: 법령명은 "근로기준법 제XX조" 형식으로 한국어로 작성, 최대 3개까지
+4. **문자 인코딩**: JSON 내 문자열에서 특수문자(따옴표, 줄바꿈 등)는 이스케이프 처리하세요.
+5. **issues**: 우선순위가 높은 것부터 최대 10개까지 식별
+6. **original_text 필수**: 각 issue의 "original_text" 필드는 반드시 계약서 원문에서 해당 위험 조항의 실제 텍스트를 그대로 복사해야 합니다. 요약이나 재작성이 아닌 원문 그대로여야 합니다.
+7. **risk_score**: 
+   - 0-30: low (전반적으로 양호)
+   - 31-60: medium (일부 개선 필요)
+   - 61-100: high (심각한 위험 조항 존재)
+
+**응답 예시:**
+{{
+    "risk_score": 65,
+    "risk_level": "high",
+    "summary": "이 계약서는 근로기준법 위반 가능성이 있는 조항이 포함되어 있습니다.",
+    "issues": [
+        {{
+            "name": "임금 지급 방법 불명확",
+            "description": "임금 지급일이 구체적으로 명시되지 않음",
+            "original_text": "임금은 매월 말일에 지급한다",
+            "severity": "high",
+            "legal_basis": ["근로기준법 제43조"],
+            "suggested_text": "임금은 매월 말일 오후 5시 이전에 근로자 명의 계좌로 입금한다",
+            "rationale": "임금 지급일이 불명확하면 분쟁 소지가 있습니다",
+            "suggested_questions": ["임금 지급일을 구체적으로 명시해주실 수 있나요?"]
+        }}
+    ],
+    "recommendations": []
+}}
 """
     
     return prompt

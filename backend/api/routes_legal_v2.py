@@ -174,9 +174,9 @@ async def analyze_contract(
         doc_id = str(uuid.uuid4())
         doc_title = title or file.filename or "계약서"
         
-        # 비동기 병렬 처리: 청킹/임베딩 저장과 법률 분석을 병렬로 시작
+        # contract_chunks 저장을 먼저 완료한 후 분석 시작 (Race condition 해결)
         async def prepare_contract_chunks():
-            """계약서 청킹 및 벡터 저장 (백그라운드 작업)"""
+            """계약서 청킹 및 벡터 저장"""
             try:
                 # 1. 조항 단위 청킹
                 processor = get_processor()
@@ -216,33 +216,37 @@ async def analyze_contract(
                     chunks=chunk_payload
                 )
                 logger.info(f"[계약서 분석] contract_chunks 저장 완료: {len(chunk_payload)}개 청크")
+                return True
             except Exception as chunk_error:
                 logger.warning(f"[계약서 분석] contract_chunks 저장 실패 (계속 진행): {str(chunk_error)}", exc_info=True)
                 # 청크 저장 실패해도 분석은 계속 진행
+                return False
         
+        # contract_chunks 저장을 먼저 완료
+        chunks_saved = await prepare_contract_chunks()
+        
+        # 저장 완료 후 분석 시작 (Dual RAG에서 contract_chunks 사용 가능)
         async def analyze_contract_risk():
             """법률 리스크 분석 (Dual RAG 지원)"""
             service = get_legal_service()
-            # doc_id를 전달하여 contract_chunks도 검색 (청킹 완료 여부와 관계없이 시도)
+            # doc_id를 전달하여 contract_chunks도 검색
+            # chunks_saved가 True면 contract_chunks가 저장되어 있으므로 검색 가능
             return await service.analyze_contract(
                 extracted_text=extracted_text,
                 description=None,
-                doc_id=doc_id,  # Dual RAG를 위해 doc_id 전달
+                doc_id=doc_id if chunks_saved else None,  # 저장 실패 시 None 전달
             )
         
-        # 병렬 실행: 청킹/임베딩 저장과 분석을 동시에 시작
-        # 분석 결과는 즉시 필요하므로 await, 청킹은 백그라운드로 실행
-        # 주의: contract_chunks가 아직 저장되지 않았을 수 있으므로, 없으면 legal_chunks만 사용
-        result, _ = await asyncio.gather(
-            analyze_contract_risk(),
-            prepare_contract_chunks(),
-            return_exceptions=True
-        )
+        # 분석 실행
+        result = await analyze_contract_risk()
         
-        # result가 예외인 경우 처리
-        if isinstance(result, Exception):
-            logger.error(f"[계약서 분석] 분석 실패: {str(result)}", exc_info=True)
-            raise result
+        # result가 예외인 경우 처리 (이미 await 했으므로 예외는 자동으로 전파됨)
+        if not result:
+            logger.error(f"[계약서 분석] 분석 결과가 None입니다")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="계약서 분석에 실패했습니다.",
+            )
         
         # 영역별 점수 계산 (기존 result에서 추출 또는 기본값)
         sections = {
@@ -252,18 +256,49 @@ async def analyze_contract(
             "stock_option_ip": 0,
         }
         
-        # issues 변환
+        # issues 변환 및 originalText 검증
         issues = []
         for idx, issue in enumerate(result.issues):
-            # originalText 추출 시도
-            original_text = issue.description[:200] if issue.description else ""  # 간단한 추출
+            # originalText 추출: LegalIssue의 original_text 필드 우선 사용
+            original_text = ""
+            if hasattr(issue, 'original_text') and issue.original_text:
+                original_text = issue.original_text
+            elif issue.description:
+                # 하위 호환성: original_text가 없으면 description 사용
+                original_text = issue.description[:200]
+            
+            # originalText 검증: 계약서 원문에 정확히 일치하는지 확인
+            original_text_validated = original_text
+            if original_text and extracted_text:
+                # 정확히 일치하는지 확인
+                if extracted_text.find(original_text) < 0:
+                    # 정확히 일치하지 않으면 부분 매칭 시도
+                    # originalText의 처음 50자로 검색
+                    partial_match = extracted_text.find(original_text[:50])
+                    if partial_match >= 0:
+                        # 부분 매칭된 경우, 해당 위치의 텍스트 추출
+                        # 문장 단위로 확장하여 추출
+                        start_pos = partial_match
+                        # 앞으로 문장 시작 찾기
+                        while start_pos > 0 and extracted_text[start_pos] not in ['\n', '。', '.']:
+                            start_pos -= 1
+                        start_pos = max(0, start_pos + 1)
+                        # 뒤로 문장 끝 찾기
+                        end_pos = min(partial_match + len(original_text), len(extracted_text))
+                        while end_pos < len(extracted_text) and extracted_text[end_pos] not in ['\n', '。', '.']:
+                            end_pos += 1
+                        original_text_validated = extracted_text[start_pos:end_pos].strip()
+                        logger.info(f"[originalText 검증] issue-{idx+1}: 부분 매칭으로 수정됨 (길이: {len(original_text)} -> {len(original_text_validated)})")
+                    else:
+                        logger.warning(f"[originalText 검증] issue-{idx+1}: originalText를 계약서 원문에서 찾을 수 없음. originalText 길이={len(original_text)}")
+                        # 검증 실패 시 원본 유지 (하위 호환성)
             
             issue_v2 = ContractIssueV2(
                 id=f"issue-{idx+1}",
                 category=issue.name.lower().replace(" ", "_"),
                 severity=issue.severity,
                 summary=issue.description,
-                originalText=original_text,
+                originalText=original_text_validated,  # 검증된 originalText 사용
                 legalBasis=issue.legal_basis,
                 explanation=issue.rationale or issue.description,
                 suggestedRevision=issue.suggested_text or "",
@@ -338,9 +373,20 @@ async def analyze_contract(
                         break
             
             logger.info(f"[계약서 분석] 조항 분류 완료: {len(clauses)}개 조항, {len(highlighted_texts)}개 하이라이트")
+            
+            # 검증: clauses가 비어있으면 경고
+            if not clauses:
+                logger.warning(f"[계약서 분석] ⚠️ 조항이 추출되지 않았습니다. 계약서에 '제n조' 패턴이 없을 수 있습니다.")
+            
+            # 검증: highlightedTexts가 비어있으면 경고
+            if not highlighted_texts and issues:
+                logger.warning(f"[계약서 분석] ⚠️ 하이라이트된 텍스트가 없습니다. originalText 매칭 실패 가능성.")
+                # originalText가 있는 issues 개수 확인
+                issues_with_original = sum(1 for issue in issues if issue.originalText and issue.originalText.strip())
+                logger.info(f"[계약서 분석] originalText가 있는 issues: {issues_with_original}/{len(issues)}개")
         except Exception as e:
             logger.warning(f"[계약서 분석] 조항 분류/하이라이트 실패: {str(e)}", exc_info=True)
-            # 실패해도 계속 진행
+            # 실패해도 계속 진행 (clauses와 highlightedTexts는 빈 배열로 유지)
         
         # 결과 저장 (DB에 저장)
         # contractText 설정 전 확인
@@ -378,6 +424,54 @@ async def analyze_contract(
             
             logger.info(f"[계약서 분석] DB 저장 시도: doc_id={doc_id}, title={doc_title}, original_filename={original_filename_for_db}, file.filename={file.filename}")
             
+            # DB 저장 전 데이터 요약 로깅
+            issues_for_db = [{
+                "id": issue.id,
+                "category": issue.category,
+                "severity": issue.severity,
+                "summary": issue.summary,
+                "originalText": issue.originalText,
+                "legalBasis": issue.legalBasis,
+                "explanation": issue.explanation,
+                "suggestedRevision": issue.suggestedRevision,
+            } for issue in issues]
+            
+            logger.info(f"[DB 저장] 저장할 데이터 요약:")
+            logger.info(f"  - doc_id: {doc_id}")
+            logger.info(f"  - title: {doc_title}")
+            logger.info(f"  - risk_score: {result.risk_score}, risk_level: {result.risk_level}")
+            logger.info(f"  - summary 길이: {len(result.summary)}")
+            logger.info(f"  - issues 개수: {len(issues_for_db)}")
+            logger.info(f"  - contract_text 길이: {len(extracted_text) if extracted_text else 0}")
+            logger.info(f"  - retrieved_contexts 개수: {len(retrieved_contexts)}")
+            for idx, issue in enumerate(issues_for_db[:3]):  # 처음 3개만 로깅
+                logger.info(f"  - issue[{idx}]: id={issue['id']}, category={issue['category']}, severity={issue['severity']}, summary={issue['summary'][:50]}")
+            
+            # clauses와 highlightedTexts를 DB 저장 형식으로 변환
+            clauses_for_db = [
+                {
+                    "id": clause.id,
+                    "title": clause.title,
+                    "content": clause.content,
+                    "articleNumber": clause.articleNumber,
+                    "startIndex": clause.startIndex,
+                    "endIndex": clause.endIndex,
+                    "category": clause.category,
+                }
+                for clause in clauses
+            ] if clauses else []
+            
+            highlighted_texts_for_db = [
+                {
+                    "text": ht.text,
+                    "startIndex": ht.startIndex,
+                    "endIndex": ht.endIndex,
+                    "severity": ht.severity,
+                    "issueId": ht.issueId,
+                }
+                for ht in highlighted_texts
+            ] if highlighted_texts else []
+            
             await storage_service.save_contract_analysis(
                 doc_id=doc_id,
                 title=doc_title,
@@ -388,18 +482,11 @@ async def analyze_contract(
                 sections=sections,
                 summary=result.summary,
                 retrieved_contexts=retrieved_contexts,
-                issues=[{
-                    "id": issue.id,
-                    "category": issue.category,
-                    "severity": issue.severity,
-                    "summary": issue.summary,
-                    "originalText": issue.originalText,
-                    "legalBasis": issue.legalBasis,
-                    "explanation": issue.explanation,
-                    "suggestedRevision": issue.suggestedRevision,
-                } for issue in issues],
+                issues=issues_for_db,
                 user_id=x_user_id,
                 contract_text=extracted_text,  # 계약서 원문 텍스트 저장
+                clauses=clauses_for_db,  # 조항 목록 저장
+                highlighted_texts=highlighted_texts_for_db,  # 하이라이트된 텍스트 저장
             )
             logger.info(f"[계약서 분석] DB 저장 완료: doc_id={doc_id}")
         except Exception as save_error:
@@ -701,25 +788,29 @@ async def analyze_situation(
         elif result["risk_score"] >= 40:
             risk_level = "medium"
         
-        # legalBasis 변환
+        # legalBasis 변환 (status 필드 보존)
         legal_basis = []
         for criteria in result.get("criteria", []):
             legal_basis.append({
                 "title": criteria.get("name", ""),
                 "snippet": criteria.get("reason", ""),
                 "sourceType": "law",
+                "status": criteria.get("status", "likely"),  # status 필드 보존
             })
         
-        # recommendations 추출
-        recommendations = []
+        # action_plan.steps에서 checklist와 recommendations 구분
         action_plan = result.get("action_plan", {})
-        for step in action_plan.get("steps", []):
-            recommendations.extend(step.get("items", []))
+        steps = action_plan.get("steps", [])
         
-        # checklist 추출
+        # checklist: 첫 번째 step의 items만 사용
         checklist = []
-        for step in action_plan.get("steps", []):
-            checklist.extend(step.get("items", []))
+        if len(steps) > 0:
+            checklist = steps[0].get("items", [])
+        
+        # recommendations: 나머지 steps의 items 병합
+        recommendations = []
+        for step in steps[1:]:
+            recommendations.extend(step.get("items", []))
         
         # scripts 변환
         scripts_data = result.get("scripts", {})
@@ -743,7 +834,8 @@ async def analyze_situation(
         # tags 추출 (classified_type 기반)
         tags = [result.get("classified_type", "unknown")]
         
-        return SituationResponseV2(
+        # v2 응답 생성
+        response = SituationResponseV2(
             riskScore=float(result["risk_score"]),
             riskLevel=risk_level,
             tags=tags,
@@ -756,6 +848,35 @@ async def analyze_situation(
             scripts=scripts,
             relatedCases=related_cases,
         )
+        
+        # DB에 저장 (비동기, 실패해도 응답은 반환)
+        try:
+            storage_service = get_storage_service()
+            await storage_service.save_situation_analysis(
+                situation=payload.situation,
+                category=payload.category,
+                employment_type=payload.employmentType,
+                company_size=payload.companySize,
+                work_period=payload.workPeriod,
+                has_written_contract=payload.hasWrittenContract,
+                social_insurance=payload.socialInsurance,
+                risk_score=float(result["risk_score"]),
+                risk_level=risk_level,
+                analysis={
+                    "summary": result.get("summary", ""),
+                    "legalBasis": legal_basis,
+                    "recommendations": recommendations,
+                },
+                checklist=checklist,
+                related_cases=related_cases,
+                user_id=x_user_id,
+            )
+            logger.info(f"상황 분석 결과 DB 저장 완료 (user_id: {x_user_id})")
+        except Exception as save_error:
+            # DB 저장 실패해도 분석 결과는 반환
+            logger.warning(f"상황 분석 결과 DB 저장 실패 (응답은 정상 반환): {str(save_error)}")
+        
+        return response
     except Exception as e:
         logger.error(f"상황 분석 중 오류 발생: {str(e)}", exc_info=True)
         raise HTTPException(
