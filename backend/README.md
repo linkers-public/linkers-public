@@ -2,6 +2,23 @@
 
 공공입찰 자동 분석 및 팀 매칭을 위한 RAG 파이프라인 백엔드 서버입니다.
 
+## 📑 목차
+
+1. [빠른 시작](#-빠른-시작)
+2. [프로젝트 구조](#-프로젝트-구조)
+3. [API 엔드포인트](#-api-엔드포인트)
+4. [테스트](#-테스트)
+5. [설정](#-설정)
+6. [주요 기능](#-주요-기능)
+7. [아키텍처 개선 사항](#️-아키텍처-개선-사항)
+8. [계약서 히스토리 저장 및 조회](#-계약서-히스토리-저장-및-조회)
+9. [문제 해결](#-문제-해결)
+10. [추가 도움말](#-추가-도움말)
+11. [관련 문서](#-관련-문서)
+12. [라이선스](#-라이선스)
+
+---
+
 ## 🚀 빠른 시작
 
 ### 1. 환경 설정
@@ -38,14 +55,22 @@ pip install -r requirements.txt
 프로젝트 루트(`backend/`)에 `.env` 파일을 생성하고 다음 내용을 추가하세요:
 
 ```env
-# OpenAI API (필수)
+# Supabase 설정 (필수)
+SUPABASE_URL=your_supabase_url
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+DATABASE_URL=your_database_url
+
+# OpenAI API (선택, Ollama 사용 시 불필요)
 OPENAI_API_KEY=your_openai_api_key_here
 
-# Vector DB 저장 경로 (선택, 기본값: ./data/chroma_db)
-CHROMA_PERSIST_DIR=./data/chroma_db
+# Ollama 설정 (로컬 LLM 사용, 기본값)
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=llama3
+USE_OLLAMA=true
 
-# Embedding Model (선택, 기본값: text-embedding-3-small)
-EMBEDDING_MODEL=text-embedding-3-small
+# Embedding Model (선택, 기본값: BAAI/bge-small-en-v1.5)
+LOCAL_EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
+USE_LOCAL_EMBEDDING=true
 
 # LLM Model (선택, 기본값: gpt-4o-mini)
 LLM_MODEL=gpt-4o-mini
@@ -58,9 +83,15 @@ CHUNK_OVERLAP=200
 # Server Settings (선택)
 HOST=0.0.0.0
 PORT=8000
+
+# Logging Settings (선택)
+LOG_LEVEL=INFO  # INFO, DEBUG, WARNING, ERROR
 ```
 
-**중요:** `.env` 파일은 반드시 생성해야 하며, `OPENAI_API_KEY`는 필수입니다.
+**중요:** 
+- Supabase 설정은 필수입니다 (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`)
+- 로컬 LLM 사용 시 Ollama가 설치되어 있어야 합니다
+- 로깅 레벨은 `LOG_LEVEL` 환경 변수로 제어할 수 있습니다
 
 ### 3. 서버 실행
 
@@ -116,6 +147,8 @@ curl http://localhost:8000/api/health
 }
 ```
 
+---
+
 ## 📁 프로젝트 구조
 
 ```
@@ -125,27 +158,40 @@ backend/
 ├── requirements.txt
 │
 ├── core/
-│   ├── document_processor.py   # 문서 처리
-│   ├── vector_store.py         # 벡터 DB
-│   ├── retriever.py            # 검색 엔진
-│   ├── generator.py            # LLM 생성
-│   └── orchestrator.py         # RAG 통합
+│   ├── exceptions.py          # 커스텀 예외 클래스
+│   ├── error_handler.py      # 공통 에러 핸들러
+│   ├── logging_config.py     # 로깅 설정 통합
+│   ├── dependencies.py       # 의존성 주입 패턴
+│   ├── document_processor_v2.py  # 문서 처리
+│   ├── supabase_vector_store.py   # 벡터 DB (Supabase)
+│   ├── generator_v2.py       # LLM 생성
+│   ├── orchestrator_v2.py    # RAG 통합
+│   ├── legal_rag_service.py  # 법률 RAG 서비스
+│   ├── contract_storage.py   # 계약서 저장 서비스
+│   ├── async_tasks.py        # 비동기 작업 관리
+│   └── tools/                # 계약서 분석 도구들
 │
 ├── models/
 │   └── schemas.py              # Pydantic 모델
 │
 ├── api/
-│   └── routes.py               # API 엔드포인트
+│   ├── routes_v2.py          # 공고 RAG API 엔드포인트
+│   ├── routes_legal.py       # 법률 RAG API (v1)
+│   └── routes_legal_v2.py    # 법률 RAG API (v2)
 │
 └── data/
-    ├── chroma_db/              # 벡터 DB 저장소
+    ├── chroma_db/              # 벡터 DB 저장소 (레거시)
     ├── temp/                   # 임시 파일
-    └── sample_data/            # 샘플 데이터
+    └── legal/                  # 법률 문서 데이터
 ```
+
+---
 
 ## 🔌 API 엔드포인트
 
-### 1. 공고 업로드 및 분석
+### 공고 관련 API
+
+#### 1. 공고 업로드 및 분석
 
 ```bash
 POST /api/announcements/upload
@@ -172,7 +218,7 @@ file: [PDF 파일]
 }
 ```
 
-### 2. 팀 매칭
+#### 2. 팀 매칭
 
 ```bash
 GET /api/announcements/{announcement_id}/match
@@ -197,7 +243,7 @@ GET /api/announcements/{announcement_id}/match
 }
 ```
 
-### 3. 견적서 생성
+#### 3. 견적서 생성
 
 ```bash
 POST /api/estimates/generate
@@ -208,6 +254,79 @@ Content-Type: application/json
   "team_id": "team_001"
 }
 ```
+
+### 4. 계약서 분석 (법률 RAG v2)
+
+#### 계약서 업로드 및 분석
+```bash
+POST /api/v2/legal/analyze-contract
+Content-Type: multipart/form-data
+X-User-Id: [사용자 ID (선택)]
+
+file: [PDF/HWPX 파일]
+title: [문서 이름 (선택)]
+doc_type: [문서 타입 (선택: employment, freelance 등)]
+```
+
+**응답:**
+```json
+{
+  "docId": "uuid-string",
+  "title": "계약서명",
+  "contractText": "계약서 전문 텍스트...",
+  "riskScore": 65.5,
+  "riskLevel": "medium",
+  "summary": "계약서 요약...",
+  "issues": [
+    {
+      "id": "issue-1",
+      "category": "working_hours",
+      "severity": "high",
+      "summary": "위험 조항 요약",
+      "explanation": "상세 설명...",
+      "legalBasis": ["관련 법령..."],
+      "suggestedRevision": "수정 제안..."
+    }
+  ],
+  "clauses": [...],
+  "highlightedTexts": [...],
+  "createdAt": "2024-01-01T00:00:00Z"
+}
+```
+
+#### 계약서 분석 결과 조회
+```bash
+GET /api/v2/legal/contracts/{doc_id}
+```
+
+#### 계약서 히스토리 조회
+```bash
+GET /api/v2/legal/contracts/history?limit=20&offset=0
+X-User-Id: [사용자 ID (필수)]
+```
+
+**응답:**
+```json
+[
+  {
+    "doc_id": "uuid-string",
+    "title": "계약서명",
+    "original_filename": "contract.pdf",
+    "risk_score": 65.5,
+    "risk_level": "medium",
+    "summary": "계약서 요약...",
+    "created_at": "2024-01-01T00:00:00Z",
+    "issue_count": 5
+  }
+]
+```
+
+**참고:**
+- 계약서 분석 시 자동으로 DB에 저장됩니다
+- 사용자 ID가 없어도 분석은 가능하지만, 히스토리 조회에는 사용자 ID가 필요합니다
+- 프론트엔드는 사용자 ID가 없을 경우 로컬 스토리지에서 히스토리를 조회합니다
+
+---
 
 ## 🧪 테스트
 
@@ -298,6 +417,63 @@ curl -X POST "http://localhost:8000/api/estimates/generate" \
 }
 ```
 
+#### 5. 계약서 분석
+```bash
+curl -X POST "http://localhost:8000/api/v2/legal/analyze-contract" \
+  -H "X-User-Id: user-123" \
+  -F "file=@contract.pdf" \
+  -F "title=근로계약서" \
+  -F "doc_type=employment"
+```
+
+**응답 예시:**
+```json
+{
+  "docId": "550e8400-e29b-41d4-a716-446655440000",
+  "title": "근로계약서",
+  "contractText": "제1조 (근로기간)...",
+  "riskScore": 65.5,
+  "riskLevel": "medium",
+  "summary": "이 계약서는 전반적으로...",
+  "issues": [
+    {
+      "id": "issue-1",
+      "category": "working_hours",
+      "severity": "high",
+      "summary": "근로시간 조항에 문제가 있습니다",
+      "explanation": "주 52시간 근무를 초과하는 조항이...",
+      "legalBasis": ["근로기준법 제50조..."],
+      "suggestedRevision": "주 40시간을 초과하지 않도록..."
+    }
+  ],
+  "clauses": [...],
+  "highlightedTexts": [...],
+  "createdAt": "2024-01-01T00:00:00Z"
+}
+```
+
+#### 6. 계약서 히스토리 조회
+```bash
+curl "http://localhost:8000/api/v2/legal/contracts/history?limit=10&offset=0" \
+  -H "X-User-Id: user-123"
+```
+
+**응답 예시:**
+```json
+[
+  {
+    "doc_id": "550e8400-e29b-41d4-a716-446655440000",
+    "title": "근로계약서",
+    "original_filename": "contract.pdf",
+    "risk_score": 65.5,
+    "risk_level": "medium",
+    "summary": "이 계약서는 전반적으로...",
+    "created_at": "2024-01-01T00:00:00Z",
+    "issue_count": 5
+  }
+]
+```
+
 ### Python 클라이언트 예제
 
 ```python
@@ -329,24 +505,128 @@ response = requests.post(
 estimate = response.json()
 ```
 
+---
+
 ## 🔧 설정
 
 ### 환경 변수
 
-- `OPENAI_API_KEY`: OpenAI API 키 (필수)
-- `CHROMA_PERSIST_DIR`: ChromaDB 저장 경로 (기본: `./data/chroma_db`)
-- `EMBEDDING_MODEL`: 임베딩 모델 (기본: `text-embedding-3-small`)
+#### 필수 설정
+- `SUPABASE_URL`: Supabase 프로젝트 URL
+- `SUPABASE_SERVICE_ROLE_KEY`: Supabase 서비스 역할 키
+- `DATABASE_URL`: PostgreSQL 데이터베이스 URL
+
+#### LLM 설정
+- `USE_OLLAMA`: Ollama 사용 여부 (기본: `true`)
+- `OLLAMA_BASE_URL`: Ollama 서버 주소 (기본: `http://localhost:11434`)
+- `OLLAMA_MODEL`: Ollama 모델명 (기본: `llama3`)
+- `OPENAI_API_KEY`: OpenAI API 키 (Ollama 미사용 시)
 - `LLM_MODEL`: LLM 모델 (기본: `gpt-4o-mini`)
-- `CHUNK_SIZE`: 청크 크기 (기본: 1000)
-- `CHUNK_OVERLAP`: 청크 오버랩 (기본: 200)
+- `LLM_TEMPERATURE`: LLM 온도 (기본: `0.1`)
+
+#### 임베딩 설정
+- `USE_LOCAL_EMBEDDING`: 로컬 임베딩 사용 여부 (기본: `true`)
+- `LOCAL_EMBEDDING_MODEL`: 로컬 임베딩 모델 (기본: `BAAI/bge-small-en-v1.5`)
+
+#### 청크 설정
+- `CHUNK_SIZE`: 청크 크기 (기본: `1000`)
+- `CHUNK_OVERLAP`: 청크 오버랩 (기본: `200`)
+
+#### 서버 설정
+- `HOST`: 서버 호스트 (기본: `0.0.0.0`)
+- `PORT`: 서버 포트 (기본: `8000`)
+
+#### 로깅 설정
+- `LOG_LEVEL`: 로그 레벨 (기본: `INFO`, 선택: `DEBUG`, `INFO`, `WARNING`, `ERROR`)
+
+---
 
 ## 📝 주요 기능
 
-1. **문서 처리**: PDF 업로드 및 텍스트 추출
-2. **벡터 저장**: ChromaDB를 사용한 임베딩 저장
+1. **문서 처리**: PDF/HWP/HWPX 업로드 및 텍스트 추출
+2. **벡터 저장**: Supabase pgvector를 사용한 임베딩 저장
 3. **유사도 검색**: 벡터 유사도 기반 검색
-4. **LLM 생성**: GPT를 사용한 분석 및 견적 생성
+4. **LLM 생성**: Ollama/OpenAI를 사용한 분석 및 견적 생성
 5. **팀 매칭**: 요구사항 기반 팀 추천
+6. **법률 리스크 분석**: 계약서 위험도 분석 및 조항 검토
+7. **계약서 히스토리 관리**: 분석 결과 자동 저장 및 조회
+   - 분석 완료 시 자동으로 DB에 저장
+   - 사용자별 히스토리 조회 지원
+   - 프론트엔드에서 로컬 스토리지 fallback 지원
+8. **공통 에러 핸들러**: 일관된 에러 응답 형식
+9. **로깅 통합**: 중앙화된 로깅 설정 및 파일 로테이션
+10. **의존성 주입**: 싱글톤 패턴 기반 서비스 관리
+
+## 🏗️ 아키텍처 개선 사항
+
+### 공통 에러 핸들러
+- 모든 예외를 일관된 JSON 형식으로 처리
+- 커스텀 예외 클래스 지원 (`core/exceptions.py`)
+- 상세한 에러 로깅 및 디버깅 정보 제공
+
+### 로깅 설정 통합
+- 중앙화된 로깅 설정 (`core/logging_config.py`)
+- 파일 및 콘솔 동시 로깅
+- 로그 파일 자동 로테이션 (10MB, 5개 백업)
+- 환경 변수로 로그 레벨 제어
+
+### 의존성 주입 패턴
+- 싱글톤 패턴으로 서비스 인스턴스 관리 (`core/dependencies.py`)
+- FastAPI Depends 지원
+- 테스트 용이성 및 코드 재사용성 향상
+
+자세한 내용은 [ARCHITECTURE_IMPROVEMENTS.md](./ARCHITECTURE_IMPROVEMENTS.md)를 참고하세요.
+
+---
+
+## 💾 계약서 히스토리 저장 및 조회
+
+### 저장 메커니즘
+
+계약서 분석 시 자동으로 다음 위치에 저장됩니다:
+
+1. **백엔드 DB 저장** (자동)
+   - `/api/v2/legal/analyze-contract` 엔드포인트 호출 시
+   - `contract_analyses` 테이블에 분석 결과 저장
+   - `contract_issues` 테이블에 이슈별 상세 정보 저장
+   - 사용자 ID가 제공된 경우 `user_id`와 함께 저장
+
+2. **프론트엔드 로컬 스토리지** (자동)
+   - 분석 완료 후 `localStorage`에 저장
+   - 키 형식: `contract_analysis_{docId}`
+   - 로그인하지 않은 사용자도 로컬에서 히스토리 확인 가능
+
+### 히스토리 조회
+
+#### 백엔드 API 조회
+```bash
+GET /api/v2/legal/contracts/history
+X-User-Id: [사용자 ID]
+```
+
+- 사용자 ID가 필수입니다
+- 해당 사용자의 분석 히스토리만 반환됩니다
+
+#### 프론트엔드 Fallback 메커니즘
+
+프론트엔드는 다음 순서로 히스토리를 조회합니다:
+
+1. **백엔드 v2 API 조회 시도**
+   - 사용자 ID가 있는 경우 백엔드에서 조회
+   - 성공 시 DB에 저장된 히스토리 반환
+
+2. **로컬 스토리지 Fallback**
+   - API 조회 실패 또는 사용자 ID가 없는 경우
+   - `localStorage`에서 `contract_analysis_`로 시작하는 키 조회
+   - 최신순으로 정렬하여 반환
+
+### 주의사항
+
+- **사용자 ID 없이 분석**: 분석은 가능하지만 히스토리 조회 시 로컬 스토리지만 사용
+- **로그인 후 분석**: 사용자 ID와 함께 저장되어 다른 기기에서도 조회 가능
+- **로컬 스토리지 제한**: 브라우저별 저장 용량 제한이 있으므로 오래된 데이터는 정리 필요
+
+---
 
 ## 🚨 문제 해결
 
@@ -461,12 +741,42 @@ source venv/bin/activate
   allow_origins=["http://localhost:3000", "https://your-domain.com"]
   ```
 
+---
+
 ## 📞 추가 도움말
 
+### 로그 확인
+- 로그 파일 위치: `./logs/server_YYYYMMDD.log`
+- 로그 레벨 변경: `.env` 파일에서 `LOG_LEVEL=DEBUG` 설정
+- 실시간 로그 확인: 터미널 출력 또는 로그 파일 모니터링
+
+### 에러 처리
+- 모든 에러는 일관된 JSON 형식으로 반환됩니다
+- 에러 응답 형식:
+  ```json
+  {
+    "status": "error",
+    "message": "에러 메시지",
+    "detail": "상세 정보",
+    "path": "/api/endpoint"
+  }
+  ```
+
+### 문제 해결
 문제가 지속되면:
-1. 로그 확인: 터미널에 출력되는 오류 메시지 확인
+1. 로그 확인: `./logs/` 디렉토리의 로그 파일 확인
 2. API 문서 확인: http://localhost:8000/docs
-3. 이슈 리포트: GitHub Issues에 문제 상세 내용 작성
+3. 아키텍처 문서 확인: [ARCHITECTURE_IMPROVEMENTS.md](./ARCHITECTURE_IMPROVEMENTS.md)
+4. 이슈 리포트: GitHub Issues에 문제 상세 내용 작성
+
+---
+
+## 📚 관련 문서
+
+- [ARCHITECTURE_IMPROVEMENTS.md](./ARCHITECTURE_IMPROVEMENTS.md) - 아키텍처 개선 사항
+- [BACKEND_LOGIC_CLEANUP.md](./BACKEND_LOGIC_CLEANUP.md) - 백엔드 로직 정리 보고서
+
+---
 
 ## 📄 라이선스
 

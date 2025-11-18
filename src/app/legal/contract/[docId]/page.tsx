@@ -7,8 +7,6 @@ import { ContractViewer } from '@/components/contract/ContractViewer'
 import { AnalysisPanel } from '@/components/contract/AnalysisPanel'
 import { ContractChat } from '@/components/contract/ContractChat'
 import { ClauseList } from '@/components/contract/ClauseList'
-import { Button } from '@/components/ui/button'
-import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
 import type { LegalIssue, ContractAnalysisResult } from '@/types/legal'
 
@@ -29,6 +27,13 @@ export default function ContractDetailPage() {
   const [externalMessage, setExternalMessage] = useState<string>('')
   const [clauses, setClauses] = useState<any[]>([])  // ✨ 추가
   const [highlightedTexts, setHighlightedTexts] = useState<any[]>([])  // ✨ 추가
+  
+  // 스와이프 제스처 상태
+  const [touchStart, setTouchStart] = useState<{ x: number; y: number } | null>(null)
+  const [touchEnd, setTouchEnd] = useState<{ x: number; y: number } | null>(null)
+  
+  // 스와이프 최소 거리 (px)
+  const minSwipeDistance = 50
 
   // 분석 결과 로드
   useEffect(() => {
@@ -312,6 +317,70 @@ export default function ContractDetailPage() {
     loadAnalysis()
   }, [docId])
 
+  // 채팅 로딩 시 body에 cursor-wait 적용
+  useEffect(() => {
+    if (chatLoading) {
+      document.body.classList.add('cursor-wait')
+    } else {
+      document.body.classList.remove('cursor-wait')
+    }
+    return () => {
+      document.body.classList.remove('cursor-wait')
+    }
+  }, [chatLoading])
+
+  // ESC 키로 채팅 닫기
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isChatOpen) {
+        setIsChatOpen(false)
+      }
+    }
+    window.addEventListener('keydown', handleEscape)
+    return () => window.removeEventListener('keydown', handleEscape)
+  }, [isChatOpen])
+
+  // 스와이프 제스처 처리
+  const onTouchStart = (e: React.TouchEvent) => {
+    setTouchEnd(null)
+    setTouchStart({
+      x: e.targetTouches[0].clientX,
+      y: e.targetTouches[0].clientY,
+    })
+  }
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    setTouchEnd({
+      x: e.targetTouches[0].clientX,
+      y: e.targetTouches[0].clientY,
+    })
+  }
+
+  const onTouchEnd = () => {
+    if (!touchStart || !touchEnd) return
+    
+    const distanceX = touchStart.x - touchEnd.x
+    const distanceY = Math.abs(touchStart.y - touchEnd.y)
+    
+    // 수직 스크롤이 수평 스와이프보다 크면 무시
+    if (distanceY > Math.abs(distanceX)) {
+      setTouchStart(null)
+      setTouchEnd(null)
+      return
+    }
+    
+    const isLeftSwipe = distanceX > minSwipeDistance
+
+    // 오른쪽에서 왼쪽으로 스와이프 (채팅 닫기)
+    if (isLeftSwipe && isChatOpen) {
+      setIsChatOpen(false)
+    }
+    
+    // 초기화
+    setTouchStart(null)
+    setTouchEnd(null)
+  }
+
   // 분석 전 상태
   if (loading) {
     return (
@@ -367,7 +436,7 @@ export default function ContractDetailPage() {
 
   // 분석 완료 상태 - 2-컬럼 레이아웃
   return (
-    <div className="min-h-screen h-screen flex flex-col bg-gradient-to-br from-slate-50 via-white to-slate-50 relative">
+    <div className="min-h-screen flex flex-col bg-gradient-to-br from-slate-50 via-white to-slate-50 relative">
       {/* 메인 컨텐츠 영역 */}
       <div className="flex-1 flex flex-col overflow-hidden min-h-0">
         {/* 상단: 2-컬럼 레이아웃 (계약서 + 분석 결과) */}
@@ -376,9 +445,13 @@ export default function ContractDetailPage() {
           isChatOpen ? "lg:mr-[400px]" : ""
         )}>
           {/* 왼쪽: 계약서 뷰어 */}
-          <div className="w-full lg:w-1/2 flex-shrink-0 overflow-hidden bg-white border-r border-slate-200/60 shadow-sm">
-            {isSummaryOnly ? (
-              <div className="h-full flex items-center justify-center p-8">
+          <div className={cn(
+            "w-full flex-shrink-0 bg-white border-r border-slate-200/60 shadow-sm transition-[width] duration-300",
+            isChatOpen ? "lg:w-[58%]" : "lg:w-1/2"
+          )}>
+            <div className="h-full max-h-[calc(100vh-64px)] overflow-y-auto">
+              {isSummaryOnly ? (
+                <div className="h-full flex items-center justify-center p-8">
                 <div className="text-center max-w-md">
                   <div className="p-4 bg-amber-50 rounded-full w-20 h-20 mx-auto mb-4 flex items-center justify-center">
                     <FileText className="w-10 h-10 text-amber-500" />
@@ -401,43 +474,18 @@ export default function ContractDetailPage() {
                 issues={analysisResult.issues}
                 selectedIssueId={selectedIssueId}
                 onIssueClick={setSelectedIssueId}
-                highlightedTexts={highlightedTexts}  // ✨ 추가
+                highlightedTexts={highlightedTexts}
+                clauses={clauses}  // ✨ 조항 목록 전달
               />
             )}
+            </div>
           </div>
 
           {/* 오른쪽: 분석 결과 패널 */}
-          <div className="w-full lg:w-1/2 flex-shrink-0 overflow-hidden bg-white shadow-sm flex flex-col">
-            {/* 조항 목록 (있는 경우) - 접을 수 있는 섹션 */}
-            {clauses.length > 0 && (
-              <div className="border-b bg-gradient-to-br from-slate-50 to-white">
-                <details className="group" open={false}>
-                  <summary className="px-4 py-3 cursor-pointer hover:bg-slate-100/50 transition-colors flex items-center justify-between list-none">
-                    <div className="flex items-center gap-2">
-                      <FileText className="w-4 h-4 text-blue-600" />
-                      <span className="text-sm font-semibold text-slate-900">
-                        조항 목록
-                      </span>
-                      <span className="text-xs text-slate-500 bg-slate-200 px-2 py-0.5 rounded-full">
-                        {clauses.length}개
-                      </span>
-                    </div>
-                    <ChevronDown className="w-4 h-4 text-slate-400 group-open:rotate-180 transition-transform" />
-                  </summary>
-                  <div className="px-4 pb-4 max-h-[300px] overflow-y-auto">
-                    <ClauseList
-                      clauses={clauses}
-                      selectedClauseId={selectedClauseId}
-                      onClauseClick={(clauseId) => {
-                        setSelectedClauseId(clauseId)
-                        // 해당 조항으로 스크롤 (나중에 구현)
-                      }}
-                    />
-                  </div>
-                </details>
-              </div>
-            )}
-            
+          <div className={cn(
+            "w-full lg:flex-shrink-0 overflow-hidden bg-white shadow-sm flex flex-col transition-[width] duration-300",
+            isChatOpen ? "lg:w-[42%]" : "lg:w-1/2"
+          )}>
             <div className="flex-1 overflow-y-auto min-h-0">
               <AnalysisPanel
                 issues={analysisResult.issues}
@@ -449,6 +497,12 @@ export default function ContractDetailPage() {
                 onIssueSelect={setSelectedIssueId}
                 riskScore={analysisResult.riskScore}
                 contractText={analysisResult.contractText}
+                clauses={clauses}
+                selectedClauseId={selectedClauseId}
+                onClauseClick={(clauseId) => {
+                  setSelectedClauseId(clauseId)
+                  // 해당 조항으로 스크롤 (나중에 구현)
+                }}
                 onCategoryClick={(category) => {
                   const categoryIssue = analysisResult.issues.find(i => i.category === category)
                   if (categoryIssue) {
@@ -485,16 +539,32 @@ export default function ContractDetailPage() {
         </div>
       </div>
 
-      {/* 오른쪽: 채팅 UI (토글 가능한 사이드바) */}
-      <div className={cn(
-        "fixed right-0 w-[400px] z-40 bg-white shadow-2xl border-l border-slate-200",
-        "transition-transform duration-300 ease-in-out",
-        isChatOpen ? "translate-x-0" : "translate-x-full"
+      {/* 채팅 오버레이 배경 (모바일/태블릿용) */}
+      {isChatOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-slate-900/30 backdrop-blur-sm lg:hidden"
+          onClick={() => setIsChatOpen(false)}
+          aria-hidden="true"
+        />
       )}
-      style={{ top: '64px', height: 'calc(100vh - 64px)' }}
+
+      {/* 오른쪽: 채팅 UI (토글 가능한 사이드바) */}
+      <div 
+        className={cn(
+          "fixed right-0 z-40 bg-white shadow-2xl border-l border-slate-200",
+          "transition-transform duration-300 ease-in-out",
+          "w-full sm:w-[90vw] md:w-[500px] lg:w-[400px]", // 반응형 너비
+          isChatOpen ? "translate-x-0" : "translate-x-full"
+        )}
+        style={{ top: '64px', height: 'calc(100vh - 64px)' }}
       >
-        {/* 채팅 헤더 */}
-        <div className="relative overflow-hidden bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-600 border-b border-blue-400/30">
+        {/* 채팅 헤더 - 스와이프 제스처 영역 */}
+        <div 
+          className="relative overflow-hidden bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-600 border-b border-blue-400/30 touch-none lg:touch-auto"
+          onTouchStart={onTouchStart}
+          onTouchMove={onTouchMove}
+          onTouchEnd={onTouchEnd}
+        >
           <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxwYXRoIGQ9Ik0zNiAzNGMwIDIuMjA5LTEuNzkxIDQtNCA0cy00LTEuNzkxLTQtNCAxLjc5MS00IDQtNCA0IDEuNzkxIDQgNHptMTAtMTBjMCAyLjIwOS0xLjc5MSA0LTQgNHMtNC0xLjc5MS00LTQgMS43OTEtNCA0LTQgNCAxLjc5MSA0IDR6IiBmaWxsPSJyZ2JhKDI1NSwyNTUsMjU1LDAuMSkiLz48L2c+PC9zdmc+')] opacity-20"></div>
           <div className="relative px-4 py-4 flex items-center justify-between">
             <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -516,9 +586,9 @@ export default function ContractDetailPage() {
               )}
               <button
                 onClick={() => setIsChatOpen(false)}
-                className="p-2 rounded-lg hover:bg-white/20 transition-colors text-white"
-                aria-label="채팅 닫기"
-                title="채팅 닫기"
+                className="p-2 min-w-[44px] min-h-[44px] rounded-lg hover:bg-white/20 transition-colors text-white flex items-center justify-center"
+                aria-label="채팅 닫기 (ESC 키로도 닫을 수 있습니다)"
+                title="채팅 닫기 (ESC)"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -552,6 +622,9 @@ export default function ContractDetailPage() {
       {!isChatOpen && (
         <button
           onClick={() => setIsChatOpen(true)}
+          disabled={chatLoading}
+          aria-busy={chatLoading}
+          data-unread={messageCount > 0 ? 'true' : 'false'}
           className={cn(
             "fixed bottom-6 right-6 z-30",
             "bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-600",
@@ -559,7 +632,9 @@ export default function ContractDetailPage() {
             "text-white rounded-full p-4 shadow-lg",
             "transition-all duration-200 hover:scale-110",
             "flex items-center gap-2",
-            "focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            "focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2",
+            "disabled:opacity-50 disabled:cursor-not-allowed",
+            "chat-floating-button"
           )}
           aria-label="AI 법률 상담 열기"
         >

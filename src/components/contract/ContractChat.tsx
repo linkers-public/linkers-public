@@ -3,9 +3,10 @@
 import { useEffect, useState, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { Loader2, Send, MessageSquare, Sparkles, Bot, User, FileText, Zap } from 'lucide-react'
+import { Loader2, Send, MessageSquare, Sparkles, Bot, User, FileText, Zap, RefreshCw, AlertCircle } from 'lucide-react'
 import { MarkdownRenderer } from '@/components/rag/MarkdownRenderer'
 import { cn } from '@/lib/utils'
+import { PRIMARY_GRADIENT, PRIMARY_GRADIENT_HOVER, FOCUS_STYLE } from './contract-design-tokens'
 import type { LegalIssue, ContractAnalysisResult } from '@/types/legal'
 import type { QueryResponse } from '@/types/rag'
 
@@ -14,6 +15,9 @@ interface Message {
   role: 'user' | 'assistant'
   content: string
   timestamp: Date
+  isError?: boolean
+  retryable?: boolean
+  originalQuery?: string
 }
 
 interface ContractChatProps {
@@ -72,6 +76,8 @@ export function ContractChat({
   const [chatLoading, setChatLoading] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const chatContainerRef = useRef<HTMLDivElement>(null)
+  const [shouldAutoScroll, setShouldAutoScroll] = useState(true)
+  const [isUserScrolling, setIsUserScrolling] = useState(false)
 
   // 초기 메시지 개수 알림
   useEffect(() => {
@@ -209,13 +215,31 @@ export function ContractChat({
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: '답변을 생성하는 중 오류가 발생했습니다. 다시 시도해주세요.',
+        content: '답변을 생성하는 중 오류가 발생했습니다.',
         timestamp: new Date(),
+        isError: true,
+        retryable: true,
+        originalQuery: query,
       }
       setMessages((prev) => [...prev, errorMessage])
     } finally {
       setChatLoading(false)
     }
+  }
+
+  // 재시도 함수
+  const handleRetry = (originalQuery: string) => {
+    // 마지막 에러 메시지만 제거
+    setMessages((prev) => {
+      const filtered = [...prev]
+      const lastErrorIndex = filtered.findLastIndex(msg => msg.isError && msg.retryable)
+      if (lastErrorIndex !== -1) {
+        filtered.splice(lastErrorIndex, 1)
+      }
+      return filtered
+    })
+    // 메시지 재전송
+    handleSendMessage(undefined, originalQuery)
   }
 
   // 프리필된 질문이 있으면 입력창에 설정
@@ -247,12 +271,44 @@ export function ContractChat({
     }
   }, [selectedIssueId, analysisResult.issues, messages.length, prefilledQuestion])
 
-  // 스크롤을 하단으로 이동
+  // 사용자 스크롤 감지
   useEffect(() => {
-    if (messagesEndRef.current) {
+    const container = chatContainerRef.current
+    if (!container) return
+
+    let scrollTimeout: NodeJS.Timeout
+    const handleScroll = () => {
+      setIsUserScrolling(true)
+      clearTimeout(scrollTimeout)
+      
+      // 스크롤이 하단 근처인지 확인 (50px 이내)
+      const isNearBottom = 
+        container.scrollHeight - container.scrollTop - container.clientHeight < 50
+      
+      if (isNearBottom) {
+        setShouldAutoScroll(true)
+      } else {
+        setShouldAutoScroll(false)
+      }
+
+      scrollTimeout = setTimeout(() => {
+        setIsUserScrolling(false)
+      }, 1000)
+    }
+
+    container.addEventListener('scroll', handleScroll)
+    return () => {
+      container.removeEventListener('scroll', handleScroll)
+      clearTimeout(scrollTimeout)
+    }
+  }, [])
+
+  // 스크롤을 하단으로 이동 (자동 스크롤이 활성화된 경우만)
+  useEffect(() => {
+    if (shouldAutoScroll && messagesEndRef.current && !isUserScrolling) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' })
     }
-  }, [messages])
+  }, [messages, shouldAutoScroll, isUserScrolling])
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey && (e.metaKey || e.ctrlKey)) {
@@ -266,14 +322,17 @@ export function ContractChat({
 
       {/* 추천 질문 - 현대적인 카드 디자인 */}
       {messages.length === 0 && (
-        <div className="p-4 sm:p-5 border-b border-slate-100 bg-gradient-to-b from-slate-50 to-white flex-shrink-0">
-          <div className="flex items-center gap-2 mb-3">
+        <div className="p-3 sm:p-4 border-b border-slate-100 bg-gradient-to-b from-slate-50 to-white flex-shrink-0">
+          <div className="flex items-center gap-2 mb-2">
             <div className="p-1.5 bg-blue-100 rounded-lg">
               <Sparkles className="w-4 h-4 text-blue-600" />
             </div>
             <span className="text-sm font-semibold text-slate-700">추천 질문</span>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <p className="text-[11px] text-slate-500 mb-2">
+            자주 묻는 질문이에요. 하나 골라서 바로 시작해도 좋습니다.
+          </p>
+          <div className="flex flex-wrap gap-1.5">
             {suggestedQuestions.map((question, index) => (
               <button
                 key={index}
@@ -281,17 +340,17 @@ export function ContractChat({
                 disabled={chatLoading}
                 aria-label={`추천 질문: ${question}`}
                 className={cn(
-                  "group relative px-4 py-2.5 text-xs font-medium",
+                  "group relative px-3 py-2 text-xs font-medium min-h-[44px]", // 최소 터치 영역
                   "bg-white border border-slate-200 rounded-xl",
                   "hover:border-blue-400 hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50",
                   "hover:shadow-md hover:scale-[1.02]",
                   "transition-all duration-200",
                   "disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100",
-                  "focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2",
-                  "text-left"
+                  FOCUS_STYLE,
+                  "text-left ai-button cursor-pointer"
                 )}
               >
-                <span className="relative z-10 text-slate-700 group-hover:text-blue-700">
+                <span className="relative z-10 text-slate-700 group-hover:text-blue-700 line-clamp-2">
                   {question}
                 </span>
               </button>
@@ -300,26 +359,44 @@ export function ContractChat({
         </div>
       )}
 
-      {/* 선택된 조항 태그 */}
-      {selectedIssueId && messages.length > 0 && (
-        <div className="px-4 py-2.5 border-b border-slate-100 bg-gradient-to-r from-blue-50 to-indigo-50 flex-shrink-0">
-          <div className="flex items-center gap-2">
-            <div className="p-1 bg-blue-100 rounded-md">
-              <FileText className="w-3 h-3 text-blue-600" />
+      {/* 선택된 조항 태그 - sticky로 고정 */}
+      {selectedIssueId && (() => {
+        const issue = analysisResult.issues.find(i => i.id === selectedIssueId)
+        if (!issue) return null
+        
+        const severityLabel =
+          issue.severity === 'high' ? '위험 HIGH' :
+          issue.severity === 'medium' ? '주의 MED' : 'LOW'
+        const severityClass =
+          issue.severity === 'high'
+            ? 'bg-red-100 text-red-700 border-red-200'
+            : issue.severity === 'medium'
+            ? 'bg-amber-100 text-amber-700 border-amber-200'
+            : 'bg-emerald-100 text-emerald-700 border-emerald-200'
+
+        return (
+          <div className="sticky top-0 z-10 px-4 py-2.5 border-b border-slate-100 bg-gradient-to-r from-blue-50 to-indigo-50 flex-shrink-0 flex items-center justify-between backdrop-blur-sm bg-opacity-95">
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              <div className="p-1 bg-blue-100 rounded-md flex-shrink-0">
+                <FileText className="w-3 h-3 text-blue-600" />
+              </div>
+              <span className="text-xs font-medium text-blue-700 truncate">
+                대상 조항: {issue.location.clauseNumber 
+                  ? `제 ${issue.location.clauseNumber}조`
+                  : issue.summary}
+              </span>
             </div>
-            <span className="text-xs font-medium text-blue-700">
-              대상 조항: {analysisResult.issues.find(i => i.id === selectedIssueId)?.location.clauseNumber 
-                ? `제 ${analysisResult.issues.find(i => i.id === selectedIssueId)?.location.clauseNumber}조`
-                : analysisResult.issues.find(i => i.id === selectedIssueId)?.summary}
+            <span className={cn("text-[10px] px-2 py-0.5 rounded-full border flex-shrink-0", severityClass)}>
+              {severityLabel}
             </span>
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* 채팅 영역 */}
       <div
         ref={chatContainerRef}
-        className="flex-1 flex flex-col overflow-hidden bg-gradient-to-b from-slate-50 via-white to-slate-50"
+        className="flex-1 flex flex-col overflow-hidden bg-gradient-to-b from-slate-50 via-white to-slate-50 relative"
       >
         {/* 메시지 목록 */}
         <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-6 space-y-6">
@@ -369,14 +446,42 @@ export function ContractChat({
                         "relative rounded-2xl px-4 py-3 shadow-sm",
                         "transition-all duration-200",
                         message.role === 'user'
-                          ? "bg-gradient-to-br from-blue-600 to-blue-700 text-white rounded-br-md"
-                          : "bg-white border border-slate-200 text-slate-900 rounded-bl-md hover:shadow-md"
+                          ? "bg-gradient-to-br from-blue-600 to-blue-700 text-white rounded-br-md message-bubble-user"
+                          : message.isError
+                          ? "bg-red-50 border-2 border-red-200 text-slate-900 rounded-bl-md message-bubble-ai"
+                          : "bg-white border border-slate-100 text-slate-900 rounded-bl-md message-bubble-ai"
                       )}
                     >
                       {message.role === 'assistant' ? (
-                        <div className="prose prose-sm max-w-none prose-headings:text-slate-900 prose-p:text-slate-700 prose-strong:text-slate-900 prose-code:text-blue-600 prose-pre:bg-slate-50">
-                          <MarkdownRenderer content={message.content} />
-                        </div>
+                        <>
+                          {message.isError ? (
+                            <div className="flex flex-col gap-3">
+                              <div className="flex items-start gap-2">
+                                <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                                <div className="flex-1">
+                                  <p className="text-sm font-medium text-red-900 mb-1">{message.content}</p>
+                                  <p className="text-xs text-red-700">네트워크 오류가 발생했거나 서버에 일시적인 문제가 있을 수 있습니다.</p>
+                                </div>
+                              </div>
+                              {message.retryable && message.originalQuery && (
+                                <Button
+                                  onClick={() => handleRetry(message.originalQuery)}
+                                  disabled={chatLoading}
+                                  size="sm"
+                                  className="w-full bg-red-600 hover:bg-red-700 text-white"
+                                  aria-label="재시도"
+                                >
+                                  <RefreshCw className={cn("w-4 h-4 mr-2", chatLoading && "animate-spin")} />
+                                  다시 시도
+                                </Button>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="prose prose-sm max-w-none prose-headings:text-slate-900 prose-p:text-slate-700 prose-strong:text-slate-900 prose-code:text-blue-600 prose-pre:bg-slate-50">
+                              <MarkdownRenderer content={message.content} />
+                            </div>
+                          )}
+                        </>
                       ) : (
                         <p className="whitespace-pre-wrap text-sm leading-relaxed text-white">{message.content}</p>
                       )}
@@ -426,6 +531,20 @@ export function ContractChat({
                 </div>
               )}
               <div ref={messagesEndRef} />
+              
+              {/* 새 메시지 알림 (사용자가 위로 스크롤한 경우) */}
+              {!shouldAutoScroll && messages.length > 0 && (
+                <button
+                  onClick={() => {
+                    setShouldAutoScroll(true)
+                    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+                  }}
+                  className="sticky bottom-4 mx-auto px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-full shadow-lg hover:bg-blue-700 transition-colors z-10"
+                  aria-label="새 메시지 보기"
+                >
+                  새 메시지 보기 ↓
+                </button>
+              )}
             </>
           )}
         </div>
@@ -438,7 +557,27 @@ export function ContractChat({
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
                 onKeyDown={handleKeyPress}
-                placeholder="질문을 입력하세요..."
+                placeholder={
+                  (() => {
+                    const currentIssue = selectedIssueId
+                      ? analysisResult.issues.find(i => i.id === selectedIssueId)
+                      : undefined
+                    
+                    const categoryLabelForPlaceholder = currentIssue ? ({
+                      working_hours: '근로시간/연장근로',
+                      wage: '보수·수당',
+                      probation: '수습/해지',
+                      stock_option: '스톡옵션',
+                      ip: 'IP/저작권',
+                      harassment: '직장 내 괴롭힘',
+                      other: '이 조항',
+                    }[currentIssue.category] ?? '이 조항') : null
+                    
+                    return categoryLabelForPlaceholder
+                      ? `${categoryLabelForPlaceholder}에 대해 궁금한 점을 적어주세요. (예: "이 조항을 어떻게 수정해야 하나요?")`
+                      : "질문을 입력하세요..."
+                  })()
+                }
                 disabled={chatLoading}
                 aria-label="AI에게 질문 입력"
                 aria-describedby="chat-input-hint"
@@ -454,9 +593,12 @@ export function ContractChat({
                 질문을 입력하고 Ctrl+Enter를 눌러 전송하세요
               </span>
               <div className="absolute bottom-2 right-2 flex items-center gap-1.5 text-xs text-slate-400">
-                <kbd className="px-1.5 py-0.5 bg-slate-100 rounded text-xs">Ctrl</kbd>
-                <span>+</span>
-                <kbd className="px-1.5 py-0.5 bg-slate-100 rounded text-xs">Enter</kbd>
+                <span className="hidden sm:flex items-center gap-1.5">
+                  <kbd className="px-1.5 py-0.5 bg-slate-100 rounded text-xs">Ctrl</kbd>
+                  <span>+</span>
+                  <kbd className="px-1.5 py-0.5 bg-slate-100 rounded text-xs">Enter</kbd>
+                </span>
+                <span className="sm:hidden text-[10px]">전송</span>
               </div>
             </div>
             <Button
@@ -465,8 +607,9 @@ export function ContractChat({
               size="lg"
               aria-label="질문 전송"
               className={cn(
-                "h-[60px] px-6 rounded-xl",
-                "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700",
+                "h-[60px] min-w-[60px] px-6 rounded-xl", // 최소 터치 영역 보장
+                PRIMARY_GRADIENT,
+                PRIMARY_GRADIENT_HOVER,
                 "text-white shadow-lg hover:shadow-xl",
                 "transition-all duration-200",
                 "disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-lg",

@@ -12,22 +12,26 @@ import os
 import json
 import asyncio
 
+from fastapi import Depends
+from core.dependencies import (
+    get_orchestrator_dep,
+    get_task_manager_dep,
+)
 from core.orchestrator_v2 import Orchestrator
-from core.async_tasks import get_task_manager
+from core.async_tasks import AsyncTaskManager
 from models.schemas import APIResponse
+from core.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api", tags=["RAG"])
 router_v2 = APIRouter(prefix="/api/v2", tags=["RAG v2"])
 
-# 오케스트레이터 인스턴스 (지연 초기화)
-_orchestrator = None
-
+# 레거시 호환성을 위한 함수 (의존성 주입 패턴으로 마이그레이션 권장)
 def get_orchestrator() -> Orchestrator:
-    """오케스트레이터 인스턴스 가져오기 (지연 초기화)"""
-    global _orchestrator
-    if _orchestrator is None:
-        _orchestrator = Orchestrator()
-    return _orchestrator
+    """오케스트레이터 인스턴스 가져오기 (레거시 호환)"""
+    from core.dependencies import get_orchestrator as _get_orchestrator
+    return _get_orchestrator()
 
 # 임시 파일 디렉토리
 TEMP_DIR = "./data/temp"
@@ -104,7 +108,8 @@ async def upload_announcement_v2(
             }
             
             # 파이프라인 실행
-            announcement_id = get_orchestrator().process_file(
+            orchestrator = get_orchestrator()
+            announcement_id = orchestrator.process_file(
                 file_path=temp_path,
                 file_type=file_type,
                 meta=meta
@@ -194,7 +199,8 @@ async def upload_announcement(
             }
             
             # 파이프라인 실행
-            announcement_id = get_orchestrator().process_file(
+            orchestrator = get_orchestrator()
+            announcement_id = orchestrator.process_file(
                 file_path=temp_path,
                 file_type=file_type,
                 meta=meta
@@ -276,7 +282,8 @@ async def start_analysis(
     if not doc_id:
         raise HTTPException(status_code=400, detail="doc_id 또는 announcement_id가 필요합니다")
     
-    job_id = await get_task_manager().start_analysis_task(doc_id, background_tasks)
+    task_manager = get_task_manager_dep()
+    job_id = await task_manager.start_analysis_task(doc_id, background_tasks)
     
     return APIResponse(
         status="success",
@@ -292,7 +299,8 @@ async def stream_analysis_progress(job_id: str):
     """
     async def event_generator():
         while True:
-            task_status = get_task_manager().get_task_status(job_id)
+            task_manager = get_task_manager_dep()
+            task_status = task_manager.get_task_status(job_id)
             
             if not task_status:
                 yield f"data: {json.dumps({'error': '작업을 찾을 수 없습니다'})}\n\n"
@@ -335,6 +343,7 @@ async def stream_analysis_progress(job_id: str):
 @router.get("/analysis/status/{job_id}")
 async def get_analysis_status(job_id: str):
     """분석 작업 상태 조회"""
+    task_manager = get_task_manager_dep()
     task_status = task_manager.get_task_status(job_id)
     
     if not task_status:
@@ -656,275 +665,6 @@ async def health_check():
 
 
 # ========== Legal RAG APIs ==========
-
-@router_v2.get("/legal/search")
-async def search_legal(
-    q: str,
-    limit: int = 5,
-    doc_type: Optional[str] = None
-):
-    """
-    법률/계약 문서 검색 (RAG)
-    
-    Args:
-        q: 검색 쿼리 텍스트
-        limit: 반환할 최대 개수
-        doc_type: 문서 타입 필터 ("law", "standard_contract", "manual", "case")
-    
-    Returns:
-        {
-            "results": [
-                {
-                    "id": str,
-                    "external_id": str,
-                    "source_type": str,  # "law", "manual", "case"
-                    "title": str,
-                    "content": str,
-                    "chunk_index": int,
-                    "file_path": str,
-                    "score": float,
-                    "metadata": dict
-                }
-            ],
-            "count": int,
-            "query": str
-        }
-    """
-    try:
-        orchestrator = get_orchestrator()
-        
-        # 필터 설정 (실제 DB는 source_type 사용)
-        filters = {}
-        if doc_type:
-            # doc_type을 source_type으로 매핑
-            type_mapping = {
-                "law": "law",
-                "manual": "manual", 
-                "case": "case",
-                "standard_contract": "law"  # 계약서는 law로 매핑
-            }
-            filters["source_type"] = type_mapping.get(doc_type, doc_type)
-        
-        # 쿼리 임베딩 생성
-        query_embedding = orchestrator.generator.embed_one(q)
-        
-        # 벡터 검색
-        search_results = orchestrator.store.search_similar_legal_chunks(
-            query_embedding=query_embedding,
-            top_k=limit,
-            filters=filters if filters else None
-        )
-        
-        # 결과 포맷팅
-        formatted_results = []
-        for result in search_results:
-            # 실제 DB 구조: external_id, source_type, title, content 사용
-            formatted_results.append({
-                "id": result.get("id", ""),
-                "external_id": result.get("external_id", ""),
-                "source_type": result.get("source_type", "law"),
-                "title": result.get("title", ""),
-                "content": result.get("content", ""),
-                "chunk_index": result.get("chunk_index", 0),
-                "file_path": result.get("file_path", ""),
-                "score": result.get("score", 0.0),
-                "metadata": result.get("metadata", {})
-            })
-        
-        return {
-            "results": formatted_results,
-            "count": len(formatted_results),
-            "query": q
-        }
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"법률 검색 실패: {str(e)}"
-        )
-
-
-@router_v2.post("/legal/analyze-contract")
-async def analyze_contract(
-    file: UploadFile = File(...),
-    title: Optional[str] = Form(None)
-):
-    """
-    계약서 분석 (RAG 기반)
-    
-    프로세스:
-    1. 계약서 PDF → 텍스트 추출
-    2. 전체 텍스트 요약
-    3. legal_chunks에서 관련 조항 검색
-    4. LLM으로 위험 조항 분석
-    
-    Args:
-        file: 계약서 PDF 파일
-        title: 계약서 제목 (선택)
-    
-    Returns:
-        {
-            "risk_score": float,  # 0~100
-            "risks": [
-                {
-                    "clause": str,
-                    "risk_level": str,  # "high", "medium", "low"
-                    "description": str,
-                    "related_law": str
-                }
-            ],
-            "summary": str,
-            "references": [
-                {
-                    "section_title": str,
-                    "source": str,
-                    "text": str
-                }
-            ]
-        }
-    """
-    try:
-        orchestrator = get_orchestrator()
-        
-        # title이 없으면 파일명에서 추출
-        if not title:
-            title = file.filename or "계약서"
-            import re
-            title = re.sub(r'\.[^.]+$', '', title)
-        
-        # 파일 임시 저장
-        temp_path = None
-        try:
-            suffix = Path(file.filename).suffix if file.filename else ".pdf"
-            temp_file = tempfile.NamedTemporaryFile(
-                delete=False,
-                suffix=suffix,
-                dir=TEMP_DIR
-            )
-            temp_path = temp_file.name
-            
-            content = await file.read()
-            temp_file.write(content)
-            temp_file.close()
-            
-            # 1. 텍스트 추출
-            text, _ = orchestrator.processor.process_file(temp_path, "pdf")
-            
-            # 2. 관련 법률 조항 검색 (계약서 본문 기반)
-            query_text = text[:1000]  # 처음 1000자로 검색
-            query_embedding = orchestrator.generator.embed_one(query_text)
-            
-            # 법률 조항 검색
-            legal_results = orchestrator.store.search_similar_legal_chunks(
-                query_embedding=query_embedding,
-                top_k=10,
-                filters={"source_type": "law"}  # 법률만 검색
-            )
-            
-            # 참조 정보 포맷팅
-            references = []
-            for result in legal_results[:5]:  # 상위 5개만
-                references.append({
-                    "title": result.get("title", ""),
-                    "source_type": result.get("source_type", "law"),
-                    "external_id": result.get("external_id", ""),
-                    "content": result.get("content", "")[:200]  # 처음 200자만
-                })
-            
-            # 3. LLM으로 위험 분석
-            risk_score = 50.0  # 기본값
-            risks = []
-            summary = ""
-            
-            if not orchestrator.generator.disable_llm:
-                try:
-                    # LLM 프롬프트 구성
-                    context = "\n\n".join([
-                        f"조문 {i+1}: {ref['title']}\n{ref['content']}"
-                        for i, ref in enumerate(references[:3])
-                    ])
-                    
-                    prompt = f"""당신은 계약서 분석 전문가입니다. 다음 계약서를 분석하여 위험 조항을 찾아주세요.
-
-계약서 제목: {title}
-
-계약서 본문 (일부):
-{text[:3000]}
-
-관련 법률 조문:
-{context}
-
-다음 JSON 형식으로 분석 결과를 반환하세요:
-{{
-    "risk_score": 0~100 사이의 숫자,
-    "risks": [
-        {{
-            "clause": "위험 조항 내용",
-            "risk_level": "high|medium|low",
-            "description": "위험 설명",
-            "related_law": "관련 법률 조문"
-        }}
-    ],
-    "summary": "전체 요약 (200자 이내)"
-}}
-
-JSON 형식만 반환하세요."""
-                    
-                    # Ollama 사용
-                    if orchestrator.generator.use_ollama:
-                        from config import settings
-                        import json
-                        import re
-                        
-                        # langchain-ollama 우선 사용 (deprecated 경고 없음)
-                        try:
-                            from langchain_ollama import OllamaLLM
-                            llm = OllamaLLM(
-                                base_url=settings.ollama_base_url,
-                                model=settings.ollama_model
-                            )
-                        except ImportError:
-                            # 대안: langchain-community 사용 (deprecated)
-                            from langchain_community.llms import Ollama
-                            llm = Ollama(
-                                base_url=settings.ollama_base_url,
-                                model=settings.ollama_model
-                            )
-                        
-                        response_text = llm.invoke(prompt)
-                        
-                        # JSON 추출
-                        try:
-                            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
-                            if json_match:
-                                analysis = json.loads(json_match.group())
-                                risk_score = analysis.get("risk_score", 50.0)
-                                risks = analysis.get("risks", [])
-                                summary = analysis.get("summary", "")
-                        except:
-                            summary = response_text[:200]
-                    
-                except Exception as e:
-                    print(f"[경고] LLM 분석 실패: {str(e)}")
-                    summary = f"계약서 분석 중 오류가 발생했습니다: {str(e)}"
-            else:
-                summary = "LLM 분석이 비활성화되어 있습니다."
-            
-            return {
-                "risk_score": risk_score,
-                "risks": risks,
-                "summary": summary,
-                "references": references,
-                "title": title
-            }
-            
-        finally:
-            # 임시 파일 삭제
-            if temp_path and os.path.exists(temp_path):
-                os.unlink(temp_path)
-    
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"계약서 분석 실패: {str(e)}"
-        )
+# 주의: 법률 관련 엔드포인트는 routes_legal_v2.py에서 관리합니다.
+# 중복을 방지하기 위해 이 파일의 법률 엔드포인트는 제거되었습니다.
+# 법률 API는 /api/v2/legal/* 경로를 사용하세요.

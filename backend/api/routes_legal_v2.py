@@ -30,50 +30,42 @@ from core.legal_rag_service import LegalRAGService
 from core.document_processor_v2 import DocumentProcessor
 from core.contract_storage import ContractStorageService
 from core.tools import ClauseLabelingTool, HighlightTool, RewriteTool
+from core.dependencies import (
+    get_legal_service_dep,
+    get_processor_dep,
+    get_storage_service_dep,
+)
+from core.logging_config import get_logger
 
 router = APIRouter(
     prefix="/api/v2/legal",
     tags=["legal-v2"],
 )
 
-# 서비스 인스턴스 (지연 초기화)
-_service = None
-
+# 레거시 호환성을 위한 함수 (의존성 주입 패턴으로 마이그레이션 권장)
 def get_legal_service() -> LegalRAGService:
-    """Legal RAG 서비스 인스턴스 가져오기 (지연 초기화)"""
-    global _service
-    if _service is None:
-        _service = LegalRAGService()
-    return _service
+    """Legal RAG 서비스 인스턴스 가져오기 (레거시 호환)"""
+    from core.dependencies import get_legal_service as _get_legal_service
+    return _get_legal_service()
+
+def get_processor() -> DocumentProcessor:
+    """문서 프로세서 인스턴스 가져오기 (레거시 호환)"""
+    from core.dependencies import get_processor as _get_processor
+    return _get_processor()
+
+def get_storage_service() -> ContractStorageService:
+    """계약서 저장 서비스 인스턴스 가져오기 (레거시 호환)"""
+    from core.dependencies import get_storage_service as _get_storage_service
+    return _get_storage_service()
 
 # 임시 파일 디렉토리
 TEMP_DIR = "./data/temp"
 os.makedirs(TEMP_DIR, exist_ok=True)
 
-# 문서 프로세서
-_processor = None
-
-def get_processor() -> DocumentProcessor:
-    """문서 프로세서 인스턴스 가져오기"""
-    global _processor
-    if _processor is None:
-        _processor = DocumentProcessor()
-    return _processor
-
 # 계약서 분석 결과 저장소 (fallback용)
 _contract_analyses = {}
 
-# 저장 서비스 인스턴스
-_storage_service = None
-
-def get_storage_service() -> ContractStorageService:
-    """계약서 저장 서비스 인스턴스 가져오기"""
-    global _storage_service
-    if _storage_service is None:
-        _storage_service = ContractStorageService()
-    return _storage_service
-
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 @router.get("/health")

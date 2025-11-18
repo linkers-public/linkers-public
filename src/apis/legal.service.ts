@@ -717,9 +717,10 @@ export const getContractHistoryV2 = async (
       authHeaders['X-User-Id'] = userId;
     }
     
-    // user_id가 없으면 에러
+    // user_id가 없으면 빈 배열 반환 (에러 대신)
     if (!authHeaders['X-User-Id']) {
-      throw new Error('사용자 ID가 필요합니다. 로그인해주세요.');
+      console.warn('사용자 ID가 없어 히스토리를 조회할 수 없습니다. 로컬 스토리지를 확인하세요.');
+      return [];
     }
     
     const params = new URLSearchParams({

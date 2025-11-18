@@ -36,7 +36,7 @@ export function ClauseList({ clauses, selectedClauseId, onClauseClick }: ClauseL
             key={clause.id}
             onClick={() => onClauseClick?.(clause.id)}
             className={cn(
-              "w-full text-left p-3 rounded-lg border transition-all",
+              "w-full text-left p-3 rounded-lg border transition-all cursor-pointer",
               "hover:bg-slate-50 hover:border-blue-300",
               selectedClauseId === clause.id
                 ? "bg-blue-50 border-blue-400 shadow-sm"

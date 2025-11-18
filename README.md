@@ -39,6 +39,18 @@ AI 기반 계약/노동 리스크 분석 시스템으로, 청년 근로자들을
 - **법률 검색**: RAG 시스템을 통해 입력한 법적 상황에 대한 관련 법률 시나리오와 대응 방법을 조회합니다
 - **상황별 분석**: 고용 형태, 근무 기간, 사회보험 등 상세 정보를 입력하여 맞춤형 법률 분석을 제공합니다
 
+#### 계약서 분석 고급 기능 (v2)
+- **위험 지도 (Heatmap)**: 계약서 본문에 위험 구간을 시각적으로 표시
+  - 왼쪽 세로 리스크 바 (Minimap): 조항별 위험도를 색상으로 한눈에 파악
+  - 조항 카드형 섹션: 각 조항을 카드 형태로 구조화하여 가독성 향상
+  - 하이라이트 태그 + 아이콘: 위험 조항에 카테고리 아이콘과 위험도 태그 표시
+  - 위험 타임라인: 상단 네비게이션으로 전체 조항의 위험도 개요 확인
+  - 법 조문 스니펫: hover 시 관련 법령 정보를 사이드 패널에 표시
+- **조항 자동 라벨링**: "제n조" 패턴 자동 인식 및 조항 목록 생성
+- **위험 조항 자동 하이라이트**: 텍스트 위치 기반 정확한 하이라이트
+- **AI 기반 조항 리라이트**: 위험한 조항을 법적으로 안전한 문구로 자동 수정 제안
+- **계약서 버전 비교**: 이전 계약서와 새 계약서를 비교하여 변경사항 및 위험도 변화 분석
+
 ## 🛠️ 기술 스택
 
 ### Frontend
@@ -53,8 +65,8 @@ AI 기반 계약/노동 리스크 분석 시스템으로, 청년 근로자들을
 - **Language**: Python 3.9+
 - **RAG**: LangChain
 - **Vector DB**: Supabase pgvector
-- **LLM**: Ollama (기본값, 무료) 또는 OpenAI (선택)
-- **Embedding**: sentence-transformers (기본값, 무료) 또는 OpenAI (선택)
+- **LLM**: Ollama (무료)
+- **Embedding**: sentence-transformers (무료)
 - **Document Processing**: PyPDF, pdfplumber
 
 ### Database & Storage
@@ -74,8 +86,8 @@ linkers-public/
 ├── backend/                    # FastAPI 백엔드 서버
 │   ├── api/                    # API 라우터
 │   │   ├── routes_v2.py        # 공공입찰 API v2
-│   │   ├── routes_legal_v2.py   # 법률 API v2 (주요)
-│   │   └── routes_legal.py     # 법률 API v1 (호환성)
+│   │   ├── routes_legal_v2.py   # 법률 API v2 (주요, 권장)
+│   │   └── routes_legal.py     # 법률 API v1 (레거시, 호환성용)
 │   ├── core/                   # 핵심 RAG 모듈
 │   │   ├── orchestrator_v2.py  # v2 오케스트레이터
 │   │   ├── document_processor_v2.py  # v2 문서 처리기
@@ -327,10 +339,12 @@ PORT=8000
 
 ```python
 # 더 구체적인 경로를 가진 라우터를 먼저 등록해야 함
-app.include_router(router_legal_v2)  # /api/v2/legal - 먼저 등록
-app.include_router(router_legal)      # /api/v1/legal
+app.include_router(router_legal_v2)  # /api/v2/legal - 먼저 등록 (권장)
+app.include_router(router_legal)      # /api/v1/legal (레거시, 호환성용)
 app.include_router(router_v2)         # /api/v2 - 나중에 등록
 ```
+
+> **참고**: `routes_legal.py` (v1)는 레거시 API로, 호환성을 위해 유지되고 있습니다. 새로운 개발은 **`routes_legal_v2.py` (v2)**를 사용하세요.
 
 이렇게 하지 않으면 `/api/v2/legal/analyze-contract`가 `router_v2`의 `/legal/analyze-contract`와 먼저 매칭되어 v1 형식으로 응답할 수 있습니다.
 
@@ -960,21 +974,115 @@ curl -X POST "http://localhost:8000/api/v2/legal/analyze-contract" \
 - **2컬럼 레이아웃**:
   - 좌측: 계약서 전문 뷰어 (50%)
   - 우측: 분석 결과 패널 (50%)
-- **계약서 뷰어**:
-  - 계약서 전문 텍스트 표시
-  - 위험 조항 하이라이트 (색상 구분)
-  - 조항 번호 자동 인식 (제n조 패턴)
-  - 스크롤 가능한 긴 문서 지원
-- **분석 결과 패널**:
-  - 위험도 통계 (전체/높음/보통/낮음)
-  - 위험 조항 목록 (카드 형태)
-  - 조항 클릭 시 상세 정보 표시
-  - 법적 근거, 수정 제안, 질문 스크립트 제공
-- **채팅 기능**:
-  - 하단 고정 채팅 패널
-  - 조항별 질문 및 답변
-  - AI 기반 법률 상담
-  - 높이 조절 가능 (드래그)
+  - 오른쪽: AI 법률 상담 채팅 (토글 가능한 사이드바, 400px)
+
+##### 계약서 뷰어 (위험 지도 Heatmap 기능)
+
+**위험 지도 시각화**:
+- **왼쪽 세로 리스크 바 (Minimap)**: 조항별 최고 위험도를 색상으로 표시
+  - High: 빨간색 (`bg-red-500`)
+  - Medium: 노란색 (`bg-amber-400`)
+  - Low: 파란색 (`bg-sky-400`)
+  - Hover 시 툴팁으로 조항 정보 표시 (제n조, 위험도, 이슈 개수)
+  - 클릭 시 해당 조항으로 자동 스크롤
+
+**조항 카드형 섹션**:
+- 각 조항을 카드 형태로 구조화
+- 조항 헤더 바:
+  - 조항 번호 및 제목 표시
+  - 위험도별 배경색 (High: 빨간색, Medium: 노란색, Low: 파란색)
+  - 위험도 배지 및 이슈 개수 표시
+- 조항 내용: 하이라이트된 텍스트 포함
+
+**하이라이트 태그 + 아이콘**:
+- 위험 조항에 인라인 태그 표시
+  - 카테고리 아이콘 (근로시간 ⏱, 보수 💰, 수습 💼 등)
+  - 카테고리명 + 위험도 (예: "근로시간 · High")
+  - 위험도별 색상 구분 (빨강/노랑/파랑)
+- 하이라이트된 텍스트: 밑줄 및 배경색으로 강조
+
+**위험 타임라인 네비게이션**:
+- 상단에 가로 스크롤 가능한 타임라인
+- 각 조항을 점으로 표시 (색상 = 최대 위험도)
+- 클릭 시 해당 조항으로 스크롤
+- 선택된 조항은 확대 + 테두리로 강조
+
+**요약 뷰 (상단 고정)**:
+- 카테고리별 위험도 진행 바 (비율 표시)
+- 가장 위험한 조항 TOP 3 미리보기
+- 클릭 시 해당 조항으로 이동
+
+**법 조문 스니펫 사이드 패널** (xl 이상 화면):
+- 하이라이트된 조항에 hover 시 오른쪽에 법령 정보 표시
+- 관련 법령 목록 및 조항 스니펫
+- Fade-in 애니메이션
+
+**마이크로 인터랙션**:
+- 조항 카드 hover: shadow 증가 + 살짝 위로 이동
+- 하이라이트 hover: 배경색 변화 + 밑줄 애니메이션
+- 선택된 조항: ring 애니메이션 (1-2초 후 제거)
+- 부드러운 스크롤 전환
+
+##### 분석 결과 패널
+
+**조항 목록** (접을 수 있는 섹션):
+- 조항 목록을 접기/펼치기 가능한 섹션으로 표시
+- 조항 개수 배지 표시
+- 클릭 시 해당 조항으로 이동
+
+**분석 결과**:
+- 위험도 통계 (전체/높음/보통/낮음)
+- 위험 조항 목록 (카드 형태)
+- 조항 클릭 시 상세 정보 표시
+- 법적 근거, 수정 제안, 질문 스크립트 제공
+- 탭 구조:
+  - 요약: 전체 요약 및 카테고리별 카드
+  - 조항별: 발견된 이슈 목록
+  - 법령·표준: 법적 근거 및 표준계약서 비교
+- 필터링 기능:
+  - 카테고리별 필터
+  - 위험도별 필터 (High/Medium/Low)
+  - 정렬 옵션 (위험도 순 / 계약서 순서)
+
+**이슈 카드 기능**:
+- 해당 조항 보기: 계약서에서 위치로 이동
+- 이 부분 질문하기: AI 채팅으로 연결 (자동 프리필)
+- 수정안 보기: 제안된 수정 문구 확인
+- AI 수정: AI 기반 조항 리라이트 (원문/수정문 비교)
+
+##### AI 법률 상담 채팅
+
+**토글 가능한 사이드바**:
+- 오른쪽에 고정 사이드바 (400px 너비)
+- 헤더 아래에서 시작 (z-index 조정)
+- 슬라이드 애니메이션 (열기/닫기)
+- 오른쪽 하단 플로팅 버튼으로 열기
+- 메시지 카운트 배지 표시
+
+**채팅 기능**:
+- 메시지 저장/로드 (localStorage)
+- 추천 질문 자동 생성
+- 선택된 이슈 기반 컨텍스트 제공
+- Markdown 렌더링
+- 프리필 질문: 이슈 카드에서 "질문하기" 클릭 시 자동 프리필
+
+##### 기타 기능
+
+**조항 자동 라벨링**:
+- 조항 목록: 백엔드에서 자동 추출된 조항 목록 표시
+- 조항 번호 인식: "제n조" 패턴 자동 감지
+- 조항별 카테고리 분류
+
+**위험 조항 자동 하이라이트**:
+- 텍스트 하이라이트: `highlightedTexts` 배열 기반
+- 위험도별 색상 (High: 빨간색, Medium: 노란색, Low: 파란색)
+- 위치 정보: `startIndex`, `endIndex`로 정확한 위치 표시
+
+**접근성 (A11y)**:
+- ARIA 레이블: 모든 인터랙티브 요소에 `aria-label` 추가
+- 키보드 네비게이션: 모든 버튼에 Enter/Space 키 지원
+- 포커스 관리: `focus:ring` 스타일로 포커스 표시
+- 시맨틱 HTML: `role`, `aria-labelledby` 속성 추가
 
 #### 5. 법률 검색 페이지 (`/legal/search`)
 - **검색 입력**: 법적 상황을 텍스트로 입력
@@ -1176,31 +1284,128 @@ file: [계약서 PDF]
 title: "프리랜서 계약서" (선택)
 ```
 
-**응답:**
+**응답 (v2 형식):**
 ```json
 {
-  "risk_score": 65.5,
-  "risks": [
+  "docId": "uuid",
+  "title": "프리랜서 계약서",
+  "riskScore": 65.5,
+  "riskLevel": "high",
+  "sections": {
+    "working_hours": 70,
+    "wage": 60,
+    "probation_termination": 80,
+    "stock_option_ip": 50
+  },
+  "issues": [
     {
-      "clause": "계약 해지 조항",
-      "risk_level": "high",
-      "description": "일방적 해지 가능 조항이 포함되어 있습니다",
-      "related_law": "제1조 (목적)"
+      "id": "issue-1",
+      "category": "probation_termination",
+      "severity": "high",
+      "summary": "계약 해지 조항",
+      "originalText": "계약 해지 조항 원문...",
+      "legalBasis": ["근로기준법 제1조"],
+      "explanation": "일방적 해지 가능 조항이 포함되어 있습니다",
+      "suggestedRevision": "수정 제안 텍스트..."
     }
   ],
   "summary": "전체 요약...",
-  "references": [
+  "retrievedContexts": [
     {
-      "section_title": "제1조 (목적)",
-      "source": "moel",
-      "text": "관련 법률 조문..."
+      "sourceType": "law",
+      "title": "근로기준법",
+      "snippet": "관련 법률 조문..."
     }
   ],
-  "title": "프리랜서 계약서"
+  "contractText": "계약서 전체 원문 텍스트...",
+  "createdAt": "2025-11-18T00:00:00Z"
 }
 ```
 
-#### 3. 상황별 법률 분석
+#### 3. 계약서 조회
+
+```bash
+GET /api/v2/legal/contracts/{doc_id}
+```
+
+**응답**: 계약서 분석 결과 (위와 동일한 v2 형식)
+
+#### 4. 계약서 히스토리 조회
+
+```bash
+GET /api/v2/legal/contracts/history?limit=20&offset=0
+Headers:
+  X-User-Id: [사용자 ID] (필수)
+```
+
+**응답:**
+```json
+[
+  {
+    "docId": "uuid",
+    "title": "프리랜서 계약서",
+    "riskScore": 65.5,
+    "riskLevel": "high",
+    "createdAt": "2025-11-18T00:00:00Z"
+  }
+]
+```
+
+#### 5. 계약서 비교
+
+```bash
+POST /api/v2/legal/compare-contracts
+Content-Type: application/json
+X-User-Id: [사용자 ID] (선택)
+
+{
+  "oldContractId": "uuid-1",
+  "newContractId": "uuid-2"
+}
+```
+
+**응답:**
+```json
+{
+  "oldContractId": "uuid-1",
+  "newContractId": "uuid-2",
+  "riskScoreChange": -10.5,
+  "changedClauses": [
+    {
+      "type": "added",
+      "clauseId": "clause-1",
+      "title": "제1조",
+      "content": "새로 추가된 조항..."
+    }
+  ],
+  "summary": "변경사항 요약..."
+}
+```
+
+#### 6. 조항 리라이트
+
+```bash
+POST /api/v2/legal/rewrite-clause
+Content-Type: application/json
+X-User-Id: [사용자 ID] (선택)
+
+{
+  "originalText": "위험한 조항 원문...",
+  "issueId": "issue-1" (선택)
+}
+```
+
+**응답:**
+```json
+{
+  "originalText": "위험한 조항 원문...",
+  "rewrittenText": "수정된 안전한 문구...",
+  "explanation": "수정 이유 설명...",
+  "legalBasis": ["근로기준법 제1조"]
+}
+```
+
+#### 7. 상황별 법률 분석
 
 ```bash
 POST /api/v2/legal/analyze-situation
@@ -1262,7 +1467,40 @@ curl -X POST "http://localhost:8000/api/v2/legal/analyze-contract" \
 
 **응답 형식**: v2 형식 (`docId`, `contractText`, `issues` 등 포함)
 
-#### 4. 상황별 분석
+#### 4. 계약서 조회
+```bash
+curl "http://localhost:8000/api/v2/legal/contracts/{doc_id}"
+```
+
+#### 5. 계약서 히스토리
+```bash
+curl "http://localhost:8000/api/v2/legal/contracts/history?limit=20&offset=0" \
+  -H "X-User-Id: [사용자 ID]"
+```
+
+#### 6. 계약서 비교
+```bash
+curl -X POST "http://localhost:8000/api/v2/legal/compare-contracts" \
+  -H "Content-Type: application/json" \
+  -H "X-User-Id: [사용자 ID]" \
+  -d '{
+    "oldContractId": "uuid-1",
+    "newContractId": "uuid-2"
+  }'
+```
+
+#### 7. 조항 리라이트
+```bash
+curl -X POST "http://localhost:8000/api/v2/legal/rewrite-clause" \
+  -H "Content-Type: application/json" \
+  -H "X-User-Id: [사용자 ID]" \
+  -d '{
+    "originalText": "위험한 조항 원문...",
+    "issueId": "issue-1"
+  }'
+```
+
+#### 8. 상황별 분석
 ```bash
 curl -X POST "http://localhost:8000/api/v2/legal/analyze-situation" \
   -H "Content-Type: application/json" \

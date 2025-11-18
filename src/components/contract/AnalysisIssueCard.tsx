@@ -5,6 +5,8 @@ import { AlertTriangle, Eye, FileEdit, Copy, ChevronDown, ChevronUp, MessageSqua
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/hooks/use-toast'
 import { RewriteModal } from './RewriteModal'
+import { cn } from '@/lib/utils'
+import { SEVERITY_COLORS, SEVERITY_LABELS, SEVERITY_LABELS_SHORT, PRIMARY_GRADIENT, PRIMARY_GRADIENT_HOVER, FOCUS_STYLE, ICON_SIZES } from './contract-design-tokens'
 import type { LegalIssue } from '@/types/legal'
 
 interface AnalysisIssueCardProps {
@@ -25,18 +27,6 @@ export function AnalysisIssueCard({
   const [isExpanded, setIsExpanded] = useState(false)
   const [showRewriteModal, setShowRewriteModal] = useState(false)
   const { toast } = useToast()
-
-  const severityColors = {
-    high: 'bg-red-100 text-red-800 border-red-300',
-    medium: 'bg-yellow-100 text-yellow-800 border-yellow-300',
-    low: 'bg-green-100 text-green-800 border-green-300',
-  }
-
-  const severityLabels = {
-    high: '심각',
-    medium: '경고',
-    low: '주의',
-  }
 
   const categoryLabels: Record<string, string> = {
     working_hours: '근로시간',
@@ -83,11 +73,12 @@ export function AnalysisIssueCard({
 
   return (
     <div
-      className={`border rounded-xl p-4 sm:p-5 mb-4 transition-all cursor-pointer ${
+      className={cn(
+        "relative border rounded-xl p-4 sm:p-5 mb-4 transition-all issue-card",
         isSelected
-          ? 'border-blue-400 bg-gradient-to-br from-blue-50 to-indigo-50 shadow-lg ring-2 ring-blue-200'
-          : 'border-slate-200 bg-white hover:border-blue-200 hover:shadow-md hover:bg-slate-50/50'
-      }`}
+          ? 'border-blue-500 bg-gradient-to-br from-blue-50 to-indigo-50 shadow-md scale-[1.01]'
+          : 'border-slate-200 bg-white hover:border-slate-300'
+      )}
       onClick={onSelect}
       role="button"
       tabIndex={0}
@@ -99,6 +90,9 @@ export function AnalysisIssueCard({
         }
       }}
     >
+      {isSelected && (
+        <div className="absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-blue-500 to-indigo-500 rounded-l-xl" />
+      )}
       {/* 헤더 */}
       <div className="flex items-start justify-between mb-3">
         <div className="flex-1">
@@ -108,9 +102,12 @@ export function AnalysisIssueCard({
               {categoryLabels[issue.category] || issue.category}
             </span>
             <span
-              className={`px-3 py-1.5 text-xs font-semibold rounded-lg border-2 shadow-sm ${severityColors[issue.severity]}`}
+              className={cn(
+                "px-3 py-1.5 text-xs font-semibold rounded-lg border-2 shadow-sm",
+                SEVERITY_COLORS[issue.severity].badge
+              )}
             >
-              {severityLabels[issue.severity].toUpperCase()}
+              {SEVERITY_LABELS_SHORT[issue.severity]}
             </span>
           </div>
 
@@ -137,7 +134,7 @@ export function AnalysisIssueCard({
           }}
           aria-expanded={isExpanded}
           aria-label={isExpanded ? "상세 정보 접기" : "상세 정보 펼치기"}
-          className="ml-2 p-1 hover:bg-slate-100 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+          className={cn("ml-2 p-1 hover:bg-slate-100 rounded", FOCUS_STYLE)}
         >
           {isExpanded ? (
             <ChevronUp className="w-4 h-4 text-slate-500" />
@@ -190,20 +187,20 @@ export function AnalysisIssueCard({
           해당 조항 보기
         </Button>
         {onAskAboutIssue && (
-          <Button
-            variant="default"
-            size="sm"
-            onClick={(e) => {
-              e.stopPropagation()
-              const prefilled = `다음 조항이 왜 위험한지와 현실적으로 어떤 협상 포인트를 잡을 수 있을지 알려줘.\n\n[문제 조항]\n${issue.originalText || issue.summary}`
-              onAskAboutIssue(issue.id, prefilled)
-            }}
-            aria-label={`${issue.summary}에 대해 AI에게 질문하기`}
-            className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-md hover:shadow-lg transition-all"
-          >
-            <MessageSquare className="w-4 h-4 mr-1.5" aria-hidden="true" />
-            이 부분 질문하기
-          </Button>
+        <Button
+          variant="default"
+          size="sm"
+          onClick={(e) => {
+            e.stopPropagation()
+            const prefilled = `다음 조항이 왜 위험한지와 현실적으로 어떤 협상 포인트를 잡을 수 있을지 알려줘.\n\n[문제 조항]\n${issue.originalText || issue.summary}`
+            onAskAboutIssue(issue.id, prefilled)
+          }}
+          aria-label={`${issue.summary}에 대해 AI에게 질문하기`}
+          className={cn(PRIMARY_GRADIENT, PRIMARY_GRADIENT_HOVER, "text-white shadow-md hover:shadow-lg transition-all ai-button")}
+        >
+          <MessageSquare className="w-4 h-4 mr-1.5" aria-hidden="true" />
+          이 부분 질문하기
+        </Button>
         )}
         <Button
           variant="outline"
@@ -247,7 +244,7 @@ export function AnalysisIssueCard({
 
       {/* 확장된 내용 */}
       {isExpanded && (
-        <div className="mt-4 pt-4 border-t border-slate-200 space-y-3">
+        <div className="mt-4 pt-4 border-t border-slate-200 space-y-3 content">
           {/* 원문 */}
           <div>
             <div className="flex items-center justify-between mb-2">
@@ -299,7 +296,7 @@ export function AnalysisIssueCard({
                         description: '제안 문구가 클립보드에 복사되었습니다.',
                       })
                     }}
-                    className="flex-1 text-xs h-8 border-emerald-300 hover:bg-emerald-100"
+                    className="flex-1 text-xs h-8 border-emerald-300 hover:bg-emerald-100 ai-button"
                   >
                     <Copy className="w-3.5 h-3.5 mr-1.5" />
                     제안 문구 복사
@@ -313,7 +310,7 @@ export function AnalysisIssueCard({
                         const prefilled = `다음 조항이 왜 위험한지와 현실적으로 어떤 협상 포인트를 잡을 수 있을지 알려줘.\n\n[문제 조항]\n${issue.originalText || issue.summary}`
                         onAskAboutIssue(issue.id, prefilled)
                       }}
-                      className="flex-1 text-xs h-8 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-md"
+                      className={cn("flex-1 text-xs h-8", PRIMARY_GRADIENT, PRIMARY_GRADIENT_HOVER, "text-white shadow-md ai-button")}
                     >
                       <MessageSquare className="w-3.5 h-3.5 mr-1.5" />
                       이 문장으로 질문하기

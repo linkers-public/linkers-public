@@ -96,11 +96,11 @@ export default function ContractAnalysisPage() {
   }
 
   // 히스토리 로드
-  useEffect(() => {
-    const loadHistory = async () => {
+  const loadHistory = async () => {
+    try {
+      setLoadingHistory(true)
+      // v2 API로 히스토리 조회 시도
       try {
-        setLoadingHistory(true)
-        // v2 API로 히스토리 조회
         const historyData = await getContractHistoryV2(10, 0)
         const formattedHistory: HistoryItem[] = historyData.map(item => ({
           id: item.doc_id,
@@ -114,14 +114,49 @@ export default function ContractAnalysisPage() {
           },
         }))
         setHistory(formattedHistory)
-      } catch (error) {
-        console.error('히스토리 로드 실패:', error)
-        // 에러가 발생해도 빈 배열로 설정 (로그인하지 않은 경우 등)
-        setHistory([])
-      } finally {
-        setLoadingHistory(false)
+      } catch (apiError: any) {
+        // API 조회 실패 시 로컬 스토리지에서 조회
+        console.warn('v2 API 히스토리 조회 실패, 로컬 스토리지 확인:', apiError)
+        const localHistory: HistoryItem[] = []
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i)
+          if (key?.startsWith('contract_analysis_')) {
+            try {
+              const docId = key.replace('contract_analysis_', '')
+              const data = JSON.parse(localStorage.getItem(key) || '{}')
+              if (data && (data.riskScore !== undefined || data.risk_score !== undefined)) {
+                localHistory.push({
+                  id: docId,
+                  file_name: data.title || data.file_name || '계약서',
+                  risk_score: data.riskScore || data.risk_score || 0,
+                  risk_level: (data.riskLevel || data.risk_level || 'low') as 'low' | 'medium' | 'high',
+                  summary: data.summary || '',
+                  created_at: data.createdAt || data.created_at || new Date().toISOString(),
+                  analysis_result: {
+                    issues: Array((data.issues || data.risks || []).length).fill(null),
+                  },
+                })
+              }
+            } catch (e) {
+              // 무시
+            }
+          }
+        }
+        // 최신순으로 정렬
+        localHistory.sort((a, b) => 
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        )
+        setHistory(localHistory.slice(0, 10))
       }
+    } catch (error) {
+      console.error('히스토리 로드 실패:', error)
+      setHistory([])
+    } finally {
+      setLoadingHistory(false)
     }
+  }
+
+  useEffect(() => {
     loadHistory()
   }, [])
 
@@ -324,6 +359,9 @@ export default function ContractAnalysisPage() {
         console.warn('DB 저장 실패, 로컬 스토리지만 사용:', saveError)
         // DB 저장 실패해도 계속 진행 (로컬 스토리지에 이미 저장됨)
       }
+      
+      // 히스토리 다시 로드
+      await loadHistory()
       
       // 상세 페이지로 이동
       router.push(`/legal/contract/${docId}`)
