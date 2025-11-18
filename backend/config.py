@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     # Embedding Model (로컬 임베딩 사용)
     use_local_embedding: bool = True  # sentence-transformers 사용 (무료)
     local_embedding_model: str = "BAAI/bge-m3"  # 로컬 임베딩 모델: bge-m3 (1024차원, 다국어 지원, 법률/계약서에 적합)
+    embedding_device: Optional[str] = None  # 임베딩 디바이스: None/"auto"(자동 감지), "cuda"(GPU 강제), "cpu"(CPU 강제)
     
     # 문서/기업 임베딩 모델 구분 (선택사항)
     doc_embed_model: str = "BAAI/bge-m3"  # 문서 임베딩: 법률/계약서/공고문 (1024차원, 다국어)

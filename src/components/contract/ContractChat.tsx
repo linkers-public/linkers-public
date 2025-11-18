@@ -456,7 +456,7 @@ export function ContractChat({
                               )}
                             </div>
                           ) : (
-                            <div className="prose prose-sm max-w-none prose-headings:text-slate-900 prose-p:text-slate-700 prose-strong:text-slate-900 prose-code:text-blue-600 prose-pre:bg-slate-50">
+                            <div className="prose prose-sm max-w-none prose-headings:text-slate-900 prose-p:text-slate-700 prose-strong:text-slate-900 prose-code:text-blue-600 prose-pre:bg-slate-50 text-sm leading-relaxed">
                               <MarkdownRenderer content={message.content} />
                             </div>
                           )}

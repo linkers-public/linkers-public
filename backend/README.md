@@ -20,10 +20,32 @@
 ## 📑 목차
 
 1. [빠른 시작](#-빠른-시작)
-2. [프로젝트 구조](#-프로젝트-구조)
-3. [주요 기능](#-주요-기능)
-4. [관련 문서](#-관련-문서)
-5. [라이선스](#-라이선스)
+2. [새로운 개발자 가이드](#-새로운-개발자-가이드) ⭐
+3. [프로젝트 구조](#-프로젝트-구조)
+4. [주요 기능](#-주요-기능)
+5. [RAG 파이프라인](#-rag-파이프라인)
+6. [관련 문서](#-관련-문서)
+7. [라이선스](#-라이선스)
+
+---
+
+## 🆕 새로운 개발자 가이드
+
+**GitHub에서 프로젝트를 처음 클론한 새로운 개발자를 위한 가이드입니다.**
+
+> ⚠️ **중요**: 임베딩 모델과 청킹 작업은 **이미 완료되어 DB에 저장되어 있습니다**.
+> 
+> 새로운 개발자는 **추가로 임베딩 생성이나 청킹 작업을 할 필요가 없습니다!**
+> 
+> 단순히 환경 설정 후 API만 사용하면 됩니다.
+
+**👉 [새로운 개발자 가이드 보기](./README_NEW_DEVELOPER.md)**
+
+### 빠른 요약
+
+1. ✅ **이미 완료됨**: 임베딩 모델 설정, 청킹, DB 저장
+2. 🔧 **해야 할 일**: 환경 설정 (`.env` 파일), 의존성 설치, 서버 실행
+3. 🚀 **바로 사용 가능**: API 엔드포인트 사용
 
 ---
 
@@ -80,6 +102,12 @@ USE_OLLAMA=true
 # 법률 문서는 다국어 지원 모델 사용 권장
 LOCAL_EMBEDDING_MODEL=BAAI/bge-m3
 USE_LOCAL_EMBEDDING=true
+
+# Embedding Device (선택, 기본값: 자동 감지)
+# "cuda": GPU 강제 사용 (GPU가 있는 경우)
+# "cpu": CPU 강제 사용 (GPU가 없거나 CPU만 사용하고 싶은 경우)
+# 설정하지 않으면 자동으로 GPU/CPU 감지
+EMBEDDING_DEVICE=cuda  # 또는 cpu, 또는 주석 처리 (자동 감지)
 
 # LLM Model (선택, 기본값: gpt-4o-mini)
 LLM_MODEL=gpt-4o-mini
@@ -308,6 +336,52 @@ python scripts/performance_test.py
 - 팀 매칭
 - 공고 분석
 
+## 🔄 RAG 파이프라인
+
+법률/계약서 RAG 시스템은 다음과 같은 파이프라인으로 동작합니다:
+
+```mermaid
+graph LR
+    A[계약서 문서<br/>PDF/HWPX] --> B[Parsing<br/>문서 파싱]
+    B --> B1[텍스트 추출]
+    B1 --> B2[조항 단위 청킹<br/>제n조 단위 분할]
+    B2 --> B3[임베딩 생성<br/>BAAI/bge-m3]
+    
+    C[사용자 질문] --> D[Retrieval<br/>검색]
+    B3 --> D
+    E[법률 문서 DB<br/>Supabase pgvector] --> D
+    D --> D1[질문 임베딩 생성]
+    D1 --> D2[벡터 유사도 검색<br/>top-k 관련 조항/법령]
+    
+    D2 --> F[LLM<br/>응답 생성]
+    B2 --> F
+    F --> F1[Ollama/GPT<br/>법률 상담 응답]
+    F1 --> G[최종 결과<br/>위험도 분석/상담]
+    
+    style A fill:#e1f5ff
+    style B fill:#fff4e1
+    style D fill:#e8f5e9
+    style F fill:#f3e5f5
+    style G fill:#ffebee
+```
+
+### 파이프라인 단계 설명
+
+1. **Parsing (문서 파싱)**
+   - PDF/HWPX 파일에서 텍스트 추출
+   - 계약서를 조항(제n조) 단위로 청킹
+   - 각 조항을 임베딩 벡터로 변환 (BAAI/bge-m3 모델)
+
+2. **Retrieval (검색)**
+   - 사용자 질문을 임베딩 벡터로 변환
+   - Supabase pgvector를 사용하여 유사한 법률 문서/조항 검색
+   - 계약서 조항과 법령을 병렬로 검색 (Dual RAG)
+
+3. **LLM (응답 생성)**
+   - 검색된 관련 문서와 계약서 조항을 컨텍스트로 제공
+   - Ollama 또는 OpenAI LLM을 사용하여 법률 상담 응답 생성
+   - 계약서 위험도 분석 및 개선안 제시
+
 ## 🏗️ 아키텍처
 
 아키텍처 개선 사항에 대한 상세 내용은 [ARCHITECTURE_IMPROVEMENTS.md](./ARCHITECTURE_IMPROVEMENTS.md)를 참고하세요.
@@ -322,6 +396,24 @@ python scripts/performance_test.py
 ## 🚨 문제 해결
 
 문제 해결 가이드는 [TROUBLESHOOTING.md](./TROUBLESHOOTING.md)를 참고하세요.
+
+### 🔧 로컬 임베딩 생성 실패
+
+**"로컬 임베딩 생성 실패" 오류가 발생하는 경우:**
+
+1. **진단 스크립트 실행:**
+   ```bash
+   cd backend
+   python test_embedding.py
+   ```
+
+2. **상세 해결 가이드:**
+   - [TROUBLESHOOTING_EMBEDDING.md](./TROUBLESHOOTING_EMBEDDING.md) 참고
+
+**빠른 해결 방법:**
+- Windows: Long Path 활성화 후 재시작 → `pip install sentence-transformers`
+- PyTorch 오류: `pip uninstall torch && pip install torch`
+- 모델 다운로드 실패: 인터넷 연결 확인
 
 **일반적인 문제:**
 - 서버 시작 오류
@@ -380,20 +472,40 @@ when moving module from meta to a different device.
 - 배치 크기가 작음
 
 **해결 방법:**
-1. **배치 크기 최적화 (이미 적용됨):**
-   - `generator_v2.py`에서 `batch_size=64`로 설정
-   - `show_progress_bar=True`로 진행 상황 표시
-
-2. **GPU 사용 (권장):**
+1. **GPU 사용 (권장):**
    - CUDA 지원 GPU가 있으면 자동으로 사용
+   - 또는 환경 변수로 강제 지정: `EMBEDDING_DEVICE=cuda`
    - PyTorch CUDA 버전 설치:
      ```bash
      pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
      ```
 
+2. **배치 크기 최적화 (이미 적용됨):**
+   - `generator_v2.py`에서 `batch_size=64`로 설정
+   - `show_progress_bar=True`로 진행 상황 표시
+
 3. **더 작은 모델 사용 (품질 저하 가능):**
    - 환경 변수에서 `LOCAL_EMBEDDING_MODEL=BAAI/bge-small-en-v1.5` 설정
    - 주의: 384차원으로 변경되므로 DB 스키마도 변경 필요
+
+#### 디바이스 설정 (GPU/CPU 선택)
+**환경 변수로 디바이스 강제 지정:**
+
+```env
+# GPU 강제 사용 (GPU가 있는 경우)
+EMBEDDING_DEVICE=cuda
+
+# CPU 강제 사용 (GPU가 없거나 CPU만 사용하고 싶은 경우)
+EMBEDDING_DEVICE=cpu
+
+# 자동 감지 (기본값, 설정하지 않으면 자동)
+# EMBEDDING_DEVICE 설정 안 함
+```
+
+**사용 시나리오:**
+- **GPU가 있는 개발자**: `EMBEDDING_DEVICE=cuda` 설정 (또는 자동 감지)
+- **CPU만 있는 개발자**: `EMBEDDING_DEVICE=cpu` 설정
+- **자동 감지**: 환경 변수 설정 안 함 (기본 동작)
 
 #### 임베딩 차원 불일치 오류
 **증상:**
