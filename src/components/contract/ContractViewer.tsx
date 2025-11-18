@@ -58,6 +58,7 @@ export function ContractViewer({
   const [scrollProgress, setScrollProgress] = useState(0)
   const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null)
   const tooltipRef = useRef<HTMLDivElement>(null)
+  const hideTooltipTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // 조항 파싱 및 이슈 매핑
   const parsedClauses = useMemo(() => {
@@ -175,6 +176,12 @@ export function ContractViewer({
 
   // 툴팁 위치 계산
   const handleMouseEnter = (e: React.MouseEvent<HTMLElement>, issue: LegalIssue) => {
+    // 이전 타임아웃이 있으면 취소
+    if (hideTooltipTimeoutRef.current) {
+      clearTimeout(hideTooltipTimeoutRef.current)
+      hideTooltipTimeoutRef.current = null
+    }
+    
     const rect = e.currentTarget.getBoundingClientRect()
     const container = containerRef.current
     if (!container) return
@@ -223,8 +230,35 @@ export function ContractViewer({
   }
 
   const handleMouseLeave = () => {
-    setCurrentHoveredIssue(null)
-    setTooltipPosition(null)
+    // 툴팁을 즉시 숨기지 않고 약간의 지연을 추가하여 툴팁으로 마우스를 이동할 시간을 줌
+    if (hideTooltipTimeoutRef.current) {
+      clearTimeout(hideTooltipTimeoutRef.current)
+    }
+    hideTooltipTimeoutRef.current = setTimeout(() => {
+      setCurrentHoveredIssue(null)
+      setTooltipPosition(null)
+      hideTooltipTimeoutRef.current = null
+    }, 150) // 150ms 지연
+  }
+
+  const handleTooltipMouseEnter = () => {
+    // 툴팁 위에 마우스가 있으면 숨기지 않음
+    if (hideTooltipTimeoutRef.current) {
+      clearTimeout(hideTooltipTimeoutRef.current)
+      hideTooltipTimeoutRef.current = null
+    }
+  }
+
+  const handleTooltipMouseLeave = () => {
+    // 툴팁에서 마우스가 벗어나면 숨김
+    if (hideTooltipTimeoutRef.current) {
+      clearTimeout(hideTooltipTimeoutRef.current)
+    }
+    hideTooltipTimeoutRef.current = setTimeout(() => {
+      setCurrentHoveredIssue(null)
+      setTooltipPosition(null)
+      hideTooltipTimeoutRef.current = null
+    }, 100) // 100ms 지연
   }
 
   // 하이라이트된 텍스트 렌더링 (태그 + 아이콘 포함)
@@ -315,8 +349,12 @@ export function ContractViewer({
       
       // 스크롤 시 툴팁 숨기기 (위치 계산이 복잡하므로)
       if (tooltipPosition) {
+        if (hideTooltipTimeoutRef.current) {
+          clearTimeout(hideTooltipTimeoutRef.current)
+        }
         setTooltipPosition(null)
         setCurrentHoveredIssue(null)
+        hideTooltipTimeoutRef.current = null
       }
     }
 
@@ -327,6 +365,15 @@ export function ContractViewer({
       return () => container.removeEventListener('scroll', handleScroll)
     }
   }, [contractText, tooltipPosition])
+
+  // 컴포넌트 언마운트 시 타임아웃 정리
+  useEffect(() => {
+    return () => {
+      if (hideTooltipTimeoutRef.current) {
+        clearTimeout(hideTooltipTimeoutRef.current)
+      }
+    }
+  }, [])
 
   // 조항별 텍스트 렌더링
   const renderClauseContent = (clause: Clause) => {
@@ -642,7 +689,7 @@ export function ContractViewer({
               {currentHoveredIssue && tooltipPosition && (
                 <div
                   ref={tooltipRef}
-                  className="absolute z-50 w-[280px] pointer-events-none"
+                  className="absolute z-50 w-[280px] pointer-events-auto"
                   style={{
                     left: `${tooltipPosition.x}px`,
                     top: `${tooltipPosition.y}px`,
@@ -650,6 +697,8 @@ export function ContractViewer({
                   }}
                   role="tooltip"
                   aria-label="위험 조항 상세 정보"
+                  onMouseEnter={handleTooltipMouseEnter}
+                  onMouseLeave={handleTooltipMouseLeave}
                 >
                   <div className="bg-white rounded-lg border-2 border-slate-200 shadow-xl p-3 animate-in fade-in zoom-in-95 duration-200">
                     {/* 툴팁 헤더 */}

@@ -18,9 +18,9 @@ export function MarkdownRenderer({ content, className = '' }: MarkdownRendererPr
     let html = content
 
     // 제목 처리 (#, ##, ###)
-    html = html.replace(/^### (.*$)/gim, '<h3 class="text-lg font-bold mt-6 mb-3 text-gray-900">$1</h3>')
-    html = html.replace(/^## (.*$)/gim, '<h2 class="text-xl font-bold mt-8 mb-4 text-gray-900">$1</h2>')
-    html = html.replace(/^# (.*$)/gim, '<h1 class="text-2xl font-bold mt-10 mb-5 text-gray-900">$1</h1>')
+    html = html.replace(/^### (.*$)/gim, '<h3 class="text-sm font-bold mt-4 mb-2 text-gray-900">$1</h3>')
+    html = html.replace(/^## (.*$)/gim, '<h2 class="text-base font-bold mt-5 mb-3 text-gray-900">$1</h2>')
+    html = html.replace(/^# (.*$)/gim, '<h1 class="text-lg font-bold mt-6 mb-4 text-gray-900">$1</h1>')
 
     // 강조 처리 (**텍스트** -> <strong>)
     html = html.replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-gray-900">$1</strong>')
@@ -51,7 +51,7 @@ export function MarkdownRenderer({ content, className = '' }: MarkdownRendererPr
           processedLines.push(`<${listType} class="list-disc list-inside space-y-2 my-4 ml-4">`)
         }
         const content = listMatch ? listMatch[1] : numberedMatch![1]
-        processedLines.push(`<li class="text-gray-700">${content}</li>`)
+        processedLines.push(`<li class="text-sm text-gray-700">${content}</li>`)
       } else {
         if (inList) {
           processedLines.push(`</${listType}>`)
@@ -73,7 +73,7 @@ export function MarkdownRenderer({ content, className = '' }: MarkdownRendererPr
     html = processedLines.join('\n')
 
     // 인용구 처리 (>)
-    html = html.replace(/^>\s+(.*$)/gim, '<blockquote class="border-l-4 border-blue-300 pl-4 my-4 italic text-gray-600">$1</blockquote>')
+    html = html.replace(/^>\s+(.*$)/gim, '<blockquote class="border-l-4 border-blue-300 pl-4 my-3 italic text-sm text-gray-600">$1</blockquote>')
 
     // 수평선 처리 (---)
     html = html.replace(/^---$/gim, '<hr class="my-6 border-gray-300" />')
@@ -90,7 +90,7 @@ export function MarkdownRenderer({ content, className = '' }: MarkdownRendererPr
       // 이미 태그가 있거나 빈 줄이면 현재 문단 종료
       if (trimmed.match(/^<[h|u|o|l|b|p|d|t|r|s]/) || trimmed === '') {
         if (currentParagraph.length > 0) {
-          finalProcessed.push(`<p class="mb-4 leading-relaxed text-gray-700">${currentParagraph.join(' ')}</p>`)
+          finalProcessed.push(`<p class="mb-3 leading-relaxed text-sm text-gray-700">${currentParagraph.join(' ')}</p>`)
           currentParagraph = []
         }
         if (trimmed) {
@@ -103,7 +103,7 @@ export function MarkdownRenderer({ content, className = '' }: MarkdownRendererPr
 
     // 남은 문단 처리
     if (currentParagraph.length > 0) {
-      finalProcessed.push(`<p class="mb-4 leading-relaxed text-gray-700">${currentParagraph.join(' ')}</p>`)
+      finalProcessed.push(`<p class="mb-3 leading-relaxed text-sm text-gray-700">${currentParagraph.join(' ')}</p>`)
     }
 
     html = finalProcessed.join('\n')
