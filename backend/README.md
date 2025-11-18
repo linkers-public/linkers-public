@@ -240,6 +240,31 @@ API 엔드포인트에 대한 상세 설명은 [API_REFERENCE.md](./API_REFERENC
 - Swagger UI: http://localhost:8000/docs
 - 헬스 체크: `curl http://localhost:8000/api/health`
 
+### 성능 테스트
+
+RAG 시스템의 성능을 측정하는 스크립트:
+
+```bash
+cd backend
+python scripts/performance_test.py
+```
+
+**측정 항목:**
+- 단일/배치 임베딩 생성 성능
+- 임베딩 캐시 효과
+- 벡터 검색 성능
+- LLM 응답 생성 성능
+- Dual RAG 검색 성능
+- 전체 계약서 분석 파이프라인
+- 비동기 병렬 처리 효과
+
+**결과 저장:**
+- 테스트 결과는 자동으로 `backend/data/indexed/reports/performance/` 폴더에 JSON 형식으로 저장됩니다
+- 파일명: `performance_test_YYYYMMDD_HHMMSS.json`
+- 각 테스트 완료 시마다 결과가 저장되므로, 중간에 중단되어도 완료된 테스트 결과는 보존됩니다
+
+상세한 사용법은 [scripts/README_PERFORMANCE_TEST.md](./scripts/README_PERFORMANCE_TEST.md)를 참고하세요.
+
 ---
 
 ## 🔧 설정
@@ -404,6 +429,10 @@ expected 384 dimensions, not 1024
 - [TESTING.md](./TESTING.md) - 테스트 방법 및 예제
 - [CONFIGURATION.md](./CONFIGURATION.md) - 환경 변수 및 설정 가이드
 - [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) - 문제 해결 가이드
+
+### 스크립트 문서
+- [scripts/README.md](./scripts/README.md) - 배치 인입 스크립트 가이드
+- [scripts/README_PERFORMANCE_TEST.md](./scripts/README_PERFORMANCE_TEST.md) - 성능 테스트 스크립트 가이드
 
 ### 아키텍처 및 로직 문서
 - [BACKEND_LOGIC_EXPLANATION.md](./BACKEND_LOGIC_EXPLANATION.md) - 백엔드 로직 상세 설명 (청킹, RAG, 검색)

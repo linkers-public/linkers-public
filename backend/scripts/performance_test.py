@@ -6,6 +6,8 @@ RAG 시스템의 각 컴포넌트별 성능 측정
 import asyncio
 import time
 import statistics
+import json
+from datetime import datetime
 from typing import List, Dict, Any
 from pathlib import Path
 import sys
@@ -23,12 +25,38 @@ from config import settings
 class PerformanceTester:
     """성능 테스트 클래스"""
     
-    def __init__(self):
+    def __init__(self, save_results: bool = True, save_dir: str = None):
         self.generator = LLMGenerator()
         self.legal_service = LegalRAGService(embedding_cache_size=100)
         self.vector_store = SupabaseVectorStore()
         self.processor = DocumentProcessor()
         self.results: Dict[str, List[float]] = {}
+        self.save_results = save_results
+        
+        # 저장 디렉토리 설정
+        if save_dir is None:
+            save_dir = Path(__file__).parent.parent / "data" / "indexed" / "reports" / "performance"
+        else:
+            save_dir = Path(save_dir)
+        
+        self.save_dir = save_dir
+        self.save_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 타임스탬프 생성
+        self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.result_file = self.save_dir / f"performance_test_{self.timestamp}.json"
+        
+        # 전체 결과 데이터
+        self.all_results = {
+            "timestamp": self.timestamp,
+            "datetime": datetime.now().isoformat(),
+            "config": {
+                "embedding_model": settings.local_embedding_model,
+                "llm_model": settings.ollama_model,
+                "vector_db": "Supabase" if settings.supabase_url else "ChromaDB",
+            },
+            "results": {}
+        }
     
     def print_header(self, title: str):
         """헤더 출력"""
@@ -57,6 +85,10 @@ class PerformanceTester:
         print(f"   측정 횟수: {len(times)}회")
         
         self.results[test_name] = times
+        
+        # 결과를 파일에 저장
+        if self.save_results:
+            self._save_result(test_name, times)
     
     async def test_embedding_single(self, iterations: int = 10) -> List[float]:
         """단일 임베딩 생성 성능 테스트"""
@@ -192,6 +224,14 @@ class PerformanceTester:
             "근로시간 제한은 어떻게 되나요?",
         ]
         
+        # LLM 초기화
+        try:
+            from core.generator_v2 import _get_ollama_llm
+            llm = _get_ollama_llm()
+        except Exception as e:
+            print(f"   ❌ LLM 초기화 실패: {str(e)}")
+            return []
+        
         times = []
         for i in range(iterations):
             query = queries[i % len(queries)]
@@ -199,7 +239,7 @@ class PerformanceTester:
             try:
                 # 간단한 LLM 호출 테스트
                 response = await asyncio.to_thread(
-                    self.generator.llm.invoke,
+                    llm.invoke,
                     f"다음 질문에 간단히 답변하세요: {query}"
                 )
                 elapsed = time.time() - start
@@ -227,11 +267,17 @@ class PerformanceTester:
                 query_embedding = await self.legal_service._get_embedding(query)
                 
                 # 병렬 검색
-                contract_task = self.legal_service._search_contract_chunks(
-                    doc_id=doc_id or "test-doc-id",
-                    query=query,
-                    top_k=5
-                ) if doc_id else asyncio.sleep(0)  # doc_id가 없으면 스킵
+                if doc_id:
+                    contract_task = self.legal_service._search_contract_chunks(
+                        doc_id=doc_id,
+                        query=query,
+                        top_k=5
+                    )
+                else:
+                    # doc_id가 없으면 빈 리스트를 반환하는 코루틴
+                    async def empty_contract_chunks():
+                        return []
+                    contract_task = empty_contract_chunks()
                 
                 legal_task = self.legal_service._search_legal_chunks(query=query, top_k=8)
                 
@@ -244,8 +290,20 @@ class PerformanceTester:
                 elapsed = time.time() - start
                 times.append(elapsed)
                 
-                contract_count = len(contract_chunks) if not isinstance(contract_chunks, Exception) else 0
-                legal_count = len(legal_chunks) if not isinstance(legal_chunks, Exception) else 0
+                # None 체크 추가
+                if isinstance(contract_chunks, Exception):
+                    contract_count = 0
+                elif contract_chunks is None:
+                    contract_count = 0
+                else:
+                    contract_count = len(contract_chunks)
+                
+                if isinstance(legal_chunks, Exception):
+                    legal_count = 0
+                elif legal_chunks is None:
+                    legal_count = 0
+                else:
+                    legal_count = len(legal_chunks)
                 
                 print(f"   [{i+1}/{iterations}] {elapsed:.3f}초 - 계약서: {contract_count}개, 법령: {legal_count}개")
             except Exception as e:
@@ -385,6 +443,63 @@ class PerformanceTester:
             "속도 향상": speedup
         }
     
+    def _save_result(self, test_name: str, times: List[float]):
+        """개별 테스트 결과를 파일에 저장"""
+        if not times:
+            return
+        
+        avg = statistics.mean(times)
+        median = statistics.median(times)
+        min_time = min(times)
+        max_time = max(times)
+        std_dev = statistics.stdev(times) if len(times) > 1 else 0
+        
+        result_data = {
+            "test_name": test_name,
+            "statistics": {
+                "mean": round(avg, 3),
+                "median": round(median, 3),
+                "min": round(min_time, 3),
+                "max": round(max_time, 3),
+                "std_dev": round(std_dev, 3),
+                "count": len(times)
+            },
+            "raw_times": [round(t, 3) for t in times]
+        }
+        
+        # 전체 결과에 추가
+        self.all_results["results"][test_name] = result_data
+        
+        # 즉시 파일에 저장 (주기적 저장)
+        try:
+            with open(self.result_file, 'w', encoding='utf-8') as f:
+                json.dump(self.all_results, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"   [경고] 결과 저장 실패: {str(e)}")
+    
+    def _save_final_results(self):
+        """최종 결과를 파일에 저장"""
+        try:
+            # 전체 결과 요약 추가
+            summary = {}
+            for test_name, times in self.results.items():
+                if times:
+                    summary[test_name] = {
+                        "mean": round(statistics.mean(times), 3),
+                        "count": len(times)
+                    }
+            
+            self.all_results["summary"] = summary
+            self.all_results["total_tests"] = len(self.results)
+            
+            # 최종 저장
+            with open(self.result_file, 'w', encoding='utf-8') as f:
+                json.dump(self.all_results, f, ensure_ascii=False, indent=2)
+            
+            print(f"\n💾 결과 저장 완료: {self.result_file}")
+        except Exception as e:
+            print(f"\n❌ 최종 결과 저장 실패: {str(e)}")
+    
     def print_summary(self):
         """전체 결과 요약"""
         self.print_header("성능 테스트 결과 요약")
@@ -408,6 +523,10 @@ class PerformanceTester:
                 print(f"   - 캐시 사용 시 {cache_speedup:.2f}배 속도 향상")
         
         print("\n✅ 테스트 완료!")
+        
+        # 최종 결과 저장
+        if self.save_results:
+            self._save_final_results()
 
 
 async def main():
@@ -451,6 +570,14 @@ async def main():
         for stage, time_taken in pipeline_results.items():
             print(f"\n   {stage}: {time_taken:.3f}초")
         
+        # 파이프라인 결과도 저장
+        if pipeline_results:
+            tester.all_results["pipeline_results"] = {
+                stage: round(time_taken, 3) 
+                for stage, time_taken in pipeline_results.items()
+            }
+            tester._save_final_results()
+        
         # 8. 비동기 병렬 처리
         async_results = await tester.test_async_parallelism()
         for test_type, time_taken in async_results.items():
@@ -458,6 +585,14 @@ async def main():
                 print(f"\n   {test_type}: {time_taken:.3f}초")
             else:
                 print(f"\n   {test_type}: {time_taken:.2f}배")
+        
+        # 비동기 결과도 저장
+        if async_results:
+            tester.all_results["async_results"] = {
+                test_type: round(time_taken, 3) if isinstance(time_taken, float) else round(time_taken, 2)
+                for test_type, time_taken in async_results.items()
+            }
+            tester._save_final_results()
         
         # 요약
         tester.print_summary()
