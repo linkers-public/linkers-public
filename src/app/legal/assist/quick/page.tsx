@@ -33,8 +33,9 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
-import { analyzeSituationV2, type SituationRequestV2 } from '@/apis/legal.service'
+import { analyzeSituationV2, type SituationRequestV2, chatWithContractV2, getSituationReports, deleteSituationReport, saveSituationReport, type SituationReport } from '@/apis/legal.service'
 import { MarkdownRenderer } from '@/components/rag/MarkdownRenderer'
+import type { SituationAnalysisResponse } from '@/types/legal'
 
 // 색상 상수 (다른 페이지와 통일)
 const PRIMARY_GRADIENT = 'from-blue-600 to-indigo-600'
@@ -156,7 +157,7 @@ interface ChatMessage {
   reportId?: string // 리포트가 생성된 경우 리포트 ID
 }
 
-// 리포트 타입 정의
+// 리포트 타입 정의 (Supabase와 호환)
 interface Report {
   id: string
   question: string
@@ -166,7 +167,7 @@ interface Report {
   riskScore?: number
   tags?: string[] // 유형 태그
   createdAt: Date
-  expiresAt: Date // 24시간 후
+  expiresAt?: Date // Supabase에서는 만료일 없음 (선택사항)
 }
 
 // 대화 세션 타입
@@ -193,12 +194,19 @@ export default function QuickAssistPage() {
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null)
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
   const [editText, setEditText] = useState('')
-  const [showReportModal, setShowReportModal] = useState(false)
-  const [currentReport, setCurrentReport] = useState<Report | null>(null)
   const [showArchiveModal, setShowArchiveModal] = useState(false)
   const [reports, setReports] = useState<Report[]>([])
+  const [situationAnalysis, setSituationAnalysis] = useState<SituationAnalysisResponse | null>(null)
+  const [situationContext, setSituationContext] = useState<{
+    summary: string
+    details: string
+    categoryHint: string
+    employmentType?: string
+    workPeriod?: string
+    socialInsurance?: string
+  } | null>(null)
 
-  // localStorage에서 대화 내역 로드
+  // localStorage에서 대화 내역 로드 및 상황 분석 결과 확인
   useEffect(() => {
     if (typeof window === 'undefined') return
     
@@ -218,38 +226,58 @@ export default function QuickAssistPage() {
         setConversations(sessions)
       }
 
-      // 리포트 로드
-      const storedReports = localStorage.getItem('legal_assist_reports')
-      if (storedReports) {
-        const parsedReports = JSON.parse(storedReports)
-        const reportsWithDates = parsedReports.map((r: any) => ({
-          ...r,
-          createdAt: new Date(r.createdAt),
-          expiresAt: new Date(r.expiresAt),
-        }))
-        // 만료된 리포트 제거
-        const validReports = reportsWithDates.filter((r: Report) => r.expiresAt > new Date())
-        setReports(validReports)
-        localStorage.setItem('legal_assist_reports', JSON.stringify(validReports))
+      // 리포트 로드 (Supabase에서)
+      const loadReports = async () => {
+        try {
+          const situationReports = await getSituationReports(50)
+          const reports: Report[] = situationReports.map((r: SituationReport) => ({
+            id: r.id,
+            question: r.question,
+            answer: r.answer,
+            legalBasis: r.legal_basis || [],
+            recommendations: r.recommendations || [],
+            riskScore: r.risk_score,
+            tags: r.tags || [],
+            createdAt: new Date(r.created_at),
+            // Supabase에서는 만료일 없음
+          }))
+          setReports(reports)
+        } catch (error) {
+          console.error('리포트 로드 실패:', error)
+          // 실패 시 빈 배열로 설정
+          setReports([])
+        }
+      }
+      loadReports()
+
+      // 상황 분석 결과 확인 (situation 페이지에서 전달된 경우)
+      const situationData = localStorage.getItem('legal_situation_for_quick')
+      if (situationData) {
+        try {
+          const parsed = JSON.parse(situationData)
+          if (parsed.analysisResult) {
+            setSituationAnalysis(parsed.analysisResult)
+            setSituationContext({
+              summary: parsed.summary || '',
+              details: parsed.details || '',
+              categoryHint: parsed.categoryHint || 'unknown',
+              employmentType: parsed.employmentType,
+              workPeriod: parsed.workPeriod,
+              socialInsurance: parsed.socialInsurance,
+            })
+            // 사용 후 삭제 (한 번만 사용)
+            localStorage.removeItem('legal_situation_for_quick')
+          }
+        } catch (error) {
+          console.error('상황 분석 결과 로드 실패:', error)
+        }
       }
     } catch (error) {
       console.error('데이터 로드 실패:', error)
     }
   }, [])
 
-  // 만료된 리포트 정리 (24시간 후 자동 삭제)
-  useEffect(() => {
-    const cleanup = setInterval(() => {
-      const now = new Date()
-      const validReports = reports.filter(r => r.expiresAt > now)
-      if (validReports.length !== reports.length) {
-        setReports(validReports)
-        localStorage.setItem('legal_assist_reports', JSON.stringify(validReports))
-      }
-    }, 60000) // 1분마다 체크
-
-    return () => clearInterval(cleanup)
-  }, [reports])
+  // Supabase에서는 만료일이 없으므로 정리 로직 제거
 
   // 선택된 대화의 메시지 로드
   useEffect(() => {
@@ -265,13 +293,29 @@ export default function QuickAssistPage() {
     }
   }, [selectedConversationId, conversations])
 
-  // 초기 인사말 추가
+  // 초기 인사말 추가 (상황 분석 결과가 있으면 리포트 표시)
   useEffect(() => {
     if (!selectedConversationId && messages.length === 0 && !hasInitialGreeting) {
-      const greetingMessage: ChatMessage = {
-        id: `greeting-${Date.now()}`,
-        role: 'assistant',
-        content: `안녕하세요 법률 리스크를 탐지하는 Linkus legal이에요!
+      let initialMessage: ChatMessage
+      
+      if (situationAnalysis && situationContext) {
+        // 상황 분석 결과가 있으면 summary 필드의 내용을 그대로 표시
+        // summary 필드는 /legal/situation의 프롬프트(build_situation_analysis_prompt)에서 생성된
+        // 4개 섹션(📊 상황 분석의 결과, ⚖️ 법적 관점, 🎯 지금 당장 할 수 있는 행동, 💬 이렇게 말해보세요)을 포함
+        const reportContent = situationAnalysis.summary || '리포트 내용을 불러올 수 없습니다.'
+        
+        initialMessage = {
+          id: `report-${Date.now()}`,
+          role: 'assistant',
+          content: reportContent,
+          timestamp: new Date(),
+        }
+      } else {
+        // 일반 인사말
+        initialMessage = {
+          id: `greeting-${Date.now()}`,
+          role: 'assistant',
+          content: `안녕하세요 법률 리스크를 탐지하는 Linkus legal이에요!
 
 사용자님의 상황과 함께
 
@@ -281,12 +325,14 @@ export default function QuickAssistPage() {
 • 가지고 있는 증거(카톡, 메일, 녹취 등)가 있는지
 
 등을 알려주시면 더 자세한 대화가 가능해요!`,
-        timestamp: new Date(),
+          timestamp: new Date(),
+        }
       }
-      setMessages([greetingMessage])
+      
+      setMessages([initialMessage])
       setHasInitialGreeting(true)
     }
-  }, [selectedConversationId, messages.length, hasInitialGreeting])
+  }, [selectedConversationId, messages.length, hasInitialGreeting, situationAnalysis, situationContext])
 
   // 메시지 스크롤
   useEffect(() => {
@@ -315,14 +361,10 @@ export default function QuickAssistPage() {
     }
   }
 
-  // 리포트 저장
+  // 리포트 저장 (Supabase에 저장되므로 로컬 저장 불필요)
   const saveReports = (updatedReports: Report[]) => {
-    if (typeof window === 'undefined') return
-    try {
-      localStorage.setItem('legal_assist_reports', JSON.stringify(updatedReports))
-    } catch (error) {
-      console.error('리포트 저장 실패:', error)
-    }
+    // Supabase에 저장되므로 로컬 저장 불필요
+    // 리포트는 /legal/situation에서 자동으로 저장됨
   }
 
   // 질문 요약 생성 (타임라인용)
@@ -351,16 +393,26 @@ export default function QuickAssistPage() {
   }
 
   // 리포트 삭제
-  const handleDeleteReport = (reportId: string, e: React.MouseEvent) => {
+  const handleDeleteReport = async (reportId: string, e: React.MouseEvent) => {
     e.stopPropagation() // 버튼 클릭 시 리포트 선택 방지
-    const updatedReports = reports.filter(r => r.id !== reportId)
-    setReports(updatedReports)
-    saveReports(updatedReports)
     
-    toast({
-      title: "리포트 삭제 완료",
-      description: "리포트가 삭제되었습니다.",
-    })
+    try {
+      await deleteSituationReport(reportId)
+      const updatedReports = reports.filter(r => r.id !== reportId)
+      setReports(updatedReports)
+      
+      toast({
+        title: "리포트 삭제 완료",
+        description: "리포트가 삭제되었습니다.",
+      })
+    } catch (error: any) {
+      console.error('리포트 삭제 실패:', error)
+      toast({
+        title: "리포트 삭제 실패",
+        description: error.message || "리포트 삭제 중 오류가 발생했습니다.",
+        variant: 'destructive',
+      })
+    }
   }
 
   // 메시지 전송
@@ -411,46 +463,92 @@ export default function QuickAssistPage() {
     }
 
     try {
-      // API 호출
-      const request: SituationRequestV2 = {
-        situation: inputMessage.trim(),
-        category: 'unknown',
-      }
-
-      const result = await analyzeSituationV2(request)
-
-      // AI 응답 메시지 생성
-      const assistantMessage: ChatMessage = {
-        id: `msg-${Date.now()}-assistant`,
-        role: 'assistant',
-        content: result.analysis.summary,
-        timestamp: new Date(),
-      }
-
-      // 리포트 생성 여부 판단 (위험도가 높거나 특정 키워드가 있는 경우)
-      const shouldGenerateReport = result.riskScore > 50 || 
-        ['해고', '임금', '체불', '위반', '불법'].some(keyword => inputMessage.includes(keyword))
-
-      if (shouldGenerateReport) {
-        const reportId = `report-${Date.now()}`
-        assistantMessage.reportId = reportId
-
-        // 리포트 생성
-        const report: Report = {
-          id: reportId,
-          question: inputMessage.trim(),
-          answer: result.analysis.summary,
-          legalBasis: result.analysis.legalBasis.map(b => b.snippet),
-          recommendations: result.analysis.recommendations,
-          riskScore: result.riskScore,
-          tags: result.tags || [],
-          createdAt: new Date(),
-          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24시간 후
+      let assistantMessage: ChatMessage
+      
+      // 상황 분석 결과가 있으면 chatWithContractV2 사용 (컨텍스트 포함)
+      if (situationAnalysis && situationContext) {
+        // 법적 관점 내용을 컨텍스트로 변환
+        const legalContext = situationAnalysis.criteria
+          .map((criterion, index) => {
+            const reason = criterion.reason || `${criterion.name}: ${criterion.status}`
+            return `${index + 1}. ${reason}`
+          })
+          .join('\n')
+        
+        const analysisSummary = `상황 요약: ${situationContext.summary}\n\n법적 관점:\n${legalContext}\n\n위험도: ${situationAnalysis.riskScore}점`
+        
+        // chatWithContractV2 API 호출 (상황 분석 결과 기반)
+        const chatResult = await chatWithContractV2({
+          query: inputMessage.trim(),
+          docIds: [], // 상황 분석은 docId 없음
+          analysisSummary: analysisSummary,
+          riskScore: situationAnalysis.riskScore,
+          totalIssues: situationAnalysis.criteria?.length || 0,
+          topK: 8,
+        })
+        
+        assistantMessage = {
+          id: `msg-${Date.now()}-assistant`,
+          role: 'assistant',
+          content: chatResult.answer || '답변을 생성할 수 없습니다.',
+          timestamp: new Date(),
+        }
+      } else {
+        // 일반 상황 분석 API 호출
+        const request: SituationRequestV2 = {
+          situation: inputMessage.trim(),
+          category: 'unknown',
         }
 
-        const updatedReports = [report, ...reports].slice(0, 5) // 최근 5개만 유지
-        setReports(updatedReports)
-        saveReports(updatedReports)
+        const result = await analyzeSituationV2(request)
+
+        // AI 응답 메시지 생성
+        assistantMessage = {
+          id: `msg-${Date.now()}-assistant`,
+          role: 'assistant',
+          content: result.analysis.summary,
+          timestamp: new Date(),
+        }
+
+        // 리포트 생성 여부 판단 (위험도가 높거나 특정 키워드가 있는 경우)
+        const shouldGenerateReport = result.riskScore > 50 || 
+          ['해고', '임금', '체불', '위반', '불법'].some(keyword => inputMessage.includes(keyword))
+
+        if (shouldGenerateReport) {
+          // 리포트를 Supabase에 저장
+          try {
+            const savedReport = await saveSituationReport({
+              question: inputMessage.trim(),
+              answer: result.analysis.summary,
+              summary: result.analysis.summary,
+              risk_score: result.riskScore,
+              classified_type: result.tags[0] || 'unknown',
+              legal_basis: result.analysis.legalBasis.map(b => b.snippet),
+              recommendations: result.analysis.recommendations,
+              tags: result.tags || [],
+            })
+            
+            assistantMessage.reportId = savedReport.id
+
+            // 로컬 상태 업데이트
+            const report: Report = {
+              id: savedReport.id,
+              question: savedReport.question,
+              answer: savedReport.answer,
+              legalBasis: savedReport.legal_basis || [],
+              recommendations: savedReport.recommendations || [],
+              riskScore: savedReport.risk_score,
+              tags: savedReport.tags || [],
+              createdAt: new Date(savedReport.created_at),
+            }
+
+            const updatedReports = [report, ...reports].slice(0, 50) // 최근 50개만 유지
+            setReports(updatedReports)
+          } catch (saveError: any) {
+            console.error('리포트 저장 실패:', saveError)
+            // 저장 실패해도 메시지는 표시
+          }
+        }
       }
 
       const finalMessages = [...newMessages, assistantMessage]
@@ -524,13 +622,9 @@ export default function QuickAssistPage() {
     })
   }
 
-  // 리포트 보기
+  // 리포트 보기 (페이지로 이동)
   const handleViewReport = (reportId: string) => {
-    const report = reports.find(r => r.id === reportId)
-    if (report) {
-      setCurrentReport(report)
-      setShowReportModal(true)
-    }
+    router.push(`/legal/assist/quick/report/${reportId}`)
   }
 
   // 새 대화 시작
@@ -909,84 +1003,6 @@ export default function QuickAssistPage() {
         </DialogContent>
       </Dialog>
 
-      {/* 리포트 모달 */}
-      <Dialog open={showReportModal} onOpenChange={setShowReportModal}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 flex-wrap">
-              <div className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-                <Scroll className="w-5 h-5 text-blue-600" />
-                법적 조언 리포트
-              </div>
-              {currentReport && (
-                <div className="flex items-center gap-2">
-                  {currentReport.riskScore !== undefined && (
-                    <span className={cn(
-                      "px-2 py-1 rounded-md text-xs font-semibold",
-                      currentReport.riskScore > 70 ? "bg-red-100 text-red-700" :
-                      currentReport.riskScore > 40 ? "bg-amber-100 text-amber-700" :
-                      "bg-green-100 text-green-700"
-                    )}>
-                      위험도 {currentReport.riskScore}%
-                    </span>
-                  )}
-                  {currentReport.tags && currentReport.tags.length > 0 && (
-                    <span className="px-2 py-1 rounded-md text-xs font-semibold bg-blue-100 text-blue-700">
-                      {currentReport.tags[0] === 'harassment' ? '직장 내 괴롭힘' :
-                       currentReport.tags[0] === 'unpaid_wage' ? '임금체불' :
-                       currentReport.tags[0] === 'unfair_dismissal' ? '부당해고' :
-                       currentReport.tags[0] === 'overtime' ? '근로시간 문제' :
-                       currentReport.tags[0] === 'probation' ? '수습·인턴' :
-                       currentReport.tags[0]}
-                    </span>
-                  )}
-                </div>
-              )}
-            </DialogTitle>
-          </DialogHeader>
-          {currentReport && (
-            <div className="space-y-6">
-              <div>
-                <h3 className="font-bold mb-2 text-blue-600">질문</h3>
-                <p className="text-slate-700">{currentReport.question}</p>
-              </div>
-              <div>
-                <h3 className="font-bold mb-2 text-blue-600">법적 조언</h3>
-                <p className="text-slate-700 whitespace-pre-wrap">{currentReport.answer}</p>
-              </div>
-              {currentReport.legalBasis.length > 0 && (
-                <div>
-                  <h3 className="font-bold mb-2 text-blue-600">참조 법조문</h3>
-                  <ul className="space-y-2">
-                    {currentReport.legalBasis.map((basis, index) => (
-                      <li key={index} className="text-sm text-slate-700 pl-4 border-l-2 border-slate-200">
-                        {basis}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {currentReport.recommendations.length > 0 && (
-                <div>
-                  <h3 className="font-bold mb-2 text-blue-600">권장 실행 단계</h3>
-                  <ol className="space-y-2">
-                    {currentReport.recommendations.map((rec, index) => (
-                      <li key={index} className="text-sm text-slate-700 pl-4">
-                        <span className="font-semibold">{index + 1}.</span> {rec}
-                      </li>
-                    ))}
-                  </ol>
-                </div>
-              )}
-              <div className="text-xs text-slate-500 pt-4 border-t">
-                생성일: {currentReport.createdAt.toLocaleString('ko-KR')} | 
-                만료일: {currentReport.expiresAt.toLocaleString('ko-KR')} (24시간 후 자동 삭제)
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
       {/* 리포트 아카이브 모달 */}
       <Dialog open={showArchiveModal} onOpenChange={setShowArchiveModal}>
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
@@ -1007,9 +1023,8 @@ export default function QuickAssistPage() {
                   key={report.id}
                   className="cursor-pointer hover:shadow-md transition-shadow group"
                   onClick={() => {
-                    setCurrentReport(report)
                     setShowArchiveModal(false)
-                    setShowReportModal(true)
+                    handleViewReport(report.id)
                   }}
                 >
                   <CardContent className="p-4">

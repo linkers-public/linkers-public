@@ -850,3 +850,155 @@ export const healthCheckV2 = async (): Promise<{ status: string; message: string
   }
 };
 
+// ============================================================================
+// 상황 분석 리포트 저장/조회 (Supabase)
+// ============================================================================
+
+export interface SituationReport {
+  id: string;
+  user_id?: string;
+  question: string;
+  answer: string;
+  summary?: string;
+  details?: string;
+  category_hint?: string;
+  employment_type?: string;
+  work_period?: string;
+  social_insurance?: string;
+  risk_score?: number;
+  classified_type?: string;
+  legal_basis?: string[];
+  recommendations?: string[];
+  tags?: string[];
+  analysis_result?: any;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * 상황 분석 리포트를 Supabase에 저장
+ */
+export const saveSituationReport = async (
+  report: Omit<SituationReport, 'id' | 'created_at' | 'updated_at'>
+): Promise<SituationReport> => {
+  try {
+    const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client');
+    const supabase = createSupabaseBrowserClient();
+    
+    // 사용자 ID 가져오기 (선택사항)
+    const { data: { user } } = await supabase.auth.getUser();
+    const userId = user?.id || null;
+
+    const { data, error } = await supabase
+      .from('situation_reports')
+      .insert({
+        user_id: userId,
+        question: report.question,
+        answer: report.answer,
+        summary: report.summary,
+        details: report.details,
+        category_hint: report.category_hint,
+        employment_type: report.employment_type,
+        work_period: report.work_period,
+        social_insurance: report.social_insurance,
+        risk_score: report.risk_score,
+        classified_type: report.classified_type,
+        legal_basis: report.legal_basis,
+        recommendations: report.recommendations,
+        tags: report.tags,
+        analysis_result: report.analysis_result,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('리포트 저장 실패:', error);
+      throw new Error(`리포트 저장 실패: ${error.message}`);
+    }
+
+    return data as SituationReport;
+  } catch (error) {
+    console.error('리포트 저장 오류:', error);
+    throw error;
+  }
+};
+
+/**
+ * 사용자의 상황 분석 리포트 목록 조회
+ */
+export const getSituationReports = async (limit: number = 50): Promise<SituationReport[]> => {
+  try {
+    const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client');
+    const supabase = createSupabaseBrowserClient();
+
+    const { data, error } = await supabase
+      .from('situation_reports')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      console.error('리포트 조회 실패:', error);
+      throw new Error(`리포트 조회 실패: ${error.message}`);
+    }
+
+    return (data || []) as SituationReport[];
+  } catch (error) {
+    console.error('리포트 조회 오류:', error);
+    throw error;
+  }
+};
+
+/**
+ * 특정 리포트 조회
+ */
+export const getSituationReport = async (reportId: string): Promise<SituationReport | null> => {
+  try {
+    const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client');
+    const supabase = createSupabaseBrowserClient();
+
+    const { data, error } = await supabase
+      .from('situation_reports')
+      .select('*')
+      .eq('id', reportId)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        // 리포트를 찾을 수 없음
+        return null;
+      }
+      console.error('리포트 조회 실패:', error);
+      throw new Error(`리포트 조회 실패: ${error.message}`);
+    }
+
+    return data as SituationReport;
+  } catch (error) {
+    console.error('리포트 조회 오류:', error);
+    throw error;
+  }
+};
+
+/**
+ * 리포트 삭제
+ */
+export const deleteSituationReport = async (reportId: string): Promise<void> => {
+  try {
+    const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client');
+    const supabase = createSupabaseBrowserClient();
+
+    const { error } = await supabase
+      .from('situation_reports')
+      .delete()
+      .eq('id', reportId);
+
+    if (error) {
+      console.error('리포트 삭제 실패:', error);
+      throw new Error(`리포트 삭제 실패: ${error.message}`);
+    }
+  } catch (error) {
+    console.error('리포트 삭제 오류:', error);
+    throw error;
+  }
+};
+

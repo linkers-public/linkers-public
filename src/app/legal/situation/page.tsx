@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,11 +9,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Slider } from '@/components/ui/slider'
-import { Loader2, AlertTriangle, CheckCircle2, Copy, FileText, Sparkles, Info, ChevronDown, ChevronUp, Scale, Clock, DollarSign, Users, Briefcase, TrendingUp, Zap, MessageSquare, X } from 'lucide-react'
-import { analyzeSituationV2, type SituationRequestV2, type SituationResponseV2 } from '@/apis/legal.service'
+import { Loader2, AlertTriangle, CheckCircle2, Copy, FileText, Sparkles, Info, ChevronDown, ChevronUp, Scale, Clock, DollarSign, Users, Briefcase, TrendingUp, Zap, MessageSquare } from 'lucide-react'
+import { analyzeSituationV2, type SituationRequestV2, type SituationResponseV2, saveSituationReport } from '@/apis/legal.service'
 import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
-import { SituationChat } from '@/components/legal/SituationChat'
+import { MarkdownRenderer } from '@/components/rag/MarkdownRenderer'
 import type { 
   SituationCategory, 
   EmploymentType, 
@@ -192,22 +192,6 @@ export default function SituationAnalysisPage() {
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [analysisResult, setAnalysisResult] = useState<SituationAnalysisResponse | null>(null)
   const [checkedItems, setCheckedItems] = useState<Set<string>>(new Set())
-  
-  // 챗봇 상태
-  const [isChatOpen, setIsChatOpen] = useState(false)
-  const [chatLoading, setChatLoading] = useState(false)
-  const [messageCount, setMessageCount] = useState(0)
-
-  // ESC 키로 챗봇 닫기
-  useEffect(() => {
-    const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isChatOpen) {
-        setIsChatOpen(false)
-      }
-    }
-    window.addEventListener('keydown', handleEsc)
-    return () => window.removeEventListener('keydown', handleEsc)
-  }, [isChatOpen])
 
   // 템플릿 선택 핸들러
   const handleTemplateSelect = (template: typeof SITUATION_TEMPLATES[0]) => {
@@ -307,11 +291,14 @@ export default function SituationAnalysisPage() {
 
       const result = await analyzeSituationV2(request)
       
+      console.log('분석 결과:', result)
+      console.log('summary 필드:', result.analysis.summary)
+      
       // v2 응답을 v1 형식으로 변환 (기존 UI 호환성)
       const v1Format: SituationAnalysisResponse = {
         classifiedType: (result.tags[0] || 'unknown') as SituationCategory,
         riskScore: result.riskScore,
-        summary: result.analysis.summary,
+        summary: result.analysis.summary || '리포트 내용을 불러올 수 없습니다.',
         criteria: result.analysis.legalBasis.map(basis => ({
           name: basis.title,
           status: 'likely' as const,
@@ -330,8 +317,8 @@ export default function SituationAnalysisPage() {
           ],
         },
         scripts: {
-          toCompany: result.scripts?.toCompany,
-          toAdvisor: result.scripts?.toAdvisor,
+          toCompany: undefined,
+          toAdvisor: undefined,
         },
         relatedCases: result.relatedCases.map(c => ({
           id: c.id,
@@ -340,7 +327,42 @@ export default function SituationAnalysisPage() {
         })),
       }
       
+      console.log('변환된 리포트:', v1Format)
       setAnalysisResult(v1Format)
+      
+      // 리포트를 Supabase에 저장
+      try {
+        const savedReport = await saveSituationReport({
+          question: summary,
+          answer: result.analysis.summary,
+          summary: result.analysis.summary,
+          details: details,
+          category_hint: categoryHint,
+          employment_type: employmentType,
+          work_period: workPeriod,
+          social_insurance: socialInsurance,
+          risk_score: result.riskScore,
+          classified_type: result.tags[0] || 'unknown',
+          legal_basis: result.analysis.legalBasis.map(b => b.snippet),
+          recommendations: result.analysis.recommendations,
+          tags: result.tags,
+          analysis_result: {
+            criteria: v1Format.criteria,
+            actionPlan: v1Format.actionPlan,
+            scripts: v1Format.scripts,
+            relatedCases: v1Format.relatedCases,
+          },
+        })
+        console.log('리포트 저장 성공:', savedReport.id)
+      } catch (saveError: any) {
+        console.error('리포트 저장 실패:', saveError)
+        // 저장 실패해도 분석 결과는 표시
+        toast({
+          title: '리포트 저장 실패',
+          description: saveError.message || '분석은 완료되었지만 리포트 저장에 실패했습니다. 콘솔을 확인해주세요.',
+          variant: 'destructive',
+        })
+      }
     } catch (error: any) {
       console.error('분석 오류:', error)
       toast({
@@ -927,6 +949,25 @@ export default function SituationAnalysisPage() {
               </div>
             </div>
 
+            {/* 리포트 요약 (summary 필드) */}
+            {analysisResult.summary && (
+              <Card className="border-2 border-indigo-300 shadow-xl bg-gradient-to-br from-white to-indigo-50/30">
+                <CardHeader className="pb-4">
+                  <CardTitle className="text-xl flex items-center gap-3">
+                    <div className="p-2 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg shadow-md">
+                      <FileText className="w-5 h-5 text-white" />
+                    </div>
+                    <span className="font-bold">상황 분석 리포트</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="prose prose-sm max-w-none prose-headings:text-slate-900 prose-p:text-slate-700 prose-strong:text-slate-900 prose-code:text-blue-600 prose-pre:bg-slate-50">
+                    <MarkdownRenderer content={analysisResult.summary} />
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {/* 카드 1 - 법적 관점 요약 */}
             <Card className="border-2 border-blue-300 shadow-xl bg-gradient-to-br from-white to-blue-50/30">
               <CardHeader className="pb-4">
@@ -976,49 +1017,41 @@ export default function SituationAnalysisPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {analysisResult.actionPlan?.steps && analysisResult.actionPlan.steps.length > 0 ? (
-                    analysisResult.actionPlan.steps.flatMap((step, stepIndex) =>
-                      step.items && step.items.length > 0
-                        ? step.items.map((item, itemIndex) => {
-                            const itemKey = `step-${stepIndex}-item-${itemIndex}`
-                            return (
-                              <div
-                                key={itemKey}
-                                className={cn(
-                                  "flex items-start gap-4 p-4 bg-white border-2 rounded-xl transition-all duration-200",
-                                  checkedItems.has(itemKey)
-                                    ? "border-emerald-400 bg-gradient-to-r from-emerald-50 to-green-50 shadow-md"
-                                    : "border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/50 hover:shadow-sm"
-                                )}
-                              >
-                                <button
-                                  onClick={() => toggleCheckItem(itemKey)}
-                                  className={cn(
-                                    "flex-shrink-0 w-7 h-7 rounded-lg border-2 flex items-center justify-center mt-0.5 transition-all shadow-sm",
-                                    checkedItems.has(itemKey)
-                                      ? 'bg-gradient-to-br from-emerald-500 to-green-600 border-emerald-600'
-                                      : 'border-slate-300 bg-white hover:border-emerald-400'
-                                  )}
-                                >
-                                  {checkedItems.has(itemKey) && (
-                                    <CheckCircle2 className="w-5 h-5 text-white" />
-                                  )}
-                                </button>
-                                <p className={cn(
-                                  "flex-1 text-sm leading-relaxed",
-                                  checkedItems.has(itemKey) ? "text-emerald-900 font-medium" : "text-slate-700"
-                                )}>
-                                  {item}
-                                </p>
-                              </div>
-                            )
-                          })
-                        : []
-                    )
-                  ) : (
-                    <div className="p-4 bg-slate-50 border-2 border-slate-200 rounded-xl text-sm text-slate-600 text-center">
-                      행동 가이드가 아직 준비되지 않았습니다.
-                    </div>
+                  {analysisResult.actionPlan.steps.flatMap((step, stepIndex) =>
+                    step.items.map((item, itemIndex) => {
+                      const itemKey = `step-${stepIndex}-item-${itemIndex}`
+                      return (
+                        <div
+                          key={itemKey}
+                          className={cn(
+                            "flex items-start gap-4 p-4 bg-white border-2 rounded-xl transition-all duration-200",
+                            checkedItems.has(itemKey)
+                              ? "border-emerald-400 bg-gradient-to-r from-emerald-50 to-green-50 shadow-md"
+                              : "border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/50 hover:shadow-sm"
+                          )}
+                        >
+                          <button
+                            onClick={() => toggleCheckItem(itemKey)}
+                            className={cn(
+                              "flex-shrink-0 w-7 h-7 rounded-lg border-2 flex items-center justify-center mt-0.5 transition-all shadow-sm",
+                              checkedItems.has(itemKey)
+                                ? 'bg-gradient-to-br from-emerald-500 to-green-600 border-emerald-600'
+                                : 'border-slate-300 bg-white hover:border-emerald-400'
+                            )}
+                          >
+                            {checkedItems.has(itemKey) && (
+                              <CheckCircle2 className="w-5 h-5 text-white" />
+                            )}
+                          </button>
+                          <p className={cn(
+                            "flex-1 text-sm leading-relaxed",
+                            checkedItems.has(itemKey) ? "text-emerald-900 font-medium" : "text-slate-700"
+                          )}>
+                            {item}
+                          </p>
+                        </div>
+                      )
+                    })
                   )}
                 </div>
               </CardContent>
@@ -1154,6 +1187,46 @@ export default function SituationAnalysisPage() {
               </Card>
             )}
 
+            {/* 즉시 상담 버튼 */}
+            <Card className="border-2 border-blue-300 shadow-lg bg-gradient-to-br from-blue-50 to-indigo-50">
+              <CardContent className="p-6">
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                  <div className="flex-1">
+                    <h3 className="text-lg font-bold text-slate-900 mb-2 flex items-center gap-2">
+                      <MessageSquare className="w-5 h-5 text-blue-600" />
+                      이 리포트로 즉시 상담을 시작해보세요
+                    </h3>
+                    <p className="text-sm text-slate-600">
+                      리포트 내용을 기반으로 더 자세한 질문을 하고 맞춤형 조언을 받을 수 있습니다.
+                    </p>
+                  </div>
+                  <Button
+                    onClick={() => {
+                      // 리포트 결과를 localStorage에 저장
+                      if (typeof window !== 'undefined' && analysisResult) {
+                        const situationData = {
+                          analysisResult: analysisResult,
+                          summary: summary,
+                          details: details,
+                          categoryHint: categoryHint,
+                          employmentType: employmentType,
+                          workPeriod: workPeriod,
+                          socialInsurance: socialInsurance,
+                        }
+                        localStorage.setItem('legal_situation_for_quick', JSON.stringify(situationData))
+                      }
+                      // 대화창 페이지로 이동
+                      router.push('/legal/assist/quick')
+                    }}
+                    className="h-12 px-6 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-200 whitespace-nowrap"
+                  >
+                    <MessageSquare className="w-5 h-5 mr-2" />
+                    즉시 상담 시작하기
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
             {/* 액션 버튼 */}
             <div className="flex flex-col sm:flex-row gap-4 pt-4">
               <Button
@@ -1169,80 +1242,11 @@ export default function SituationAnalysisPage() {
                 다시 분석하기
               </Button>
               <Button
-                onClick={() => setIsChatOpen(true)}
+                onClick={() => router.push('/legal')}
                 className="flex-1 h-12 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold shadow-lg hover:shadow-xl"
               >
-                리포트 결과 관련 대화 시작하기
+                홈으로 돌아가기
               </Button>
-            </div>
-          </div>
-        )}
-
-        {/* 챗봇 오버레이 배경 (모바일/태블릿용) */}
-        {isChatOpen && (
-          <div
-            className="fixed inset-0 z-30 bg-slate-900/30 backdrop-blur-sm lg:hidden"
-            onClick={() => setIsChatOpen(false)}
-            aria-hidden="true"
-          />
-        )}
-
-        {/* 오른쪽: 채팅 UI (토글 가능한 사이드바) */}
-        {analysisResult && (
-          <div 
-            className={cn(
-              "fixed right-0 z-40 bg-white shadow-2xl border-l border-slate-200",
-              "transition-transform duration-300 ease-in-out",
-              "w-full sm:w-[90vw] md:w-[500px] lg:w-[400px]",
-              isChatOpen ? "translate-x-0" : "translate-x-full"
-            )}
-            style={{ top: '64px', height: 'calc(100vh - 64px)' }}
-          >
-            {/* 채팅 헤더 */}
-            <div className="relative overflow-hidden bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-600 border-b border-blue-400/30">
-              <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxwYXRoIGQ9Ik0zNiAzNGMwIDIuMjA5LTEuNzkxIDQtNCA0cy00LTEuNzkxLTQtNCAxLjc5MS00IDQtNCA0IDEuNzkxIDQgNHptMTAtMTBjMCAyLjIwOS0xLjc5MSA0LTQgNHMtNC0xLjc5MS00LTQgMS43OTEtNCA0LTQgNCAxLjc5MSA0IDR6IiBmaWxsPSJyZ2JhKDI1NSwyNTUsMjU1LDAuMSkiLz48L2c+PC9zdmc+')] opacity-20"></div>
-              <div className="relative px-4 py-4 flex items-center justify-between">
-                <div className="flex items-center gap-3 flex-1 min-w-0">
-                  <div className="p-2 bg-white/20 backdrop-blur-sm rounded-xl shadow-lg flex-shrink-0">
-                    <MessageSquare className="w-5 h-5 text-white" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h2 className="text-lg font-bold text-white">리포트 결과 대화</h2>
-                    <p className="text-xs text-blue-100 mt-0.5">
-                      법적 관점 분석 결과에 대해 질문하세요
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  {messageCount > 0 && (
-                    <span className="px-2 py-0.5 bg-white/30 rounded-full text-[10px] font-medium text-white">
-                      {messageCount}개 대화
-                    </span>
-                  )}
-                  <button
-                    onClick={() => setIsChatOpen(false)}
-                    className="p-2 min-w-[44px] min-h-[44px] rounded-lg hover:bg-white/20 transition-colors text-white flex items-center justify-center"
-                    aria-label="채팅 닫기"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* 채팅 컨텐츠 */}
-            <div 
-              role="region"
-              aria-label="리포트 결과 대화"
-              aria-live="polite"
-              className="h-[calc(100%-80px)] overflow-hidden flex flex-col"
-            >
-              <SituationChat
-                analysisResult={analysisResult}
-                situationSummary={summary}
-                onLoadingChange={setChatLoading}
-                onMessageCountChange={setMessageCount}
-              />
             </div>
           </div>
         )}

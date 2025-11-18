@@ -8,6 +8,8 @@ from pathlib import Path
 from collections import OrderedDict as OrderedDictType
 import asyncio
 import logging
+import json
+import re
 
 from models.schemas import (
     LegalAnalysisResult,
@@ -23,6 +25,7 @@ from core.prompts import (
     build_legal_chat_prompt,
     build_contract_analysis_prompt,
     build_situation_analysis_prompt,
+    LEGAL_CHAT_SYSTEM_PROMPT,
 )
 
 
@@ -851,6 +854,48 @@ class LegalRAGService:
                 
                 response_text = llm.invoke(prompt)
                 
+                # 한국어가 포함되어 있는지 확인 (한글 유니코드 범위: AC00-D7A3)
+                # 첫 200자 중 한국어가 없으면 재시도
+                if response_text and len(response_text) > 0:
+                    first_chars = response_text[:200]
+                    has_korean = any(ord(c) >= 0xAC00 and ord(c) <= 0xD7A3 for c in first_chars)
+                    
+                    if not has_korean:
+                        # 영어로 답변한 경우 더 강한 프롬프트로 재시도
+                        retry_prompt = f"""당신은 한국어 전문가입니다. 다음 질문에 반드시 한국어로만 답변하세요. 영어를 절대 사용하지 마세요.
+마크다운 형식으로 구조화하여 작성하세요.
+
+{LEGAL_CHAT_SYSTEM_PROMPT}
+
+**사용자 질문:**
+{query}
+{issue_context}
+{analysis_context}
+
+**관련 법령/가이드/케이스:**
+{context}
+
+**⚠️ 매우 중요:**
+- 반드시 한국어로만 답변하세요.
+- 영어 단어나 문장을 절대 사용하지 마세요.
+- 모든 텍스트는 한국어로 작성해야 합니다.
+
+다음 구조로 **한국어로만** 답변해주세요:
+
+## 요약 결론
+[한 문장으로 핵심 답변 (한국어)]
+
+## 왜 위험한지 (법적 리스크)
+[관련 법령을 근거로 위험성 설명 (한국어)]
+
+## 실무 협상 포인트
+[현실적인 협상 옵션과 대안 제시 (한국어)]
+
+## 참고 법령/표준 계약
+[관련 법령 요약 및 출처 (한국어)]
+"""
+                        response_text = llm.invoke(retry_prompt)
+                
                 # 답변에 전문가 상담 권장 문구 추가 (없는 경우)
                 if "전문가 상담" not in response_text and "법률 자문" not in response_text:
                     response_text += "\n\n---\n\n**⚠️ 참고:** 이 답변은 정보 안내를 위한 것이며 법률 자문이 아닙니다. 중요한 사안은 전문 변호사나 노동위원회 등 전문 기관에 상담하시기 바랍니다."
@@ -927,27 +972,109 @@ class LegalRAGService:
                 
                 response_text = llm.invoke(prompt)
                 
-                # JSON 추출
+                # JSON 추출 및 파싱
                 try:
-                    json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+                    # 1. 외부 코드 블록 제거 (```json, ``` 등)
+                    response_clean = response_text.strip()
+                    if response_clean.startswith("```json"):
+                        response_clean = response_clean[7:]
+                    elif response_clean.startswith("```"):
+                        response_clean = response_clean[3:]
+                    if response_clean.endswith("```"):
+                        response_clean = response_clean[:-3]
+                    response_clean = response_clean.strip()
+                    
+                    # 2. JSON 객체 추출
+                    json_match = re.search(r'\{.*\}', response_clean, re.DOTALL)
                     if json_match:
-                        diagnosis = json.loads(json_match.group())
+                        json_str = json_match.group()
+                        
+                        # 3. summary 필드 처리: 여러 줄에 걸친 문자열을 안전하게 이스케이프
+                        # summary 필드의 값 부분을 찾아서 제어 문자를 이스케이프
+                        # "summary": "로 시작해서 다음 필드(", "field":) 또는 닫는 중괄호(}) 전까지
+                        summary_start_pattern = r'"summary"\s*:\s*"'
+                        start_match = re.search(summary_start_pattern, json_str)
+                        if start_match:
+                            start_pos = start_match.end()  # summary 값 시작 위치
+                            
+                            # summary 값의 끝 찾기: 다음 필드나 닫는 중괄호 전의 마지막 따옴표
+                            remaining = json_str[start_pos:]
+                            
+                            # 다음 필드 패턴: , "field_name": 또는 ,\n"field_name":
+                            next_field_match = re.search(r',\s*"[^"]+"\s*:', remaining)
+                            next_brace_pos = remaining.find('}')
+                            
+                            if next_field_match and (next_brace_pos == -1 or next_field_match.start() < next_brace_pos):
+                                # 다음 필드가 있는 경우, 그 전의 마지막 따옴표
+                                end_pos = start_pos + next_field_match.start()
+                                last_quote = json_str.rfind('"', start_pos, end_pos)
+                            elif next_brace_pos != -1:
+                                # 마지막 필드인 경우
+                                end_pos = start_pos + next_brace_pos
+                                last_quote = json_str.rfind('"', start_pos, end_pos)
+                            else:
+                                # 둘 다 없으면 전체 문자열의 마지막 따옴표
+                                last_quote = json_str.rfind('"', start_pos)
+                            
+                            if last_quote > start_pos:
+                                # summary 값 추출
+                                summary_value = json_str[start_pos:last_quote]
+                                
+                                # 마크다운 코드 블록 제거
+                                summary_value = re.sub(r'```markdown\s*', '', summary_value)
+                                summary_value = re.sub(r'```\s*', '', summary_value)
+                                
+                                # 제어 문자를 이스케이프 (역슬래시 먼저 처리)
+                                summary_value = summary_value.replace('\\', '\\\\')  # 역슬래시 이스케이프
+                                summary_value = summary_value.replace('\n', '\\n')   # 줄바꿈
+                                summary_value = summary_value.replace('\r', '\\r')   # 캐리지 리턴
+                                summary_value = summary_value.replace('\t', '\\t')   # 탭
+                                summary_value = summary_value.replace('"', '\\"')    # 따옴표
+                                
+                                # JSON 문자열에서 summary 값만 교체
+                                json_str = json_str[:start_pos] + summary_value + json_str[last_quote:]
+                        
+                        # 4. JSON 파싱
+                        try:
+                            diagnosis = json.loads(json_str)
+                        except json.JSONDecodeError as parse_error:
+                            # 파싱 실패 시 더 자세한 로그
+                            import logging
+                            logger = logging.getLogger(__name__)
+                            logger.error(f"JSON 파싱 실패 (이스케이프 후): {str(parse_error)}")
+                            logger.error(f"JSON 문자열 (처음 1000자): {json_str[:1000]}")
+                            raise
+                        
+                        # 4. summary 필드에서 마크다운 코드 블록 제거
+                        summary = diagnosis.get("summary", "상황을 분석했습니다.")
+                        if isinstance(summary, str):
+                            # 마크다운 코드 블록 제거
+                            summary = re.sub(r'```markdown\s*', '', summary)
+                            summary = re.sub(r'```\s*', '', summary)
+                            summary = summary.strip()
                         
                         # 응답 형식 변환
                         return {
                             "classified_type": diagnosis.get("classified_type", category_hint),
                             "risk_score": diagnosis.get("risk_score", 50),
-                            "summary": diagnosis.get("summary", "상황을 분석했습니다."),
+                            "summary": summary,
                             "criteria": diagnosis.get("criteria", []),
                             "action_plan": diagnosis.get("action_plan", {"steps": []}),
                             "scripts": diagnosis.get("scripts", {}),
                             "related_cases": [],  # 나중에 추가됨
                         }
+                except json.JSONDecodeError as e:
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.error(f"LLM 진단 응답 JSON 파싱 실패: {str(e)}", exc_info=True)
+                    logger.error(f"LLM 응답 원문 (처음 500자): {response_text[:500] if response_text else 'None'}")
+                    # JSON 파싱 실패 시 기본 응답 반환
                 except Exception as e:
                     import logging
                     logger = logging.getLogger(__name__)
                     logger.error(f"LLM 진단 응답 파싱 실패: {str(e)}", exc_info=True)
                     logger.error(f"LLM 응답 원문 (처음 500자): {response_text[:500] if response_text else 'None'}")
+                    # 파싱 실패 시 기본 응답 반환
         except Exception as e:
             import logging
             logger = logging.getLogger(__name__)
