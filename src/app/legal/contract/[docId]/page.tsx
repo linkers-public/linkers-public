@@ -299,7 +299,15 @@ export default function ContractDetailPage() {
           }
 
           // ✨ clauses와 highlightedTexts 저장
-          setClauses(normalizedData.clauses || [])
+          const clausesData = normalizedData.clauses || []
+          console.log('[Frontend] clauses 데이터 확인:', {
+            clausesLength: clausesData.length,
+            clauses: clausesData,
+            v2DataClauses: v2Data?.clauses,
+            v2DataClausesLength: v2Data?.clauses?.length || 0,
+            normalizedDataClauses: normalizedData.clauses,
+          })
+          setClauses(clausesData)
           setHighlightedTexts(normalizedData.highlightedTexts || [])
 
           setAnalysisResult(result)

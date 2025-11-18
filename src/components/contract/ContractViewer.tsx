@@ -57,15 +57,29 @@ export function ContractViewer({
   const [selectedClauseNumber, setSelectedClauseNumber] = useState<number | null>(null)
   const [scrollProgress, setScrollProgress] = useState(0)
   const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null)
+  const [pinnedTooltipIssueId, setPinnedTooltipIssueId] = useState<string | null>(null)
   const tooltipRef = useRef<HTMLDivElement>(null)
   const hideTooltipTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // 조항 파싱 및 이슈 매핑
   const parsedClauses = useMemo(() => {
-    if (!contractText) return []
+    console.log('[ContractViewer] parsedClauses 계산 시작:', {
+      hasContractText: !!contractText,
+      contractTextLength: contractText?.length || 0,
+      contractTextPreview: contractText?.substring(0, 200) || '(없음)',
+      clausesPropLength: clausesProp?.length || 0,
+      clausesProp: clausesProp,
+      issuesLength: issues?.length || 0,
+    })
+    
+    if (!contractText) {
+      console.log('[ContractViewer] contractText가 없어서 빈 배열 반환')
+      return []
+    }
 
     // clauses prop이 있으면 사용, 없으면 텍스트에서 파싱
     if (clausesProp.length > 0) {
+      console.log('[ContractViewer] clausesProp 사용:', clausesProp.length, '개')
       return clausesProp.map((clause, idx) => {
         const clauseNumber = clause.articleNumber || idx + 1
         const clauseIssues = issues.filter(issue => {
@@ -94,11 +108,26 @@ export function ContractViewer({
     }
 
     // 텍스트에서 조항 파싱
-    const clauseMatches = contractText.matchAll(/제\s*(\d+)\s*조[^\n]*\n([\s\S]*?)(?=제\s*\d+\s*조|$)/g)
+    console.log('[ContractViewer] 텍스트에서 조항 파싱 시도')
+    
+    // 🔥 정규식 lastIndex 문제 해결: test용과 match용 분리
+    const CLAUSE_REGEX = /제\s*(\d+)\s*조[^\n]*\n([\s\S]*?)(?=제\s*\d+\s*조|$)/g  // 실제 파싱용 (global)
+    const CLAUSE_REGEX_TEST = /제\s*\d+\s*조/  // 존재 여부 확인용 (non-global)
+    
+    // 패턴 존재 여부 확인 (non-global 정규식 사용)
+    const hasClausePattern = CLAUSE_REGEX_TEST.test(contractText)
+    
+    // 🔥 중요: global 정규식의 lastIndex를 리셋 (혹시 몰라서)
+    CLAUSE_REGEX.lastIndex = 0
+    
+    // matchAll로 모든 매칭 찾기
+    const clauseMatches = contractText.matchAll(CLAUSE_REGEX)
     const parsed: Clause[] = []
     let lastIndex = 0
+    let matchCount = 0
 
     for (const match of clauseMatches) {
+      matchCount++
       const clauseNumber = parseInt(match[1])
       const clauseText = match[0]
       const startIndex = match.index || lastIndex
@@ -131,6 +160,51 @@ export function ContractViewer({
       })
 
       lastIndex = endIndex
+    }
+    
+    console.log('[ContractViewer] 텍스트 파싱 결과:', {
+      matchCount,
+      parsedCount: parsed.length,
+      parsedClauses: parsed.map(c => ({ id: c.id, number: c.number, title: c.title, contentLength: c.content.length })),
+      contractTextSample: contractText.substring(0, 300),
+      hasClausePattern,
+      lastIndexReset: true,  // lastIndex 리셋 확인용
+    })
+    
+    if (parsed.length === 0) {
+      console.warn('[ContractViewer] ⚠️ 조항 파싱 실패 - 정규식 매칭 없음')
+      // 정규식이 실패한 경우, "제X조" 패턴만 찾아서 간단한 조항 생성
+      // 🔥 fallback도 lastIndex 문제 방지: 새로운 정규식 인스턴스 사용
+      const SIMPLE_CLAUSE_REGEX = /제\s*(\d+)\s*조[^\n]*/g
+      SIMPLE_CLAUSE_REGEX.lastIndex = 0  // 리셋
+      const simpleClauseMatches = contractText.matchAll(SIMPLE_CLAUSE_REGEX)
+      const simpleParsed: Clause[] = []
+      for (const match of simpleClauseMatches) {
+        const clauseNumber = parseInt(match[1])
+        const matchIndex = match.index || 0
+        // 다음 조항까지 또는 텍스트 끝까지
+        // 🔥 search도 새로운 정규식 인스턴스 사용
+        const NEXT_CLAUSE_REGEX = /제\s*\d+\s*조/
+        const nextMatch = contractText.substring(matchIndex + match[0].length).search(NEXT_CLAUSE_REGEX)
+        const contentEnd = nextMatch >= 0 ? matchIndex + match[0].length + nextMatch : contractText.length
+        const content = contractText.substring(matchIndex, contentEnd)
+        
+        simpleParsed.push({
+          id: `clause-${clauseNumber}`,
+          number: clauseNumber,
+          title: match[0].trim(),
+          content: content,
+          startIndex: matchIndex,
+          endIndex: contentEnd,
+          maxSeverity: undefined,
+          issueCount: 0,
+          issues: [],
+        })
+      }
+      if (simpleParsed.length > 0) {
+        console.log('[ContractViewer] 간단한 파싱으로 조항 생성:', simpleParsed.length, '개')
+        return simpleParsed
+      }
     }
 
     return parsed
@@ -250,15 +324,38 @@ export function ContractViewer({
   }
 
   const handleTooltipMouseLeave = () => {
+    // 고정된 툴팁이면 숨기지 않음
+    if (pinnedTooltipIssueId && currentHoveredIssue?.id === pinnedTooltipIssueId) {
+      return
+    }
     // 툴팁에서 마우스가 벗어나면 숨김
     if (hideTooltipTimeoutRef.current) {
       clearTimeout(hideTooltipTimeoutRef.current)
     }
     hideTooltipTimeoutRef.current = setTimeout(() => {
-      setCurrentHoveredIssue(null)
-      setTooltipPosition(null)
+      // 고정된 툴팁이 아니면 숨김
+      if (!pinnedTooltipIssueId || currentHoveredIssue?.id !== pinnedTooltipIssueId) {
+        setCurrentHoveredIssue(null)
+        setTooltipPosition(null)
+      }
       hideTooltipTimeoutRef.current = null
     }, 100) // 100ms 지연
+  }
+
+  // 툴팁 고정/해제 토글
+  const handleTooltipTogglePin = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (pinnedTooltipIssueId === currentHoveredIssue?.id) {
+      // 고정 해제
+      setPinnedTooltipIssueId(null)
+      setCurrentHoveredIssue(null)
+      setTooltipPosition(null)
+    } else {
+      // 고정
+      if (currentHoveredIssue) {
+        setPinnedTooltipIssueId(currentHoveredIssue.id)
+      }
+    }
   }
 
   // 하이라이트된 텍스트 렌더링 (태그 + 아이콘 포함)
@@ -288,13 +385,37 @@ export function ContractViewer({
           )}
           onMouseEnter={(e) => handleMouseEnter(e, issue)}
           onMouseLeave={handleMouseLeave}
+          onClick={(e) => {
+            // 클릭 시 툴팁 고정/해제 토글
+            if (pinnedTooltipIssueId === issue.id) {
+              // 이미 고정된 경우 해제
+              setPinnedTooltipIssueId(null)
+              setCurrentHoveredIssue(null)
+              setTooltipPosition(null)
+            } else {
+              // 고정하고 툴팁 표시
+              handleMouseEnter(e, issue)
+              setPinnedTooltipIssueId(issue.id)
+            }
+          }}
           role="button"
           tabIndex={0}
           aria-label={`${getCategoryLabel(issue.category)} 위험 조항, 위험도: ${getSeverityLabel(issue.severity)}, 클릭하여 상세 정보 보기`}
           onKeyDown={(e) => {
             if (e.key === 'Enter' || e.key === ' ') {
               e.preventDefault()
-              onIssueClick?.(issue.id)
+              if (pinnedTooltipIssueId === issue.id) {
+                setPinnedTooltipIssueId(null)
+                setCurrentHoveredIssue(null)
+                setTooltipPosition(null)
+              } else {
+                const syntheticEvent = {
+                  currentTarget: e.currentTarget,
+                  preventDefault: () => {},
+                } as React.MouseEvent<HTMLElement>
+                handleMouseEnter(syntheticEvent, issue)
+                setPinnedTooltipIssueId(issue.id)
+              }
             }
           }}
         >
@@ -347,8 +468,8 @@ export function ContractViewer({
       const progress = scrollHeight > 0 ? (scrollTop / scrollHeight) * 100 : 0
       setScrollProgress(progress)
       
-      // 스크롤 시 툴팁 숨기기 (위치 계산이 복잡하므로)
-      if (tooltipPosition) {
+      // 스크롤 시 고정되지 않은 툴팁만 숨기기 (위치 계산이 복잡하므로)
+      if (tooltipPosition && !pinnedTooltipIssueId) {
         if (hideTooltipTimeoutRef.current) {
           clearTimeout(hideTooltipTimeoutRef.current)
         }
@@ -428,7 +549,20 @@ export function ContractViewer({
               highlightedRefs.current.delete(highlight.issueId)
             }
           }}
-          onClick={() => onIssueClick?.(highlight.issueId)}
+          onClick={(e) => {
+            // 클릭 시 툴팁 고정/해제 토글
+            if (pinnedTooltipIssueId === highlight.issueId) {
+              // 이미 고정된 경우 해제
+              setPinnedTooltipIssueId(null)
+              setCurrentHoveredIssue(null)
+              setTooltipPosition(null)
+            } else {
+              // 고정하고 툴팁 표시
+              handleMouseEnter(e, issue)
+              setPinnedTooltipIssueId(highlight.issueId)
+            }
+            onIssueClick?.(highlight.issueId)
+          }}
           onMouseEnter={(e) => handleMouseEnter(e, issue)}
           onMouseLeave={handleMouseLeave}
           className={cn(
@@ -632,17 +766,32 @@ export function ContractViewer({
 
         {/* 계약서 본문 */}
         {parsedClauses.length === 0 ? (
+          // parsedClauses가 없어도 contractText가 있으면 직접 표시
+          contractText && contractText.trim().length > 0 ? (
+            <div className="relative flex gap-3 lg:gap-4">
+              {/* 중앙: 계약서 텍스트 (파싱 실패 시 원문 그대로 표시) */}
+              <div className="flex-1 space-y-4 relative overflow-visible">
+                <div className="bg-white rounded-lg border border-slate-200 p-6 shadow-sm">
+                  <h3 className="text-lg font-semibold text-slate-900 mb-4">계약서 전문</h3>
+                  <div className="prose prose-sm max-w-none">
+                    <p className="text-sm leading-relaxed whitespace-pre-wrap text-slate-800">
+                      {contractText}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
           <div className="text-center py-20">
             <div className="p-4 bg-slate-100 rounded-full w-20 h-20 mx-auto mb-4 flex items-center justify-center">
               <FileText className="w-10 h-10 text-slate-400" />
             </div>
             <p className="text-lg font-medium text-slate-600 mb-2">계약서 내용이 없습니다.</p>
             <p className="text-sm text-slate-500">
-              {contractText && contractText.trim().length > 0 
-                ? '계약서 텍스트는 있지만 파싱할 수 없습니다.' 
-                : '계약서 텍스트를 불러올 수 없습니다.'}
+                계약서 텍스트를 불러올 수 없습니다.
             </p>
           </div>
+          )
         ) : (
           <div className="relative flex gap-3 lg:gap-4">
             {/* 왼쪽: 리스크 minimap */}
@@ -686,7 +835,7 @@ export function ContractViewer({
             {/* 중앙: 계약서 텍스트 */}
             <div className="flex-1 space-y-4 relative overflow-visible">
               {/* 호버 툴팁 - 호버한 위치에 표시 */}
-              {currentHoveredIssue && tooltipPosition && (
+              {(currentHoveredIssue || (pinnedTooltipIssueId && issues.find(i => i.id === pinnedTooltipIssueId))) && tooltipPosition && (
                 <div
                   ref={tooltipRef}
                   className="absolute z-50 w-[280px] pointer-events-auto"
@@ -700,58 +849,91 @@ export function ContractViewer({
                   onMouseEnter={handleTooltipMouseEnter}
                   onMouseLeave={handleTooltipMouseLeave}
                 >
-                  <div className="bg-white rounded-lg border-2 border-slate-200 shadow-xl p-3 animate-in fade-in zoom-in-95 duration-200">
-                    {/* 툴팁 헤더 */}
-                    <div className="flex items-center gap-2 mb-2 pb-2 border-b border-slate-200">
-                      <div className={cn(
-                        "p-1.5 rounded-lg",
-                        currentHoveredIssue.severity === 'high' && "bg-red-100",
-                        currentHoveredIssue.severity === 'medium' && "bg-amber-100",
-                        currentHoveredIssue.severity === 'low' && "bg-blue-100"
-                      )}>
-                        {getCategoryIcon(currentHoveredIssue.category)}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="text-xs font-semibold text-slate-900 truncate">
-                          {getCategoryLabel(currentHoveredIssue.category)}
-                        </div>
-                        <div className="text-[10px] text-slate-500">
-                          {getSeverityLabel(currentHoveredIssue.severity)} 위험도
-                        </div>
-                      </div>
-                    </div>
+                  {(() => {
+                    const displayIssue = currentHoveredIssue || issues.find(i => i.id === pinnedTooltipIssueId)
+                    if (!displayIssue) return null
+                    const isPinned = pinnedTooltipIssueId === displayIssue.id
                     
-                    {/* 요약 */}
-                    <div className="mb-2">
-                      <p className="text-xs text-slate-700 line-clamp-2 leading-relaxed">
-                        {currentHoveredIssue.summary}
-                      </p>
-                    </div>
-                    
-                    {/* 법적 근거 (있는 경우) */}
-                    {currentHoveredIssue.legalBasis && currentHoveredIssue.legalBasis.length > 0 && (
-                      <div className="mt-2 pt-2 border-t border-slate-200">
-                        <div className="flex items-center gap-1 mb-1">
-                          <BookOpen className="w-3 h-3 text-slate-500" aria-hidden="true" />
-                          <span className="text-[10px] font-semibold text-slate-600">관련 법령</span>
-                        </div>
-                        <div className="space-y-1">
-                          {currentHoveredIssue.legalBasis.slice(0, 2).map((basis, idx) => (
-                            <div key={idx} className="text-[10px] text-slate-600 line-clamp-2">
-                              {basis}
+                    return (
+                      <div className="bg-white rounded-lg border-2 border-slate-200 shadow-xl p-3 animate-in fade-in zoom-in-95 duration-200">
+                        {/* 툴팁 헤더 */}
+                        <div className="flex items-center gap-2 mb-2 pb-2 border-b border-slate-200">
+                          <div className={cn(
+                            "p-1.5 rounded-lg",
+                            displayIssue.severity === 'high' && "bg-red-100",
+                            displayIssue.severity === 'medium' && "bg-amber-100",
+                            displayIssue.severity === 'low' && "bg-blue-100"
+                          )}>
+                            {getCategoryIcon(displayIssue.category)}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs font-semibold text-slate-900 truncate">
+                              {getCategoryLabel(displayIssue.category)}
                             </div>
-                          ))}
+                            <div className="text-[10px] text-slate-500">
+                              {getSeverityLabel(displayIssue.severity)} 위험도
+                            </div>
+                          </div>
+                          {/* 고정 버튼 */}
+                          <button
+                            onClick={handleTooltipTogglePin}
+                            className={cn(
+                              "p-1.5 rounded-lg transition-colors",
+                              isPinned 
+                                ? "bg-blue-100 text-blue-600 hover:bg-blue-200" 
+                                : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                            )}
+                            aria-label={isPinned ? "툴팁 고정 해제" : "툴팁 고정"}
+                            title={isPinned ? "고정 해제" : "고정"}
+                          >
+                            {isPinned ? (
+                              <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
+                              </svg>
+                            ) : (
+                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+                              </svg>
+                            )}
+                          </button>
+                        </div>
+                    
+                        {/* 요약 */}
+                        <div className="mb-2">
+                          <p className="text-xs text-slate-700 line-clamp-2 leading-relaxed">
+                            {displayIssue.summary}
+                          </p>
+                        </div>
+                        
+                        {/* 법적 근거 (있는 경우) */}
+                        {displayIssue.legalBasis && displayIssue.legalBasis.length > 0 && (
+                          <div className="mt-2 pt-2 border-t border-slate-200">
+                            <div className="flex items-center gap-1 mb-1">
+                              <BookOpen className="w-3 h-3 text-slate-500" aria-hidden="true" />
+                              <span className="text-[10px] font-semibold text-slate-600">관련 법령</span>
+                            </div>
+                            <div className="space-y-1">
+                              {displayIssue.legalBasis.slice(0, 2).map((basis, idx) => (
+                                <div key={idx} className="text-[10px] text-slate-600 line-clamp-2">
+                                  {basis}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* 클릭 안내 */}
+                        <div className="mt-2 pt-2 border-t border-slate-200">
+                          <button
+                            onClick={() => onIssueClick?.(displayIssue.id)}
+                            className="w-full text-[10px] text-blue-600 hover:text-blue-700 hover:underline text-center"
+                          >
+                            클릭하여 상세 정보 보기
+                          </button>
                         </div>
                       </div>
-                    )}
-                    
-                    {/* 클릭 안내 */}
-                    <div className="mt-2 pt-2 border-t border-slate-200">
-                      <p className="text-[10px] text-slate-500 text-center">
-                        클릭하여 상세 정보 보기
-                      </p>
-                    </div>
-                  </div>
+                    )
+                  })()}
                 </div>
               )}
               

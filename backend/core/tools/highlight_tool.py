@@ -70,7 +70,8 @@ class HighlightTool(BaseTool):
                 issue_id = issue.get("id", "")
                 severity = issue.get("severity", "medium")
                 
-                if not original_text:
+                if not original_text or not original_text.strip():
+                    logger.debug(f"[하이라이트] issue={issue_id}: originalText가 없어 건너뜁니다")
                     continue
                 
                 # 원문에서 originalText 찾기

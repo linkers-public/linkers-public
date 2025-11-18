@@ -629,8 +629,8 @@ class LegalRAGService:
         - recommendations[]
         를 생성하도록 하는 부분.
         """
-        # TODO: 실제 LLM 호출 로직
-        # 여기서는 더미 반환 (나중에 실제 LLM 연동)
+        logger.info(f"[LLM 호출] _llm_summarize_risk 시작: query 길이={len(query)}, contract_text 길이={len(contract_text) if contract_text else 0}, grounding_chunks={len(grounding_chunks)}, contract_chunks={len(contract_chunks) if contract_chunks else 0}")
+        logger.info(f"[LLM 호출] disable_llm={self.generator.disable_llm}, use_ollama={self.generator.use_ollama}")
         
         if self.generator.disable_llm:
             # LLM 비활성화 시 기본 응답
@@ -665,6 +665,8 @@ class LegalRAGService:
                 import json
                 import re
                 
+                logger.info(f"[LLM 호출] Ollama 호출 시작: base_url={settings.ollama_base_url}, model={settings.ollama_model}")
+                
                 # langchain-ollama 우선 사용 (deprecated 경고 없음)
                 try:
                     from langchain_ollama import OllamaLLM
@@ -672,6 +674,7 @@ class LegalRAGService:
                         base_url=settings.ollama_base_url,
                         model=settings.ollama_model
                     )
+                    logger.info("[LLM 호출] langchain_ollama.OllamaLLM 사용")
                 except ImportError:
                     # 대안: langchain-community 사용 (deprecated)
                     from langchain_community.llms import Ollama
@@ -679,32 +682,103 @@ class LegalRAGService:
                         base_url=settings.ollama_base_url,
                         model=settings.ollama_model
                     )
+                    logger.info("[LLM 호출] langchain_community.llms.Ollama 사용")
                 
+                logger.info(f"[LLM 호출] 프롬프트 길이: {len(prompt)}자, invoke 호출 중...")
+                logger.debug(f"[LLM 호출] 프롬프트 미리보기 (처음 500자): {prompt[:500]}")
                 response_text = llm.invoke(prompt)
+                logger.info(f"[LLM 호출] 응답 수신 완료, 응답 길이: {len(response_text) if response_text else 0}자")
+                logger.info(f"[LLM 호출] 응답 원문 (처음 1000자): {response_text[:1000] if response_text else 'None'}")
+                if response_text and len(response_text) > 1000:
+                    logger.info(f"[LLM 호출] 응답 원문 (마지막 500자): ...{response_text[-500:]}")
                 
-                # JSON 추출
+                # JSON 추출 (더 robust한 파싱)
                 try:
-                    json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
+                    # 1. 코드 블록 제거
+                    response_clean = response_text.strip()
+                    if response_clean.startswith("```json"):
+                        response_clean = response_clean[7:]
+                    elif response_clean.startswith("```"):
+                        response_clean = response_clean[3:]
+                    if response_clean.endswith("```"):
+                        response_clean = response_clean[:-3]
+                    response_clean = response_clean.strip()
+                    
+                    # 2. JSON 객체 찾기 (더 정확한 정규식)
+                    json_match = re.search(r'\{[\s\S]*\}', response_clean, re.DOTALL)
                     if json_match:
-                        analysis = json.loads(json_match.group())
+                        json_str = json_match.group()
+                        # 3. JSON 유효성 검사 및 파싱
+                        try:
+                            analysis = json.loads(json_str)
+                        except json.JSONDecodeError as json_err:
+                            # JSON이 유효하지 않으면 수정 시도
+                            logger.warning(f"JSON 파싱 실패, 수정 시도 중...: {str(json_err)}")
+                            # 마지막 중괄호까지 찾기
+                            brace_count = 0
+                            last_valid_pos = -1
+                            for i, char in enumerate(json_str):
+                                if char == '{':
+                                    brace_count += 1
+                                elif char == '}':
+                                    brace_count -= 1
+                                    if brace_count == 0:
+                                        last_valid_pos = i + 1
+                                        break
+                            
+                            if last_valid_pos > 0:
+                                json_str = json_str[:last_valid_pos]
+                                try:
+                                    analysis = json.loads(json_str)
+                                except:
+                                    raise json_err
+                            else:
+                                raise json_err
                         risk_score = analysis.get("risk_score", 50)
                         risk_level = analysis.get("risk_level", "medium")
                         summary = analysis.get("summary", "")
                         
+                        logger.info(f"[LLM 응답 파싱] JSON 파싱 성공: risk_score={risk_score}, risk_level={risk_level}, summary 길이={len(summary)}")
+                        logger.info(f"[LLM 응답 파싱] issues 배열 길이: {len(analysis.get('issues', []))}")
+                        
                         issues = []
                         for issue_data in analysis.get("issues", []):
-                            # 계약서 텍스트에서 해당 조항 위치 찾기
+                            # original_text 우선 사용 (LLM이 반환한 실제 원문 텍스트)
+                            original_text = issue_data.get("original_text", "")
                             description = issue_data.get("description", "")
+                            
+                            # original_text가 없으면 description 사용 (하위 호환성)
+                            if not original_text:
+                                original_text = description
+                            
+                            # 계약서 텍스트에서 해당 조항 위치 찾기
                             start_index = None
                             end_index = None
                             
-                            if contract_text and description:
-                                # 간단한 텍스트 매칭으로 위치 찾기 (더 정교한 방법 필요할 수 있음)
-                                start_index = contract_text.find(description[:50])  # 처음 50자로 검색
+                            if contract_text and original_text:
+                                # original_text를 사용하여 정확한 위치 찾기
+                                start_index = contract_text.find(original_text)
                                 if start_index >= 0:
-                                    end_index = start_index + len(description)
+                                    end_index = start_index + len(original_text)
+                                else:
+                                    # 정확히 일치하지 않으면 부분 매칭 시도
+                                    # 1. 처음 100자로 검색
+                                    start_index = contract_text.find(original_text[:100])
+                                    if start_index >= 0:
+                                        end_index = start_index + len(original_text)
+                                    else:
+                                        # 2. 처음 50자로 검색
+                                        start_index = contract_text.find(original_text[:50])
+                                        if start_index >= 0:
+                                            # 문장 단위로 확장
+                                            end_pos = min(start_index + len(original_text), len(contract_text))
+                                            while end_pos < len(contract_text) and contract_text[end_pos] not in ['\n', '。', '.']:
+                                                end_pos += 1
+                                            end_index = end_pos
+                                        else:
+                                            logger.warning(f"[LLM 응답 파싱] originalText를 계약서에서 찾을 수 없음: {original_text[:50]}...")
                             
-                            issues.append(LegalIssue(
+                            issue_obj = LegalIssue(
                                 name=issue_data.get("name", ""),
                                 description=description,
                                 severity=issue_data.get("severity", "medium"),
@@ -713,8 +787,13 @@ class LegalRAGService:
                                 end_index=end_index,
                                 suggested_text=issue_data.get("suggested_text"),
                                 rationale=issue_data.get("rationale"),
-                                suggested_questions=issue_data.get("suggested_questions", [])
-                            ))
+                                suggested_questions=issue_data.get("suggested_questions", []),
+                                original_text=original_text  # original_text 필드 추가
+                            )
+                            issues.append(issue_obj)
+                            logger.debug(f"[LLM 응답 파싱] issue[{len(issues)}]: name={issue_obj.name[:50]}, severity={issue_obj.severity}, description 길이={len(description)}")
+                        
+                        logger.info(f"[LLM 응답 파싱] 최종 이슈 개수: {len(issues)}개")
                         
                         recommendations = []
                         for rec_data in analysis.get("recommendations", []):
@@ -724,7 +803,7 @@ class LegalRAGService:
                                 steps=rec_data.get("steps", [])
                             ))
                         
-                        return LegalAnalysisResult(
+                        result = LegalAnalysisResult(
                             risk_score=risk_score,
                             risk_level=risk_level,
                             summary=summary,
@@ -732,26 +811,74 @@ class LegalRAGService:
                             recommendations=recommendations,
                             grounding=grounding_chunks,
                         )
+                        
+                        logger.info(f"[LLM 응답 파싱] 최종 결과:")
+                        logger.info(f"  - risk_score: {result.risk_score}, risk_level: {result.risk_level}")
+                        logger.info(f"  - summary: {result.summary[:100]}..." if len(result.summary) > 100 else f"  - summary: {result.summary}")
+                        logger.info(f"  - issues 개수: {len(result.issues)}")
+                        logger.info(f"  - recommendations 개수: {len(result.recommendations)}")
+                        logger.info(f"  - grounding_chunks 개수: {len(result.grounding)}")
+                        for idx, issue in enumerate(result.issues[:3]):  # 처음 3개만 로깅
+                            logger.info(f"  - issue[{idx}]: name={issue.name[:50]}, severity={issue.severity}, description 길이={len(issue.description)}")
+                        
+                        return result
                 except Exception as e:
-                    import logging
-                    logger = logging.getLogger(__name__)
                     logger.error(f"LLM 응답 파싱 실패: {str(e)}", exc_info=True)
-                    logger.error(f"LLM 응답 원문 (처음 500자): {response_text[:500] if response_text else 'None'}")
-                    # 파싱 실패 시 기본 응답 (빈 이슈 리스트 반환)
-                    return LegalAnalysisResult(
-                        risk_score=50,
-                        risk_level="medium",
-                        summary=f"LLM 분석 중 오류가 발생했습니다. RAG 검색 결과는 {len(grounding_chunks)}개 발견되었습니다.",
-                        issues=[],
-                        recommendations=[],
-                        grounding=grounding_chunks,
-                    )
+                    logger.error(f"LLM 응답 원문 (처음 1000자): {response_text[:1000] if response_text else 'None'}")
+                    
+                    # 파싱 실패 시에도 최소한의 정보 추출 시도
+                    try:
+                        # risk_score, risk_level, summary만이라도 추출 시도
+                        risk_score_match = re.search(r'"risk_score"\s*:\s*(\d+)', response_text)
+                        risk_level_match = re.search(r'"risk_level"\s*:\s*"([^"]+)"', response_text)
+                        summary_match = re.search(r'"summary"\s*:\s*"([^"]+)"', response_text)
+                        
+                        risk_score = int(risk_score_match.group(1)) if risk_score_match else 50
+                        risk_level = risk_level_match.group(1) if risk_level_match else "medium"
+                        summary = summary_match.group(1) if summary_match else f"LLM 분석 중 오류가 발생했습니다. RAG 검색 결과는 {len(grounding_chunks)}개 발견되었습니다."
+                        
+                        # issues 배열에서 최소한의 정보 추출 시도
+                        issues = []
+                        issues_matches = re.finditer(r'\{\s*"name"\s*:\s*"([^"]+)"\s*,\s*"description"\s*:\s*"([^"]+)"\s*,\s*"severity"\s*:\s*"([^"]+)"', response_text)
+                        for match in issues_matches:
+                            issues.append(LegalIssue(
+                                name=match.group(1),
+                                description=match.group(2),
+                                severity=match.group(3),
+                                legal_basis=[],
+                                suggested_text=None,
+                                rationale=None,
+                                suggested_questions=[]
+                            ))
+                        
+                        if issues:
+                            logger.info(f"파싱 실패했지만 {len(issues)}개 이슈를 정규식으로 추출했습니다.")
+                        
+                        return LegalAnalysisResult(
+                            risk_score=risk_score,
+                            risk_level=risk_level,
+                            summary=summary,
+                            issues=issues,
+                            recommendations=[],
+                            grounding=grounding_chunks,
+                        )
+                    except Exception as fallback_error:
+                        logger.error(f"Fallback 파싱도 실패: {str(fallback_error)}")
+                        # 최종 fallback: 빈 이슈 리스트 반환
+                        return LegalAnalysisResult(
+                            risk_score=50,
+                            risk_level="medium",
+                            summary=f"LLM 분석 중 오류가 발생했습니다. RAG 검색 결과는 {len(grounding_chunks)}개 발견되었습니다.",
+                            issues=[],
+                            recommendations=[],
+                            grounding=grounding_chunks,
+                        )
         except Exception as e:
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.error(f"LLM 호출 실패: {str(e)}", exc_info=True)
+            logger.error(f"[LLM 호출] LLM 호출 실패: {str(e)}", exc_info=True)
+            logger.error(f"[LLM 호출] 예외 타입: {type(e).__name__}")
         
         # LLM 호출 실패 시 빈 이슈 리스트 반환 (프론트엔드에서 에러 처리)
+        logger.warning(f"[LLM 호출] LLM 호출 실패로 기본 응답 반환: RAG 검색 결과 {len(grounding_chunks)}개")
         return LegalAnalysisResult(
             risk_score=50,
             risk_level="medium",
@@ -857,8 +984,6 @@ class LegalRAGService:
                 
                 return response_text
         except Exception as e:
-            import logging
-            logger = logging.getLogger(__name__)
             logger.error(f"LLM 채팅 응답 생성 실패: {str(e)}", exc_info=True)
         
         # LLM 호출 실패 시 기본 응답
@@ -944,13 +1069,9 @@ class LegalRAGService:
                             "related_cases": [],  # 나중에 추가됨
                         }
                 except Exception as e:
-                    import logging
-                    logger = logging.getLogger(__name__)
                     logger.error(f"LLM 진단 응답 파싱 실패: {str(e)}", exc_info=True)
                     logger.error(f"LLM 응답 원문 (처음 500자): {response_text[:500] if response_text else 'None'}")
         except Exception as e:
-            import logging
-            logger = logging.getLogger(__name__)
             logger.error(f"LLM 진단 응답 생성 실패: {str(e)}", exc_info=True)
         
         # LLM 호출 실패 시 기본 응답

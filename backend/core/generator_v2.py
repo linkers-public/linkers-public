@@ -31,7 +31,12 @@ def _get_local_embedding_model():
             # meta tensor 문제 해결: CPU로 직접 로드 (GPU 이동 시도 안 함)
             # bge-m3 모델은 meta tensor 상태로 초기화되므로 .to() 호출 시 에러 발생
             # 따라서 처음부터 CPU로 로드하고 GPU 이동은 하지 않음
-            device = "cpu"  # 안전하게 CPU만 사용
+            # config.py의 embedding_device 또는 환경변수 EMBEDDING_DEVICE 사용, 없으면 "cpu" 기본값
+            import os
+            device = settings.embedding_device or os.getenv("EMBEDDING_DEVICE", "cpu")
+            if device != "cpu":
+                print(f"[경고] meta tensor 문제 방지를 위해 device를 cpu로 강제 변경: {device} -> cpu")
+                device = "cpu"
             
             if torch.cuda.is_available():
                 device_name = torch.cuda.get_device_name(0)
