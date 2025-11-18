@@ -34,6 +34,7 @@ import {
 import { cn } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
 import { analyzeSituationV2, type SituationRequestV2 } from '@/apis/legal.service'
+import { MarkdownRenderer } from '@/components/rag/MarkdownRenderer'
 
 // 색상 상수 (다른 페이지와 통일)
 const PRIMARY_GRADIENT = 'from-blue-600 to-indigo-600'
@@ -153,7 +154,6 @@ interface ChatMessage {
   content: string
   timestamp: Date
   reportId?: string // 리포트가 생성된 경우 리포트 ID
-  isUrgent?: boolean // 긴급 상황 여부
 }
 
 // 리포트 타입 정의
@@ -164,6 +164,7 @@ interface Report {
   legalBasis: string[]
   recommendations: string[]
   riskScore?: number
+  tags?: string[] // 유형 태그
   createdAt: Date
   expiresAt: Date // 24시간 후
 }
@@ -330,10 +331,36 @@ export default function QuickAssistPage() {
     return text.substring(0, 30) + '...'
   }
 
-  // 긴급 상황 감지
-  const detectUrgency = (text: string): boolean => {
-    const urgentKeywords = ['긴급', '즉시', '당장', '지금', '바로', '해고', '불법', '위험', '중요']
-    return urgentKeywords.some(keyword => text.includes(keyword))
+  // 대화 삭제
+  const handleDeleteConversation = (conversationId: string, e: React.MouseEvent) => {
+    e.stopPropagation() // 버튼 클릭 시 대화 선택 방지
+    const updatedConversations = conversations.filter(c => c.id !== conversationId)
+    setConversations(updatedConversations)
+    saveConversations(updatedConversations)
+    
+    // 삭제된 대화가 현재 선택된 대화인 경우 선택 해제
+    if (selectedConversationId === conversationId) {
+      setSelectedConversationId(null)
+      setMessages([])
+    }
+    
+    toast({
+      title: "대화 삭제 완료",
+      description: "대화 내역이 삭제되었습니다.",
+    })
+  }
+
+  // 리포트 삭제
+  const handleDeleteReport = (reportId: string, e: React.MouseEvent) => {
+    e.stopPropagation() // 버튼 클릭 시 리포트 선택 방지
+    const updatedReports = reports.filter(r => r.id !== reportId)
+    setReports(updatedReports)
+    saveReports(updatedReports)
+    
+    toast({
+      title: "리포트 삭제 완료",
+      description: "리포트가 삭제되었습니다.",
+    })
   }
 
   // 메시지 전송
@@ -345,7 +372,6 @@ export default function QuickAssistPage() {
       role: 'user',
       content: inputMessage.trim(),
       timestamp: new Date(),
-      isUrgent: detectUrgency(inputMessage),
     }
 
     const newMessages = [...messages, userMessage]
@@ -417,6 +443,7 @@ export default function QuickAssistPage() {
           legalBasis: result.analysis.legalBasis.map(b => b.snippet),
           recommendations: result.analysis.recommendations,
           riskScore: result.riskScore,
+          tags: result.tags || [],
           createdAt: new Date(),
           expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24시간 후
         }
@@ -549,8 +576,8 @@ export default function QuickAssistPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/20 to-slate-50">
-      <div className="flex h-screen">
+    <div className="h-screen overflow-hidden bg-gradient-to-br from-slate-50 via-blue-50/20 to-slate-50">
+      <div className="flex h-full">
         {/* 사이드바 (왼쪽 20%) */}
         <div className="w-1/5 border-r border-slate-200 flex flex-col bg-gradient-to-br from-blue-600 to-indigo-600">
           <div className="p-4 border-b border-slate-300">
@@ -581,7 +608,7 @@ export default function QuickAssistPage() {
                     key={conv.id}
                     onClick={() => handleSelectConversation(conv.id)}
                     className={cn(
-                      "w-full text-left p-3 rounded-lg transition-all",
+                      "w-full text-left p-3 rounded-lg transition-all group",
                       selectedConversationId === conv.id
                         ? "bg-white/20 text-white"
                         : "hover:bg-white/10 text-white/80"
@@ -596,9 +623,13 @@ export default function QuickAssistPage() {
                           {conv.title}
                         </div>
                       </div>
-                      {conv.messages.some(m => m.isUrgent) && (
-                        <span className="text-lg">🚨</span>
-                      )}
+                      <button
+                        onClick={(e) => handleDeleteConversation(conv.id, e)}
+                        className="opacity-0 group-hover:opacity-100 hover:bg-white/20 rounded p-1 transition-opacity"
+                        title="대화 삭제"
+                      >
+                        <X className="w-4 h-4 text-white/80" />
+                      </button>
                     </div>
                   </button>
                 ))}
@@ -608,7 +639,7 @@ export default function QuickAssistPage() {
         </div>
 
         {/* 메인 채팅 영역 (오른쪽 80%) */}
-        <div className="flex-1 flex flex-col bg-white relative">
+        <div className="flex-1 flex flex-col bg-white overflow-hidden">
           {/* 헤더 */}
           <div className="p-4 border-b border-slate-200 bg-white flex-shrink-0">
             <div className="flex items-center justify-between">
@@ -634,53 +665,56 @@ export default function QuickAssistPage() {
                 className="text-slate-600 hover:text-slate-900"
               >
                 <FolderArchive className="w-5 h-5 mr-2" />
-                리포트 아카이브
+                리포트 <br/>아카이브
               </Button>
             </div>
           </div>
 
           {/* 채팅 메시지 영역 */}
-          <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-6 space-y-4" style={{ paddingBottom: '200px' }}>
-            {messages.map((message) => (
+          <div ref={chatContainerRef} className="flex-1 overflow-y-auto bg-gradient-to-b from-slate-50 via-white to-slate-50 px-4 sm:px-6 py-6 space-y-6">
+            {messages.map((message, index) => (
                   <div
                     key={message.id}
                     className={cn(
-                      "flex gap-3",
+                      "flex gap-3 sm:gap-4 animate-in fade-in slide-in-from-bottom-2 duration-300",
                       message.role === 'user' ? 'justify-end' : 'justify-start'
                     )}
+                    style={{ animationDelay: `${index * 50}ms` }}
                   >
                     {message.role === 'assistant' && (
-                      <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">
-                        <Bot className="w-4 h-4 text-slate-600" />
+                      <div className="flex-shrink-0 w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg ring-2 ring-white">
+                        <Bot className="w-5 h-5 text-white" />
                       </div>
                     )}
                     
                     <div className={cn(
-                      "flex flex-col gap-1 max-w-[70%]",
+                      "flex flex-col gap-1.5 max-w-[85%] sm:max-w-[75%]",
                       message.role === 'user' ? 'items-end' : 'items-start'
                     )}>
                       <div
                         className={cn(
-                          "rounded-2xl px-4 py-3 shadow-sm",
+                          "relative rounded-2xl px-4 py-3 shadow-sm transition-all duration-200",
                           message.role === 'user'
-                            ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-br-md"
-                            : "bg-white border border-slate-200 text-slate-900 rounded-bl-md",
-                          message.isUrgent && message.role === 'user' && "border-2 border-red-400"
+                            ? "bg-gradient-to-br from-blue-600 to-blue-700 text-white rounded-br-md"
+                            : "bg-white border border-slate-100 text-slate-900 rounded-bl-md"
                         )}
                       >
-                        {message.isUrgent && message.role === 'user' && (
-                          <div className="flex items-center gap-1 mb-2">
-                            <span className="text-lg">🚨</span>
-                            <span className="text-xs font-semibold">긴급 상황</span>
+                        {message.role === 'assistant' ? (
+                          <div className="prose prose-sm max-w-none prose-headings:text-slate-900 prose-p:text-slate-700 prose-strong:text-slate-900 prose-code:text-blue-600 prose-pre:bg-slate-50 text-sm leading-relaxed">
+                            <MarkdownRenderer content={message.content} />
                           </div>
+                        ) : (
+                          <p className="whitespace-pre-wrap text-sm leading-relaxed text-white">
+                            {message.content}
+                          </p>
                         )}
-                        <p className="whitespace-pre-wrap text-sm leading-relaxed" style={{ fontFamily: 'Noto Sans KR, sans-serif' }}>
-                          {message.content}
-                        </p>
                       </div>
                       
                       <div className="flex items-center gap-2">
-                        <span className="text-xs text-slate-500">
+                        <span className={cn(
+                          "text-xs px-1",
+                          message.role === 'user' ? 'text-slate-500' : 'text-slate-400'
+                        )}>
                           {message.timestamp.toLocaleTimeString('ko-KR', {
                             hour: '2-digit',
                             minute: '2-digit',
@@ -721,20 +755,27 @@ export default function QuickAssistPage() {
                     </div>
 
                     {message.role === 'user' && (
-                      <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-blue-100">
-                        <User className="w-4 h-4 text-blue-600" />
+                      <div className="flex-shrink-0 w-9 h-9 rounded-full bg-gradient-to-br from-slate-400 to-slate-500 flex items-center justify-center shadow-lg ring-2 ring-white">
+                        <User className="w-5 h-5 text-white" />
                       </div>
                     )}
                   </div>
                 ))}
                 
                 {isAnalyzing && (
-                  <div className="flex gap-3 justify-start">
-                    <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">
-                      <Bot className="w-4 h-4 text-slate-600" />
+                  <div className="flex gap-3 sm:gap-4 justify-start animate-in fade-in slide-in-from-bottom-2" role="status" aria-live="polite">
+                    <div className="flex-shrink-0 w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg ring-2 ring-white">
+                      <Bot className="w-5 h-5 text-white" />
                     </div>
-                    <div className="bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3">
-                      <Loader2 className="w-5 h-5 animate-spin text-slate-600" />
+                    <div className="bg-white border border-slate-200 rounded-2xl rounded-bl-md px-4 py-3 shadow-sm">
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex gap-1" aria-hidden="true">
+                          <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                          <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                          <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                        </div>
+                        <span className="text-sm text-slate-600">답변 생성 중...</span>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -742,7 +783,7 @@ export default function QuickAssistPage() {
           </div>
 
           {/* 입력 영역 - 화면 하단 고정 */}
-          <div className="absolute bottom-0 left-0 right-0 border-t border-slate-200 bg-white/95 backdrop-blur-sm shadow-lg z-10">
+          <div className="flex-shrink-0 border-t border-slate-200 bg-white/80 backdrop-blur-sm p-4">
             {/* 자주 있는 상황 태그 버튼 */}
             <div className="px-4 pt-3 pb-2 border-b border-slate-100">
               <div className="flex items-center gap-2 mb-2">
@@ -772,13 +813,13 @@ export default function QuickAssistPage() {
             </div>
             
             {/* 입력창 */}
-            <div className="p-4 space-y-4">
+            <div className="space-y-4">
               {/* 한 줄 요약 */}
               <div>
                 <div className="text-xs font-semibold text-slate-700 mb-2">
                   <span className="text-red-500">*</span> 한 줄로 상황을 요약해 주세요
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-3 items-end">
                   <div className="relative flex-1">
                     <Textarea
                       ref={textareaRef}
@@ -793,30 +834,40 @@ export default function QuickAssistPage() {
                       placeholder="예: 단톡방/회의에서 모욕적인 말을 들어요"
                       style={{
                         minHeight: '60px',
-                        maxHeight: '33vh',
-                        overflowY: 'auto',
+                        maxHeight: '140px',
                         resize: 'none',
                       }}
-                      className="border-2 border-slate-300 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 pr-12"
+                      className={cn(
+                        "min-h-[60px] max-h-[140px] resize-none text-sm",
+                        "border-slate-300 focus:border-blue-400 focus:ring-2 focus:ring-blue-100",
+                        "rounded-xl pr-12",
+                        "transition-all duration-200"
+                      )}
+                      rows={2}
                     />
-                    <div className="absolute bottom-2 right-2 text-xs text-slate-400 pointer-events-none">
-                      {inputMessage.length}자
+                    <div className="absolute bottom-2 right-2 flex items-center gap-1.5 text-xs text-slate-400">
+                      <span>{inputMessage.length}자</span>
                     </div>
                   </div>
                   <Button
                     onClick={handleSendMessage}
                     disabled={!inputMessage.trim() || isAnalyzing}
+                    size="lg"
                     className={cn(
-                      "px-6 bg-gradient-to-r text-white shadow-md h-[60px]",
+                      "h-[60px] min-w-[60px] px-6 rounded-xl",
                       PRIMARY_GRADIENT,
                       PRIMARY_GRADIENT_HOVER,
-                      "disabled:opacity-50 disabled:cursor-not-allowed"
+                      "text-white shadow-lg hover:shadow-xl",
+                      "transition-all duration-200",
+                      "disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-lg",
+                      "focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-blue-600",
+                      "flex-shrink-0"
                     )}
                   >
                     {isAnalyzing ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <Loader2 className="w-5 h-5 animate-spin" />
                     ) : (
-                      <Send className="w-4 h-4" />
+                      <Send className="w-5 h-5" />
                     )}
                   </Button>
                 </div>
@@ -862,9 +913,35 @@ export default function QuickAssistPage() {
       <Dialog open={showReportModal} onOpenChange={setShowReportModal}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-              <Scroll className="w-5 h-5 text-blue-600" />
-              법적 조언 리포트
+            <DialogTitle className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                <Scroll className="w-5 h-5 text-blue-600" />
+                법적 조언 리포트
+              </div>
+              {currentReport && (
+                <div className="flex items-center gap-2">
+                  {currentReport.riskScore !== undefined && (
+                    <span className={cn(
+                      "px-2 py-1 rounded-md text-xs font-semibold",
+                      currentReport.riskScore > 70 ? "bg-red-100 text-red-700" :
+                      currentReport.riskScore > 40 ? "bg-amber-100 text-amber-700" :
+                      "bg-green-100 text-green-700"
+                    )}>
+                      위험도 {currentReport.riskScore}%
+                    </span>
+                  )}
+                  {currentReport.tags && currentReport.tags.length > 0 && (
+                    <span className="px-2 py-1 rounded-md text-xs font-semibold bg-blue-100 text-blue-700">
+                      {currentReport.tags[0] === 'harassment' ? '직장 내 괴롭힘' :
+                       currentReport.tags[0] === 'unpaid_wage' ? '임금체불' :
+                       currentReport.tags[0] === 'unfair_dismissal' ? '부당해고' :
+                       currentReport.tags[0] === 'overtime' ? '근로시간 문제' :
+                       currentReport.tags[0] === 'probation' ? '수습·인턴' :
+                       currentReport.tags[0]}
+                    </span>
+                  )}
+                </div>
+              )}
             </DialogTitle>
           </DialogHeader>
           {currentReport && (
@@ -877,24 +954,6 @@ export default function QuickAssistPage() {
                 <h3 className="font-bold mb-2 text-blue-600">법적 조언</h3>
                 <p className="text-slate-700 whitespace-pre-wrap">{currentReport.answer}</p>
               </div>
-              {currentReport.riskScore !== undefined && (
-                <div>
-                  <h3 className="font-bold mb-2 text-blue-600">위험도</h3>
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 h-3 bg-slate-200 rounded-full overflow-hidden">
-                      <div
-                        className={cn(
-                          "h-full rounded-full",
-                          currentReport.riskScore > 70 ? "bg-red-500" : 
-                          currentReport.riskScore > 40 ? "bg-amber-500" : "bg-green-500"
-                        )}
-                        style={{ width: `${currentReport.riskScore}%` }}
-                      />
-                    </div>
-                    <span className="text-sm font-semibold">{currentReport.riskScore}%</span>
-                  </div>
-                </div>
-              )}
               {currentReport.legalBasis.length > 0 && (
                 <div>
                   <h3 className="font-bold mb-2 text-blue-600">참조 법조문</h3>
@@ -946,7 +1005,7 @@ export default function QuickAssistPage() {
               {reports.map((report) => (
                 <Card
                   key={report.id}
-                  className="cursor-pointer hover:shadow-md transition-shadow"
+                  className="cursor-pointer hover:shadow-md transition-shadow group"
                   onClick={() => {
                     setCurrentReport(report)
                     setShowArchiveModal(false)
@@ -954,7 +1013,7 @@ export default function QuickAssistPage() {
                   }}
                 >
                   <CardContent className="p-4">
-                    <div className="flex items-start justify-between">
+                    <div className="flex items-start justify-between gap-2">
                       <div className="flex-1">
                         <h4 className="font-semibold mb-1 text-sm text-blue-600">
                           {generateQuestionSummary(report.question)}
@@ -978,7 +1037,16 @@ export default function QuickAssistPage() {
                           </div>
                         )}
                       </div>
-                      <FileText className="w-5 h-5 text-slate-400" />
+                      <div className="flex items-center gap-2">
+                        <FileText className="w-5 h-5 text-slate-400" />
+                        <button
+                          onClick={(e) => handleDeleteReport(report.id, e)}
+                          className="opacity-0 group-hover:opacity-100 hover:bg-slate-100 rounded p-1 transition-opacity"
+                          title="리포트 삭제"
+                        >
+                          <X className="w-4 h-4 text-slate-500 hover:text-red-500" />
+                        </button>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
