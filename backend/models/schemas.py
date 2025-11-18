@@ -257,6 +257,12 @@ class RelatedCaseV2(BaseModel):
     link: Optional[str] = None
 
 
+class ScriptsV2(BaseModel):
+    """스크립트/템플릿 (v2)"""
+    toCompany: Optional[str] = Field(None, description="회사에 보낼 메시지 초안")
+    toAdvisor: Optional[str] = Field(None, description="상담 시 쓸 설명 템플릿")
+
+
 class SituationResponseV2(BaseModel):
     """상황 분석 응답 (v2)"""
     riskScore: float
@@ -264,6 +270,7 @@ class SituationResponseV2(BaseModel):
     tags: List[str]
     analysis: SituationAnalysisV2
     checklist: List[str]
+    scripts: Optional[ScriptsV2] = None
     relatedCases: List[RelatedCaseV2]
 
 

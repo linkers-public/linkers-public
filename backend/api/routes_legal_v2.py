@@ -14,6 +14,7 @@ from datetime import datetime
 import uuid
 
 from models.schemas import (
+    ScriptsV2,
     LegalSearchResponseV2,
     LegalSearchResult,
     SituationRequestV2,
@@ -720,6 +721,15 @@ async def analyze_situation(
         for step in action_plan.get("steps", []):
             checklist.extend(step.get("items", []))
         
+        # scripts 변환
+        scripts_data = result.get("scripts", {})
+        scripts = None
+        if scripts_data:
+            scripts = ScriptsV2(
+                toCompany=scripts_data.get("to_company"),
+                toAdvisor=scripts_data.get("to_advisor"),
+            )
+        
         # relatedCases 변환
         related_cases = []
         for case in result.get("related_cases", []):
@@ -743,6 +753,7 @@ async def analyze_situation(
                 "recommendations": recommendations[:5],  # 최대 5개
             },
             checklist=checklist,
+            scripts=scripts,
             relatedCases=related_cases,
         )
     except Exception as e:

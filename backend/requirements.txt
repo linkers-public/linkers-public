@@ -6,7 +6,7 @@ python-multipart==0.0.6
 langchain==1.0.5
 langchain-community==0.4.1
 langchain-core==1.0.5
-langchain-openai==0.0.5
+langchain-openai>=0.1.0  # langchain-core 1.0.5 호환성
 # chromadb==0.4.22  # Windows 빌드 문제로 임시 주석 처리
 # 대안: Supabase pgvector 사용 (이미 구현됨)
 
@@ -23,12 +23,12 @@ Pillow==10.4.0  # 이미지 처리 (pdf2image 의존성)
 
 # HWP Processing (선택)
 olefile==0.46  # HWP 바이너리 파일 처리
-requests==2.31.0  # HWP 변환 서비스 호출용
+requests>=2.32.5  # HWP 변환 서비스 호출용 (langchain-community 호환성)
 
 # Utilities
 python-dotenv==1.0.0
 pydantic==2.12.4
-pydantic-settings==2.1.0
+pydantic-settings>=2.10.1  # langchain-community 호환성
 numpy==1.26.3
 
 # Supabase

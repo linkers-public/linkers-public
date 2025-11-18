@@ -261,12 +261,18 @@ export interface RelatedCaseV2 {
   link?: string;
 }
 
+export interface ScriptsV2 {
+  toCompany?: string;
+  toAdvisor?: string;
+}
+
 export interface SituationResponseV2 {
   riskScore: number;
   riskLevel: 'low' | 'medium' | 'high';
   tags: string[];
   analysis: SituationAnalysisV2;
   checklist: string[];
+  scripts?: ScriptsV2;
   relatedCases: RelatedCaseV2[];
 }
 
