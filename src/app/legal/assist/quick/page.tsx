@@ -1,11 +1,12 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { 
   Zap, 
   Send,
@@ -13,306 +14,435 @@ import {
   AlertTriangle,
   CheckCircle2,
   MessageSquare,
-  Sparkles,
   Copy,
-  Phone,
-  FileText,
-  ArrowRight,
   ArrowLeft,
-  Info,
   Scale,
+  FileText,
+  FolderArchive,
+  Edit,
+  X,
+  Bot,
+  User,
   Clock,
-  Shield,
-  ChevronRight,
-  Search,
+  Scroll,
   Briefcase,
   DollarSign,
   Users,
   TrendingUp,
-  X
+  Sparkles
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
-import { analyzeSituationV2, type SituationRequestV2, type SituationResponseV2 } from '@/apis/legal.service'
-import type { SituationAnalysisResponse } from '@/types/legal'
-import { EvidenceGuideModal } from '@/components/legal/EvidenceGuideModal'
+import { analyzeSituationV2, type SituationRequestV2 } from '@/apis/legal.service'
 
-// 대표 질문 버튼 (카테고리별 분류)
-const QUICK_QUESTIONS = [
-  // 해고 관련
+// 색상 상수 (다른 페이지와 통일)
+const PRIMARY_GRADIENT = 'from-blue-600 to-indigo-600'
+const PRIMARY_GRADIENT_HOVER = 'hover:from-blue-700 hover:to-indigo-700'
+
+// 자주 있는 상황 템플릿
+const COMMON_SITUATIONS = [
   {
-    text: '수습 중 해고가 가능한가요?',
-    category: 'probation' as const,
+    title: '인턴/수습 해고 통보',
+    text: '수습 기간 중 갑작스러운 해고 통보를 받은 경우',
     icon: Briefcase,
-    tags: ['수습', '해고'],
+    category: 'probation' as const,
+    exampleForm: `• 언제부터 이런 일이 발생했는지
+예: 2025년 1월부터, 수습 인턴으로 근무 중입니다. 최근 2주 전부터 팀장님이 수습이라서 언제든 내보낼 수 있다고 반복적으로 말하기 시작했습니다.
+
+• 상대방(회사, 팀장, 클라이언트 등)이 누구인지
+예: OO회사 인사팀과 팀장 A씨입니다.
+
+• 지금까지 어떤 대화를 나눴는지
+예: 갑자기 이번 주까지만 나오라고 통보만 받았고, 구체적인 사유는 없었습니다. 해고 사유를 물어봤지만 명확한 답변을 받지 못했습니다.
+
+• 가지고 있는 증거(카톡, 메일, 녹취 등)가 있는지
+예: 해고 통보 카카오톡 메시지와 근로계약서가 있습니다.`,
   },
   {
-    text: '이 상황이 불법인가요?',
-    category: 'unfair_dismissal' as const,
-    icon: AlertTriangle,
-    tags: ['해고', '불법'],
-  },
-  {
-    text: '정규직인데 갑자기 해고 통보를 받았어요',
-    category: 'unfair_dismissal' as const,
-    icon: AlertTriangle,
-    tags: ['정규직', '해고'],
-  },
-  // 임금 관련
-  {
-    text: '포괄임금제 거절해도 되나요?',
-    category: 'unpaid_wage' as const,
-    icon: DollarSign,
-    tags: ['포괄임금', '임금'],
-  },
-  {
-    text: '야근 수당이 안 들어와요',
-    category: 'unpaid_wage' as const,
-    icon: DollarSign,
-    tags: ['야근', '수당'],
-  },
-  {
-    text: '프리랜서 대금 체불 대응 어떻게 하나요?',
-    category: 'unpaid_wage' as const,
-    icon: DollarSign,
-    tags: ['프리랜서', '체불'],
-  },
-  {
-    text: '월급이 계속 늦게 들어와요',
-    category: 'unpaid_wage' as const,
-    icon: DollarSign,
-    tags: ['월급', '체불'],
-  },
-  // 근로시간 관련
-  {
-    text: '주 52시간을 초과해서 일하는데 괜찮나요?',
-    category: 'overtime' as const,
+    title: '무급 야근·추가 근무',
+    text: '연장근로 수당 없이 야근이나 추가 근무를 요구받는 경우',
     icon: Clock,
-    tags: ['근로시간', '52시간'],
-  },
-  {
-    text: '야근은 매일인데 수당은 없어요',
     category: 'overtime' as const,
-    icon: Clock,
-    tags: ['야근', '수당'],
+    exampleForm: `• 언제부터 이런 일이 발생했는지
+예: 2024년 10월쯤부터, 거의 매주 회의 때마다 야근을 요구받기 시작했습니다.
+
+• 상대방(회사, 팀장, 클라이언트 등)이 누구인지
+예: OO회사와 팀장 B씨입니다.
+
+• 지금까지 어떤 대화를 나눴는지
+예: 매일 밤 10시 이후까지 근무하는데, 연장근로 수당은 전혀 지급되지 않습니다. 수당에 대해 물어봤지만 "회사 사정상 어렵다"는 답변만 받았습니다.
+
+• 가지고 있는 증거(카톡, 메일, 녹취 등)가 있는지
+예: 야근 요청 카카오톡 메시지와 출퇴근 기록이 있습니다.`,
   },
-  // 괴롭힘 관련
   {
-    text: '상사가 모욕적인 말을 해요',
-    category: 'harassment' as const,
+    title: '임금 체불·수당 미지급',
+    text: '월급이나 수당이 지급되지 않거나 지연되는 경우',
+    icon: DollarSign,
+    category: 'unpaid_wage' as const,
+    exampleForm: `• 언제부터 이런 일이 발생했는지
+예: 2024년 9월부터 월급 지급이 불규칙해지기 시작했습니다.
+
+• 상대방(회사, 팀장, 클라이언트 등)이 누구인지
+예: OO회사 인사팀과 대표 C씨입니다.
+
+• 지금까지 어떤 대화를 나눴는지
+예: 계약서에는 매월 25일 지급이라고 되어 있는데, 실제로는 다음 달 초에야 들어옵니다. 월급 지급 지연에 대해 여러 번 문의했지만 "곧 지급하겠다"는 답변만 반복됩니다.
+
+• 가지고 있는 증거(카톡, 메일, 녹취 등)가 있는지
+예: 계약서, 급여명세서, 월급 지급 지연 관련 이메일이 있습니다.`,
+  },
+  {
+    title: '직장 내 괴롭힘·모욕 발언',
+    text: '상사나 동료로부터 모욕적 발언이나 괴롭힘을 당하는 경우',
     icon: Users,
-    tags: ['괴롭힘', '모욕'],
-  },
-  {
-    text: '직장 내 괴롭힘 신고를 해야 하나요?',
     category: 'harassment' as const,
-    icon: Users,
-    tags: ['괴롭힘', '신고'],
+    exampleForm: `• 언제부터 이런 일이 발생했는지
+예: 2024년 10월쯤부터, 거의 매주 회의 때마다 모욕적인 발언을 듣기 시작했습니다.
+
+• 상대방(회사, 팀장, 클라이언트 등)이 누구인지
+예: 팀장 D씨가 주로 그런 발언을 합니다.
+
+• 지금까지 어떤 대화를 나눴는지
+예: 팀장 D씨가 팀원들 다 있는 자리에서 특정 사람을 지목해 모욕적인 말을 합니다. "너 같은 사람은 어디 가도 안 된다"는 식의 발언을 반복합니다. 항의했지만 "농담이었다"며 넘어갑니다.
+
+• 가지고 있는 증거(카톡, 메일, 녹취 등)가 있는지
+예: 회의 중 모욕 발언 녹취와 관련 증인(동료들)이 있습니다.`,
   },
-  // 스톡옵션/IP 관련
   {
-    text: '스톡옵션 행사 조건이 이상해요',
-    category: 'unknown' as const,
+    title: '프리랜서/용역 대금 미지급',
+    text: '프리랜서나 용역 계약에서 대금이 지급되지 않는 경우',
+    icon: FileText,
+    category: 'unpaid_wage' as const,
+    exampleForm: `• 언제부터 이런 일이 발생했는지
+예: 2024년 11월부터, 프로젝트 완료 후 대금 지급이 계속 지연되고 있습니다.
+
+• 상대방(회사, 팀장, 클라이언트 등)이 누구인지
+예: OO기업과 프로젝트 담당자 E씨입니다.
+
+• 지금까지 어떤 대화를 나눴는지
+예: 계약서에는 "프로젝트 완료 후 7일 이내 지급"이라고 되어 있는데, 3개월째 미지급 상태입니다. 대금 지급을 요청했지만 "회계 처리 중"이라는 답변만 반복됩니다.
+
+• 가지고 있는 증거(카톡, 메일, 녹취 등)가 있는지
+예: 용역계약서, 프로젝트 완료 확인서, 대금 지급 요청 이메일이 있습니다.`,
+  },
+  {
+    title: '스톡옵션/성과급 관련 문제',
+    text: '스톡옵션이나 성과급 관련 약속이 지켜지지 않는 경우',
     icon: TrendingUp,
-    tags: ['스톡옵션'],
-  },
-  {
-    text: '회사가 내 IP를 가져가려고 해요',
     category: 'unknown' as const,
-    icon: FileText,
-    tags: ['IP', '저작권'],
-  },
-  {
-    text: 'NDA 계약서에 서명해야 하나요?',
-    category: 'unknown' as const,
-    icon: FileText,
-    tags: ['NDA', '비밀유지'],
+    exampleForm: `• 언제부터 이런 일이 발생했는지
+예: 입사 시(2023년 3월) 스톡옵션을 받기로 약속받았는데, 2년이 지나도 지급되지 않았습니다.
+
+• 상대방(회사, 팀장, 클라이언트 등)이 누구인지
+예: OO스타트업과 대표 F씨입니다.
+
+• 지금까지 어떤 대화를 나눴는지
+예: 계약서에는 명시되어 있지 않고, 구두로만 약속받았습니다. 스톡옵션 지급에 대해 물어봤지만 "회사 상황을 봐야 한다"는 답변만 받았습니다.
+
+• 가지고 있는 증거(카톡, 메일, 녹취 등)가 있는지
+예: 입사 시 스톡옵션 약속 관련 이메일과 증인(동료들)이 있습니다.`,
   },
 ]
 
-// 위험도 라벨
-const getRiskLabel = (score: number) => {
-  if (score <= 30) return { label: '위험이 낮습니다', color: 'text-green-700', bg: 'bg-green-50', border: 'border-green-300', icon: CheckCircle2 }
-  if (score <= 70) return { label: '주의가 필요합니다', color: 'text-amber-700', bg: 'bg-amber-50', border: 'border-amber-300', icon: AlertTriangle }
-  return { label: '위험이 매우 높습니다', color: 'text-red-700', bg: 'bg-red-50', border: 'border-red-300', icon: AlertTriangle }
+
+// 메시지 타입 정의
+interface ChatMessage {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  timestamp: Date
+  reportId?: string // 리포트가 생성된 경우 리포트 ID
+  isUrgent?: boolean // 긴급 상황 여부
 }
 
-// Burden Type 자동 분류 (간단한 키워드 기반)
-const classifyBurdenType = (text: string): string => {
-  const lowerText = text.toLowerCase()
-  if (lowerText.includes('임금') || lowerText.includes('수당') || lowerText.includes('월급') || lowerText.includes('체불')) {
-    return '임금'
-  }
-  if (lowerText.includes('시간') || lowerText.includes('야근') || lowerText.includes('근무') || lowerText.includes('휴게')) {
-    return '시간'
-  }
-  if (lowerText.includes('해고') || lowerText.includes('해지') || lowerText.includes('계약')) {
-    return '해고'
-  }
-  if (lowerText.includes('괴롭힘') || lowerText.includes('모욕') || lowerText.includes('성희롱')) {
-    return '괴롭힘'
-  }
-  if (lowerText.includes('nda') || lowerText.includes('비밀유지')) {
-    return 'NDA'
-  }
-  if (lowerText.includes('ip') || lowerText.includes('저작권') || lowerText.includes('지적재산')) {
-    return 'IP'
-  }
-  return '기타'
+// 리포트 타입 정의
+interface Report {
+  id: string
+  question: string
+  answer: string
+  legalBasis: string[]
+  recommendations: string[]
+  riskScore?: number
+  createdAt: Date
+  expiresAt: Date // 24시간 후
 }
 
-// 긴급 조치 텍스트 가져오기
-const getUrgencyText = (urgencyLevel: string | undefined) => {
-  if (!urgencyLevel) return ''
-  if (urgencyLevel === '즉시 조치 필요') return '⚠️ 즉시 조치 필요'
-  if (urgencyLevel === '진행 중 위험') return '⏱ 진행 중 위험'
-  return '🟢 모니터링 추천'
-}
-
-// 카테고리 배지 색상
-const getCategoryBadge = (category: string) => {
-  const categoryMap: Record<string, { emoji: string; color: string; bg: string; label: string }> = {
-    '해고': { emoji: '🟥', color: 'text-red-700', bg: 'bg-red-50', label: '부당해고 의심' },
-    '괴롭힘': { emoji: '🟧', color: 'text-orange-700', bg: 'bg-orange-50', label: '직장 내 괴롭힘 가능성' },
-    '임금': { emoji: '🟦', color: 'text-blue-700', bg: 'bg-blue-50', label: '임금체불' },
-    '시간': { emoji: '🟨', color: 'text-yellow-700', bg: 'bg-yellow-50', label: '근로시간 위반' },
-    '기타': { emoji: '🟩', color: 'text-green-700', bg: 'bg-green-50', label: '기타 법적 문제' },
-  }
-  return categoryMap[category] || categoryMap['기타']
-}
-
-// 긴급 조치 필요 여부 판단
-const getUrgencyLevel = (score: number) => {
-  if (score > 70) {
-    return { 
-      level: '즉시 조치 필요', 
-      icon: AlertTriangle, 
-      color: 'text-red-700', 
-      bg: 'bg-red-50', 
-      border: 'border-red-300' 
-    }
-  }
-  if (score > 40) {
-    return { 
-      level: '진행 중 위험', 
-      icon: Clock, 
-      color: 'text-amber-700', 
-      bg: 'bg-amber-50', 
-      border: 'border-amber-300' 
-    }
-  }
-  return { 
-    level: '모니터링 추천', 
-    icon: CheckCircle2, 
-    color: 'text-green-700', 
-    bg: 'bg-green-50', 
-    border: 'border-green-300' 
-  }
+// 대화 세션 타입
+interface ConversationSession {
+  id: string
+  title: string
+  messages: ChatMessage[]
+  createdAt: Date
+  updatedAt: Date
 }
 
 export default function QuickAssistPage() {
   const router = useRouter()
   const { toast } = useToast()
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const chatContainerRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  const [question, setQuestion] = useState('')
+  const [inputMessage, setInputMessage] = useState('')
   const [isAnalyzing, setIsAnalyzing] = useState(false)
-  const [analysisResult, setAnalysisResult] = useState<SituationAnalysisResponse | null>(null)
-  const [burdenType, setBurdenType] = useState<string>('')
-  const [riskScore, setRiskScore] = useState<number | null>(null)
-  const [showEvidenceGuide, setShowEvidenceGuide] = useState(false)
-  const [checkedItems, setCheckedItems] = useState<Set<string>>(new Set())
-  const [questionSearch, setQuestionSearch] = useState('')
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
+  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [hasInitialGreeting, setHasInitialGreeting] = useState(false)
+  const [conversations, setConversations] = useState<ConversationSession[]>([])
+  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null)
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null)
+  const [editText, setEditText] = useState('')
+  const [showReportModal, setShowReportModal] = useState(false)
+  const [currentReport, setCurrentReport] = useState<Report | null>(null)
+  const [showArchiveModal, setShowArchiveModal] = useState(false)
+  const [reports, setReports] = useState<Report[]>([])
 
-  const handleQuickQuestion = (quickQuestion: typeof QUICK_QUESTIONS[0]) => {
-    setQuestion(quickQuestion.text)
-    setBurdenType(classifyBurdenType(quickQuestion.text))
-    setQuestionSearch('') // 검색어 초기화
+  // localStorage에서 대화 내역 로드
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    
+    try {
+      const stored = localStorage.getItem('legal_assist_conversations')
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        const sessions = parsed.map((s: any) => ({
+          ...s,
+          createdAt: new Date(s.createdAt),
+          updatedAt: new Date(s.updatedAt),
+          messages: s.messages.map((m: any) => ({
+            ...m,
+            timestamp: new Date(m.timestamp),
+          })),
+        }))
+        setConversations(sessions)
+      }
+
+      // 리포트 로드
+      const storedReports = localStorage.getItem('legal_assist_reports')
+      if (storedReports) {
+        const parsedReports = JSON.parse(storedReports)
+        const reportsWithDates = parsedReports.map((r: any) => ({
+          ...r,
+          createdAt: new Date(r.createdAt),
+          expiresAt: new Date(r.expiresAt),
+        }))
+        // 만료된 리포트 제거
+        const validReports = reportsWithDates.filter((r: Report) => r.expiresAt > new Date())
+        setReports(validReports)
+        localStorage.setItem('legal_assist_reports', JSON.stringify(validReports))
+      }
+    } catch (error) {
+      console.error('데이터 로드 실패:', error)
+    }
+  }, [])
+
+  // 만료된 리포트 정리 (24시간 후 자동 삭제)
+  useEffect(() => {
+    const cleanup = setInterval(() => {
+      const now = new Date()
+      const validReports = reports.filter(r => r.expiresAt > now)
+      if (validReports.length !== reports.length) {
+        setReports(validReports)
+        localStorage.setItem('legal_assist_reports', JSON.stringify(validReports))
+      }
+    }, 60000) // 1분마다 체크
+
+    return () => clearInterval(cleanup)
+  }, [reports])
+
+  // 선택된 대화의 메시지 로드
+  useEffect(() => {
+    if (selectedConversationId) {
+      const conversation = conversations.find(c => c.id === selectedConversationId)
+      if (conversation) {
+        setMessages(conversation.messages)
+        setHasInitialGreeting(true)
+      }
+    } else {
+      setMessages([])
+      setHasInitialGreeting(false)
+    }
+  }, [selectedConversationId, conversations])
+
+  // 초기 인사말 추가
+  useEffect(() => {
+    if (!selectedConversationId && messages.length === 0 && !hasInitialGreeting) {
+      const greetingMessage: ChatMessage = {
+        id: `greeting-${Date.now()}`,
+        role: 'assistant',
+        content: `안녕하세요 법률 리스크를 탐지하는 Linkus legal이에요!
+
+사용자님의 상황과 함께
+
+• 언제부터 이런 일이 발생했는지
+• 상대방(회사, 팀장, 클라이언트 등)이 누구인지
+• 지금까지 어떤 대화를 나눴는지
+• 가지고 있는 증거(카톡, 메일, 녹취 등)가 있는지
+
+등을 알려주시면 더 자세한 대화가 가능해요!`,
+        timestamp: new Date(),
+      }
+      setMessages([greetingMessage])
+      setHasInitialGreeting(true)
+    }
+  }, [selectedConversationId, messages.length, hasInitialGreeting])
+
+  // 메시지 스크롤
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
+
+  // 입력창 높이 조절
+  useEffect(() => {
+    if (textareaRef.current) {
+      const textarea = textareaRef.current
+      const maxHeight = window.innerHeight * 0.33 // 화면 높이의 1/3
+      textarea.style.height = 'auto'
+      const newHeight = Math.min(textarea.scrollHeight, maxHeight)
+      textarea.style.height = `${Math.max(60, newHeight)}px`
+      textarea.style.overflowY = textarea.scrollHeight > maxHeight ? 'auto' : 'hidden'
+    }
+  }, [inputMessage])
+
+  // 대화 저장
+  const saveConversations = (updatedConversations: ConversationSession[]) => {
+    if (typeof window === 'undefined') return
+    try {
+      localStorage.setItem('legal_assist_conversations', JSON.stringify(updatedConversations))
+    } catch (error) {
+      console.error('대화 저장 실패:', error)
+    }
   }
 
-  // 질문 필터링
-  const filteredQuestions = QUICK_QUESTIONS.filter(q => {
-    const matchesSearch = questionSearch.trim() === '' || 
-      q.text.toLowerCase().includes(questionSearch.toLowerCase()) ||
-      q.tags.some(tag => tag.toLowerCase().includes(questionSearch.toLowerCase()))
-    const matchesCategory = !selectedCategory || q.category === selectedCategory
-    return matchesSearch && matchesCategory
-  })
+  // 리포트 저장
+  const saveReports = (updatedReports: Report[]) => {
+    if (typeof window === 'undefined') return
+    try {
+      localStorage.setItem('legal_assist_reports', JSON.stringify(updatedReports))
+    } catch (error) {
+      console.error('리포트 저장 실패:', error)
+    }
+  }
 
-  // 카테고리 목록
-  const categories = [
-    { value: null, label: '전체', count: QUICK_QUESTIONS.length },
-    { value: 'probation', label: '수습/해고', count: QUICK_QUESTIONS.filter(q => q.category === 'probation').length },
-    { value: 'unfair_dismissal', label: '부당해고', count: QUICK_QUESTIONS.filter(q => q.category === 'unfair_dismissal').length },
-    { value: 'unpaid_wage', label: '임금/수당', count: QUICK_QUESTIONS.filter(q => q.category === 'unpaid_wage').length },
-    { value: 'overtime', label: '근로시간', count: QUICK_QUESTIONS.filter(q => q.category === 'overtime').length },
-    { value: 'harassment', label: '괴롭힘', count: QUICK_QUESTIONS.filter(q => q.category === 'harassment').length },
-  ]
+  // 질문 요약 생성 (타임라인용)
+  const generateQuestionSummary = (text: string): string => {
+    if (text.length <= 30) return text
+    return text.substring(0, 30) + '...'
+  }
 
-  const handleAnalyze = async () => {
-    if (!question.trim()) {
-      toast({
-        title: '질문을 입력해주세요',
-        description: '무엇이 걱정되시는지 입력해주세요.',
-        variant: 'destructive',
-      })
-      return
+  // 긴급 상황 감지
+  const detectUrgency = (text: string): boolean => {
+    const urgentKeywords = ['긴급', '즉시', '당장', '지금', '바로', '해고', '불법', '위험', '중요']
+    return urgentKeywords.some(keyword => text.includes(keyword))
+  }
+
+  // 메시지 전송
+  const handleSendMessage = async () => {
+    if (!inputMessage.trim() || isAnalyzing) return
+
+    const userMessage: ChatMessage = {
+      id: `msg-${Date.now()}`,
+      role: 'user',
+      content: inputMessage.trim(),
+      timestamp: new Date(),
+      isUrgent: detectUrgency(inputMessage),
     }
 
+    const newMessages = [...messages, userMessage]
+    setMessages(newMessages)
+    setInputMessage('')
     setIsAnalyzing(true)
-    setBurdenType(classifyBurdenType(question))
+
+    // 현재 대화 세션 업데이트 또는 생성
+    let currentSession: ConversationSession
+    if (selectedConversationId) {
+      const existing = conversations.find(c => c.id === selectedConversationId)
+      if (existing) {
+        currentSession = {
+          ...existing,
+          messages: [...existing.messages, userMessage],
+          updatedAt: new Date(),
+        }
+      } else {
+        currentSession = {
+          id: selectedConversationId,
+          title: generateQuestionSummary(inputMessage),
+          messages: [userMessage],
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }
+      }
+    } else {
+      const newSessionId = `conv-${Date.now()}`
+      currentSession = {
+        id: newSessionId,
+        title: generateQuestionSummary(inputMessage),
+        messages: [userMessage],
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }
+      setSelectedConversationId(newSessionId)
+    }
 
     try {
-      // v2 API 요청 형식
+      // API 호출
       const request: SituationRequestV2 = {
-        situation: question.trim(),
+        situation: inputMessage.trim(),
         category: 'unknown',
       }
 
       const result = await analyzeSituationV2(request)
-      
-      // v2 응답을 v1 형식으로 변환 (기존 UI 호환성)
-      const v1Format: SituationAnalysisResponse = {
-        classifiedType: result.tags[0] || 'unknown',
-        riskScore: result.riskScore,
-        summary: result.analysis.summary,
-        criteria: result.analysis.legalBasis.map(basis => ({
-          name: basis.title,
-          status: 'likely' as const,
-          reason: basis.snippet,
-        })),
-        actionPlan: {
-          steps: [
-            {
-              title: '즉시 조치',
-              items: result.checklist.slice(0, 3),
-            },
-            {
-              title: '권고사항',
-              items: result.analysis.recommendations,
-            },
-          ],
-        },
-        scripts: {
-          toCompany: undefined,
-          toAdvisor: undefined,
-        },
-        relatedCases: result.relatedCases.map(c => ({
-          id: c.id,
-          title: c.title,
-          summary: c.summary,
-        })),
+
+      // AI 응답 메시지 생성
+      const assistantMessage: ChatMessage = {
+        id: `msg-${Date.now()}-assistant`,
+        role: 'assistant',
+        content: result.analysis.summary,
+        timestamp: new Date(),
       }
-      
-      setAnalysisResult(v1Format)
-      setRiskScore(result.riskScore)
-      
-      // 위험도가 높으면 증거 수집 가이드 자동 팝업
-      if (result.riskScore > 70) {
-        setTimeout(() => {
-          setShowEvidenceGuide(true)
-        }, 1000)
+
+      // 리포트 생성 여부 판단 (위험도가 높거나 특정 키워드가 있는 경우)
+      const shouldGenerateReport = result.riskScore > 50 || 
+        ['해고', '임금', '체불', '위반', '불법'].some(keyword => inputMessage.includes(keyword))
+
+      if (shouldGenerateReport) {
+        const reportId = `report-${Date.now()}`
+        assistantMessage.reportId = reportId
+
+        // 리포트 생성
+        const report: Report = {
+          id: reportId,
+          question: inputMessage.trim(),
+          answer: result.analysis.summary,
+          legalBasis: result.analysis.legalBasis.map(b => b.snippet),
+          recommendations: result.analysis.recommendations,
+          riskScore: result.riskScore,
+          createdAt: new Date(),
+          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24시간 후
+        }
+
+        const updatedReports = [report, ...reports].slice(0, 5) // 최근 5개만 유지
+        setReports(updatedReports)
+        saveReports(updatedReports)
       }
+
+      const finalMessages = [...newMessages, assistantMessage]
+      setMessages(finalMessages)
+
+      // 대화 세션 업데이트
+      const updatedSession = {
+        ...currentSession,
+        messages: finalMessages,
+        updatedAt: new Date(),
+      }
+
+      const updatedConversations = selectedConversationId
+        ? conversations.map(c => c.id === selectedConversationId ? updatedSession : c)
+        : [updatedSession, ...conversations]
+
+      setConversations(updatedConversations)
+      saveConversations(updatedConversations)
+
     } catch (error: any) {
       console.error('분석 오류:', error)
       toast({
@@ -325,759 +455,538 @@ export default function QuickAssistPage() {
     }
   }
 
-  const handleCopy = (text: string, description: string) => {
+  // 메시지 수정
+  const handleEditMessage = (messageId: string) => {
+    const message = messages.find(m => m.id === messageId)
+    if (message && message.role === 'user') {
+      setEditText(message.content)
+      setEditingMessageId(messageId)
+    }
+  }
+
+  // 메시지 수정 저장
+  const handleSaveEdit = () => {
+    if (!editingMessageId || !editText.trim()) return
+
+    const updatedMessages = messages.map(m =>
+      m.id === editingMessageId ? { ...m, content: editText.trim() } : m
+    )
+    setMessages(updatedMessages)
+
+    // 대화 세션도 업데이트
+    if (selectedConversationId) {
+      const updatedConversations = conversations.map(c =>
+        c.id === selectedConversationId
+          ? { ...c, messages: updatedMessages, updatedAt: new Date() }
+          : c
+      )
+      setConversations(updatedConversations)
+      saveConversations(updatedConversations)
+    }
+
+    setEditingMessageId(null)
+    setEditText('')
+  }
+
+  // 메시지 복사
+  const handleCopyMessage = (text: string) => {
     navigator.clipboard.writeText(text)
     toast({
       title: '복사 완료',
-      description,
+      description: '메시지가 클립보드에 복사되었습니다.',
     })
   }
 
-  const toggleCheckItem = (itemKey: string) => {
-    const newSet = new Set(checkedItems)
-    if (newSet.has(itemKey)) {
-      newSet.delete(itemKey)
-    } else {
-      newSet.add(itemKey)
+  // 리포트 보기
+  const handleViewReport = (reportId: string) => {
+    const report = reports.find(r => r.id === reportId)
+    if (report) {
+      setCurrentReport(report)
+      setShowReportModal(true)
     }
-    setCheckedItems(newSet)
   }
 
-  // 분석 결과 렌더링을 위한 변수 준비
-  const categoryBadge = analysisResult ? getCategoryBadge(burdenType || '기타') : null
-  const riskInfo = riskScore !== null ? getRiskLabel(riskScore) : null
-  const RiskIcon = riskInfo?.icon
-  
-  // 긴급 조치 필요 여부 계산
-  const urgency = riskScore !== null ? getUrgencyLevel(riskScore) : null
-  const UrgencyIcon = urgency?.icon
-  const urgencyText = urgency?.level ? getUrgencyText(urgency.level) : ''
+  // 새 대화 시작
+  const handleNewConversation = () => {
+    setSelectedConversationId(null)
+    setMessages([])
+    setHasInitialGreeting(false)
+  }
+
+  // 대화 선택
+  const handleSelectConversation = (conversationId: string) => {
+    setSelectedConversationId(conversationId)
+  }
+
+  // 상황 템플릿 선택
+  const handleSituationSelect = (situation: typeof COMMON_SITUATIONS[0]) => {
+    // 한 줄 요약 + 폼 형식 예시 텍스트 조합
+    const fullText = `${situation.text}\n\n사용자님의 상황과 함께\n\n${situation.exampleForm}`
+    setInputMessage(fullText)
+    // 입력창으로 포커스 이동
+    setTimeout(() => {
+      const textarea = document.querySelector('textarea')
+      if (textarea) {
+        textarea.focus()
+        textarea.setSelectionRange(textarea.value.length, textarea.value.length)
+      }
+    }, 100)
+  }
+
+  // 날짜 포맷팅
+  const formatDate = (date: Date): string => {
+    const today = new Date()
+    const yesterday = new Date(today)
+    yesterday.setDate(yesterday.getDate() - 1)
+
+    if (date.toDateString() === today.toDateString()) {
+      return '오늘'
+    } else if (date.toDateString() === yesterday.toDateString()) {
+      return '어제'
+    } else {
+      return `${date.getMonth() + 1}/${date.getDate()}`
+    }
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/20 to-slate-50">
-      <div className="container mx-auto px-4 sm:px-6 py-8 sm:py-12 max-w-4xl">
-        {/* Header */}
-        <div className="mb-8">
-          <Button
-            variant="ghost"
-            onClick={() => router.push('/legal/assist')}
-            className="mb-6 text-slate-600 hover:text-slate-900"
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            상담 허브로 돌아가기
-          </Button>
-          
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-indigo-500 text-white rounded-full mb-4 shadow-lg">
-              <Zap className="w-5 h-5" />
-              <span className="font-semibold">즉시 상담</span>
+      <div className="flex h-screen">
+        {/* 사이드바 (왼쪽 20%) */}
+        <div className="w-1/5 border-r border-slate-200 flex flex-col bg-gradient-to-br from-blue-600 to-indigo-600">
+          <div className="p-4 border-b border-slate-300">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <MessageSquare className="w-5 h-5" />
+                대화 내역
+              </h2>
+              <Button
+                onClick={handleNewConversation}
+                size="sm"
+                className="bg-white/20 hover:bg-white/30 text-white border-0"
+              >
+                <Zap className="w-4 h-4" />
+              </Button>
             </div>
-            <h1 className="text-4xl md:text-5xl font-extrabold mb-4 bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-              무엇이 걱정되시나요?
-            </h1>
-            <p className="text-lg md:text-xl text-slate-600 max-w-2xl mx-auto">
-              자연어 질문만으로 법적 위험도·조항·상황 유형을 자동 분류하고,
-              <br />
-              위반 가능성과 핵심 권리, 조문 근거를 즉시 요약해드립니다.
-            </p>
+          </div>
+          
+          <div className="flex-1 overflow-y-auto">
+            {conversations.length === 0 ? (
+              <div className="p-4 text-center text-white/70 text-sm">
+                대화 내역이 없습니다
+              </div>
+            ) : (
+              <div className="p-2 space-y-1">
+                {conversations.map((conv) => (
+                  <button
+                    key={conv.id}
+                    onClick={() => handleSelectConversation(conv.id)}
+                    className={cn(
+                      "w-full text-left p-3 rounded-lg transition-all",
+                      selectedConversationId === conv.id
+                        ? "bg-white/20 text-white"
+                        : "hover:bg-white/10 text-white/80"
+                    )}
+                  >
+                    <div className="flex items-start gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs text-white/60 mb-1">
+                          {formatDate(conv.updatedAt)}
+                        </div>
+                        <div className="text-sm font-medium truncate">
+                          {conv.title}
+                        </div>
+                      </div>
+                      {conv.messages.some(m => m.isUrgent) && (
+                        <span className="text-lg">🚨</span>
+                      )}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
-        {/* 입력 영역 */}
-        {!analysisResult && (
-          <div className="space-y-6">
-            {/* 큰 입력창 (ChatGPT 스타일) */}
-            <Card className="border-2 border-blue-200 shadow-xl bg-white">
-              <CardContent className="p-6">
-                <div className="space-y-4">
-                  <Textarea
-                    value={question}
-                    onChange={(e) => {
-                      setQuestion(e.target.value)
-                      setBurdenType(classifyBurdenType(e.target.value))
-                    }}
-                    placeholder="예: 수습 중인데 갑자기 해고 통보를 받았어요. 이게 합법인가요?"
-                    className="min-h-[200px] text-base border-2 border-slate-300 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 rounded-xl resize-none"
-                  />
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      {burdenType && (
-                        <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">
-                          {burdenType} 관련
-                        </span>
-                      )}
-                    </div>
-                    <Button
-                      onClick={handleAnalyze}
-                      disabled={isAnalyzing || !question.trim()}
-                      className={cn(
-                        "bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg",
-                        "disabled:opacity-50 disabled:cursor-not-allowed"
-                      )}
-                    >
-                      {isAnalyzing ? (
-                        <>
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          분석 중...
-                        </>
-                      ) : (
-                        <>
-                          <Send className="w-4 h-4 mr-2" />
-                          분석 받기
-                        </>
-                      )}
-                    </Button>
-                  </div>
+        {/* 메인 채팅 영역 (오른쪽 80%) */}
+        <div className="flex-1 flex flex-col bg-white relative">
+          {/* 헤더 */}
+          <div className="p-4 border-b border-slate-200 bg-white flex-shrink-0">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Button
+                  variant="ghost"
+                  onClick={() => router.push('/legal/assist')}
+                  className="text-slate-600 hover:text-slate-900"
+                >
+                  <ArrowLeft className="w-4 h-4 mr-2" />
+                  상담 허브로 돌아가기
+                </Button>
+                <div className="flex items-center gap-2">
+                  <Scale className="w-5 h-5 text-blue-600" />
+                  <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                    즉시 상담
+                  </h1>
                 </div>
-              </CardContent>
-            </Card>
-
-            {/* 대표 질문 버튼 - 강화된 버전 */}
-            <Card className="border-2 border-slate-200 shadow-lg bg-white/80 backdrop-blur-sm">
-              <CardHeader>
-                <div className="flex items-center justify-between mb-4">
-                  <CardTitle className="text-lg font-bold flex items-center gap-2">
-                    <Sparkles className="w-5 h-5 text-blue-600" />
-                    자주 묻는 질문
-                  </CardTitle>
-                  <span className="text-xs text-slate-500">
-                    {filteredQuestions.length}개 질문
-                  </span>
-                </div>
-                
-                {/* 검색 및 필터 */}
-                <div className="space-y-3">
-                  {/* 검색창 */}
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <Input
-                      value={questionSearch}
-                      onChange={(e) => setQuestionSearch(e.target.value)}
-                      placeholder="질문 검색... (예: 해고, 임금, 야근)"
-                      className="pl-10 h-10 text-sm border-2 border-slate-300 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
-                    />
-                    {questionSearch && (
-                      <button
-                        onClick={() => setQuestionSearch('')}
-                        className="absolute right-3 top-1/2 transform -translate-y-1/2 p-1 hover:bg-slate-100 rounded"
-                      >
-                        <X className="w-4 h-4 text-slate-400" />
-                      </button>
-                    )}
-                  </div>
-
-                  {/* 카테고리 필터 */}
-                  <div className="flex flex-wrap gap-2">
-                    {categories.map((cat) => (
-                      <button
-                        key={cat.value || 'all'}
-                        onClick={() => setSelectedCategory(cat.value)}
-                        className={cn(
-                          "px-3 py-1.5 rounded-full text-xs font-semibold transition-all",
-                          selectedCategory === cat.value
-                            ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-md"
-                            : "bg-white border-2 border-slate-300 text-slate-700 hover:border-blue-400 hover:bg-blue-50"
-                        )}
-                      >
-                        {cat.label} ({cat.count})
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {filteredQuestions.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Search className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                    <p className="text-sm text-slate-600">
-                      검색 결과가 없습니다. 다른 키워드로 검색해보세요.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {filteredQuestions.map((q, index) => {
-                      const Icon = q.icon
-                      return (
-                        <button
-                          key={index}
-                          onClick={() => handleQuickQuestion(q)}
-                          className="p-4 text-left border-2 border-slate-200 rounded-xl hover:border-blue-400 hover:bg-blue-50 transition-all bg-white group"
-                        >
-                          <div className="flex items-start gap-3">
-                            <div className="p-2 bg-blue-100 rounded-lg group-hover:bg-blue-200 transition-colors flex-shrink-0">
-                              <Icon className="w-4 h-4 text-blue-600" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium text-slate-900 mb-2 leading-relaxed">
-                                {q.text}
-                              </p>
-                              <div className="flex flex-wrap gap-1">
-                                {q.tags.map((tag, tagIndex) => (
-                                  <span
-                                    key={tagIndex}
-                                    className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-[10px] font-medium"
-                                  >
-                                    #{tag}
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-                          </div>
-                        </button>
-                      )
-                    })}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+              </div>
+              <Button
+                variant="ghost"
+                onClick={() => setShowArchiveModal(true)}
+                className="text-slate-600 hover:text-slate-900"
+              >
+                <FolderArchive className="w-5 h-5 mr-2" />
+                리포트 아카이브
+              </Button>
+            </div>
           </div>
-        )}
 
-        {/* 분석 결과 */}
-        {analysisResult && categoryBadge && (
-          <div className="space-y-6">
-            {/* ① 상단 결과 헤더 (AI 진단 박스) */}
-            <Card className="border-2 border-blue-300 shadow-xl bg-gradient-to-br from-white to-blue-50/30">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-center gap-4 flex-wrap mb-4">
+          {/* 채팅 메시지 영역 */}
+          <div ref={chatContainerRef} className="flex-1 overflow-y-auto p-6 space-y-4" style={{ paddingBottom: '200px' }}>
+            {messages.map((message) => (
                   <div
+                    key={message.id}
                     className={cn(
-                      "px-5 py-3 border-2 rounded-xl shadow-sm flex items-center gap-2",
-                      categoryBadge.bg,
-                      categoryBadge.color
+                      "flex gap-3",
+                      message.role === 'user' ? 'justify-end' : 'justify-start'
                     )}
                   >
-                    <span className="text-2xl">{categoryBadge.emoji}</span>
-                    <span className="text-base font-bold">{categoryBadge.label}</span>
-                  </div>
-                  {riskScore !== null && riskInfo && RiskIcon && (
-                    <div
-                      className={cn(
-                        "px-5 py-3 border-2 rounded-xl shadow-sm flex items-center gap-2",
-                        riskInfo.bg,
-                        riskInfo.border
-                      )}
-                    >
-                      <RiskIcon className="w-5 h-5" />
-                      <span className="text-xs font-semibold uppercase tracking-wide mr-2">위험도:</span>
-                      <span className={cn("text-base font-extrabold", riskInfo.color)}>
-                        {riskInfo.label} ({riskScore}%)
-                      </span>
-                    </div>
-                  )}
-                </div>
-                <div className="text-center">
-                  <p className="text-base text-slate-700 leading-relaxed">
-                    현재 상황은 <strong className="text-blue-700">{burdenType || '법적 문제'}</strong>에 해당하며,
-                    법적 기준과 비교해 <strong className="text-red-700">위험도 {riskScore}%</strong>로 평가됩니다.
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* ② 핵심 판단 카드 (3-4개) */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* 법적 판단 요약 카드 */}
-              <Card className="border-2 border-blue-200 shadow-lg bg-white">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-bold flex items-center gap-2">
-                    <Scale className="w-4 h-4 text-blue-600" />
-                    법적 판단 요약
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    {(analysisResult.criteria || []).slice(0, 2).map((criterion, index) => (
-                      <p key={index} className="text-xs text-slate-700 leading-relaxed">
-                        • {criterion.reason || criterion.name}
-                      </p>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* 현재 위험 수준 카드 */}
-              {riskScore !== null && (
-                <Card className="border-2 border-amber-200 shadow-lg bg-white">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-sm font-bold flex items-center gap-2">
-                      <Shield className="w-4 h-4 text-amber-600" />
-                      현재 위험 수준
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-3">
-                      <div className="relative h-3 bg-slate-200 rounded-full overflow-hidden">
-                        <div
-                          className={cn(
-                            "h-full rounded-full transition-all",
-                            riskScore > 70 ? "bg-red-500" : riskScore > 40 ? "bg-amber-500" : "bg-green-500"
-                          )}
-                          style={{ width: `${riskScore}%` }}
-                        />
+                    {message.role === 'assistant' && (
+                      <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">
+                        <Bot className="w-4 h-4 text-slate-600" />
                       </div>
-                      <p className="text-xs text-slate-600">
-                        위험도: {riskScore}% ({riskScore > 70 ? '높음' : riskScore > 40 ? '중간' : '낮음'})
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* 긴급 조치 필요 여부 카드 */}
-              {riskScore !== null && urgency && UrgencyIcon && (
-                <Card key="urgency-card" className={cn("border-2 shadow-lg", urgency.border, urgency.bg)}>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-sm font-bold flex items-center gap-2">
-                      <UrgencyIcon className={cn("w-4 h-4", urgency.color)} />
-                      <span className={urgency.color}>긴급 조치 필요 여부</span>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className={cn("text-sm font-semibold", urgency.color)}>
-                      {urgencyText}
-                    </p>
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* 상황 태그 자동 추출 카드 */}
-              <Card className="border-2 border-purple-200 shadow-lg bg-white">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-bold flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-purple-600" />
-                    상황 태그
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex flex-wrap gap-2">
-                    {question.split(' ').filter(word => word.length > 2).slice(0, 5).map((tag, index) => (
-                      <span
-                        key={index}
-                        className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-medium"
-                      >
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* 법적 관점 요약 */}
-            <Card className="border-2 border-blue-300 shadow-xl bg-gradient-to-br from-white to-blue-50/30">
-              <CardHeader>
-                <CardTitle className="text-xl flex items-center gap-3">
-                  <Scale className="w-5 h-5 text-blue-600" />
-                  <span className="font-bold">법적 관점 요약</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {(analysisResult.criteria || []).map((criterion, index) => (
-                    <div key={index} className="flex items-start gap-3 p-3 bg-white rounded-lg border border-blue-100 shadow-sm">
-                      <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center mt-0.5">
-                        <span className="text-blue-600 font-bold text-xs">{index + 1}</span>
-                      </div>
-                      <p className="text-sm text-slate-700 leading-relaxed flex-1">
-                        {criterion.reason || `${criterion.name}: ${criterion.status === 'likely' ? '충족' : criterion.status === 'unclear' ? '부분 충족' : '불충족'}`}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* ③ 증거 수집 체크리스트 */}
-            <Card className="border-2 border-emerald-300 shadow-xl bg-gradient-to-br from-white to-emerald-50/30">
-              <CardHeader>
-                <CardTitle className="text-xl flex items-center gap-3">
-                  <FileText className="w-5 h-5 text-emerald-600" />
-                  <span className="font-bold">증거 수집 체크리스트</span>
-                </CardTitle>
-                <p className="text-sm text-slate-600 mt-2">
-                  완료한 항목은 체크해 두면, 다음에 다시 봐도 진행 상황을 기억하기 쉽습니다.
-                </p>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {[
-                    '서면/카톡/이메일로 해고 통보 여부 확인',
-                    '근로계약서 사본 확보',
-                    '근무시간 기록(캘린더, 퇴근 로그, 메시지)',
-                    '녹취가 필요한 경우 가능한 상황 여부 안내',
-                    '5인 미만 사업장 여부 확인',
-                    '급여명세서 및 수당 지급 내역',
-                    '출퇴근 기록 및 근무일지',
-                  ].map((item, index) => {
-                    const itemKey = `evidence-${index}`
-                    return (
+                    )}
+                    
+                    <div className={cn(
+                      "flex flex-col gap-1 max-w-[70%]",
+                      message.role === 'user' ? 'items-end' : 'items-start'
+                    )}>
                       <div
-                        key={itemKey}
                         className={cn(
-                          "flex items-start gap-4 p-4 bg-white border-2 rounded-xl transition-all cursor-pointer",
-                          checkedItems.has(itemKey)
-                            ? "border-emerald-400 bg-gradient-to-r from-emerald-50 to-green-50 shadow-md"
-                            : "border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/50"
+                          "rounded-2xl px-4 py-3 shadow-sm",
+                          message.role === 'user'
+                            ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-br-md"
+                            : "bg-white border border-slate-200 text-slate-900 rounded-bl-md",
+                          message.isUrgent && message.role === 'user' && "border-2 border-red-400"
                         )}
-                        onClick={() => toggleCheckItem(itemKey)}
                       >
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            toggleCheckItem(itemKey)
-                          }}
-                          className={cn(
-                            "flex-shrink-0 w-6 h-6 rounded-lg border-2 flex items-center justify-center mt-0.5 transition-all",
-                            checkedItems.has(itemKey)
-                              ? 'bg-gradient-to-br from-emerald-500 to-green-600 border-emerald-600'
-                              : 'border-slate-300 bg-white hover:border-emerald-400'
-                          )}
-                        >
-                          {checkedItems.has(itemKey) && (
-                            <CheckCircle2 className="w-4 h-4 text-white" />
-                          )}
-                        </button>
-                        <p className={cn(
-                          "flex-1 text-sm leading-relaxed",
-                          checkedItems.has(itemKey) ? "text-emerald-900 font-medium" : "text-slate-700"
-                        )}>
-                          ☑︎ {item}
+                        {message.isUrgent && message.role === 'user' && (
+                          <div className="flex items-center gap-1 mb-2">
+                            <span className="text-lg">🚨</span>
+                            <span className="text-xs font-semibold">긴급 상황</span>
+                          </div>
+                        )}
+                        <p className="whitespace-pre-wrap text-sm leading-relaxed" style={{ fontFamily: 'Noto Sans KR, sans-serif' }}>
+                          {message.content}
                         </p>
                       </div>
-                    )
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* ④ 다음 단계 액션 플로우 (3단계) */}
-            <Card className="border-2 border-purple-300 shadow-xl bg-gradient-to-br from-white to-purple-50/30">
-              <CardHeader>
-                <CardTitle className="text-xl flex items-center gap-3">
-                  <ArrowRight className="w-5 h-5 text-purple-600" />
-                  <span className="font-bold">다음 단계 액션 플로우</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-6">
-                  {/* 1단계: 사실관계 정리 */}
-                  <div className="border-2 border-blue-200 rounded-xl p-5 bg-gradient-to-br from-blue-50 to-indigo-50">
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold">
-                        1
-                      </div>
-                      <h3 className="text-base font-bold text-slate-900">사실관계 정리</h3>
-                    </div>
-                    <ul className="space-y-2 ml-11">
-                      {['해고 통보일자 정리', '수습기간 계약일 확인', '근무 기간 및 근무 시간 기록', '관련 문서 및 증거 수집'].map((item, index) => (
-                        <li key={index} className="flex items-start gap-2 text-sm text-slate-700">
-                          <span className="text-blue-600 mt-1">•</span>
-                          <span>{item}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  {/* 2단계: 법적 절차 */}
-                  <div className="border-2 border-amber-200 rounded-xl p-5 bg-gradient-to-br from-amber-50 to-orange-50">
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="w-8 h-8 rounded-full bg-amber-600 text-white flex items-center justify-center font-bold">
-                        2
-                      </div>
-                      <h3 className="text-base font-bold text-slate-900">법적 절차</h3>
-                    </div>
-                    <ul className="space-y-2 ml-11">
-                      <li className="flex items-start gap-2 text-sm text-slate-700">
-                        <span className="text-amber-600 mt-1">•</span>
-                        <span>노동청 신고 루트 확인</span>
-                      </li>
-                      <li className="flex items-start gap-2 text-sm text-slate-700">
-                        <span className="text-amber-600 mt-1">•</span>
-                        <span>직장 내 괴롭힘 신고 양식 작성</span>
-                      </li>
-                      <li className="flex items-start gap-2 text-sm text-slate-700">
-                        <span className="text-amber-600 mt-1">•</span>
-                        <span>노무사 상담 필요 여부 판단</span>
-                      </li>
-                    </ul>
-                  </div>
-
-                  {/* 3단계: 실제로 사용할 메시지 템플릿 */}
-                  <div className="border-2 border-emerald-200 rounded-xl p-5 bg-gradient-to-br from-emerald-50 to-green-50">
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="w-8 h-8 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold">
-                        3
-                      </div>
-                      <h3 className="text-base font-bold text-slate-900">실제로 사용할 메시지 템플릿</h3>
-                    </div>
-                    <div className="ml-11 space-y-4">
-                      {analysisResult.scripts?.toCompany && (
-                        <div>
-                          <p className="text-xs font-semibold text-slate-600 mb-2">회사에 전달할 메시지 예시:</p>
-                          <div className="bg-white border-2 border-emerald-200 rounded-lg p-4">
-                            <p className="text-sm text-slate-700 whitespace-pre-line leading-relaxed">
-                              {analysisResult.scripts.toCompany}
-                            </p>
+                      
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-slate-500">
+                          {message.timestamp.toLocaleTimeString('ko-KR', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </span>
+                        {message.role === 'user' && (
+                          <div className="flex gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEditMessage(message.id)}
+                              className="h-6 px-2 text-slate-500 hover:text-slate-900"
+                            >
+                              <Edit className="w-3 h-3" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleCopyMessage(message.content)}
+                              className="h-6 px-2 text-slate-500 hover:text-slate-900"
+                            >
+                              <Copy className="w-3 h-3" />
+                            </Button>
                           </div>
+                        )}
+                        {message.role === 'assistant' && message.reportId && (
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => handleCopy(analysisResult.scripts?.toCompany || '', '메시지 템플릿이 복사되었습니다')}
-                            className="mt-2 border-emerald-300 hover:bg-emerald-50"
+                            onClick={() => handleViewReport(message.reportId!)}
+                            className="h-6 px-2 text-xs border-slate-300"
                           >
-                            <Copy className="w-4 h-4 mr-1.5" />
-                            바로 복사하기
+                            <FileText className="w-3 h-3 mr-1" />
+                            리포트 보기
                           </Button>
-                        </div>
-                      )}
+                        )}
+                      </div>
+                    </div>
+
+                    {message.role === 'user' && (
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-blue-100">
+                        <User className="w-4 h-4 text-blue-600" />
+                      </div>
+                    )}
+                  </div>
+                ))}
+                
+                {isAnalyzing && (
+                  <div className="flex gap-3 justify-start">
+                    <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0">
+                      <Bot className="w-4 h-4 text-slate-600" />
+                    </div>
+                    <div className="bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3">
+                      <Loader2 className="w-5 h-5 animate-spin text-slate-600" />
                     </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
+                )}
+                <div ref={messagesEndRef} />
+          </div>
 
-            {/* ⑤ 공공기관 바로가기 */}
-            <Card className="border-2 border-blue-200 shadow-lg bg-white">
-              <CardHeader>
-                <CardTitle className="text-lg font-bold flex items-center gap-2">
-                  <Phone className="w-5 h-5 text-blue-600" />
-                  공공기관 바로가기
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <Button
-                    onClick={() => window.open('tel:1350')}
-                    className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg"
-                  >
-                    <Phone className="w-4 h-4 mr-2" />
-                    고용노동부 전화 1350
-                  </Button>
-                  <Button
-                    onClick={() => window.open('https://www.moel.go.kr/info/publict/publictNoticeView.do?bbs_seq=20241201001', '_blank')}
-                    variant="outline"
-                    className="w-full border-2 border-blue-300 hover:bg-blue-50"
-                  >
-                    <FileText className="w-4 h-4 mr-2" />
-                    직장 내 괴롭힘 신고센터
-                  </Button>
-                  <Button
-                    onClick={() => window.open('https://www.klac.or.kr/', '_blank')}
-                    variant="outline"
-                    className="w-full border-2 border-blue-300 hover:bg-blue-50"
-                  >
-                    <FileText className="w-4 h-4 mr-2" />
-                    무료 노동상담센터
-                  </Button>
-                  <Button
-                    onClick={() => window.open('https://www.klaf.or.kr/', '_blank')}
-                    variant="outline"
-                    className="w-full border-2 border-blue-300 hover:bg-blue-50"
-                  >
-                    <FileText className="w-4 h-4 mr-2" />
-                    대한법률구조공단
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* ⑥ AI 챗 상담 이어가기 */}
-            <Card className="border-2 border-purple-200 shadow-lg bg-gradient-to-br from-purple-50 to-indigo-50">
-              <CardHeader>
-                <CardTitle className="text-lg font-bold flex items-center gap-2">
-                  <MessageSquare className="w-5 h-5 text-purple-600" />
-                  AI 챗 상담 이어가기
-                </CardTitle>
-                <p className="text-sm text-slate-600 mt-2">
-                  추가로 궁금한 점이 있으시면 계속 질문하실 수 있습니다.
-                </p>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setQuestion('이 상황에서 근로계약서도 같이 점검할래요')
-                      setAnalysisResult(null)
-                    }}
-                    className="border-purple-300 hover:bg-purple-50"
-                  >
-                    <FileText className="w-4 h-4 mr-2" />
-                    근로계약서 점검
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setQuestion('해고 대응 메시지 만들어줘')
-                      setAnalysisResult(null)
-                    }}
-                    className="border-purple-300 hover:bg-purple-50"
-                  >
-                    <MessageSquare className="w-4 h-4 mr-2" />
-                    해고 대응 메시지
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setQuestion('노무사에게 전달할 사건 요약 만들어줘')
-                      setAnalysisResult(null)
-                    }}
-                    className="border-purple-300 hover:bg-purple-50"
-                  >
-                    <FileText className="w-4 h-4 mr-2" />
-                    노무사 요약
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* 스크립트 및 행동 버튼 */}
-            {(analysisResult.scripts?.toCompany || analysisResult.scripts?.toAdvisor) && (
-              <Card className="border-2 border-purple-300 shadow-xl bg-gradient-to-br from-white to-purple-50/30">
-                <CardHeader>
-                  <CardTitle className="text-xl flex items-center gap-3">
-                    <MessageSquare className="w-5 h-5 text-purple-600" />
-                    <span className="font-bold">이렇게 말해보세요</span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-5">
-                    {analysisResult.scripts?.toCompany && (
-                      <div className="border-2 border-purple-200 rounded-xl p-5 bg-gradient-to-br from-purple-50/80 to-indigo-50/50">
-                        <div className="flex items-center justify-between mb-4">
-                          <span className="text-sm font-bold text-slate-900">회사에 말할 때</span>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleCopy(analysisResult.scripts?.toCompany || '', '회사 메시지 템플릿이 복사되었습니다')}
-                            className="bg-white hover:bg-purple-50 border-purple-300"
-                          >
-                            <Copy className="w-4 h-4 mr-1.5" />
-                            복사
-                          </Button>
-                        </div>
-                        <div className="bg-white border-2 border-purple-200 rounded-xl p-5">
-                          <p className="text-sm text-slate-700 whitespace-pre-line leading-relaxed">
-                            {analysisResult.scripts.toCompany}
-                          </p>
-                        </div>
-                      </div>
-                    )}
-
-                    {analysisResult.scripts?.toAdvisor && (
-                      <div className="border-2 border-blue-200 rounded-xl p-5 bg-gradient-to-br from-blue-50/80 to-indigo-50/50">
-                        <div className="flex items-center justify-between mb-4">
-                          <span className="text-sm font-bold text-slate-900">공공 기관 상담 시</span>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleCopy(analysisResult.scripts?.toAdvisor || '', '상담 템플릿이 복사되었습니다')}
-                            className="bg-white hover:bg-blue-50 border-blue-300"
-                          >
-                            <Copy className="w-4 h-4 mr-1.5" />
-                            복사
-                          </Button>
-                        </div>
-                        <div className="bg-white border-2 border-blue-200 rounded-xl p-5">
-                          <p className="text-sm text-slate-700 whitespace-pre-line leading-relaxed">
-                            {analysisResult.scripts.toAdvisor}
-                          </p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* 행동 버튼 3종 */}
-                  <div className="mt-6 pt-5 border-t-2 border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        const textToCopy = analysisResult.scripts?.toCompany || analysisResult.scripts?.toAdvisor || ''
-                        handleCopy(textToCopy, '수정 예시가 복사되었습니다')
-                      }}
-                      className="border-slate-300 hover:bg-slate-50"
+          {/* 입력 영역 - 화면 하단 고정 */}
+          <div className="absolute bottom-0 left-0 right-0 border-t border-slate-200 bg-white/95 backdrop-blur-sm shadow-lg z-10">
+            {/* 자주 있는 상황 태그 버튼 */}
+            <div className="px-4 pt-3 pb-2 border-b border-slate-100">
+              <div className="flex items-center gap-2 mb-2">
+                <Sparkles className="w-4 h-4 text-blue-600" />
+                <span className="text-xs font-semibold text-slate-600">자주 있는 상황:</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {COMMON_SITUATIONS.map((situation, index) => {
+                  const Icon = situation.icon
+                  return (
+                    <button
+                      key={index}
+                      onClick={() => handleSituationSelect(situation)}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all",
+                        "bg-white border border-slate-300 text-slate-700",
+                        "hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700 hover:shadow-sm",
+                        "active:scale-95"
+                      )}
                     >
-                      <Copy className="w-4 h-4 mr-2" />
-                      수정 예시 복사
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => setShowEvidenceGuide(true)}
-                      className="border-slate-300 hover:bg-slate-50"
-                    >
-                      <FileText className="w-4 h-4 mr-2" />
-                      증거 수집 가이드
-                    </Button>
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        const caseData = {
-                          question,
-                          burdenType,
-                          riskScore,
-                          analysisResult,
-                          timestamp: new Date().toISOString(),
+                      <Icon className="w-3.5 h-3.5" />
+                      <span>{situation.title}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+            
+            {/* 입력창 */}
+            <div className="p-4 space-y-4">
+              {/* 한 줄 요약 */}
+              <div>
+                <div className="text-xs font-semibold text-slate-700 mb-2">
+                  <span className="text-red-500">*</span> 한 줄로 상황을 요약해 주세요
+                </div>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Textarea
+                      ref={textareaRef}
+                      value={inputMessage}
+                      onChange={(e) => setInputMessage(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault()
+                          handleSendMessage()
                         }
-                        localStorage.setItem('myCase', JSON.stringify(caseData))
-                        toast({
-                          title: '저장 완료',
-                          description: '나의 상황이 저장되었습니다.',
-                        })
                       }}
-                      className="border-slate-300 hover:bg-slate-50"
-                    >
-                      <FileText className="w-4 h-4 mr-2" />
-                      나의 상황 저장
-                    </Button>
+                      placeholder="예: 단톡방/회의에서 모욕적인 말을 들어요"
+                      style={{
+                        minHeight: '60px',
+                        maxHeight: '33vh',
+                        overflowY: 'auto',
+                        resize: 'none',
+                      }}
+                      className="border-2 border-slate-300 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 pr-12"
+                    />
+                    <div className="absolute bottom-2 right-2 text-xs text-slate-400 pointer-events-none">
+                      {inputMessage.length}자
+                    </div>
                   </div>
-              </CardContent>
-            </Card>
-            )}
-
-            {/* 다시 분석하기 */}
-            <div className="flex gap-4 pt-4">
-              <Button
-                onClick={() => {
-                  setAnalysisResult(null)
-                  setQuestion('')
-                  setBurdenType('')
-                  setRiskScore(null)
-                }}
-                variant="outline"
-                className="flex-1 border-2 border-slate-300"
-              >
-                다시 질문하기
-              </Button>
-              <Button
-                onClick={() => router.push('/legal/assist')}
-                className="flex-1 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white"
-              >
-                상담 허브로 돌아가기
-              </Button>
+                  <Button
+                    onClick={handleSendMessage}
+                    disabled={!inputMessage.trim() || isAnalyzing}
+                    className={cn(
+                      "px-6 bg-gradient-to-r text-white shadow-md h-[60px]",
+                      PRIMARY_GRADIENT,
+                      PRIMARY_GRADIENT_HOVER,
+                      "disabled:opacity-50 disabled:cursor-not-allowed"
+                    )}
+                  >
+                    {isAnalyzing ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Send className="w-4 h-4" />
+                    )}
+                  </Button>
+                </div>
+                {inputMessage.trim() && (
+                  <div className="mt-1 flex items-center gap-1 text-xs text-green-600">
+                    <CheckCircle2 className="w-3 h-3" />
+                    <span>입력 완료</span>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
-        )}
-
-        {/* 로딩 상태 */}
-        {isAnalyzing && (
-          <Card className="border-2 border-blue-200 shadow-lg">
-            <CardContent className="p-12 text-center">
-              <Loader2 className="w-12 h-12 animate-spin text-blue-600 mx-auto mb-4" />
-              <p className="text-lg font-semibold text-slate-900">분석 중...</p>
-              <p className="text-sm text-slate-600 mt-2">법적 위험도를 분석하고 있습니다</p>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* 증거 수집 가이드 모달 */}
-        <EvidenceGuideModal
-          open={showEvidenceGuide}
-          onOpenChange={setShowEvidenceGuide}
-          situationType={burdenType}
-        />
+        </div>
       </div>
+
+      {/* 메시지 수정 모달 */}
+      <Dialog open={editingMessageId !== null} onOpenChange={(open) => !open && setEditingMessageId(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>메시지 수정</DialogTitle>
+          </DialogHeader>
+          <Textarea
+            value={editText}
+            onChange={(e) => setEditText(e.target.value)}
+            className="min-h-[120px]"
+            style={{ fontFamily: 'Noto Sans KR, sans-serif' }}
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setEditingMessageId(null)}>
+              취소
+            </Button>
+            <Button 
+              onClick={handleSaveEdit} 
+              className={cn("bg-gradient-to-r text-white", PRIMARY_GRADIENT, PRIMARY_GRADIENT_HOVER)}
+            >
+              저장
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 리포트 모달 */}
+      <Dialog open={showReportModal} onOpenChange={setShowReportModal}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+              <Scroll className="w-5 h-5 text-blue-600" />
+              법적 조언 리포트
+            </DialogTitle>
+          </DialogHeader>
+          {currentReport && (
+            <div className="space-y-6">
+              <div>
+                <h3 className="font-bold mb-2 text-blue-600">질문</h3>
+                <p className="text-slate-700">{currentReport.question}</p>
+              </div>
+              <div>
+                <h3 className="font-bold mb-2 text-blue-600">법적 조언</h3>
+                <p className="text-slate-700 whitespace-pre-wrap">{currentReport.answer}</p>
+              </div>
+              {currentReport.riskScore !== undefined && (
+                <div>
+                  <h3 className="font-bold mb-2 text-blue-600">위험도</h3>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 h-3 bg-slate-200 rounded-full overflow-hidden">
+                      <div
+                        className={cn(
+                          "h-full rounded-full",
+                          currentReport.riskScore > 70 ? "bg-red-500" : 
+                          currentReport.riskScore > 40 ? "bg-amber-500" : "bg-green-500"
+                        )}
+                        style={{ width: `${currentReport.riskScore}%` }}
+                      />
+                    </div>
+                    <span className="text-sm font-semibold">{currentReport.riskScore}%</span>
+                  </div>
+                </div>
+              )}
+              {currentReport.legalBasis.length > 0 && (
+                <div>
+                  <h3 className="font-bold mb-2 text-blue-600">참조 법조문</h3>
+                  <ul className="space-y-2">
+                    {currentReport.legalBasis.map((basis, index) => (
+                      <li key={index} className="text-sm text-slate-700 pl-4 border-l-2 border-slate-200">
+                        {basis}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {currentReport.recommendations.length > 0 && (
+                <div>
+                  <h3 className="font-bold mb-2 text-blue-600">권장 실행 단계</h3>
+                  <ol className="space-y-2">
+                    {currentReport.recommendations.map((rec, index) => (
+                      <li key={index} className="text-sm text-slate-700 pl-4">
+                        <span className="font-semibold">{index + 1}.</span> {rec}
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              )}
+              <div className="text-xs text-slate-500 pt-4 border-t">
+                생성일: {currentReport.createdAt.toLocaleString('ko-KR')} | 
+                만료일: {currentReport.expiresAt.toLocaleString('ko-KR')} (24시간 후 자동 삭제)
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* 리포트 아카이브 모달 */}
+      <Dialog open={showArchiveModal} onOpenChange={setShowArchiveModal}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+              <FolderArchive className="w-5 h-5 text-blue-600" />
+              리포트 아카이브 (최근 5개)
+            </DialogTitle>
+          </DialogHeader>
+          {reports.length === 0 ? (
+            <div className="text-center py-8 text-slate-500">
+              저장된 리포트가 없습니다.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {reports.map((report) => (
+                <Card
+                  key={report.id}
+                  className="cursor-pointer hover:shadow-md transition-shadow"
+                  onClick={() => {
+                    setCurrentReport(report)
+                    setShowArchiveModal(false)
+                    setShowReportModal(true)
+                  }}
+                >
+                  <CardContent className="p-4">
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <h4 className="font-semibold mb-1 text-sm text-blue-600">
+                          {generateQuestionSummary(report.question)}
+                        </h4>
+                        <p className="text-xs text-slate-500 mb-2">
+                          {report.createdAt.toLocaleString('ko-KR')}
+                        </p>
+                        {report.riskScore !== undefined && (
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
+                              <div
+                                className={cn(
+                                  "h-full rounded-full",
+                                  report.riskScore > 70 ? "bg-red-500" : 
+                                  report.riskScore > 40 ? "bg-amber-500" : "bg-green-500"
+                                )}
+                                style={{ width: `${report.riskScore}%` }}
+                              />
+                            </div>
+                            <span className="text-xs font-semibold">{report.riskScore}%</span>
+                          </div>
+                        )}
+                      </div>
+                      <FileText className="w-5 h-5 text-slate-400" />
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
-
