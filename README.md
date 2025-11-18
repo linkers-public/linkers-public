@@ -1,5 +1,6 @@
 # Linkus Legal - 청년 법률 리스크 탐지 플랫폼
 [2025년 새싹 해커톤 AI 서비스 기획서 양식.docx (1).pdf](https://github.com/user-attachments/files/23615180/2025.AI.docx.1.pdf)
+영상 링크 : https://drive.google.com/file/d/1_gFeahMFP8BzKhhyMFtkiG5SegsyCMK9/view?usp=drive_link
 
 > **알바·인턴·첫 직장 계약서를 혼자 보게 되는 20대들을 위한 AI 노동권 세이프티넷**
 
