@@ -67,6 +67,8 @@ class ContractStorageService:
             analysis_data = {
                 "doc_id": doc_id,
                 "title": title,
+                "file_name": original_filename or title,  # file_name은 NOT NULL이므로 original_filename 또는 title 사용
+                "file_url": "",  # file_url은 NOT NULL이므로 빈 문자열로 설정 (필요시 나중에 업로드된 파일 URL로 업데이트)
                 "original_filename": original_filename,
                 "doc_type": doc_type,
                 "risk_score": int(round(float(risk_score))),  # DB는 integer 타입이므로 변환

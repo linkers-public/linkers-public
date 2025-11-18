@@ -13,78 +13,141 @@ from config import settings
 _local_embedding_model = None
 _ollama_llm = None
 
+def _load_cpu_model():
+    """CPU 전용 모델 로드 (meta tensor 문제 해결)"""
+    from sentence_transformers import SentenceTransformer
+    
+    print(f"[CPU] CPU 모드로 모델 로드 중...")
+    
+    try:
+        # 첫 번째 시도: device 파라미터 없이 로드 후 CPU로 이동
+        model = SentenceTransformer(
+            settings.local_embedding_model,
+            trust_remote_code=True
+        )
+        # 로드 후 CPU로 이동
+        model = model.to("cpu")
+        print(f"[완료] CPU 모델 로드 완료")
+        return model
+    except Exception as e:
+        # meta tensor 에러 발생 시 다른 방법 시도
+        if "meta tensor" in str(e).lower() or "to_empty" in str(e).lower():
+            print(f"[경고] CPU 로드 실패 (meta tensor), 재시도 중...: {str(e)}")
+            try:
+                # device 파라미터를 명시적으로 사용하되, trust_remote_code 추가
+                model = SentenceTransformer(
+                    settings.local_embedding_model,
+                    device="cpu",
+                    trust_remote_code=True
+                )
+                print(f"[완료] CPU 모델 로드 완료 (재시도 성공)")
+                return model
+            except Exception as retry_e:
+                print(f"[에러] CPU 모델 로드 최종 실패: {str(retry_e)}")
+                raise Exception(f"CPU 모델 로드 실패: {str(retry_e)}")
+        else:
+            raise
+
+def _load_cuda_model():
+    """CUDA 전용 모델 로드 (GPU 최적화)"""
+    from sentence_transformers import SentenceTransformer
+    import torch
+    
+    print(f"[CUDA] GPU 모드로 모델 로드 중...")
+    
+    # CUDA 사용 가능 여부 확인
+    if not torch.cuda.is_available():
+        raise RuntimeError("CUDA를 사용할 수 없습니다. CPU 모드를 사용하세요.")
+    
+    device_name = torch.cuda.get_device_name(0)
+    print(f"[CUDA] GPU 감지: {device_name}")
+    
+    # CUDA 디바이스에 직접 로드 시도
+    try:
+        model = SentenceTransformer(
+            settings.local_embedding_model,
+            device="cuda"
+        )
+        print(f"[완료] CUDA 모델 로드 완료")
+        return model
+    except Exception as e:
+        # meta tensor 에러 발생 시: CPU에 먼저 로드 후 CUDA로 이동
+        if "meta tensor" in str(e).lower() or "to_empty" in str(e).lower():
+            print(f"[경고] CUDA 직접 로드 실패 (meta tensor), CPU→CUDA 방식으로 재시도...")
+            print(f"      에러: {str(e)}")
+            
+            # 1단계: CPU에 먼저 로드
+            print(f"[1단계] CPU에 모델 로드 중...")
+            model = SentenceTransformer(
+                settings.local_embedding_model,
+                device="cpu"
+            )
+            
+            # 2단계: CUDA로 이동
+            print(f"[2단계] 모델을 CUDA로 이동 중...")
+            try:
+                model = model.to("cuda")
+                print(f"[완료] CUDA 모델 로드 완료 (CPU→CUDA 이동 성공)")
+                return model
+            except Exception as move_e:
+                print(f"[경고] CUDA 이동 실패: {str(move_e)}")
+                print(f"[폴백] CPU 모드로 사용합니다")
+                return model  # CPU 모델 반환
+        else:
+            # 다른 에러는 그대로 전파
+            raise
+
 def _get_local_embedding_model():
     """로컬 임베딩 모델 지연 로드"""
     global _local_embedding_model
     if _local_embedding_model is None:
         try:
-            from sentence_transformers import SentenceTransformer
             import torch
-            import os
             
             print(f"[로딩] 로컬 임베딩 모델: {settings.local_embedding_model}")
             
             # 디바이스 결정: 환경 변수 우선, 없으면 자동 감지
             if settings.embedding_device and settings.embedding_device.lower() in ["cuda", "cpu"]:
                 # 환경 변수로 강제 지정
-                device = settings.embedding_device.lower()
-                if device == "cuda" and not torch.cuda.is_available():
-                    print(f"[경고] CUDA를 요청했지만 사용 불가, CPU로 폴백합니다")
-                    device = "cpu"
-                print(f"[설정] 환경 변수로 디바이스 지정: {device}")
+                device_setting = settings.embedding_device.lower()
+                
+                if device_setting == "cuda":
+                    # CUDA 사용 가능 여부 확인
+                    if not torch.cuda.is_available():
+                        print(f"[경고] EMBEDDING_DEVICE=cuda로 설정했지만 CUDA를 사용할 수 없습니다.")
+                        print(f"[폴백] CPU 모드로 자동 전환합니다.")
+                        device_setting = "cpu"
+                    else:
+                        print(f"[설정] 환경 변수로 CUDA 지정")
+                else:
+                    print(f"[설정] 환경 변수로 CPU 지정")
             else:
                 # 자동 감지 (기본 동작)
                 if torch.cuda.is_available():
-                    device = "cuda"
+                    device_setting = "cuda"
                     device_name = torch.cuda.get_device_name(0)
-                    print(f"[GPU] CUDA 사용 가능: {device_name}")
+                    print(f"[자동 감지] CUDA 사용 가능: {device_name}")
                 else:
-                    device = "cpu"
-                    print(f"[CPU] CUDA 사용 불가, CPU 사용")
+                    device_setting = "cpu"
+                    print(f"[자동 감지] CUDA 사용 불가, CPU 사용")
             
-            # 환경 변수로 device 강제 지정 (meta tensor 문제 방지)
-            os.environ.setdefault("TORCH_DEVICE", device)
-            
-            try:
-                # 첫 번째 시도: device를 명시적으로 지정
-                _local_embedding_model = SentenceTransformer(
-                    settings.local_embedding_model,
-                    device=device
+            # 디바이스에 따라 모델 로드
+            if device_setting == "cuda":
+                try:
+                    _local_embedding_model = _load_cuda_model()
+                except Exception as cuda_e:
+                    print(f"[경고] CUDA 로드 실패, CPU로 폴백: {str(cuda_e)}")
+                    _local_embedding_model = _load_cpu_model()
+                    
+            elif device_setting == "cpu":
+                print(f"[설정] 환경 변수로 CPU 지정")
+                _local_embedding_model = _load_cpu_model()
+            else:
+                raise ValueError(
+                    f"잘못된 EMBEDDING_DEVICE 값: {settings.embedding_device}. "
+                    "EMBEDDING_DEVICE는 'cpu' 또는 'cuda'만 가능합니다."
                 )
-                print(f"[완료] 로컬 임베딩 모델 로드 완료 (device: {device})")
-            except Exception as e:
-                # meta tensor 에러 발생 시 다른 방법으로 재시도
-                if "meta tensor" in str(e).lower() or "to_empty" in str(e).lower():
-                    print(f"[경고] 모델 로딩 에러 발생 (meta tensor), 재시도 중...: {str(e)}")
-                    # 모델 캐시를 우회하고 직접 로드 시도
-                    try:
-                        # 환경 변수로 지정된 device 사용, 없으면 자동 감지
-                        if settings.embedding_device and settings.embedding_device.lower() == "cpu":
-                            retry_device = "cpu"
-                        elif settings.embedding_device and settings.embedding_device.lower() == "cuda" and torch.cuda.is_available():
-                            retry_device = "cuda"
-                        else:
-                            retry_device = "cuda" if torch.cuda.is_available() else "cpu"
-                        
-                        _local_embedding_model = SentenceTransformer(
-                            settings.local_embedding_model,
-                            device=retry_device,
-                            trust_remote_code=True
-                        )
-                        print(f"[완료] 로컬 임베딩 모델 재로드 완료 (device: {retry_device})")
-                    except Exception as retry_e:
-                        # 최종 시도: CPU로 폴백 (가장 안전)
-                        print(f"[경고] 재시도 실패, CPU로 최종 시도 중...: {str(retry_e)}")
-                        final_device = "cpu"
-                        
-                        _local_embedding_model = SentenceTransformer(
-                            settings.local_embedding_model,
-                            trust_remote_code=True,
-                            device=final_device
-                        )
-                        print(f"[완료] 로컬 임베딩 모델 최종 로드 완료 (device: {final_device})")
-                else:
-                    raise
+                
         except ImportError:
             raise ImportError("sentence-transformers가 설치되지 않았습니다. pip install sentence-transformers")
     return _local_embedding_model
