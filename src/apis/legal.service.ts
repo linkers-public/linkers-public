@@ -5,6 +5,7 @@
 
 const BACKEND_API_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://localhost:8000';
 const LEGAL_API_BASE = `${BACKEND_API_URL}/api/v1/legal`;
+const LEGAL_API_BASE_V2 = `${BACKEND_API_URL}/api/v2/legal`;
 
 export interface LegalCasePreview {
   id: string;
@@ -209,6 +210,256 @@ export const analyzeContract = async (
     return data;
   } catch (error) {
     console.error('계약서 분석 오류:', error);
+    throw error;
+  }
+};
+
+// ========== v2 API (가이드 스펙) ==========
+
+export interface LegalSearchResultV2 {
+  legal_document_id: string;
+  section_title?: string;
+  text: string;
+  score: number;
+  source?: string;
+  doc_type?: string;
+  title?: string;
+}
+
+export interface LegalSearchResponseV2 {
+  results: LegalSearchResultV2[];
+  count: number;
+  query: string;
+}
+
+export interface SituationRequestV2 {
+  situation: string;
+  category?: string;
+  employmentType?: string;
+  companySize?: string;
+  workPeriod?: string;
+  hasWrittenContract?: boolean;
+  socialInsurance?: string[];
+}
+
+export interface LegalBasisItemV2 {
+  title: string;
+  snippet: string;
+  sourceType: string;
+}
+
+export interface SituationAnalysisV2 {
+  summary: string;
+  legalBasis: LegalBasisItemV2[];
+  recommendations: string[];
+}
+
+export interface RelatedCaseV2 {
+  id: string;
+  title: string;
+  summary: string;
+  link?: string;
+}
+
+export interface SituationResponseV2 {
+  riskScore: number;
+  riskLevel: 'low' | 'medium' | 'high';
+  tags: string[];
+  analysis: SituationAnalysisV2;
+  checklist: string[];
+  relatedCases: RelatedCaseV2[];
+}
+
+export interface ContractIssueV2 {
+  id: string;
+  category: string;
+  severity: 'low' | 'medium' | 'high';
+  summary: string;
+  originalText: string;
+  legalBasis: string[];
+  explanation: string;
+  suggestedRevision: string;
+}
+
+export interface ContractAnalysisResponseV2 {
+  docId: string;
+  title: string;
+  riskScore: number;
+  riskLevel: 'low' | 'medium' | 'high';
+  sections: {
+    working_hours?: number;
+    wage?: number;
+    probation_termination?: number;
+    stock_option_ip?: number;
+  };
+  issues: ContractIssueV2[];
+  summary: string;
+  retrievedContexts: Array<{
+    sourceType: string;
+    title: string;
+    snippet: string;
+  }>;
+  createdAt: string;
+}
+
+/**
+ * 법령/케이스 검색 (v2)
+ */
+export const searchLegalV2 = async (
+  query: string,
+  limit: number = 5,
+  docType?: string
+): Promise<LegalSearchResponseV2> => {
+  try {
+    const url = `${LEGAL_API_BASE_V2}/search`;
+    const params = new URLSearchParams({
+      q: query,
+      limit: limit.toString(),
+    });
+    if (docType) {
+      params.append('doc_type', docType);
+    }
+
+    const response = await fetch(`${url}?${params}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`법령 검색 실패: ${response.status} - ${errorText}`);
+    }
+
+    const data: LegalSearchResponseV2 = await response.json();
+    return data;
+  } catch (error) {
+    console.error('법령 검색 오류:', error);
+    throw error;
+  }
+};
+
+/**
+ * 계약서 분석 (v2)
+ */
+export const analyzeContractV2 = async (
+  file: File,
+  title?: string,
+  docType?: string
+): Promise<ContractAnalysisResponseV2> => {
+  try {
+    const url = `${LEGAL_API_BASE_V2}/analyze-contract`;
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    if (title) {
+      formData.append('title', title);
+    }
+    if (docType) {
+      formData.append('doc_type', docType);
+    }
+
+    const response = await fetch(url, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`계약서 분석 실패: ${response.status} - ${errorText}`);
+    }
+
+    const data: ContractAnalysisResponseV2 = await response.json();
+    return data;
+  } catch (error) {
+    console.error('계약서 분석 오류:', error);
+    throw error;
+  }
+};
+
+/**
+ * 계약서 상세 조회 (v2)
+ */
+export const getContractAnalysisV2 = async (
+  docId: string
+): Promise<ContractAnalysisResponseV2> => {
+  try {
+    const url = `${LEGAL_API_BASE_V2}/contracts/${docId}`;
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`계약서 조회 실패: ${response.status} - ${errorText}`);
+    }
+
+    const data: ContractAnalysisResponseV2 = await response.json();
+    return data;
+  } catch (error) {
+    console.error('계약서 조회 오류:', error);
+    throw error;
+  }
+};
+
+/**
+ * 상황별 법률 분석 (v2)
+ */
+export const analyzeSituationV2 = async (
+  request: SituationRequestV2
+): Promise<SituationResponseV2> => {
+  try {
+    const url = `${LEGAL_API_BASE_V2}/analyze-situation`;
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(request),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`상황 분석 실패: ${response.status} - ${errorText}`);
+    }
+
+    const data: SituationResponseV2 = await response.json();
+    return data;
+  } catch (error) {
+    console.error('상황 분석 오류:', error);
+    throw error;
+  }
+};
+
+/**
+ * 헬스 체크 (v2)
+ */
+export const healthCheckV2 = async (): Promise<{ status: string; message: string }> => {
+  try {
+    const url = `${LEGAL_API_BASE_V2}/health`;
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`헬스 체크 실패: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('헬스 체크 오류:', error);
     throw error;
   }
 };

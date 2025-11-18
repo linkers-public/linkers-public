@@ -20,7 +20,7 @@ import {
   X,
   Zap
 } from 'lucide-react'
-import { analyzeContract } from '@/apis/legal.service'
+import { analyzeContractV2 } from '@/apis/legal.service'
 import { uploadContractFile, saveContractAnalysis, getContractAnalysisHistory } from '@/apis/contract-history.service'
 import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
@@ -177,23 +177,41 @@ export default function ContractAnalysisPage() {
 
       setAnalysisStep(2)
 
-      // Step 2: 계약서 분석 수행
-      const result = await analyzeContract(file)
+      // Step 2: 계약서 분석 수행 (v2)
+      const result = await analyzeContractV2(file, file.name, 'employment')
       
       setAnalysisStep(3)
       
-      // docId 생성 (UUID) - DB 저장 후 실제 ID 사용
-      let docId = crypto.randomUUID()
+      // docId는 v2 응답에서 받음
+      const docId = result.docId
       
       // Step 3: 분석 결과를 DB에 저장
       try {
         if (fileUrl) {
-          const savedId = await saveContractAnalysis(file, fileUrl, {
-            ...result,
-            contract_text: result.contract_text,
-          })
-          docId = savedId
-          console.log('분석 결과 DB 저장 완료, ID:', docId)
+          // v2 형식에 맞춰 변환
+          const v1Format = {
+            risk_score: result.riskScore,
+            risk_level: result.riskLevel,
+            summary: result.summary,
+            issues: result.issues.map(issue => ({
+              name: issue.summary,
+              description: issue.explanation,
+              severity: issue.severity,
+              legal_basis: issue.legalBasis,
+              suggested_text: issue.suggestedRevision,
+            })),
+            recommendations: [],
+            grounding: result.retrievedContexts.map(ctx => ({
+              source_id: '',
+              source_type: ctx.sourceType as 'law' | 'manual' | 'case',
+              title: ctx.title,
+              snippet: ctx.snippet,
+              score: 0,
+            })),
+            contract_text: '',
+          }
+          const savedId = await saveContractAnalysis(file, fileUrl, v1Format)
+          console.log('분석 결과 DB 저장 완료, ID:', savedId)
         }
       } catch (saveError: any) {
         console.warn('DB 저장 실패, 로컬 스토리지만 사용:', saveError)
@@ -201,12 +219,13 @@ export default function ContractAnalysisPage() {
       
       // 분석 결과를 로컬 스토리지에 저장 (fallback)
       const analysisData = {
-        risk_score: result.risk_score,
+        risk_score: result.riskScore,
+        risk_level: result.riskLevel,
         summary: result.summary || '',
-        contractText: result.contract_text || '',
+        contractText: '',
         issues: result.issues || [],
-        recommendations: result.recommendations || [],
-        createdAt: new Date().toISOString(),
+        recommendations: [],
+        createdAt: result.createdAt,
         fileUrl,
       }
       localStorage.setItem(`contract_analysis_${docId}`, JSON.stringify(analysisData))

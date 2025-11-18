@@ -13,6 +13,8 @@ AI 기반 계약/노동 리스크 분석 시스템으로, 청년 근로자들을
 - [Legal RAG 모드](#-legal-rag-모드)
 - [API 사용 가이드](#-api-사용-가이드)
 - [문제 해결](#-문제-해결)
+- [배포 (무료 & 쉬운 방법)](#-배포-무료--쉬운-방법)
+- [📘 백엔드 구현 가이드](./LEGAL_BACKEND_IMPLEMENTATION_GUIDE.md) - 해커톤/백엔드 개발자를 위한 완전한 구현 패키지
 
 ## 🚀 주요 기능
 
@@ -998,19 +1000,325 @@ source venv/bin/activate
 - `main.py`의 CORS 설정 확인
 - 프론트엔드 도메인을 `allow_origins`에 추가
 
-## 🚀 배포
+## 🚀 배포 (무료 & 쉬운 방법)
 
-### Vercel 배포 (Frontend)
-```bash
-npm run build
+이 프로젝트는 **완전 무료**로 배포할 수 있습니다! Frontend와 Backend를 각각 무료 플랫폼에 배포하는 방법을 안내합니다.
+
+### 📋 배포 전략
+
+- **Frontend (Next.js)**: Vercel (무료, 자동 배포)
+- **Backend (FastAPI)**: Railway 또는 Render (무료 플랜)
+
+### ⚠️ 중요: Monorepo 구조
+
+현재 프로젝트는 **Monorepo 구조**입니다 (Frontend와 Backend가 같은 저장소에 있음).  
+**분리할 필요 없습니다!** 각 배포 플랫폼에서 **Root Directory** 설정만으로 원하는 폴더만 배포할 수 있습니다.
+
+```
+linkers-public/          ← GitHub 저장소 루트
+├── src/                 ← Frontend (Vercel에서 배포)
+├── backend/             ← Backend (Railway/Render에서 배포)
+├── package.json
+└── README.md
 ```
 
-Vercel 플랫폼을 사용하여 쉽게 배포할 수 있습니다.
+---
 
-### Backend 배포
-- 독립 서버 (AWS EC2, Google Cloud, Azure 등)
-- Vercel Serverless Functions
-- Docker 컨테이너
+## 1️⃣ Frontend 배포 (Vercel) - 완전 무료
+
+Vercel은 Next.js를 위한 최고의 배포 플랫폼이며, 무료 플랜이 매우 관대합니다.
+
+### 단계별 가이드
+
+#### 1. Vercel 계정 생성
+1. [Vercel](https://vercel.com) 접속
+2. GitHub 계정으로 로그인
+
+#### 2. 프로젝트 배포
+1. Vercel 대시보드에서 **"Add New Project"** 클릭
+2. GitHub 저장소 선택
+3. 프로젝트 설정:
+   - **Framework Preset**: Next.js (자동 감지)
+   - **Root Directory**: `./` (기본값) ⚠️ **Monorepo이므로 루트 그대로 사용**
+   - **Build Command**: `npm run build` (자동)
+   - **Output Directory**: `.next` (자동)
+   
+   > 💡 **참고**: Vercel은 자동으로 `package.json`이 있는 루트를 Next.js 프로젝트로 인식합니다.
+
+#### 3. 환경 변수 설정
+Vercel 대시보드에서 **Settings → Environment Variables**에 다음 변수 추가:
+
+```env
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
+NEXT_PUBLIC_BACKEND_API_URL=https://your-backend.railway.app
+NEXT_PUBLIC_SITE_URL=https://your-app.vercel.app
+```
+
+#### 4. 배포 완료
+- **자동 배포**: GitHub에 push할 때마다 자동 배포
+- **프리뷰 배포**: Pull Request마다 프리뷰 URL 생성
+- **프로덕션 URL**: `https://your-app.vercel.app`
+
+### Vercel 무료 플랜 제한
+- ✅ 무제한 프로젝트
+- ✅ 100GB 대역폭/월
+- ✅ 자동 HTTPS
+- ✅ 글로벌 CDN
+- ✅ 자동 배포
+
+---
+
+## 2️⃣ Backend 배포 (Railway) - 무료 크레딧
+
+Railway는 가장 쉬운 백엔드 배포 플랫폼입니다. 매월 $5 무료 크레딧을 제공합니다.
+
+### 단계별 가이드
+
+#### 1. Railway 계정 생성
+1. [Railway](https://railway.app) 접속
+2. GitHub 계정으로 로그인
+
+#### 2. 새 프로젝트 생성
+1. **"New Project"** 클릭
+2. **"Deploy from GitHub repo"** 선택
+3. 저장소 선택
+4. **"Configure Service"** 클릭
+
+#### 3. 서비스 설정
+1. **Root Directory**: `backend` 설정 ⚠️ **중요: Monorepo이므로 backend 폴더만 지정**
+2. **Build Command**: 
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. **Start Command**:
+   ```bash
+   python main.py
+   ```
+   
+   > 💡 **참고**: Railway는 Root Directory를 `backend`로 설정하면 해당 폴더만 빌드하고 배포합니다.
+
+#### 4. 환경 변수 설정
+Railway 대시보드에서 **Variables** 탭에 다음 변수 추가:
+
+```env
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+PORT=8000
+HOST=0.0.0.0
+```
+
+**선택적 변수** (Ollama 사용 시):
+```env
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=llama3
+```
+
+#### 5. 배포 완료
+- Railway가 자동으로 배포 시작
+- 배포 완료 후 **Settings → Networking**에서 공개 URL 확인
+- 예: `https://your-backend.railway.app`
+
+### Railway 무료 플랜
+- ✅ $5 크레딧/월 (소규모 프로젝트 충분)
+- ✅ 자동 HTTPS
+- ✅ GitHub 연동
+- ✅ 로그 확인 가능
+
+---
+
+## 3️⃣ Backend 배포 (Render) - 완전 무료 대안
+
+Render는 완전 무료 플랜을 제공하지만, 15분 비활성 시 슬립 모드로 전환됩니다.
+
+### 단계별 가이드
+
+#### 1. Render 계정 생성
+1. [Render](https://render.com) 접속
+2. GitHub 계정으로 로그인
+
+#### 2. 새 Web Service 생성
+1. **"New +"** → **"Web Service"** 클릭
+2. GitHub 저장소 연결
+3. 서비스 설정:
+   - **Name**: `linkus-backend`
+   - **Region**: `Singapore` (한국과 가까움)
+   - **Branch**: `main`
+   - **Root Directory**: `backend` ⚠️ **중요: Monorepo이므로 backend 폴더만 지정**
+   - **Runtime**: `Python 3`
+   - **Build Command**: `pip install -r requirements.txt`
+   - **Start Command**: `python main.py`
+   
+   > 💡 **참고**: Render는 Root Directory를 `backend`로 설정하면 해당 폴더만 빌드하고 배포합니다.
+
+#### 3. 환경 변수 설정
+**Environment** 섹션에 변수 추가 (Railway와 동일)
+
+#### 4. 무료 플랜 설정
+- **Plan**: `Free` 선택
+- ⚠️ **주의**: 15분 비활성 시 슬립 모드 (첫 요청 시 깨어남, 약 30초 소요)
+
+#### 5. 배포 완료
+- 배포 완료 후 URL 확인: `https://your-backend.onrender.com`
+
+### Render 무료 플랜
+- ✅ 완전 무료
+- ✅ 자동 HTTPS
+- ⚠️ 15분 비활성 시 슬립 (첫 요청 지연)
+
+---
+
+## 🔗 Frontend와 Backend 연결
+
+### 1. Backend URL 확인
+배포 완료 후 Backend 공개 URL을 확인합니다:
+- Railway: `https://your-backend.railway.app`
+- Render: `https://your-backend.onrender.com`
+
+### 2. Frontend 환경 변수 업데이트
+Vercel 대시보드에서 `NEXT_PUBLIC_BACKEND_API_URL`을 실제 Backend URL로 업데이트:
+
+```env
+NEXT_PUBLIC_BACKEND_API_URL=https://your-backend.railway.app
+```
+
+### 3. 재배포
+Vercel이 자동으로 재배포하거나, 수동으로 **Redeploy** 클릭
+
+---
+
+## 🧪 배포 확인
+
+### Frontend 확인
+```bash
+# Vercel 배포 URL 접속
+https://your-app.vercel.app
+```
+
+### Backend 확인
+```bash
+# 헬스 체크
+curl https://your-backend.railway.app/api/health
+
+# API 문서
+https://your-backend.railway.app/docs
+```
+
+---
+
+## 💡 배포 팁
+
+### 1. CORS 설정
+Backend의 `main.py`에서 Frontend 도메인을 허용해야 합니다:
+
+```python
+# backend/main.py
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://your-app.vercel.app",
+        "http://localhost:3000",  # 로컬 개발용
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+```
+
+### 2. 환경 변수 관리
+- **절대 `.env` 파일을 Git에 커밋하지 마세요**
+- 모든 민감한 정보는 배포 플랫폼의 환경 변수로 설정
+
+### 3. 로그 확인
+- **Vercel**: 대시보드 → Deployments → 함수 로그
+- **Railway**: 대시보드 → Deployments → 로그 탭
+- **Render**: 대시보드 → Logs 탭
+
+### 4. 자동 배포
+- GitHub에 push하면 자동으로 배포됩니다
+- Pull Request마다 프리뷰 배포 생성 (Vercel)
+
+---
+
+## 🆓 무료 플랜 비교
+
+| 플랫폼 | Frontend | Backend | 제한사항 |
+|--------|----------|---------|----------|
+| **Vercel** | ✅ 완전 무료 | ❌ | Next.js 최적화 |
+| **Railway** | ❌ | ✅ $5/월 크레딧 | 소규모 프로젝트 충분 |
+| **Render** | ❌ | ✅ 완전 무료 | 15분 비활성 시 슬립 |
+
+### 추천 조합
+- **가장 쉬움**: Vercel (Frontend) + Railway (Backend)
+- **완전 무료**: Vercel (Frontend) + Render (Backend)
+
+---
+
+## 🚨 문제 해결
+
+### Monorepo 관련 문제
+
+#### "package.json을 찾을 수 없습니다" (Frontend)
+- **원인**: Vercel의 Root Directory가 잘못 설정됨
+- **해결**: Root Directory를 `./` (루트)로 설정
+
+#### "requirements.txt를 찾을 수 없습니다" (Backend)
+- **원인**: Railway/Render의 Root Directory가 잘못 설정됨
+- **해결**: Root Directory를 `backend`로 설정
+
+#### "모듈을 찾을 수 없습니다" (Backend)
+- **원인**: 상대 경로 import가 잘못됨
+- **해결**: Backend 코드에서 상대 경로가 `backend/` 기준인지 확인
+
+### Backend가 응답하지 않는 경우
+1. **환경 변수 확인**: 모든 필수 변수가 설정되었는지 확인
+2. **로그 확인**: 배포 플랫폼의 로그에서 오류 확인
+3. **포트 확인**: `PORT` 환경 변수가 설정되었는지 확인 (Railway/Render는 자동 설정)
+
+### Frontend에서 Backend 연결 실패
+1. **CORS 오류**: Backend의 `allow_origins`에 Frontend URL 추가
+2. **환경 변수**: `NEXT_PUBLIC_BACKEND_API_URL`이 올바른지 확인
+3. **HTTPS**: 모든 URL이 `https://`로 시작하는지 확인
+
+### Render 슬립 모드
+- 첫 요청이 느릴 수 있습니다 (약 30초)
+- 무료 플랜의 정상 동작입니다
+- 더 빠른 응답이 필요하면 Railway 사용 권장
+
+---
+
+## 🔀 저장소 분리하기 (선택사항)
+
+현재 구조로도 배포가 가능하지만, 만약 **완전히 분리**하고 싶다면:
+
+### 방법 1: Git Subtree로 분리
+```bash
+# Frontend만 별도 저장소로 분리
+git subtree push --prefix=src origin frontend-only
+
+# Backend만 별도 저장소로 분리
+git subtree push --prefix=backend origin backend-only
+```
+
+### 방법 2: 수동 분리
+1. Frontend용 새 저장소 생성
+2. `src/`, `package.json`, `next.config.mjs` 등 Frontend 관련 파일만 복사
+3. Backend용 새 저장소 생성
+4. `backend/` 폴더 내용만 복사
+
+### 분리 시 장단점
+
+**장점:**
+- ✅ 각 서비스 독립 배포
+- ✅ 저장소 크기 감소
+- ✅ 권한 분리 가능
+
+**단점:**
+- ❌ 코드 공유 어려움
+- ❌ 버전 관리 복잡
+- ❌ 배포 설정 중복
+
+**결론**: **현재 Monorepo 구조 그대로 사용하는 것을 권장합니다!** 배포 플랫폼들이 모두 Monorepo를 잘 지원합니다.
 
 ## 📝 라이선스
 

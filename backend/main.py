@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from api.routes_v2 import router, router_v2  # v2 라우터 사용
 from api.routes_legal import router_legal  # 법률 RAG 라우터
+from api.routes_legal_v2 import router as router_legal_v2  # 법률 RAG 라우터 v2
 from config import settings
 import uvicorn
 import logging
@@ -82,7 +83,8 @@ app.add_middleware(
 # 라우터 등록
 app.include_router(router)
 app.include_router(router_v2)  # v2 엔드포인트
-app.include_router(router_legal)  # 법률 RAG 엔드포인트
+app.include_router(router_legal)  # 법률 RAG 엔드포인트 (v1)
+app.include_router(router_legal_v2)  # 법률 RAG 엔드포인트 (v2 - 가이드 스펙)
 
 
 @app.get("/")
@@ -90,7 +92,16 @@ async def root():
     return {
         "message": "Linkus Public RAG API",
         "docs": "/docs",
-        "health": "/api/health"
+        "health": "/api/health",
+        "legal_v2_health": "/api/v2/legal/health"
+    }
+
+@app.get("/api/health")
+async def health():
+    """헬스 체크 (공통)"""
+    return {
+        "status": "ok",
+        "message": "Linkus Public RAG API is running"
     }
 
 

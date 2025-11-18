@@ -8,7 +8,7 @@ import { FileUpload } from '@/components/legal/FileUpload'
 import { RiskScore } from '@/components/legal/RiskScore'
 import { AnalysisResultCard } from '@/components/legal/AnalysisResultCard'
 import { Upload, FileText, Loader2 } from 'lucide-react'
-import { analyzeContract, analyzeLegalSituation } from '@/apis/legal.service'
+import { analyzeContractV2, analyzeSituationV2, type SituationRequestV2 } from '@/apis/legal.service'
 
 export default function LegalAnalysisPage() {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
@@ -46,11 +46,62 @@ export default function LegalAnalysisPage() {
       let result
 
       if (uploadedFile) {
-        // 파일 업로드 시 계약서 분석
-        result = await analyzeContract(uploadedFile, textInput.trim() || undefined)
+        // 파일 업로드 시 계약서 분석 (v2)
+        const v2Result = await analyzeContractV2(uploadedFile, uploadedFile.name, 'employment')
+        
+        // v2 응답을 v1 형식으로 변환
+        result = {
+          risk_score: v2Result.riskScore,
+          risk_level: v2Result.riskLevel,
+          summary: v2Result.summary,
+          issues: v2Result.issues.map(issue => ({
+            name: issue.summary,
+            description: issue.explanation,
+            severity: issue.severity,
+            legal_basis: issue.legalBasis,
+          })),
+          recommendations: [],
+          grounding: v2Result.retrievedContexts.map(ctx => ({
+            source_id: '',
+            source_type: ctx.sourceType as 'law' | 'manual' | 'case',
+            title: ctx.title,
+            snippet: ctx.snippet,
+            score: 0,
+          })),
+          contract_text: '',
+        }
       } else {
-        // 텍스트 입력 시 상황 분석
-        result = await analyzeLegalSituation(textInput.trim())
+        // 텍스트 입력 시 상황 분석 (v2)
+        const v2Request: SituationRequestV2 = {
+          situation: textInput.trim(),
+        }
+        const v2Result = await analyzeSituationV2(v2Request)
+        
+        // v2 응답을 v1 형식으로 변환
+        result = {
+          risk_score: v2Result.riskScore,
+          risk_level: v2Result.riskLevel,
+          summary: v2Result.analysis.summary,
+          issues: v2Result.analysis.legalBasis.map(basis => ({
+            name: basis.title,
+            description: basis.snippet,
+            severity: 'medium' as const,
+            legal_basis: [basis.title],
+          })),
+          recommendations: v2Result.analysis.recommendations.map(rec => ({
+            title: '권고사항',
+            description: rec,
+            steps: [],
+          })),
+          grounding: v2Result.analysis.legalBasis.map(basis => ({
+            source_id: '',
+            source_type: basis.sourceType as 'law' | 'manual' | 'case',
+            title: basis.title,
+            snippet: basis.snippet,
+            score: 0,
+          })),
+          contract_text: '',
+        }
       }
 
       // API 응답을 컴포넌트 형식으로 변환

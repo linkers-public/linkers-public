@@ -202,3 +202,91 @@ class SituationAnalysisResponse(BaseModel):
     action_plan: ActionPlan = Field(..., description="행동 가이드")
     scripts: Scripts = Field(..., description="스크립트/템플릿")
     related_cases: List[RelatedCase] = Field(default_factory=list, description="유사 사례")
+
+
+# ========== API v2 스키마 (가이드 스펙) ==========
+
+class LegalSearchResult(BaseModel):
+    """법률 검색 결과 (v2)"""
+    legal_document_id: str
+    section_title: Optional[str] = None
+    text: str
+    score: float
+    source: Optional[str] = None
+    doc_type: Optional[str] = None
+    title: Optional[str] = None
+
+
+class LegalSearchResponseV2(BaseModel):
+    """법률 검색 응답 (v2)"""
+    results: List[LegalSearchResult]
+    count: int
+    query: str
+
+
+class SituationRequestV2(BaseModel):
+    """상황 분석 요청 (v2)"""
+    situation: str
+    category: Optional[str] = None
+    employmentType: Optional[str] = None
+    companySize: Optional[str] = None
+    workPeriod: Optional[str] = None
+    hasWrittenContract: Optional[bool] = None
+    socialInsurance: Optional[List[str]] = None
+
+
+class LegalBasisItem(BaseModel):
+    """법적 근거 항목"""
+    title: str
+    snippet: str
+    sourceType: str
+
+
+class SituationAnalysisV2(BaseModel):
+    """상황 분석 결과 (v2)"""
+    summary: str
+    legalBasis: List[LegalBasisItem]
+    recommendations: List[str]
+
+
+class RelatedCaseV2(BaseModel):
+    """유사 사례 (v2)"""
+    id: str
+    title: str
+    summary: str
+    link: Optional[str] = None
+
+
+class SituationResponseV2(BaseModel):
+    """상황 분석 응답 (v2)"""
+    riskScore: float
+    riskLevel: str  # "low" | "medium" | "high"
+    tags: List[str]
+    analysis: SituationAnalysisV2
+    checklist: List[str]
+    relatedCases: List[RelatedCaseV2]
+
+
+class ContractIssueV2(BaseModel):
+    """계약서 이슈 (v2)"""
+    id: str
+    category: str
+    severity: str  # "low" | "medium" | "high"
+    summary: str
+    originalText: str
+    legalBasis: List[str]
+    explanation: str
+    suggestedRevision: str
+
+
+class ContractAnalysisResponseV2(BaseModel):
+    """계약서 분석 응답 (v2)"""
+    docId: str
+    title: str
+    riskScore: float
+    riskLevel: str  # "low" | "medium" | "high"
+    sections: dict  # {working_hours: 80, wage: 70, ...}
+    issues: List[ContractIssueV2]
+    summary: str
+    retrievedContexts: List[dict]
+    createdAt: str

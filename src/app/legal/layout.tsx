@@ -14,6 +14,7 @@ export default function LegalLayout({
 
   const navItems = [
     { href: '/legal', label: '홈', icon: Home },
+    { href: '/legal/assist', label: '상담 허브', icon: MessageSquare },
     { href: '/legal/contract', label: '계약서 분석', icon: FileText },
     { href: '/legal/situation', label: '상황 분석', icon: MessageSquare },
     { href: '/legal/cases', label: '유사 케이스', icon: BookOpen },

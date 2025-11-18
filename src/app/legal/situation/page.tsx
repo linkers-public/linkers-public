@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Slider } from '@/components/ui/slider'
 import { Loader2, AlertTriangle, CheckCircle2, Copy, FileText, Sparkles, Info, ChevronDown, ChevronUp, Scale, Clock, DollarSign, Users, Briefcase, TrendingUp, Zap, MessageSquare } from 'lucide-react'
-import { analyzeSituationDetailed } from '@/apis/legal.service'
+import { analyzeSituationV2, type SituationRequestV2, type SituationResponseV2 } from '@/apis/legal.service'
 import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
 import type { 
@@ -277,23 +277,53 @@ export default function SituationAnalysisPage() {
 
     setIsAnalyzing(true)
     try {
-      // summary + details를 합쳐서 situationText 생성
-      const situationText = [summary, details].filter(Boolean).join('\n\n')
-
-      const request: SituationAnalysisRequest = {
-        categoryHint,
-        summary: summary.trim(),
-        details: details.trim() || undefined,
-        situationText, // 백엔드 호환성
-        ...(employmentType && { employmentType: employmentType as EmploymentType }),
-        ...(workPeriod && { workPeriod: workPeriod as WorkPeriod }),
-        ...(weeklyHours && { weeklyHours }),
-        ...(isProbation !== 'unknown' && { isProbation: isProbation === true }),
-        ...(socialInsurance && { socialInsurance: socialInsurance as SocialInsurance }),
+      // v2 API 요청 형식
+      const request: SituationRequestV2 = {
+        situation: [summary, details].filter(Boolean).join('\n\n'),
+        category: categoryHint,
+        employmentType: employmentType || undefined,
+        companySize: undefined, // 필요시 추가
+        workPeriod: workPeriod || undefined,
+        hasWrittenContract: undefined, // 필요시 추가
+        socialInsurance: socialInsurance ? [socialInsurance] : undefined,
       }
 
-      const result = await analyzeSituationDetailed(request)
-      setAnalysisResult(result)
+      const result = await analyzeSituationV2(request)
+      
+      // v2 응답을 v1 형식으로 변환 (기존 UI 호환성)
+      const v1Format: SituationAnalysisResponse = {
+        classifiedType: (result.tags[0] || 'unknown') as SituationCategory,
+        riskScore: result.riskScore,
+        summary: result.analysis.summary,
+        criteria: result.analysis.legalBasis.map(basis => ({
+          name: basis.title,
+          status: 'likely' as const,
+          reason: basis.snippet,
+        })),
+        actionPlan: {
+          steps: [
+            {
+              title: '즉시 조치',
+              items: result.checklist.slice(0, 3),
+            },
+            {
+              title: '권고사항',
+              items: result.analysis.recommendations,
+            },
+          ],
+        },
+        scripts: {
+          toCompany: undefined,
+          toAdvisor: undefined,
+        },
+        relatedCases: result.relatedCases.map(c => ({
+          id: c.id,
+          title: c.title,
+          summary: c.summary,
+        })),
+      }
+      
+      setAnalysisResult(v1Format)
     } catch (error: any) {
       console.error('분석 오류:', error)
       toast({
