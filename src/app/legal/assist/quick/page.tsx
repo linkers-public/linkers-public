@@ -186,6 +186,8 @@ export default function QuickAssistPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const chatContainerRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const isUserScrollingRef = useRef(false)
+  const shouldAutoScrollRef = useRef(true)
 
   const [inputMessage, setInputMessage] = useState('')
   const [isAnalyzing, setIsAnalyzing] = useState(false)
@@ -197,6 +199,7 @@ export default function QuickAssistPage() {
   const [editText, setEditText] = useState('')
   const [showArchiveModal, setShowArchiveModal] = useState(false)
   const [reports, setReports] = useState<Report[]>([])
+  const [isLoadingReports, setIsLoadingReports] = useState(false)
   const [situationAnalysis, setSituationAnalysis] = useState<SituationAnalysisResponse | null>(null)
   const [situationContext, setSituationContext] = useState<{
     summary: string
@@ -544,9 +547,39 @@ export default function QuickAssistPage() {
     }
   }, [selectedConversationId, messages.length, hasInitialGreeting, situationAnalysis, situationContext])
 
-  // 메시지 스크롤
+  // 사용자 스크롤 감지
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    const container = chatContainerRef.current
+    if (!container) return
+
+    const handleScroll = () => {
+      if (!container) return
+      
+      const { scrollTop, scrollHeight, clientHeight } = container
+      const isNearBottom = scrollHeight - scrollTop - clientHeight < 100 // 하단 100px 이내
+      
+      // 사용자가 맨 아래 근처에 있으면 자동 스크롤 허용
+      shouldAutoScrollRef.current = isNearBottom
+      isUserScrollingRef.current = !isNearBottom
+    }
+
+    container.addEventListener('scroll', handleScroll, { passive: true })
+    
+    return () => {
+      container.removeEventListener('scroll', handleScroll)
+    }
+  }, [])
+
+  // 메시지 스크롤 (사용자가 맨 아래에 있을 때만)
+  useEffect(() => {
+    if (shouldAutoScrollRef.current && messagesEndRef.current) {
+      // 약간의 지연을 두어 DOM 업데이트 후 스크롤
+      setTimeout(() => {
+        if (shouldAutoScrollRef.current && messagesEndRef.current) {
+          messagesEndRef.current.scrollIntoView({ behavior: 'smooth' })
+        }
+      }, 100)
+    }
   }, [messages])
 
   // 입력창 높이 조절
@@ -602,6 +635,61 @@ export default function QuickAssistPage() {
     })
   }
 
+  // 리포트 아카이브 로드 (DB에서 가져오기)
+  const loadReports = async () => {
+    setIsLoadingReports(true)
+    try {
+      const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client')
+      const supabase = createSupabaseBrowserClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      const userId = user?.id || null
+
+      if (!userId) {
+        setReports([])
+        return
+      }
+
+      // DB에서 상황 분석 히스토리 가져오기
+      const situationHistory = await getSituationHistoryV2(20, 0, userId)
+      
+      // Report 형식으로 변환
+      const reportsData: Report[] = situationHistory.map((situation) => {
+        // analysis 필드에서 summary 추출
+        const analysisData = typeof situation.summary === 'string' ? { summary: situation.summary } : {}
+        const summary = analysisData.summary || situation.summary || ''
+        
+        return {
+          id: situation.id,
+          question: situation.situation || '',
+          answer: summary,
+          legalBasis: [], // 필요시 추가 파싱
+          recommendations: [], // 필요시 추가 파싱
+          riskScore: situation.risk_score,
+          tags: [situation.category || 'unknown'],
+          createdAt: new Date(situation.created_at),
+        }
+      })
+      
+      setReports(reportsData)
+    } catch (error: any) {
+      console.error('리포트 로드 실패:', error)
+      toast({
+        title: '리포트 로드 실패',
+        description: error.message || '리포트를 불러오는 중 오류가 발생했습니다.',
+        variant: 'destructive',
+      })
+      setReports([])
+    } finally {
+      setIsLoadingReports(false)
+    }
+  }
+
+  // 리포트 아카이브 모달 열기
+  const handleOpenArchiveModal = () => {
+    setShowArchiveModal(true)
+    loadReports()
+  }
+
   // 리포트 삭제
   const handleDeleteReport = async (reportId: string, e: React.MouseEvent) => {
     e.stopPropagation() // 버튼 클릭 시 리포트 선택 방지
@@ -609,6 +697,7 @@ export default function QuickAssistPage() {
     try {
       // 리포트 삭제는 situation_analyses 테이블을 사용하도록 변경됨
       // 필요시 백엔드 API 추가 필요
+      // 현재는 로컬에서만 제거
       const updatedReports = reports.filter(r => r.id !== reportId)
       setReports(updatedReports)
       
@@ -628,19 +717,61 @@ export default function QuickAssistPage() {
 
   // 메시지 전송
   const handleSendMessage = async () => {
-    if (!inputMessage.trim() || isAnalyzing) return
+    const trimmedMessage = inputMessage.trim()
+    
+    // 입력 검증
+    if (!trimmedMessage) {
+      toast({
+        title: '입력 필요',
+        description: '메시지를 입력해주세요.',
+        variant: 'destructive',
+      })
+      return
+    }
+    
+    if (trimmedMessage.length < 5) {
+      toast({
+        title: '입력이 너무 짧습니다',
+        description: '최소 5자 이상 입력해주세요.',
+        variant: 'destructive',
+      })
+      return
+    }
+    
+    if (trimmedMessage.length > 2000) {
+      toast({
+        title: '입력이 너무 깁니다',
+        description: '최대 2000자까지 입력 가능합니다.',
+        variant: 'destructive',
+      })
+      return
+    }
+    
+    if (isAnalyzing) {
+      toast({
+        title: '처리 중',
+        description: '이전 요청이 처리 중입니다. 잠시만 기다려주세요.',
+      })
+      return
+    }
 
     const userMessage: ChatMessage = {
       id: `msg-${Date.now()}`,
       role: 'user',
-      content: inputMessage.trim(),
+      content: trimmedMessage,
       timestamp: new Date(),
     }
+
+    // 메시지 전송 시 자동 스크롤 활성화
+    shouldAutoScrollRef.current = true
 
     const newMessages = [...messages, userMessage]
     setMessages(newMessages)
     setInputMessage('')
     setIsAnalyzing(true)
+    
+    // 에러 발생 시 재시도를 위한 메시지 백업
+    const messageToSend = trimmedMessage
 
     // 현재 대화 세션 업데이트 또는 생성
     let currentSession: ConversationSession
@@ -821,6 +952,8 @@ export default function QuickAssistPage() {
       }
 
       const finalMessages = [...newMessages, assistantMessage]
+      // AI 응답 시에도 자동 스크롤 활성화
+      shouldAutoScrollRef.current = true
       setMessages(finalMessages)
 
       // 대화 세션 업데이트
@@ -939,60 +1072,99 @@ export default function QuickAssistPage() {
     }
   }
 
+  // 전체 화면 스크롤 방지
+  useEffect(() => {
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = 'unset'
+    }
+  }, [])
+
   return (
-    <div className="h-screen overflow-hidden bg-gradient-to-br from-slate-50 via-blue-50/20 to-slate-50">
-      <div className="flex h-full">
-        {/* 사이드바 (왼쪽 20%) */}
-        <div className="w-1/5 border-r border-slate-200 flex flex-col bg-gradient-to-br from-blue-600 to-indigo-600">
-          <div className="p-4 border-b border-slate-300">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                <MessageSquare className="w-5 h-5" />
-                대화 내역
+    <div className="h-[calc(100vh-64px)] w-full overflow-hidden bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 flex flex-col">
+      <div className="flex flex-1 min-h-0 w-full">
+        {/* 사이드바 (왼쪽 고정 너비) */}
+        <div className="w-[280px] border-r border-slate-200/80 flex flex-col bg-white/80 backdrop-blur-sm shadow-lg overflow-hidden min-h-0 flex-shrink-0">
+          <div className="p-4 border-b border-slate-200 bg-gradient-to-r from-blue-600 to-indigo-600 flex-shrink-0">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-base font-bold text-white flex items-center gap-2">
+                <div className="p-1.5 bg-white/20 rounded-lg">
+                  <MessageSquare className="w-4 h-4" />
+                </div>
+                <span>대화 내역</span>
               </h2>
               <Button
                 onClick={handleNewConversation}
                 size="sm"
-                className="bg-white/20 hover:bg-white/30 text-white border-0"
+                className="bg-white/20 hover:bg-white/30 text-white border-0 shadow-md hover:shadow-lg transition-all h-7 w-7 p-0"
+                title="새 대화 시작"
               >
-                <Zap className="w-4 h-4" />
+                <Zap className="w-3.5 h-3.5" />
               </Button>
             </div>
+            {conversations.length > 0 && (
+              <div className="text-xs text-white/80 font-medium">
+                총 {conversations.length}개
+              </div>
+            )}
           </div>
           
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-transparent min-h-0">
             {conversations.length === 0 ? (
-              <div className="p-4 text-center text-white/70 text-sm">
-                대화 내역이 없습니다
+              <div className="p-5 text-center">
+                <div className="p-3 bg-slate-100 rounded-full w-14 h-14 mx-auto mb-3 flex items-center justify-center">
+                  <MessageSquare className="w-7 h-7 text-slate-400" />
+                </div>
+                <p className="text-sm text-slate-500 font-medium mb-1">대화 내역이 없습니다</p>
+                <p className="text-xs text-slate-400">새로운 대화를 시작해보세요</p>
               </div>
             ) : (
-              <div className="p-2 space-y-1">
+              <div className="p-2.5 space-y-1.5">
                 {conversations.map((conv) => (
                   <button
                     key={conv.id}
                     onClick={() => handleSelectConversation(conv.id)}
                     className={cn(
-                      "w-full text-left p-3 rounded-lg transition-all group",
+                      "w-full text-left p-2.5 rounded-lg transition-all group relative",
+                      "hover:shadow-md active:scale-[0.98]",
                       selectedConversationId === conv.id
-                        ? "bg-white/20 text-white"
-                        : "hover:bg-white/10 text-white/80"
+                        ? "bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-300 shadow-sm"
+                        : "bg-slate-50/50 hover:bg-slate-100/70 border border-transparent"
                     )}
                   >
-                    <div className="flex items-start gap-2">
+                    <div className="flex items-start gap-2.5">
                       <div className="flex-1 min-w-0">
-                        <div className="text-xs text-white/60 mb-1">
-                          {formatDate(conv.updatedAt)}
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <div className={cn(
+                            "w-2 h-2 rounded-full",
+                            selectedConversationId === conv.id ? "bg-blue-500" : "bg-slate-300"
+                          )} />
+                          <div className="text-xs text-slate-500 font-medium">
+                            {formatDate(conv.updatedAt)}
+                          </div>
                         </div>
-                        <div className="text-sm font-medium truncate">
+                        <div className={cn(
+                          "text-sm font-semibold truncate leading-snug",
+                          selectedConversationId === conv.id ? "text-blue-900" : "text-slate-800"
+                        )}>
                           {conv.title}
                         </div>
+                        {conv.messages.length > 0 && (
+                          <div className="text-xs text-slate-500 mt-1 line-clamp-1">
+                            {conv.messages.length}개의 메시지
+                          </div>
+                        )}
                       </div>
                       <button
                         onClick={(e) => handleDeleteConversation(conv.id, e)}
-                        className="opacity-0 group-hover:opacity-100 hover:bg-white/20 rounded p-1 transition-opacity"
+                        className={cn(
+                          "opacity-0 group-hover:opacity-100 rounded-lg p-1.5 transition-all",
+                          "hover:bg-red-100 hover:text-red-600",
+                          selectedConversationId === conv.id && "opacity-100"
+                        )}
                         title="대화 삭제"
                       >
-                        <X className="w-4 h-4 text-white/80" />
+                        <X className="w-4 h-4" />
                       </button>
                     </div>
                   </button>
@@ -1003,80 +1175,119 @@ export default function QuickAssistPage() {
         </div>
 
         {/* 메인 채팅 영역 (오른쪽 80%) */}
-        <div className="flex-1 flex flex-col bg-white overflow-hidden">
+        <div className="flex-1 flex flex-col bg-gradient-to-b from-white via-slate-50/50 to-white overflow-hidden min-h-0">
           {/* 헤더 */}
-          <div className="p-4 border-b border-slate-200 bg-white flex-shrink-0">
+          <div className="px-5 py-2.5 border-b border-slate-200/80 bg-white/90 backdrop-blur-sm flex-shrink-0">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <Button
                   variant="ghost"
+                  size="sm"
                   onClick={() => router.push('/legal/assist')}
-                  className="text-slate-600 hover:text-slate-900"
+                  className="text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors h-8 px-2"
                 >
-                  <ArrowLeft className="w-4 h-4 mr-2" />
-                  상담 허브로 돌아가기
+                  <ArrowLeft className="w-4 h-4" />
                 </Button>
+                <div className="h-4 w-px bg-slate-300" />
                 <div className="flex items-center gap-2">
-                  <Scale className="w-5 h-5 text-blue-600" />
-                  <h1 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                  <div className="p-1.5 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-md shadow-sm">
+                    <Scale className="w-4 h-4 text-white" />
+                  </div>
+                  <h1 className="text-lg font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
                     즉시 상담
                   </h1>
                 </div>
               </div>
               <Button
-                variant="ghost"
-                onClick={() => setShowArchiveModal(true)}
-                className="text-slate-600 hover:text-slate-900"
+                variant="outline"
+                size="sm"
+                onClick={handleOpenArchiveModal}
+                className="text-slate-700 hover:text-slate-900 border-slate-300 hover:border-slate-400 hover:bg-slate-50 transition-all h-8 px-3"
               >
-                <FolderArchive className="w-5 h-5 mr-2" />
-                리포트 <br/>아카이브
+                <FolderArchive className="w-3.5 h-3.5 mr-1.5" />
+                <span className="text-xs">아카이브</span>
               </Button>
             </div>
           </div>
 
           {/* 채팅 메시지 영역 */}
-          <div ref={chatContainerRef} className="flex-1 overflow-y-auto bg-gradient-to-b from-slate-50 via-white to-slate-50 px-4 sm:px-6 py-6 space-y-6">
+          <div ref={chatContainerRef} className="flex-1 overflow-y-auto overflow-x-hidden bg-gradient-to-b from-white via-slate-50/30 to-white px-5 sm:px-6 lg:px-8 pt-4 pb-6 space-y-5 scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-transparent min-h-0">
+            {messages.length === 0 && !hasInitialGreeting && (
+              <div className="flex flex-col items-center justify-center h-full">
+                <div className="p-6 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-3xl mb-6 shadow-lg animate-pulse">
+                  <Bot className="w-16 h-16 text-blue-600" />
+                </div>
+                <h2 className="text-2xl font-bold text-slate-800 mb-2">안녕하세요! 👋</h2>
+                <p className="text-slate-600 text-center max-w-md mb-2">
+                  법률 상담이 필요하신가요? 아래에서 상황을 설명해주시면<br />
+                  AI가 도와드리겠습니다.
+                </p>
+                <p className="text-xs text-slate-400 mb-8">
+                  💡 팁: Ctrl+K로 새 대화를 시작할 수 있습니다
+                </p>
+                <div className="grid grid-cols-2 gap-3 max-w-md">
+                  {COMMON_SITUATIONS.slice(0, 4).map((situation, index) => {
+                    const Icon = situation.icon
+                    return (
+                      <button
+                        key={index}
+                        onClick={() => handleSituationSelect(situation)}
+                        className="p-4 bg-white border-2 border-slate-200 rounded-xl hover:border-blue-400 hover:bg-blue-50 transition-all text-left group active:scale-95"
+                        title={situation.description}
+                      >
+                        <Icon className="w-5 h-5 text-blue-600 mb-2" />
+                        <div className="text-sm font-semibold text-slate-800 group-hover:text-blue-700">
+                          {situation.title}
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
             {messages.map((message, index) => (
                   <div
                     key={message.id}
                     className={cn(
-                      "flex gap-3 sm:gap-4 animate-in fade-in slide-in-from-bottom-2 duration-300",
-                      message.role === 'user' ? 'justify-end' : 'justify-start'
+                      "flex gap-3 sm:gap-4 animate-in fade-in slide-in-from-bottom-3 duration-500",
+                      message.role === 'user' ? 'justify-end' : 'justify-start',
+                      index === 0 && "mt-2"
                     )}
                     style={{ animationDelay: `${index * 50}ms` }}
                   >
                     {message.role === 'assistant' && (
-                      <div className="flex-shrink-0 w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg ring-2 ring-white">
+                      <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg ring-2 ring-white/50">
                         <Bot className="w-5 h-5 text-white" />
                       </div>
                     )}
                     
                     <div className={cn(
-                      "flex flex-col gap-1.5 max-w-[85%] sm:max-w-[75%]",
+                      "flex flex-col gap-2 max-w-[85%] sm:max-w-[75%]",
                       message.role === 'user' ? 'items-end' : 'items-start'
                     )}>
                       <div
                         className={cn(
-                          "relative rounded-2xl px-4 py-3 shadow-sm transition-all duration-200",
+                          "relative rounded-2xl px-5 py-3.5 shadow-md transition-all duration-200",
+                          "hover:shadow-lg",
                           message.role === 'user'
-                            ? "bg-gradient-to-br from-blue-600 to-blue-700 text-white rounded-br-md"
-                            : "bg-white border border-slate-100 text-slate-900 rounded-bl-md"
+                            ? "bg-gradient-to-br from-blue-600 to-indigo-600 text-white rounded-br-sm"
+                            : "bg-white border border-slate-200/80 text-slate-900 rounded-bl-sm"
                         )}
                       >
                         {message.role === 'assistant' ? (
-                          <div className="prose prose-sm max-w-none prose-headings:text-slate-900 prose-p:text-slate-700 prose-strong:text-slate-900 prose-code:text-blue-600 prose-pre:bg-slate-50 text-sm leading-relaxed">
+                          <div className="prose prose-sm max-w-none prose-headings:text-slate-900 prose-p:text-slate-700 prose-strong:text-slate-900 prose-code:text-blue-600 prose-pre:bg-slate-50 prose-pre:border prose-pre:border-slate-200 text-sm leading-relaxed">
                             <MarkdownRenderer content={message.content} />
                           </div>
                         ) : (
-                          <p className="whitespace-pre-wrap text-sm leading-relaxed text-white">
+                          <p className="whitespace-pre-wrap text-sm leading-relaxed text-white font-medium">
                             {message.content}
                           </p>
                         )}
                       </div>
                       
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 px-1">
                         <span className={cn(
-                          "text-xs px-1",
+                          "text-xs font-medium",
                           message.role === 'user' ? 'text-slate-500' : 'text-slate-400'
                         )}>
                           {message.timestamp.toLocaleTimeString('ko-KR', {
@@ -1085,22 +1296,24 @@ export default function QuickAssistPage() {
                           })}
                         </span>
                         {message.role === 'user' && (
-                          <div className="flex gap-1">
+                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <Button
                               variant="ghost"
                               size="sm"
                               onClick={() => handleEditMessage(message.id)}
-                              className="h-6 px-2 text-slate-500 hover:text-slate-900"
+                              className="h-6 px-2 text-slate-500 hover:text-slate-900 hover:bg-slate-100"
+                              title="수정"
                             >
-                              <Edit className="w-3 h-3" />
+                              <Edit className="w-3.5 h-3.5" />
                             </Button>
                             <Button
                               variant="ghost"
                               size="sm"
                               onClick={() => handleCopyMessage(message.content)}
-                              className="h-6 px-2 text-slate-500 hover:text-slate-900"
+                              className="h-6 px-2 text-slate-500 hover:text-slate-900 hover:bg-slate-100"
+                              title="복사"
                             >
-                              <Copy className="w-3 h-3" />
+                              <Copy className="w-3.5 h-3.5" />
                             </Button>
                           </div>
                         )}
@@ -1109,9 +1322,9 @@ export default function QuickAssistPage() {
                             variant="outline"
                             size="sm"
                             onClick={() => handleViewReport(message.reportId!)}
-                            className="h-6 px-2 text-xs border-slate-300"
+                            className="h-7 px-3 text-xs border-blue-300 text-blue-700 hover:bg-blue-50 hover:border-blue-400 transition-all"
                           >
-                            <FileText className="w-3 h-3 mr-1" />
+                            <FileText className="w-3.5 h-3.5 mr-1.5" />
                             리포트 보기
                           </Button>
                         )}
@@ -1119,7 +1332,7 @@ export default function QuickAssistPage() {
                     </div>
 
                     {message.role === 'user' && (
-                      <div className="flex-shrink-0 w-9 h-9 rounded-full bg-gradient-to-br from-slate-400 to-slate-500 flex items-center justify-center shadow-lg ring-2 ring-white">
+                      <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-slate-400 to-slate-500 flex items-center justify-center shadow-lg ring-2 ring-white/50">
                         <User className="w-5 h-5 text-white" />
                       </div>
                     )}
@@ -1127,18 +1340,18 @@ export default function QuickAssistPage() {
                 ))}
                 
                 {isAnalyzing && (
-                  <div className="flex gap-3 sm:gap-4 justify-start animate-in fade-in slide-in-from-bottom-2" role="status" aria-live="polite">
-                    <div className="flex-shrink-0 w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg ring-2 ring-white">
+                  <div className="flex gap-3 sm:gap-4 justify-start animate-in fade-in slide-in-from-bottom-3" role="status" aria-live="polite">
+                    <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg ring-2 ring-white/50 animate-pulse">
                       <Bot className="w-5 h-5 text-white" />
                     </div>
-                    <div className="bg-white border border-slate-200 rounded-2xl rounded-bl-md px-4 py-3 shadow-sm">
-                      <div className="flex items-center gap-2.5">
-                        <div className="flex gap-1" aria-hidden="true">
-                          <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                          <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                          <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                    <div className="bg-white border border-slate-200/80 rounded-2xl rounded-bl-sm px-5 py-3.5 shadow-md">
+                      <div className="flex items-center gap-3">
+                        <div className="flex gap-1.5" aria-hidden="true">
+                          <div className="w-2.5 h-2.5 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                          <div className="w-2.5 h-2.5 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                          <div className="w-2.5 h-2.5 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
                         </div>
-                        <span className="text-sm text-slate-600">답변 생성 중...</span>
+                        <span className="text-sm text-slate-700 font-medium">답변 생성 중...</span>
                       </div>
                     </div>
                   </div>
@@ -1147,43 +1360,49 @@ export default function QuickAssistPage() {
           </div>
 
           {/* 입력 영역 - 화면 하단 고정 */}
-          <div className="flex-shrink-0 border-t border-slate-200 bg-white/80 backdrop-blur-sm p-4">
+          <div className="flex-shrink-0 border-t border-slate-200/80 bg-white/95 backdrop-blur-md px-5 py-4 shadow-lg">
             {/* 자주 있는 상황 태그 버튼 */}
-            <div className="px-4 pt-3 pb-2 border-b border-slate-100">
-              <div className="flex items-center gap-2 mb-2">
-                <Sparkles className="w-4 h-4 text-blue-600" />
-                <span className="text-xs font-semibold text-slate-600">자주 있는 상황:</span>
+            {messages.length === 0 && (
+              <div className="px-1 pt-1 pb-3 mb-3 border-b border-slate-200/80">
+                <div className="flex items-center gap-2 mb-2.5">
+                  <div className="p-1 bg-blue-100 rounded-lg">
+                    <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                  </div>
+                  <span className="text-xs font-bold text-slate-700">자주 있는 상황:</span>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {COMMON_SITUATIONS.map((situation, index) => {
+                    const Icon = situation.icon
+                    return (
+                      <button
+                        key={index}
+                        onClick={() => handleSituationSelect(situation)}
+                        className={cn(
+                          "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all",
+                          "bg-white border-2 border-slate-200 text-slate-700 shadow-sm",
+                          "hover:border-blue-400 hover:bg-gradient-to-br hover:from-blue-50 hover:to-indigo-50 hover:text-blue-700 hover:shadow-md",
+                          "active:scale-95"
+                        )}
+                      >
+                        <Icon className="w-4 h-4" />
+                        <span>{situation.title}</span>
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
-              <div className="flex flex-wrap gap-2">
-                {COMMON_SITUATIONS.map((situation, index) => {
-                  const Icon = situation.icon
-                  return (
-                    <button
-                      key={index}
-                      onClick={() => handleSituationSelect(situation)}
-                      className={cn(
-                        "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all",
-                        "bg-white border border-slate-300 text-slate-700",
-                        "hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700 hover:shadow-sm",
-                        "active:scale-95"
-                      )}
-                    >
-                      <Icon className="w-3.5 h-3.5" />
-                      <span>{situation.title}</span>
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
+            )}
             
             {/* 입력창 */}
-            <div className="space-y-4">
+            <div className="space-y-2.5">
               {/* 한 줄 요약 */}
               <div>
-                <div className="text-xs font-semibold text-slate-700 mb-2">
-                  <span className="text-red-500">*</span> 한 줄로 상황을 요약해 주세요
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="text-xs font-bold text-slate-700">
+                    <span className="text-red-500 mr-1">*</span> 한 줄로 상황을 요약해 주세요
+                  </div>
                 </div>
-                <div className="flex gap-3 items-end">
+                <div className="flex gap-2.5 items-end">
                   <div className="relative flex-1">
                     <Textarea
                       ref={textareaRef}
@@ -1196,20 +1415,20 @@ export default function QuickAssistPage() {
                         }
                       }}
                       placeholder="예: 단톡방/회의에서 모욕적인 말을 들어요"
-                      style={{
-                        minHeight: '60px',
-                        maxHeight: '140px',
-                        resize: 'none',
-                      }}
                       className={cn(
-                        "min-h-[60px] max-h-[140px] resize-none text-sm",
-                        "border-slate-300 focus:border-blue-400 focus:ring-2 focus:ring-blue-100",
-                        "rounded-xl pr-12",
+                        "min-h-[56px] max-h-[180px] resize-none text-sm",
+                        "border-2 border-slate-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200",
+                        "rounded-xl px-4 py-2.5 pr-12 shadow-sm",
                         "transition-all duration-200"
                       )}
+                      style={{
+                        minHeight: '56px',
+                        maxHeight: '180px',
+                        resize: 'none',
+                      }}
                       rows={2}
                     />
-                    <div className="absolute bottom-2 right-2 flex items-center gap-1.5 text-xs text-slate-400">
+                    <div className="absolute bottom-2.5 right-2.5 flex items-center gap-1.5 text-xs text-slate-400 font-medium">
                       <span>{inputMessage.length}자</span>
                     </div>
                   </div>
@@ -1218,7 +1437,7 @@ export default function QuickAssistPage() {
                     disabled={!inputMessage.trim() || isAnalyzing}
                     size="lg"
                     className={cn(
-                      "h-[60px] min-w-[60px] px-6 rounded-xl",
+                      "h-[56px] min-w-[56px] px-5 rounded-xl",
                       PRIMARY_GRADIENT,
                       PRIMARY_GRADIENT_HOVER,
                       "text-white shadow-lg hover:shadow-xl",
@@ -1236,9 +1455,9 @@ export default function QuickAssistPage() {
                   </Button>
                 </div>
                 {inputMessage.trim() && (
-                  <div className="mt-1 flex items-center gap-1 text-xs text-green-600">
-                    <CheckCircle2 className="w-3 h-3" />
-                    <span>입력 완료</span>
+                  <div className="mt-2 flex items-center gap-1.5 text-xs text-green-600 font-medium">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>입력 완료 - Enter 키로 전송하세요</span>
                   </div>
                 )}
               </div>
@@ -1275,67 +1494,168 @@ export default function QuickAssistPage() {
 
       {/* 리포트 아카이브 모달 */}
       <Dialog open={showArchiveModal} onOpenChange={setShowArchiveModal}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-              <FolderArchive className="w-5 h-5 text-blue-600" />
-              리포트 아카이브 (최근 5개)
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-hidden flex flex-col p-0 gap-0">
+          <DialogHeader className="px-6 pt-6 pb-4 border-b border-slate-200 bg-gradient-to-r from-blue-50/50 to-indigo-50/50">
+            <DialogTitle className="flex items-center gap-3">
+              <div className="p-2 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg shadow-sm">
+                <FolderArchive className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                  리포트 아카이브
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">저장된 상황 분석 리포트를 확인하세요</p>
+              </div>
             </DialogTitle>
           </DialogHeader>
-          {reports.length === 0 ? (
-            <div className="text-center py-8 text-slate-500">
-              저장된 리포트가 없습니다.
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {reports.map((report) => (
-                <Card
-                  key={report.id}
-                  className="cursor-pointer hover:shadow-md transition-shadow group"
-                  onClick={() => {
-                    setShowArchiveModal(false)
-                    handleViewReport(report.id)
-                  }}
-                >
-                  <CardContent className="p-4">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1">
-                        <h4 className="font-semibold mb-1 text-sm text-blue-600">
-                          {generateQuestionSummary(report.question)}
-                        </h4>
-                        <p className="text-xs text-slate-500 mb-2">
-                          {report.createdAt.toLocaleString('ko-KR')}
-                        </p>
-                        {report.riskScore !== undefined && (
-                          <div className="flex items-center gap-2">
-                            <div className="flex-1 h-2 bg-slate-200 rounded-full overflow-hidden">
-                              <div
-                                className={cn(
-                                  "h-full rounded-full",
-                                  report.riskScore > 70 ? "bg-red-500" : 
-                                  report.riskScore > 40 ? "bg-amber-500" : "bg-green-500"
-                                )}
-                                style={{ width: `${report.riskScore}%` }}
-                              />
+          
+          <div className="flex-1 overflow-y-auto px-6 py-4 scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-transparent">
+            {isLoadingReports ? (
+              <div className="flex flex-col items-center justify-center py-16">
+                <div className="relative">
+                  <div className="w-16 h-16 border-4 border-blue-100 rounded-full"></div>
+                  <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin absolute top-0 left-0"></div>
+                </div>
+                <p className="text-sm text-slate-600 mt-4 font-medium">리포트를 불러오는 중...</p>
+                <p className="text-xs text-slate-400 mt-1">잠시만 기다려주세요</p>
+              </div>
+            ) : reports.length === 0 ? (
+              <div className="text-center py-16">
+                <div className="p-5 bg-gradient-to-br from-slate-100 to-slate-200 rounded-2xl w-20 h-20 mx-auto mb-5 flex items-center justify-center shadow-inner">
+                  <FolderArchive className="w-10 h-10 text-slate-400" />
+                </div>
+                <h4 className="text-lg font-semibold text-slate-800 mb-2">저장된 리포트가 없습니다</h4>
+                <p className="text-sm text-slate-500 mb-1">상황 분석을 진행하면 리포트가 자동으로 저장됩니다</p>
+                <p className="text-xs text-slate-400">분석 결과를 나중에 다시 확인할 수 있어요</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {reports.map((report, index) => (
+                  <div
+                    key={report.id}
+                    className={cn(
+                      "group relative bg-white border-2 rounded-xl transition-all duration-200",
+                      "hover:border-blue-300 hover:shadow-lg hover:scale-[1.01]",
+                      "cursor-pointer active:scale-[0.99]",
+                      "border-slate-200"
+                    )}
+                    onClick={() => {
+                      setShowArchiveModal(false)
+                      handleViewReport(report.id)
+                    }}
+                    style={{ animationDelay: `${index * 50}ms` }}
+                  >
+                    <div className="p-5">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="flex-1 min-w-0">
+                          {/* 제목 및 날짜 */}
+                          <div className="flex items-start gap-3 mb-3">
+                            <div className="p-2 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-lg flex-shrink-0 mt-0.5">
+                              <FileText className="w-4 h-4 text-blue-600" />
                             </div>
-                            <span className="text-xs font-semibold">{report.riskScore}%</span>
+                            <div className="flex-1 min-w-0">
+                              <h4 className="font-semibold text-base text-slate-900 mb-1.5 line-clamp-2 group-hover:text-blue-700 transition-colors">
+                                {report.question || '상황 분석 리포트'}
+                              </h4>
+                              <div className="flex items-center gap-2 text-xs text-slate-500">
+                                <Clock className="w-3.5 h-3.5" />
+                                <span>
+                                  {report.createdAt.toLocaleString('ko-KR', {
+                                    year: 'numeric',
+                                    month: 'long',
+                                    day: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                  })}
+                                </span>
+                              </div>
+                            </div>
                           </div>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <FileText className="w-5 h-5 text-slate-400" />
-                        <button
-                          onClick={(e) => handleDeleteReport(report.id, e)}
-                          className="opacity-0 group-hover:opacity-100 hover:bg-slate-100 rounded p-1 transition-opacity"
-                          title="리포트 삭제"
-                        >
-                          <X className="w-4 h-4 text-slate-500 hover:text-red-500" />
-                        </button>
+
+                          {/* 위험도 표시 */}
+                          {report.riskScore !== undefined && (
+                            <div className="mb-3">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-xs font-semibold text-slate-700">위험도</span>
+                                <span className={cn(
+                                  "text-sm font-bold px-2 py-0.5 rounded-full",
+                                  report.riskScore > 70 ? "bg-red-100 text-red-700" : 
+                                  report.riskScore > 40 ? "bg-amber-100 text-amber-700" : "bg-green-100 text-green-700"
+                                )}>
+                                  {report.riskScore}점
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <div className="flex-1 h-2.5 bg-slate-200 rounded-full overflow-hidden shadow-inner">
+                                  <div
+                                    className={cn(
+                                      "h-full rounded-full transition-all duration-300 shadow-sm",
+                                      report.riskScore > 70 ? "bg-gradient-to-r from-red-500 to-red-600" : 
+                                      report.riskScore > 40 ? "bg-gradient-to-r from-amber-500 to-amber-600" : "bg-gradient-to-r from-green-500 to-green-600"
+                                    )}
+                                    style={{ width: `${report.riskScore}%` }}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* 태그 */}
+                          {report.tags && report.tags.length > 0 && (
+                            <div className="flex flex-wrap gap-2">
+                              {report.tags.slice(0, 3).map((tag, idx) => (
+                                <span
+                                  key={idx}
+                                  className="inline-flex items-center gap-1 px-3 py-1 text-xs font-medium bg-gradient-to-r from-blue-50 to-indigo-50 text-blue-700 rounded-full border border-blue-200/50"
+                                >
+                                  <span className="w-1.5 h-1.5 bg-blue-500 rounded-full"></span>
+                                  {tag}
+                                </span>
+                              ))}
+                              {report.tags.length > 3 && (
+                                <span className="inline-flex items-center px-3 py-1 text-xs font-medium bg-slate-100 text-slate-600 rounded-full">
+                                  +{report.tags.length - 3}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* 액션 버튼 */}
+                        <div className="flex flex-col items-center gap-2 flex-shrink-0">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleDeleteReport(report.id, e)
+                            }}
+                            className={cn(
+                              "opacity-0 group-hover:opacity-100 p-2 rounded-lg transition-all",
+                              "hover:bg-red-50 hover:text-red-600 text-slate-400",
+                              "border border-transparent hover:border-red-200"
+                            )}
+                            title="리포트 삭제"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
                     </div>
-                  </CardContent>
-                </Card>
-              ))}
+                    
+                    {/* 호버 효과 - 하단 그라데이션 */}
+                    <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 via-indigo-500 to-blue-500 opacity-0 group-hover:opacity-100 transition-opacity rounded-b-xl"></div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          
+          {/* 하단 정보 */}
+          {reports.length > 0 && (
+            <div className="px-6 py-3 border-t border-slate-200 bg-slate-50/50">
+              <div className="flex items-center justify-between text-xs text-slate-600">
+                <span className="font-medium">총 {reports.length}개의 리포트</span>
+                <span className="text-slate-400">리포트를 클릭하면 상세 내용을 확인할 수 있습니다</span>
+              </div>
             </div>
           )}
         </DialogContent>
