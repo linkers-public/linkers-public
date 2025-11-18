@@ -127,11 +127,14 @@ def build_legal_chat_prompt(
 
 CONTRACT_ANALYSIS_SYSTEM_PROMPT = """당신은 한국 노동법 전문가입니다. 계약서를 분석하여 위험 조항을 식별하고 개선안을 제시합니다.
 
+**중요: 모든 응답은 반드시 한국어로 작성해야 합니다.**
+
 **분석 원칙:**
 1. 근로기준법, 최저임금법 등 관련 법령을 기준으로 분석
 2. 표준근로계약서와 비교하여 누락/과도한 조항 식별
 3. 각 위험 조항에 대해 구체적인 법적 근거 제시
 4. 실무적인 개선안과 협상 포인트 제시
+5. 모든 텍스트 응답(summary, description, rationale 등)은 한국어로 작성
 """
 
 
@@ -187,29 +190,36 @@ def build_contract_analysis_prompt(
 
 위 계약서를 분석하여 다음 JSON 형식으로 응답해주세요:
 
+**중요: 모든 응답은 반드시 한국어로 작성하세요. (summary, description, rationale, title 등 모든 필드)**
+
 {{
     "risk_score": 0-100,
     "risk_level": "low" | "medium" | "high",
-    "summary": "전체 위험도 요약 (2-3문장)",
+    "summary": "전체 위험도 요약 (2-3문장, 한국어)",
     "issues": [
         {{
-            "name": "이슈 이름",
-            "description": "위험 조항 내용",
+            "name": "이슈 이름 (한국어)",
+            "description": "위험 조항 내용 (한국어)",
             "severity": "low" | "medium" | "high",
             "legal_basis": ["근로기준법 제XX조", ...],
-            "suggested_text": "개선된 조항 텍스트",
-            "rationale": "왜 위험한지 설명",
-            "suggested_questions": ["협상 시 물어볼 질문 1", ...]
+            "suggested_text": "개선된 조항 텍스트 (한국어)",
+            "rationale": "왜 위험한지 설명 (한국어)",
+            "suggested_questions": ["협상 시 물어볼 질문 1 (한국어)", ...]
         }}
     ],
     "recommendations": [
         {{
-            "title": "권장 사항 제목",
-            "description": "구체적인 권장 사항",
-            "steps": ["단계 1", "단계 2", ...]
+            "title": "권장 사항 제목 (한국어)",
+            "description": "구체적인 권장 사항 (한국어)",
+            "steps": ["단계 1 (한국어)", "단계 2 (한국어)", ...]
         }}
     ]
 }}
+
+**응답 언어 규칙:**
+- summary, description, rationale, title, steps 등 모든 텍스트 필드는 반드시 한국어로 작성
+- legal_basis는 법령명이므로 "근로기준법 제XX조" 형식으로 한국어로 작성
+- JSON 형식만 반환하고, 설명이나 추가 텍스트는 포함하지 마세요.
 """
     
     return prompt

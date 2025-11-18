@@ -63,6 +63,19 @@ class ContractStorageService:
         self._ensure_initialized()
         
         try:
+            # file_name 필드는 NOT NULL 제약조건이 있으므로 반드시 값이 있어야 함
+            # 우선순위: original_filename > title > 기본값
+            file_name_value = None
+            if original_filename and original_filename.strip():
+                file_name_value = original_filename.strip()
+            elif title and title.strip():
+                file_name_value = title.strip()
+            else:
+                file_name_value = "unknown.pdf"  # 최후의 기본값
+            
+            # 로깅으로 실제 저장되는 값 확인
+            logger.info(f"[DB 저장] file_name 설정: original_filename={original_filename}, title={title}, 최종 file_name={file_name_value}")
+            
             # 1. contract_analyses 테이블에 헤더 저장
             analysis_data = {
                 "doc_id": doc_id,
@@ -70,6 +83,7 @@ class ContractStorageService:
                 "file_name": original_filename or title,  # file_name은 NOT NULL이므로 original_filename 또는 title 사용
                 "file_url": "",  # file_url은 NOT NULL이므로 빈 문자열로 설정 (필요시 나중에 업로드된 파일 URL로 업데이트)
                 "original_filename": original_filename,
+                "file_name": file_name_value,  # NOT NULL 제약조건 충족
                 "doc_type": doc_type,
                 "risk_score": int(round(float(risk_score))),  # DB는 integer 타입이므로 변환
                 "risk_level": risk_level,
