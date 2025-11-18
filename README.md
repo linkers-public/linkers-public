@@ -73,9 +73,6 @@ linkers-public/
 │   │   ├── legal_chunker.py         # 법률 문서 청커
 │   │   ├── contract_storage.py      # 계약서 스토리지
 │   │   ├── async_tasks.py           # 비동기 작업 관리
-│   │   ├── bidding_rag.py           # 공공입찰 RAG (레거시)
-│   │   ├── document_processor.py    # v1 문서 처리기 (레거시)
-│   │   ├── vector_store.py          # 레거시 벡터 스토어
 │   │   └── tools/                   # 계약서 분석 도구 (Phase 1-3)
 │   ├── models/                 # 데이터 모델
 │   ├── scripts/                # 배치 처리 스크립트

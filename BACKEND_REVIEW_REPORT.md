@@ -124,13 +124,13 @@ backend/
 3. ✅ `backend/core/generator.py` - orchestrator.py에서만 사용 → 제거됨
 4. ✅ `backend/core/retriever.py` - orchestrator.py에서만 사용 → 제거됨
 
-### ⚠️ 보관 필요 (실제 사용 중)
-1. ✅ `backend/core/async_tasks.py` - routes_v2.py에서 사용 중 (보관)
-2. ✅ `backend/core/bidding_rag.py` - async_tasks.py에서 사용 중 (보관)
-3. ✅ `backend/core/document_processor.py` - bidding_rag.py에서 사용 중 (보관)
-4. ✅ `backend/core/vector_store.py` - bidding_rag.py에서 사용 중 (보관)
+### ✅ 추가 제거 완료 (2025-01-18)
+1. ✅ `backend/core/bidding_rag.py` - orchestrator_v2로 대체 → 제거됨
+2. ✅ `backend/core/document_processor.py` - bidding_rag.py에서만 사용 → 제거됨
+3. ✅ `backend/core/vector_store.py` - bidding_rag.py에서만 사용 → 제거됨
 
-**참고**: `bidding_rag.py`는 공공입찰 기능에서 사용되며, 법률 서비스와는 별개입니다.
+### ✅ 수정 완료
+1. ✅ `backend/core/async_tasks.py` - bidding_rag.py → orchestrator_v2로 변경
 
 ### README 업데이트 필요
 - v1 파일 제거 후 README 업데이트

@@ -7,7 +7,7 @@ Celery 또는 FastAPI BackgroundTasks 사용
 
 from typing import Dict, Any, Optional
 from fastapi import BackgroundTasks
-from .bidding_rag import BiddingRAG
+from .orchestrator_v2 import Orchestrator
 import asyncio
 from datetime import datetime
 
@@ -16,15 +16,15 @@ class AsyncTaskManager:
     """비동기 작업 관리자"""
     
     def __init__(self):
-        self._rag = None  # 지연 초기화
+        self._orchestrator = None  # 지연 초기화
         self.tasks: Dict[str, Dict[str, Any]] = {}  # job_id -> task_info
     
     @property
-    def rag(self):
-        """BiddingRAG 지연 초기화"""
-        if self._rag is None:
-            self._rag = BiddingRAG()
-        return self._rag
+    def orchestrator(self):
+        """Orchestrator 지연 초기화"""
+        if self._orchestrator is None:
+            self._orchestrator = Orchestrator()
+        return self._orchestrator
     
     async def start_analysis_task(
         self,
@@ -66,45 +66,49 @@ class AsyncTaskManager:
                 'message': '문서 로드 중...',
             })
             
-            # 1. 문서 로드
-            doc = await self.rag.load_document(doc_id)
+            # 1. 문서 로드 (orchestrator_v2 사용)
+            announcement_data = self.orchestrator.store.get_announcement_by_id(doc_id)
+            if not announcement_data:
+                raise ValueError(f"문서를 찾을 수 없습니다: {doc_id}")
+            
             self._update_task(job_id, {
                 'progress': 30,
                 'message': '요구사항 추출 중...',
             })
             
-            # 2. 요구사항 추출
-            requirements = await self.rag.extract_requirements(
-                doc.get('content', '')
-            )
+            # 2. 문서 본문 가져오기
+            text = self.orchestrator.store.get_announcement_body(doc_id)
+            if not text:
+                text = announcement_data.get('content', '') or announcement_data.get('text', '')
+            
+            if not text:
+                raise ValueError("문서 내용이 없습니다")
+            
+            # 3. 분석 결과 조회 (이미 분석된 경우)
+            analysis = self.orchestrator.get_announcement_analysis(doc_id)
+            
             self._update_task(job_id, {
                 'progress': 50,
                 'message': '유사 입찰 검색 중...',
             })
             
-            # 3. 유사 입찰 검색
-            similar_bids = await self.rag.search_similar_bids(requirements)
+            # 4. 유사 입찰 검색 (orchestrator_v2 사용)
+            similar_announcements = self.orchestrator.search_similar_announcements(
+                query=text[:1000],
+                top_k=5
+            )
+            
             self._update_task(job_id, {
                 'progress': 70,
-                'message': '리스크 분석 중...',
-            })
-            
-            # 4. 리스크 분석
-            risk_analysis = await self.rag.analyze_risks(
-                requirements,
-                similar_bids
-            )
-            self._update_task(job_id, {
-                'progress': 90,
-                'message': '결과 저장 중...',
+                'message': '결과 정리 중...',
             })
             
             # 5. 결과 저장
             result = {
-                'requirements': requirements,
-                'similar_bids': similar_bids,
-                'risk_analysis': risk_analysis,
-                'estimated_effort': self.rag.calculate_effort(requirements),
+                'analysis': analysis,
+                'similar_announcements': similar_announcements,
+                'announcement_id': doc_id,
+                'announcement_data': announcement_data,
             }
             
             self._update_task(job_id, {
