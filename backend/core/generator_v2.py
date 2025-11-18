@@ -24,20 +24,29 @@ def _get_local_embedding_model():
             
             print(f"[로딩] 로컬 임베딩 모델: {settings.local_embedding_model}")
             
-            # GPU 우선 사용 (CUDA 사용 가능 시)
-            if torch.cuda.is_available():
-                device = "cuda"
-                device_name = torch.cuda.get_device_name(0)
-                print(f"[GPU] CUDA 사용 가능: {device_name}")
+            # 디바이스 결정: 환경 변수 우선, 없으면 자동 감지
+            if settings.embedding_device and settings.embedding_device.lower() in ["cuda", "cpu"]:
+                # 환경 변수로 강제 지정
+                device = settings.embedding_device.lower()
+                if device == "cuda" and not torch.cuda.is_available():
+                    print(f"[경고] CUDA를 요청했지만 사용 불가, CPU로 폴백합니다")
+                    device = "cpu"
+                print(f"[설정] 환경 변수로 디바이스 지정: {device}")
             else:
-                device = "cpu"
-                print(f"[CPU] CUDA 사용 불가, CPU 사용")
+                # 자동 감지 (기본 동작)
+                if torch.cuda.is_available():
+                    device = "cuda"
+                    device_name = torch.cuda.get_device_name(0)
+                    print(f"[GPU] CUDA 사용 가능: {device_name}")
+                else:
+                    device = "cpu"
+                    print(f"[CPU] CUDA 사용 불가, CPU 사용")
             
             # 환경 변수로 device 강제 지정 (meta tensor 문제 방지)
             os.environ.setdefault("TORCH_DEVICE", device)
             
             try:
-                # 첫 번째 시도: device를 명시적으로 지정 (GPU 우선)
+                # 첫 번째 시도: device를 명시적으로 지정
                 _local_embedding_model = SentenceTransformer(
                     settings.local_embedding_model,
                     device=device
@@ -49,8 +58,14 @@ def _get_local_embedding_model():
                     print(f"[경고] 모델 로딩 에러 발생 (meta tensor), 재시도 중...: {str(e)}")
                     # 모델 캐시를 우회하고 직접 로드 시도
                     try:
-                        # GPU가 있으면 GPU로, 없으면 CPU로 재시도
-                        retry_device = "cuda" if torch.cuda.is_available() else "cpu"
+                        # 환경 변수로 지정된 device 사용, 없으면 자동 감지
+                        if settings.embedding_device and settings.embedding_device.lower() == "cpu":
+                            retry_device = "cpu"
+                        elif settings.embedding_device and settings.embedding_device.lower() == "cuda" and torch.cuda.is_available():
+                            retry_device = "cuda"
+                        else:
+                            retry_device = "cuda" if torch.cuda.is_available() else "cpu"
+                        
                         _local_embedding_model = SentenceTransformer(
                             settings.local_embedding_model,
                             device=retry_device,
@@ -58,13 +73,9 @@ def _get_local_embedding_model():
                         )
                         print(f"[완료] 로컬 임베딩 모델 재로드 완료 (device: {retry_device})")
                     except Exception as retry_e:
-                        # 최종 시도: GPU가 있으면 GPU로, 없으면 CPU로
-                        if torch.cuda.is_available():
-                            print(f"[경고] 재시도 실패, GPU로 최종 시도 중...: {str(retry_e)}")
-                            final_device = "cuda"
-                        else:
-                            print(f"[경고] 재시도 실패, CPU로 최종 시도 중...: {str(retry_e)}")
-                            final_device = "cpu"
+                        # 최종 시도: CPU로 폴백 (가장 안전)
+                        print(f"[경고] 재시도 실패, CPU로 최종 시도 중...: {str(retry_e)}")
+                        final_device = "cpu"
                         
                         _local_embedding_model = SentenceTransformer(
                             settings.local_embedding_model,
