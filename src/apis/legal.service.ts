@@ -299,6 +299,7 @@ export interface ContractAnalysisResponseV2 {
     title: string;
     snippet: string;
   }>;
+  contractText?: string;  // 계약서 원문 텍스트
   createdAt: string;
 }
 
@@ -320,11 +321,13 @@ export const searchLegalV2 = async (
       params.append('doc_type', docType);
     }
 
+    // 인증 헤더 가져오기 (선택적 - 검색은 인증 없이도 가능)
+    const authHeaders = await getAuthHeaders();
+    authHeaders['Content-Type'] = 'application/json';
+
     const response = await fetch(`${url}?${params}`, {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: authHeaders,
     });
 
     if (!response.ok) {
@@ -341,12 +344,55 @@ export const searchLegalV2 = async (
 };
 
 /**
+ * 사용자 ID 가져오기 (Supabase)
+ */
+const getUserId = async (): Promise<string | null> => {
+  try {
+    const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client');
+    const supabase = createSupabaseBrowserClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    return user?.id || null;
+  } catch (error) {
+    console.warn('사용자 ID 가져오기 실패:', error);
+    return null;
+  }
+};
+
+/**
+ * 인증 헤더 가져오기 (Supabase 액세스 토큰)
+ */
+const getAuthHeaders = async (): Promise<HeadersInit> => {
+  const headers: HeadersInit = {};
+  
+  try {
+    const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client');
+    const supabase = createSupabaseBrowserClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (session?.access_token) {
+      headers['Authorization'] = `Bearer ${session.access_token}`;
+    }
+    
+    // user_id도 함께 추가
+    const userId = await getUserId();
+    if (userId) {
+      headers['X-User-Id'] = userId;
+    }
+  } catch (error) {
+    console.warn('인증 헤더 가져오기 실패:', error);
+  }
+  
+  return headers;
+};
+
+/**
  * 계약서 분석 (v2)
  */
 export const analyzeContractV2 = async (
   file: File,
   title?: string,
-  docType?: string
+  docType?: string,
+  userId?: string | null
 ): Promise<ContractAnalysisResponseV2> => {
   try {
     const url = `${LEGAL_API_BASE_V2}/analyze-contract`;
@@ -360,17 +406,77 @@ export const analyzeContractV2 = async (
       formData.append('doc_type', docType);
     }
 
+    // 인증 헤더 가져오기 (Authorization + X-User-Id)
+    const authHeaders = await getAuthHeaders();
+    
+    // user_id가 명시적으로 제공된 경우 덮어쓰기
+    if (userId !== undefined) {
+      authHeaders['X-User-Id'] = userId;
+    }
+
+    // FormData 전송 시 Content-Type은 브라우저가 자동으로 설정하므로 제거
+    // (multipart/form-data boundary는 브라우저가 자동 생성)
+    const headersForFormData: HeadersInit = { ...authHeaders };
+    delete (headersForFormData as any)['Content-Type'];
+
     const response = await fetch(url, {
       method: 'POST',
+      headers: headersForFormData,
       body: formData,
     });
 
     if (!response.ok) {
       const errorText = await response.text();
+      console.error('[계약서 분석] API 에러:', response.status, errorText);
       throw new Error(`계약서 분석 실패: ${response.status} - ${errorText}`);
     }
 
     const data: ContractAnalysisResponseV2 = await response.json();
+    
+    // 응답 검증
+    if (!data || typeof data !== 'object') {
+      console.error('[계약서 분석] 잘못된 응답 형식:', data);
+      throw new Error('서버에서 잘못된 형식의 응답을 받았습니다.');
+    }
+    
+    // 📋 백엔드 응답 전체를 JSON으로 출력 (브라우저에서 펼쳐서 볼 수 있음)
+    console.group('📋 [계약서 분석] 백엔드 API 응답 전체');
+    console.log('전체 응답 객체:', data);
+    console.log('JSON 문자열:', JSON.stringify(data, null, 2));
+    console.log('응답 키 목록:', Object.keys(data));
+    console.groupEnd();
+    
+    // contractText 확인
+    const hasContractText = !!(data.contractText && data.contractText.trim().length > 0);
+    console.log('🔍 [계약서 분석] API 응답 요약:', {
+      docId: data.docId,
+      hasContractText,
+      contractTextLength: data.contractText?.length || 0,
+      contractTextPreview: data.contractText?.substring(0, 200) || '(없음)',
+      riskScore: data.riskScore,
+      riskLevel: data.riskLevel,
+      issuesCount: data.issues?.length || 0,
+      hasSummary: !!data.summary,
+      summaryPreview: data.summary?.substring(0, 100) || '(없음)',
+      responseKeys: Object.keys(data)
+    });
+    
+    if (!hasContractText) {
+      console.warn('⚠️ [계약서 분석] API 응답에 contractText가 없습니다!', {
+        docId: data.docId,
+        responseKeys: Object.keys(data),
+        contractText: data.contractText,
+        contractTextType: typeof data.contractText,
+        contractTextIsEmpty: data.contractText === '' || data.contractText === null || data.contractText === undefined
+      });
+    }
+    
+    if (!data.docId) {
+      console.warn('[계약서 분석] docId가 응답에 없음:', data);
+      // docId가 없으면 임시 ID 생성
+      data.docId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    }
+    
     return data;
   } catch (error) {
     console.error('계약서 분석 오류:', error);
@@ -387,11 +493,13 @@ export const getContractAnalysisV2 = async (
   try {
     const url = `${LEGAL_API_BASE_V2}/contracts/${docId}`;
 
+    // 인증 헤더 가져오기
+    const authHeaders = await getAuthHeaders();
+    authHeaders['Content-Type'] = 'application/json';
+
     const response = await fetch(url, {
       method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: authHeaders,
     });
 
     if (!response.ok) {
@@ -411,16 +519,24 @@ export const getContractAnalysisV2 = async (
  * 상황별 법률 분석 (v2)
  */
 export const analyzeSituationV2 = async (
-  request: SituationRequestV2
+  request: SituationRequestV2,
+  userId?: string | null
 ): Promise<SituationResponseV2> => {
   try {
     const url = `${LEGAL_API_BASE_V2}/analyze-situation`;
     
+    // 인증 헤더 가져오기 (Authorization + X-User-Id)
+    const authHeaders = await getAuthHeaders();
+    authHeaders['Content-Type'] = 'application/json';
+    
+    // user_id가 명시적으로 제공된 경우 덮어쓰기
+    if (userId !== undefined) {
+      authHeaders['X-User-Id'] = userId;
+    }
+    
     const response = await fetch(url, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: authHeaders,
       body: JSON.stringify(request),
     });
 
@@ -433,6 +549,64 @@ export const analyzeSituationV2 = async (
     return data;
   } catch (error) {
     console.error('상황 분석 오류:', error);
+    throw error;
+  }
+};
+
+/**
+ * 사용자별 계약서 분석 히스토리 조회 (v2)
+ */
+export const getContractHistoryV2 = async (
+  limit: number = 20,
+  offset: number = 0,
+  userId?: string | null
+): Promise<Array<{
+  id: string;
+  doc_id: string;
+  title: string;
+  original_filename: string;
+  risk_score: number;
+  risk_level: string;
+  summary: string;
+  created_at: string;
+  issue_count: number;
+}>> => {
+  try {
+    const url = `${LEGAL_API_BASE_V2}/contracts/history`;
+    
+    // 인증 헤더 가져오기 (Authorization + X-User-Id)
+    const authHeaders = await getAuthHeaders();
+    authHeaders['Content-Type'] = 'application/json';
+    
+    // user_id가 명시적으로 제공된 경우 덮어쓰기
+    if (userId !== undefined) {
+      authHeaders['X-User-Id'] = userId;
+    }
+    
+    // user_id가 없으면 에러
+    if (!authHeaders['X-User-Id']) {
+      throw new Error('사용자 ID가 필요합니다. 로그인해주세요.');
+    }
+    
+    const params = new URLSearchParams({
+      limit: limit.toString(),
+      offset: offset.toString(),
+    });
+
+    const response = await fetch(`${url}?${params}`, {
+      method: 'GET',
+      headers: authHeaders,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`히스토리 조회 실패: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('히스토리 조회 오류:', error);
     throw error;
   }
 };

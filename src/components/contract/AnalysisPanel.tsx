@@ -91,7 +91,10 @@ export function AnalysisPanel({
       other: [],
     }
     issues.forEach(issue => {
-      grouped[issue.category].push(issue)
+      // 카테고리가 정의된 키에 있는지 확인, 없으면 'other'에 추가
+      const validCategories: LegalCategory[] = ['working_hours', 'wage', 'probation', 'stock_option', 'ip', 'harassment', 'other']
+      const category: LegalCategory = validCategories.includes(issue.category) ? issue.category : 'other'
+      grouped[category].push(issue)
     })
     return grouped
   }, [issues])

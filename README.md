@@ -15,6 +15,7 @@ AI 기반 계약/노동 리스크 분석 시스템으로, 청년 근로자들을
 - [문제 해결](#-문제-해결)
 - [배포 (무료 & 쉬운 방법)](#-배포-무료--쉬운-방법)
 - [📘 백엔드 구현 가이드](./LEGAL_BACKEND_IMPLEMENTATION_GUIDE.md) - 해커톤/백엔드 개발자를 위한 완전한 구현 패키지
+- [🛠️ 계약서 분석 도구화 설계](./backend/CONTRACT_ANALYSIS_TOOLS_DESIGN.md) - 백엔드 로직 도구화 설계 문서
 
 ## 🚀 주요 기능
 
@@ -93,8 +94,12 @@ linkers-public/
 │   ├── lib/                   # 유틸리티 및 라이브러리
 │   │   └── rag/               # RAG 라이브러리
 │   ├── apis/                  # API 서비스 함수
+│   │   ├── legal.service.ts   # 법률 API 서비스 (v2)
+│   │   └── contract-history.service.ts  # 계약서 히스토리 서비스
 │   ├── stores/                # 상태 관리
 │   └── supabase/              # Supabase 클라이언트
+│       ├── supabase-client.ts # 싱글톤 클라이언트 (권장)
+│       └── supabase-storage.ts # Storage 전용 (싱글톤 재사용)
 │
 ├── package.json               # Node.js 의존성
 └── README.md                  # 이 문서
@@ -299,6 +304,19 @@ PORT=8000
    - 프로덕션: Vercel 환경 변수 설정 사용
 
 ## 🖥️ 백엔드 설정
+
+### ⚠️ 중요: 라우터 등록 순서
+
+백엔드 서버(`backend/main.py`)에서 라우터 등록 순서가 중요합니다:
+
+```python
+# 더 구체적인 경로를 가진 라우터를 먼저 등록해야 함
+app.include_router(router_legal_v2)  # /api/v2/legal - 먼저 등록
+app.include_router(router_legal)      # /api/v1/legal
+app.include_router(router_v2)         # /api/v2 - 나중에 등록
+```
+
+이렇게 하지 않으면 `/api/v2/legal/analyze-contract`가 `router_v2`의 `/legal/analyze-contract`와 먼저 매칭되어 v1 형식으로 응답할 수 있습니다.
 
 ### 기본 설정 (무료 스택)
 
@@ -505,39 +523,61 @@ GET /api/v2/legal/search?q=근로시간&limit=5&doc_type=law
 }
 ```
 
-#### 2. 계약서 분석
+#### 2. 계약서 분석 (v2 API)
 
 ```bash
 POST /api/v2/legal/analyze-contract
 Content-Type: multipart/form-data
+X-User-Id: [사용자 ID] (선택)
+Authorization: Bearer [Supabase Access Token] (선택)
 
 file: [계약서 PDF]
 title: "프리랜서 계약서" (선택)
+doc_type: "employment" | "freelance" (선택)
 ```
 
-**응답:**
+**응답 (v2 형식):**
 ```json
 {
-  "risk_score": 65.5,
-  "risks": [
+  "docId": "uuid",
+  "title": "프리랜서 계약서",
+  "riskScore": 65.5,
+  "riskLevel": "high",
+  "sections": {
+    "working_hours": 70,
+    "wage": 60,
+    "probation_termination": 80,
+    "stock_option_ip": 50
+  },
+  "issues": [
     {
-      "clause": "계약 해지 조항",
-      "risk_level": "high",
-      "description": "일방적 해지 가능 조항이 포함되어 있습니다",
-      "related_law": "제1조 (목적)"
+      "id": "issue-1",
+      "category": "probation_termination",
+      "severity": "high",
+      "summary": "계약 해지 조항",
+      "originalText": "계약 해지 조항 원문...",
+      "legalBasis": ["근로기준법 제1조"],
+      "explanation": "일방적 해지 가능 조항이 포함되어 있습니다",
+      "suggestedRevision": "수정 제안 텍스트..."
     }
   ],
   "summary": "전체 요약...",
-  "references": [
+  "retrievedContexts": [
     {
-      "section_title": "제1조 (목적)",
-      "source": "moel",
-      "text": "관련 법률 조문..."
+      "sourceType": "law",
+      "title": "근로기준법",
+      "snippet": "관련 법률 조문..."
     }
   ],
-  "title": "프리랜서 계약서"
+  "contractText": "계약서 전체 원문 텍스트...",
+  "createdAt": "2025-11-18T00:00:00Z"
 }
 ```
+
+**중요 사항:**
+- 백엔드 라우터 등록 순서: 더 구체적인 경로(`/api/v2/legal`)를 가진 라우터가 먼저 등록되어야 합니다
+- `contractText` 필드에 계약서 전체 원문이 포함됩니다
+- 사용자 인증이 필요한 경우 `X-User-Id`와 `Authorization` 헤더를 포함하세요
 
 #### 3. 상황별 법률 분석
 
@@ -874,12 +914,17 @@ curl http://localhost:8000/api/health
 curl "http://localhost:8000/api/v2/legal/search?q=근로시간&limit=5"
 ```
 
-#### 3. 계약서 분석
+#### 3. 계약서 분석 (v2 API)
 ```bash
 curl -X POST "http://localhost:8000/api/v2/legal/analyze-contract" \
   -F "file=@contract.pdf" \
-  -F "title=프리랜서 계약서"
+  -F "title=프리랜서 계약서" \
+  -F "doc_type=employment" \
+  -H "X-User-Id: [사용자 ID]" \
+  -H "Authorization: Bearer [Supabase Access Token]"
 ```
+
+**응답 형식**: v2 형식 (`docId`, `contractText`, `issues` 등 포함)
 
 #### 4. 상황별 분석
 ```bash
@@ -999,6 +1044,23 @@ source venv/bin/activate
 #### CORS 오류 (프론트엔드 연동 시)
 - `main.py`의 CORS 설정 확인
 - 프론트엔드 도메인을 `allow_origins`에 추가
+
+#### 백엔드가 v1 형식으로 응답하는 경우
+- **증상**: 프론트엔드에서 `contractText`가 없거나 `risks` 필드가 응답에 포함됨
+- **원인**: 백엔드 라우터 등록 순서 문제
+- **해결**: `backend/main.py`에서 `router_legal_v2`를 `router_v2`보다 먼저 등록
+  ```python
+  # 올바른 순서
+  app.include_router(router_legal_v2)  # /api/v2/legal - 먼저
+  app.include_router(router_v2)         # /api/v2 - 나중에
+  ```
+
+#### Supabase 클라이언트 중복 생성 경고
+- **증상**: `Multiple GoTrueClient instances detected` 경고
+- **원인**: 여러 파일에서 `createClient()`를 직접 호출
+- **해결**: `src/supabase/supabase-client.ts`의 싱글톤 패턴 사용
+  - 모든 파일에서 `createSupabaseBrowserClient()` 함수 사용
+  - `supabase-storage.ts`도 싱글톤을 재사용하도록 수정됨
 
 ## 🚀 배포 (무료 & 쉬운 방법)
 

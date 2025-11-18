@@ -3,7 +3,7 @@ Legal RAG API Routes v2
 법률 리스크 분석 API 엔드포인트 (v2 - 가이드 스펙 준수)
 """
 
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, status, Query
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, status, Query, Header
 from typing import Optional, List
 import tempfile
 import os
@@ -125,10 +125,14 @@ async def analyze_contract(
     file: UploadFile = File(..., description="계약서 파일 (PDF/HWPX 등)"),
     title: Optional[str] = Form(None, description="문서 이름"),
     doc_type: Optional[str] = Form(None, description="문서 타입 (employment, freelance 등)"),
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id", description="사용자 ID"),
 ):
     """
     계약서 PDF/HWPX 업로드 → 위험 분석
     """
+    logger.info(f"[계약서 분석] ========== v2 엔드포인트 호출 시작 ==========")
+    logger.info(f"[계약서 분석] 파일명: {file.filename}, title: {title}, doc_type: {doc_type}, user_id: {x_user_id}")
+    
     if not file.filename:
         raise HTTPException(status_code=400, detail="파일이 필요합니다.")
 
@@ -151,7 +155,11 @@ async def analyze_contract(
         processor = get_processor()
         extracted_text, _ = processor.process_file(temp_path, file_type=None)
         
+        # extracted_text 추출 확인 로깅
+        logger.info(f"[계약서 분석] 텍스트 추출 완료: extracted_text 길이={len(extracted_text) if extracted_text else 0}, 미리보기={extracted_text[:100] if extracted_text else '(없음)'}")
+        
         if not extracted_text or extracted_text.strip() == "":
+            logger.error(f"[계약서 분석] 텍스트 추출 실패: extracted_text가 비어있음")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="업로드된 파일에서 텍스트를 추출할 수 없습니다.",
@@ -201,6 +209,13 @@ async def analyze_contract(
             })
         
         # 결과 저장 (DB에 저장)
+        # contractText 설정 전 확인
+        logger.info(f"[계약서 분석] ContractAnalysisResponseV2 생성 전: extracted_text 길이={len(extracted_text) if extracted_text else 0}, extracted_text 타입={type(extracted_text)}")
+        
+        # extracted_text가 None이면 빈 문자열로 변환
+        contract_text_value = extracted_text if extracted_text else ""
+        logger.info(f"[계약서 분석] contractText 값 설정: 길이={len(contract_text_value)}, 비어있음={not contract_text_value or contract_text_value.strip() == ''}")
+        
         analysis_result = ContractAnalysisResponseV2(
             docId=doc_id,
             title=doc_title,
@@ -210,8 +225,13 @@ async def analyze_contract(
             issues=issues,
             summary=result.summary,
             retrievedContexts=retrieved_contexts,
+            contractText=contract_text_value,  # 계약서 원문 텍스트 포함 (None이면 빈 문자열)
             createdAt=datetime.utcnow().isoformat() + "Z",
         )
+        
+        # 생성 후 확인
+        logger.info(f"[계약서 분석] ContractAnalysisResponseV2 생성 후: contractText 길이={len(analysis_result.contractText) if analysis_result.contractText else 0}, contractText 존재={bool(analysis_result.contractText)}")
+        logger.info(f"[계약서 분석] 응답 생성 완료: docId={doc_id}, title={doc_title}, issues={len(issues)}개")
         
         # DB에 저장 시도
         try:
@@ -236,12 +256,41 @@ async def analyze_contract(
                     "explanation": issue.explanation,
                     "suggestedRevision": issue.suggestedRevision,
                 } for issue in issues],
+                user_id=x_user_id,
+                contract_text=extracted_text,  # 계약서 원문 텍스트 저장
             )
-            logger.info(f"계약서 분석 결과 DB 저장 완료: doc_id={doc_id}")
+            logger.info(f"[계약서 분석] DB 저장 완료: doc_id={doc_id}")
         except Exception as save_error:
-            logger.warning(f"DB 저장 실패, 메모리에만 저장: {str(save_error)}")
+            logger.warning(f"[계약서 분석] DB 저장 실패, 메모리에만 저장: {str(save_error)}", exc_info=True)
             # Fallback: 메모리에 저장
             _contract_analyses[doc_id] = analysis_result
+            logger.info(f"[계약서 분석] 메모리에 저장 완료: doc_id={doc_id}, contractText 길이={len(analysis_result.contractText) if analysis_result.contractText else 0}")
+        
+        # 응답 직렬화 확인
+        response_dict = analysis_result.model_dump()
+        contract_text_length = len(response_dict.get('contractText', '')) if response_dict.get('contractText') else 0
+        
+        # 상세 로깅
+        logger.info(f"[계약서 분석] 응답 생성 완료:")
+        logger.info(f"  - docId: {response_dict.get('docId')}")
+        logger.info(f"  - contractText 길이: {contract_text_length}")
+        logger.info(f"  - contractText 존재: {bool(response_dict.get('contractText'))}")
+        logger.info(f"  - contractText 미리보기: {response_dict.get('contractText', '')[:100] if response_dict.get('contractText') else '(없음)'}")
+        logger.info(f"  - 응답 키: {list(response_dict.keys())}")
+        logger.info(f"  - issues 개수: {len(response_dict.get('issues', []))}")
+        logger.info(f"  - retrievedContexts 개수: {len(response_dict.get('retrievedContexts', []))}")
+        
+        # contractText가 없으면 경고
+        if not response_dict.get('contractText') or contract_text_length == 0:
+            logger.warning(f"[계약서 분석] ⚠️ contractText가 응답에 없습니다! extracted_text 길이: {len(extracted_text) if extracted_text else 0}")
+        
+        # v2 형식 검증: 필수 필드 확인
+        required_fields = ['docId', 'title', 'riskScore', 'riskLevel', 'sections', 'issues', 'summary', 'retrievedContexts', 'contractText', 'createdAt']
+        missing_fields = [field for field in required_fields if field not in response_dict]
+        if missing_fields:
+            logger.error(f"[계약서 분석] ❌ v2 형식 필수 필드 누락: {missing_fields}")
+        else:
+            logger.info(f"[계약서 분석] ✅ v2 형식 검증 통과")
         
         return analysis_result
 
@@ -259,32 +308,85 @@ async def analyze_contract(
             os.unlink(temp_path)
 
 
+@router.get("/contracts/history", response_model=List[dict])
+async def get_contract_history(
+    x_user_id: str = Header(..., alias="X-User-Id", description="사용자 ID"),
+    limit: int = Query(20, ge=1, le=100, description="조회 개수"),
+    offset: int = Query(0, ge=0, description="오프셋"),
+):
+    """
+    사용자별 계약서 분석 히스토리 조회
+    """
+    try:
+        storage_service = get_storage_service()
+        history = await storage_service.get_user_contract_analyses(
+            user_id=x_user_id,
+            limit=limit,
+            offset=offset,
+        )
+        return history
+    except Exception as e:
+        logger.error(f"히스토리 조회 중 오류 발생: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"히스토리 조회 중 오류가 발생했습니다: {str(e)}",
+        )
+
+
 @router.get("/contracts/{doc_id}", response_model=ContractAnalysisResponseV2)
 async def get_contract_analysis(doc_id: str):
     """
     계약서 분석 결과 조회
     """
+    logger.info(f"[계약서 조회] doc_id={doc_id} 조회 시작")
+    
+    # 임시 ID인 경우 메모리에서만 조회
+    if doc_id.startswith("temp-"):
+        logger.warning(f"[계약서 조회] 임시 ID 감지: {doc_id}, 메모리에서만 조회")
+        if doc_id in _contract_analyses:
+            result = _contract_analyses[doc_id]
+            contract_text_length = len(result.contractText) if result.contractText else 0
+            logger.info(f"[계약서 조회] 메모리에서 찾음: doc_id={doc_id}, contractText 길이={contract_text_length}")
+            return result
+        else:
+            logger.warning(f"[계약서 조회] 메모리에서도 찾을 수 없음: {doc_id}")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"임시 분석 결과를 찾을 수 없습니다. (doc_id: {doc_id})",
+            )
+    
     # DB에서 조회 시도
     try:
         storage_service = get_storage_service()
         result = await storage_service.get_contract_analysis(doc_id)
         if result:
+            contract_text_length = len(result.get('contractText', '')) if result.get('contractText') else 0
+            logger.info(f"[계약서 조회] DB에서 찾음: doc_id={doc_id}, contractText 길이={contract_text_length}")
             return ContractAnalysisResponseV2(**result)
+        else:
+            logger.warning(f"[계약서 조회] DB에서 찾을 수 없음: doc_id={doc_id}")
     except Exception as e:
-        logger.warning(f"DB 조회 실패: {str(e)}")
+        logger.warning(f"[계약서 조회] DB 조회 실패: {str(e)}", exc_info=True)
     
     # Fallback: 메모리에서 조회
     if doc_id in _contract_analyses:
-        return _contract_analyses[doc_id]
+        result = _contract_analyses[doc_id]
+        contract_text_length = len(result.contractText) if result.contractText else 0
+        logger.info(f"[계약서 조회] 메모리에서 찾음: doc_id={doc_id}, contractText 길이={contract_text_length}")
+        return result
     
+    logger.error(f"[계약서 조회] 어디서도 찾을 수 없음: doc_id={doc_id}")
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
-        detail="분석 결과를 찾을 수 없습니다.",
+        detail=f"분석 결과를 찾을 수 없습니다. (doc_id: {doc_id})",
     )
 
 
 @router.post("/analyze-situation", response_model=SituationResponseV2)
-async def analyze_situation(payload: SituationRequestV2):
+async def analyze_situation(
+    payload: SituationRequestV2,
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id", description="사용자 ID"),
+):
     """
     텍스트 기반 상황 설명 + 메타 정보 → 맞춤형 상담 분석
     """

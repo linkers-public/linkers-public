@@ -3,10 +3,11 @@
  * Supabase Storage 및 DB와 통신
  */
 
-import { createSupabaseBrowserClient } from '@/supabase/supabase-storage'
+import { supabaseBrowserClient } from '@/supabase/supabase-client'
 import type { LegalAnalysisResult } from './legal.service'
 
-const supabase = createSupabaseBrowserClient()
+// 싱글톤 클라이언트 직접 사용
+const supabase = supabaseBrowserClient
 
 const handleError = (message: string, error?: any) => {
   console.error(message, error)

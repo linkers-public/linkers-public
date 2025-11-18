@@ -36,17 +36,34 @@ export const createServerSideMiddleware = async (
   req: NextRequest,
   res: NextResponse,
 ) => {
-  return createServerClient(
+  return createServerClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get: (key) => getCookie(key, { req, res }),
+        // Next.js 미들웨어에서는 NextRequest.cookies를 직접 사용
+        get: (key) => {
+          return req.cookies.get(key)?.value
+        },
         set: (key, value, options) => {
-          setCookie(key, value, { req, res, ...options })
+          // NextResponse의 cookies를 사용하여 쿠키 설정
+          res.cookies.set({
+            name: key,
+            value,
+            ...options,
+            // SameSite와 Secure 옵션은 프로덕션에서 중요
+            sameSite: options?.sameSite || 'lax',
+            httpOnly: options?.httpOnly !== false, // 기본값 true
+          })
         },
         remove: (key, options) => {
-          setCookie(key, '', { req, res, ...options })
+          // 쿠키 삭제는 만료 시간을 과거로 설정
+          res.cookies.set({
+            name: key,
+            value: '',
+            expires: new Date(0),
+            ...options,
+          })
         },
       },
     },

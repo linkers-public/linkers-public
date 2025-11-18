@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
-import { Loader2, AlertCircle, ChevronUp, ChevronDown, MessageSquare, GripVertical, Send } from 'lucide-react'
+import { Loader2, AlertCircle, ChevronUp, ChevronDown, MessageSquare, GripVertical, Send, FileText } from 'lucide-react'
 import { ContractViewer } from '@/components/contract/ContractViewer'
 import { AnalysisPanel } from '@/components/contract/AnalysisPanel'
 import { ContractChat } from '@/components/contract/ContractChat'
@@ -37,96 +37,155 @@ export default function ContractDetailPage() {
       setError(null)
 
       try {
-        // 1순위: DB에서 분석 결과 가져오기 시도
-        let dbData: any = null
-        try {
-          const response = await fetch(`/api/legal/contract-analysis/${docId}`)
-          if (response.ok) {
-            dbData = await response.json()
-            console.log('[Frontend] DB에서 분석 결과 조회 성공:', docId)
-          } else if (response.status === 404) {
-            // 404는 정상적인 경우 (DB에 없을 수 있음 - 로컬 스토리지에서 조회)
-            console.log('[Frontend] DB에서 분석 결과를 찾을 수 없음, 로컬 스토리지 확인:', docId)
-          } else {
-            console.warn('[Frontend] DB 조회 실패:', response.status, docId)
-          }
-        } catch (dbError) {
-          console.warn('[Frontend] DB 조회 중 예외 발생, 로컬 스토리지 확인:', dbError)
-        }
-
-        // 2순위: 로컬 스토리지에서 분석 결과 가져오기
-        const storedData = localStorage.getItem(`contract_analysis_${docId}`)
-        const localData = storedData ? JSON.parse(storedData) : null
+        // 임시 ID인 경우 로컬 스토리지만 사용
+        const isTempId = docId.startsWith('temp-')
         
-        // DB 데이터를 로컬 형식으로 변환 (필요시)
-        const normalizedData = dbData ? {
-          risk_score: dbData.risk_score,
-          summary: dbData.summary || '',
-          contractText: dbData.contract_text || '',
-          contract_text: dbData.contract_text || '',
-          issues: dbData.analysis_result?.issues || [],
-          recommendations: dbData.analysis_result?.recommendations || [],
-          createdAt: dbData.created_at,
-          fileUrl: dbData.file_url,
-        } : localData
+        let v2Data: any = null
+        let storedData: string | null = null
+        let localData: any = null
+        
+        if (isTempId) {
+          console.log('[Frontend] 임시 ID 감지, 로컬 스토리지만 사용:', docId)
+          storedData = localStorage.getItem(`contract_analysis_${docId}`)
+          localData = storedData ? JSON.parse(storedData) : null
+          
+          // 상세 로그 출력
+          console.log('[Frontend] 로컬 스토리지 원본 데이터:', storedData ? storedData.substring(0, 500) : '(없음)')
+          console.log('[Frontend] 로컬 스토리지 파싱된 데이터:', {
+            hasData: !!localData,
+            hasContractText: !!localData?.contractText,
+            hasContract_text: !!localData?.contract_text,
+            contractTextLength: localData?.contractText?.length || 0,
+            contract_textLength: localData?.contract_text?.length || 0,
+            contractTextPreview: localData?.contractText?.substring(0, 100) || '(없음)',
+            contract_textPreview: localData?.contract_text?.substring(0, 100) || '(없음)',
+            keys: localData ? Object.keys(localData) : [],
+            fullData: localData // 전체 데이터도 출력
+          })
+        } else {
+          // v2 API로 분석 결과 가져오기
+          const { getContractAnalysisV2 } = await import('@/apis/legal.service')
+          
+          try {
+            v2Data = await getContractAnalysisV2(docId)
+            console.log('[Frontend] v2 API에서 분석 결과 조회 성공:', docId)
+          } catch (apiError: any) {
+            console.warn('[Frontend] v2 API 조회 실패, 로컬 스토리지 확인:', apiError)
+            // 404는 정상적인 경우 (DB에 없을 수 있음)
+            if (apiError.message?.includes('404')) {
+              console.log('[Frontend] 분석 결과를 찾을 수 없음, 로컬 스토리지 확인:', docId)
+            }
+          }
+
+          // Fallback: 로컬 스토리지에서 분석 결과 가져오기
+          storedData = localStorage.getItem(`contract_analysis_${docId}`)
+          localData = storedData ? JSON.parse(storedData) : null
+        }
+        
+        // v2 데이터를 로컬 형식으로 변환
+        // temp-ID인 경우: 로컬 스토리지만 신뢰
+        // uuid인 경우: v2 API 응답을 우선, 로컬 스토리지는 fallback
+        const normalizedData = isTempId ? {
+          // temp-ID: 로컬 스토리지만 사용
+          ...localData,
+          contractText: localData?.contractText || localData?.contract_text || '',
+          contract_text: localData?.contract_text || localData?.contractText || '',
+          issues: localData?.issues || localData?.risks || [],
+          risk_score: localData?.risk_score || localData?.riskScore || 0,
+          summary: localData?.summary || '',
+        } : (v2Data ? {
+          // uuid + v2Data 있음: v2 API 응답 우선 사용
+          risk_score: v2Data.riskScore,
+          summary: v2Data.summary || '',
+          contractText: v2Data.contractText || '',
+          contract_text: v2Data.contractText || '', // 호환성을 위해 둘 다 설정
+          issues: v2Data.issues || [], // v2 형식의 issues 배열 확실히 포함
+          recommendations: [],
+          createdAt: v2Data.createdAt,
+          fileUrl: null,
+        } : {
+          // uuid + v2Data 없음: 로컬 스토리지 fallback
+          ...localData,
+          contractText: localData?.contractText || localData?.contract_text || '',
+          contract_text: localData?.contract_text || localData?.contractText || '',
+          issues: localData?.issues || localData?.risks || [],
+        })
         
         if (normalizedData) {
           // 백엔드 응답을 새로운 형식으로 변환
+          // v2 형식: issues 배열에 id, category, severity, summary, explanation 등이 있음
+          // v1 형식: name, description 필드가 있음
           // "분석 실패" 같은 에러 이슈는 필터링
           const validIssues = (normalizedData.issues || []).filter((issue: any) => {
-            const name = (issue.name || '').toLowerCase()
-            return !name.includes('분석 실패') && 
-                   !name.includes('llm 분석') && 
-                   !name.includes('비활성화') &&
-                   issue.name && 
-                   issue.description
+            // v2 형식: summary 또는 v1 형식: name
+            const nameOrSummary = (issue.summary || issue.name || '').toLowerCase()
+            // v2 형식: explanation 또는 v1 형식: description
+            const descOrExplanation = (issue.explanation || issue.description || '')
+            
+            // 에러 메시지 필터링
+            if (nameOrSummary.includes('분석 실패') || 
+                nameOrSummary.includes('llm 분석') || 
+                nameOrSummary.includes('비활성화')) {
+              return false
+            }
+            
+            // v2 형식: summary가 있으면 유효, v1 형식: name과 description이 모두 있어야 유효
+            if (issue.summary) {
+              // v2 형식: summary만 있어도 유효
+              return true
+            } else if (issue.name && issue.description) {
+              // v1 형식: name과 description이 모두 있어야 유효
+              return true
+            }
+            
+            return false
           })
           
           const issues: LegalIssue[] = validIssues.map((issue: any, index: number) => {
-            // 카테고리 매핑
-            const categoryMap: Record<string, string> = {
-              '근로시간': 'working_hours',
-              '근로시간/휴게': 'working_hours',
-              '보수': 'wage',
-              '보수/수당': 'wage',
-              '수습': 'probation',
-              '수습/해지': 'probation',
-              '스톡옵션': 'stock_option',
-              '스톡옵션/IP': 'stock_option',
-              'IP': 'ip',
-              '저작권': 'ip',
-              '직장내괴롭힘': 'harassment',
+            // v2 API 응답 형식 처리
+            // v2: summary, explanation, category, severity, originalText, suggestedRevision, legalBasis
+            // v1: name, description, risk_level, clause, related_law
+            const issueText = (issue.summary || issue.name || issue.description || '').toLowerCase()
+            const issueDesc = (issue.explanation || issue.description || '').toLowerCase()
+            const searchText = `${issueText} ${issueDesc}`
+
+            // 카테고리 매핑 (v2의 category 필드 우선 사용)
+            let category: string = issue.category || 'other'
+            // v2 category는 이미 정규화되어 있을 수 있음 (예: "일자리_괴롭힘_방지_및_보호")
+            // 언더스코어를 제거하고 매핑 시도
+            const normalizedCategory = category.replace(/_/g, '').toLowerCase()
+            if (!category || category === 'other' || normalizedCategory === 'other') {
+              // category가 없으면 텍스트 기반으로 추론
+              if (searchText.includes('근로시간') || searchText.includes('근무시간') || searchText.includes('휴게')) {
+                category = 'working_hours'
+              } else if (searchText.includes('보수') || searchText.includes('수당') || searchText.includes('임금') || searchText.includes('퇴직')) {
+                category = 'wage'
+              } else if (searchText.includes('수습') || searchText.includes('해지') || searchText.includes('해고')) {
+                category = 'probation'
+              } else if (searchText.includes('스톡옵션')) {
+                category = 'stock_option'
+              } else if (searchText.includes('ip') || searchText.includes('지적재산') || searchText.includes('저작권')) {
+                category = 'ip'
+              } else if (searchText.includes('괴롭힘') || searchText.includes('성희롱') || normalizedCategory.includes('괴롭힘') || normalizedCategory.includes('harassment')) {
+                category = 'harassment'
+              } else if (normalizedCategory.includes('차등') || normalizedCategory.includes('discrimination')) {
+                category = 'harassment' // 차등 금지도 harassment 카테고리로
+              } else {
+                category = 'other'
+              }
             }
 
-            const issueName = (issue.name || '').toLowerCase()
-            const issueDesc = (issue.description || '').toLowerCase()
-            const searchText = `${issueName} ${issueDesc}`
-
-            let category: string = 'other'
-            if (searchText.includes('근로시간') || searchText.includes('근무시간') || searchText.includes('휴게')) {
-              category = 'working_hours'
-            } else if (searchText.includes('보수') || searchText.includes('수당') || searchText.includes('임금') || searchText.includes('퇴직')) {
-              category = 'wage'
-            } else if (searchText.includes('수습') || searchText.includes('해지') || searchText.includes('해고')) {
-              category = 'probation'
-            } else if (searchText.includes('스톡옵션')) {
-              category = 'stock_option'
-            } else if (searchText.includes('ip') || searchText.includes('지적재산') || searchText.includes('저작권')) {
-              category = 'ip'
-            } else if (searchText.includes('괴롭힘') || searchText.includes('성희롱')) {
-              category = 'harassment'
-            }
-
-            // 위치 정보 추출 (description에서 조항 번호 찾기)
-            const clauseMatch = issue.description?.match(/제\s*(\d+)\s*조/)
+            // 위치 정보 추출 (v2에서는 originalText에서 조항 번호 찾기)
+            const originalText = issue.originalText || issue.description || issue.summary || ''
+            const clauseMatch = originalText.match(/제\s*(\d+)\s*조/)
             const location = {
               clauseNumber: clauseMatch ? clauseMatch[1] : undefined,
               startIndex: issue.start_index ?? issue.startIndex,
               endIndex: issue.end_index ?? issue.endIndex,
             }
 
-            // 메트릭 생성 (severity 기반, 더 정교한 계산 가능)
-            const severity = (issue.severity || 'medium').toLowerCase()
+            // 메트릭 생성 (severity 기반, v2는 severity, v1은 risk_level)
+            const severity = (issue.severity || issue.risk_level || 'medium').toLowerCase() as 'low' | 'medium' | 'high'
             const metrics = {
               legalRisk: severity === 'high' ? 5 : severity === 'medium' ? 3 : 1,
               ambiguity: severity === 'high' ? 4 : severity === 'medium' ? 2 : 1,
@@ -134,39 +193,90 @@ export default function ContractDetailPage() {
               priority: (severity === 'high' ? 'high' : severity === 'medium' ? 'medium' : 'low') as 'high' | 'medium' | 'low',
             }
 
-            // 권장사항에서 수정안 찾기
-            const relatedRec = (normalizedData.recommendations || []).find((rec: any) => {
-              const recTitle = (rec.title || '').toLowerCase()
-              return recTitle.includes(issueName) || issueName.includes(recTitle)
-            })
-
             return {
-              id: `issue-${index}`,
+              id: issue.id || `issue-${index + 1}`,
               category: category as any,
-              severity: (issue.severity || 'medium').toLowerCase() as 'low' | 'medium' | 'high',
-              summary: issue.name || issue.description?.substring(0, 100) || '문제 조항 발견',
+              severity: severity,
+              summary: issue.summary || issue.name || originalText.substring(0, 100) || '문제 조항 발견',
               location,
               metrics,
-              originalText: issue.description || issue.name || '',
-              suggestedText: issue.suggested_text ?? issue.suggestedText ?? relatedRec?.description,
-              rationale: issue.rationale ?? relatedRec?.description,
-              legalBasis: Array.isArray(issue.legal_basis) ? issue.legal_basis : [],
-              suggestedQuestions: issue.suggested_questions ?? issue.suggestedQuestions ?? relatedRec?.steps ?? [],
+              originalText: originalText,
+              suggestedText: issue.suggestedRevision || issue.suggested_text || issue.suggestedText || '',
+              rationale: issue.explanation || issue.rationale || issue.description || '',
+              legalBasis: Array.isArray(issue.legalBasis) ? issue.legalBasis : 
+                         (Array.isArray(issue.legal_basis) ? issue.legal_basis : 
+                         (Array.isArray(issue.related_law) ? issue.related_law : [])),
+              suggestedQuestions: [],
             } as LegalIssue
           })
           
           // 이슈가 없는 경우 처리
           if (issues.length === 0) {
-            console.warn('분석된 이슈가 없습니다. 백엔드 응답:', normalizedData)
+            console.warn('분석된 이슈가 없습니다. 백엔드 응답:', {
+              normalizedDataIssues: normalizedData.issues,
+              normalizedDataIssuesLength: normalizedData.issues?.length || 0,
+              validIssuesLength: validIssues.length,
+              v2DataIssues: v2Data?.issues,
+              v2DataIssuesLength: v2Data?.issues?.length || 0,
+              localDataIssues: localData?.issues,
+              localDataRisks: localData?.risks,
+              isTempId,
+              docId,
+            })
+          } else {
+            console.log(`✅ [Frontend] ${issues.length}개의 이슈를 성공적으로 로드했습니다.`, {
+              issues: issues.map(i => ({ id: i.id, category: i.category, severity: i.severity, summary: i.summary.substring(0, 50) })),
+            })
           }
           
           // DB 데이터를 로컬 스토리지에 캐싱 (다음 접근 시 빠른 로드)
-          if (dbData && !storedData) {
+          // v2Data가 있고 로컬 스토리지에 없으면 캐싱
+          if (v2Data && !storedData) {
             localStorage.setItem(`contract_analysis_${docId}`, JSON.stringify(normalizedData))
           }
 
           // 계약서 텍스트 생성 (백엔드에서 제공된 텍스트 사용)
-          const contractText = normalizedData.contractText || normalizedData.contract_text || '계약서 텍스트를 불러올 수 없습니다.'
+          // contractText가 비어있으면 경고 로그 출력
+          const contractText = normalizedData.contractText || normalizedData.contract_text || ''
+          
+          console.log('[Frontend] 계약서 텍스트 확인:', {
+            contractTextLength: contractText.length,
+            contractTextPreview: contractText.substring(0, 100) || '(없음)',
+            hasContractText: !!normalizedData.contractText,
+            hasContract_text: !!normalizedData.contract_text,
+            normalizedDataContractText: normalizedData.contractText?.substring(0, 50) || '(없음)',
+            normalizedDataContract_text: normalizedData.contract_text?.substring(0, 50) || '(없음)',
+            normalizedDataKeys: Object.keys(normalizedData),
+            isTempId,
+            v2DataHasContractText: v2Data ? !!v2Data.contractText : false,
+            v2DataContractTextLength: v2Data?.contractText?.length || 0,
+            localDataHasContractText: localData ? !!(localData.contractText || localData.contract_text) : false,
+            localDataContractTextLength: localData ? (localData.contractText || localData.contract_text)?.length || 0 : 0,
+            normalizedDataFull: normalizedData // 전체 데이터도 출력
+          })
+          
+          // contractText가 없을 때는 "요약만 표시 모드"로 처리 (에러가 아님)
+          if (!contractText || contractText.trim().length === 0) {
+            console.warn('[Frontend] ⚠️ 계약서 본문 없음, 요약/메타데이터만 표시합니다.', {
+              docId,
+              isTempId,
+              hasSummary: !!normalizedData.summary,
+              hasIssues: (normalizedData.issues || []).length > 0,
+              v2Data: v2Data ? { 
+                hasContractText: !!v2Data.contractText,
+                contractTextLength: v2Data.contractText?.length || 0,
+                keys: Object.keys(v2Data)
+              } : null,
+              localData: localData ? { 
+                hasContractText: !!(localData.contractText || localData.contract_text),
+                contractTextLength: (localData.contractText || localData.contract_text)?.length || 0,
+                keys: Object.keys(localData)
+              } : null,
+            })
+            
+            // 요약만 있는 상태도 유효한 상태로 처리 (에러가 아님)
+            // UI에서는 요약 카드와 "계약서 전체 텍스트 분석은 준비 중입니다" 안내 표시
+          }
 
           const result: ContractAnalysisResult = {
             contractText,
@@ -247,8 +357,8 @@ export default function ContractDetailPage() {
     )
   }
 
-  // 에러 상태
-  if (error || !analysisResult) {
+  // 에러 상태 (요약이 없는 경우에만 에러로 처리)
+  if (error && (!analysisResult || !analysisResult.summary)) {
     return (
       <div className="h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-red-50/20 to-slate-50">
         <div className="text-center max-w-md px-6">
@@ -262,6 +372,9 @@ export default function ContractDetailPage() {
       </div>
     )
   }
+  
+  // 요약만 있는 상태 (contractText가 없지만 summary는 있음)
+  const isSummaryOnly = analysisResult && (!analysisResult.contractText || analysisResult.contractText.trim().length === 0)
 
   // 분석 완료 상태 - 2-컬럼 레이아웃
   return (
@@ -275,12 +388,32 @@ export default function ContractDetailPage() {
         )}>
           {/* 왼쪽: 계약서 뷰어 */}
           <div className="w-full lg:w-1/2 flex-shrink-0 overflow-hidden bg-white border-r border-slate-200/60 shadow-sm">
-            <ContractViewer
-              contractText={analysisResult.contractText}
-              issues={analysisResult.issues}
-              selectedIssueId={selectedIssueId}
-              onIssueClick={setSelectedIssueId}
-            />
+            {isSummaryOnly ? (
+              <div className="h-full flex items-center justify-center p-8">
+                <div className="text-center max-w-md">
+                  <div className="p-4 bg-amber-50 rounded-full w-20 h-20 mx-auto mb-4 flex items-center justify-center">
+                    <FileText className="w-10 h-10 text-amber-500" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-slate-900 mb-2">계약서 전문 분석 준비 중</h3>
+                  <p className="text-sm text-slate-600 mb-4">
+                    현재는 요약 정보만 제공됩니다. 계약서 전문 텍스트 분석 기능은 곧 제공될 예정입니다.
+                  </p>
+                  {analysisResult.summary && (
+                    <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                      <p className="text-xs font-medium text-blue-900 mb-2">📋 분석 요약</p>
+                      <p className="text-sm text-blue-800 leading-relaxed">{analysisResult.summary}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <ContractViewer
+                contractText={analysisResult.contractText}
+                issues={analysisResult.issues}
+                selectedIssueId={selectedIssueId}
+                onIssueClick={setSelectedIssueId}
+              />
+            )}
           </div>
 
           {/* 오른쪽: 분석 결과 패널 */}

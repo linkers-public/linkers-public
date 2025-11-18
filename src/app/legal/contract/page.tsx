@@ -20,8 +20,8 @@ import {
   X,
   Zap
 } from 'lucide-react'
-import { analyzeContractV2 } from '@/apis/legal.service'
-import { uploadContractFile, saveContractAnalysis, getContractAnalysisHistory } from '@/apis/contract-history.service'
+import { analyzeContractV2, getContractHistoryV2 } from '@/apis/legal.service'
+import { uploadContractFile, saveContractAnalysis } from '@/apis/contract-history.service'
 import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
 
@@ -100,10 +100,24 @@ export default function ContractAnalysisPage() {
     const loadHistory = async () => {
       try {
         setLoadingHistory(true)
-        const historyData = await getContractAnalysisHistory(10)
-        setHistory(historyData as HistoryItem[])
+        // v2 API로 히스토리 조회
+        const historyData = await getContractHistoryV2(10, 0)
+        const formattedHistory: HistoryItem[] = historyData.map(item => ({
+          id: item.doc_id,
+          file_name: item.original_filename || item.title,
+          risk_score: item.risk_score,
+          risk_level: item.risk_level as 'low' | 'medium' | 'high',
+          summary: item.summary,
+          created_at: item.created_at,
+          analysis_result: {
+            issues: Array(item.issue_count).fill(null), // 이슈 개수만 표시
+          },
+        }))
+        setHistory(formattedHistory)
       } catch (error) {
         console.error('히스토리 로드 실패:', error)
+        // 에러가 발생해도 빈 배열로 설정 (로그인하지 않은 경우 등)
+        setHistory([])
       } finally {
         setLoadingHistory(false)
       }
@@ -182,65 +196,167 @@ export default function ContractAnalysisPage() {
       
       setAnalysisStep(3)
       
-      // docId는 v2 응답에서 받음
-      const docId = result.docId
+      // 응답 확인 및 로깅 (상세)
+      console.group('📦 [계약서 분석] ========== 프론트엔드 응답 받음 ==========')
+      console.log('✅ 전체 응답 객체:', result)
+      console.log('📋 JSON 문자열:', JSON.stringify(result, null, 2))
+      console.log('🔑 응답 키 목록:', result ? Object.keys(result) : [])
+      console.log('📊 응답 상세:', {
+        docId: result?.docId,
+        hasContractText: !!result?.contractText,
+        contractTextLength: result?.contractText?.length || 0,
+        contractTextPreview: result?.contractText?.substring(0, 200) || '(없음)',
+        riskScore: result?.riskScore,
+        riskLevel: result?.riskLevel,
+        issuesCount: result?.issues?.length || 0,
+        issues: result?.issues,
+        summary: result?.summary?.substring(0, 100) || '(없음)',
+        hasRetrievedContexts: !!(result?.retrievedContexts && result.retrievedContexts.length > 0),
+        retrievedContextsCount: result?.retrievedContexts?.length || 0,
+      })
       
-      // Step 3: 분석 결과를 DB에 저장
+      // 백엔드 응답 형식 확인 (v1 vs v2)
+      const isV2Format = result && 'docId' in result && 'contractText' in result && 'issues' in result
+      const isV1Format = result && 'risks' in result && 'references' in result
+      console.log('🔍 응답 형식 확인:', {
+        isV2Format,
+        isV1Format,
+        isUnknownFormat: !isV2Format && !isV1Format
+      })
+      
+      if (!isV2Format && isV1Format) {
+        console.error('❌ [계약서 분석] 백엔드가 v1 형식으로 응답했습니다! v2 형식이 필요합니다.')
+      } else if (isV2Format) {
+        console.log('✅ [계약서 분석] v2 형식 응답 확인됨')
+      }
+      console.groupEnd()
+      
+      // docId는 v2 응답에서 받음
+      let docId = result?.docId
+      
+      // docId가 없으면 임시 ID 생성 (fallback)
+      if (!docId) {
+        console.warn('[계약서 분석] docId가 없어 임시 ID 생성:', result)
+        docId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      }
+      
+      // contractText 확인
+      const contractText = result?.contractText || ''
+      if (!contractText || contractText.trim().length === 0) {
+        console.warn('[계약서 분석] ⚠️ 백엔드 응답에 contractText가 없습니다!', {
+          docId,
+          resultKeys: result ? Object.keys(result) : [],
+          resultContractText: result?.contractText
+        })
+      }
+      
+      // Step 3: 분석 결과를 로컬 스토리지에 먼저 저장 (임시 ID인 경우에도)
+      // 백엔드 v2 응답 전체를 저장 (contractText, issues, recommendations 모두 포함)
+      const analysisData = {
+        ...result, // 백엔드 응답 전체 포함 (docId, title, riskScore, riskLevel, sections, issues, summary, retrievedContexts, contractText, createdAt)
+        // 호환성을 위해 contractText와 contract_text 둘 다 저장
+        contractText: result.contractText ?? result.contract_text ?? contractText ?? '',
+        contract_text: result.contract_text ?? result.contractText ?? contractText ?? '',
+        // 추가 메타데이터
+        risk_score: result.riskScore,
+        risk_level: result.riskLevel,
+        fileUrl,
+        docId: docId, // docId도 함께 저장
+        // issues와 recommendations는 result에 이미 포함되어 있음
+      }
+      // 저장 전 확인
+      console.log('[계약서 분석] 로컬 스토리지에 저장하기 전:', {
+        docId,
+        contractTextLength: contractText.length,
+        contractTextPreview: contractText.substring(0, 100) || '(없음)',
+        hasContractText: contractText.length > 0,
+        analysisDataKeys: Object.keys(analysisData),
+        analysisDataContractText: analysisData.contractText?.substring(0, 50) || '(없음)',
+        analysisDataContract_text: analysisData.contract_text?.substring(0, 50) || '(없음)',
+        fullAnalysisData: analysisData // 전체 데이터 확인
+      })
+      
+      localStorage.setItem(`contract_analysis_${docId}`, JSON.stringify(analysisData))
+      
+      // 저장 후 확인
+      const savedData = localStorage.getItem(`contract_analysis_${docId}`)
+      const parsedSavedData = savedData ? JSON.parse(savedData) : null
+      console.log('[계약서 분석] 로컬 스토리지에 저장 완료:', {
+        docId,
+        contractTextLength: contractText.length,
+        hasContractText: contractText.length > 0,
+        savedDataLength: savedData?.length || 0,
+        savedDataPreview: savedData ? savedData.substring(0, 200) : '(없음)',
+        parsedSavedDataContractText: parsedSavedData?.contractText?.substring(0, 50) || '(없음)',
+        parsedSavedDataContract_text: parsedSavedData?.contract_text?.substring(0, 50) || '(없음)',
+        parsedSavedDataKeys: parsedSavedData ? Object.keys(parsedSavedData) : []
+      })
+      
+      // Step 4: 분석 결과를 DB에 저장 (선택적, 실패해도 계속 진행)
       try {
-        if (fileUrl) {
+        if (fileUrl && result.issues && Array.isArray(result.issues)) {
           // v2 형식에 맞춰 변환
           const v1Format = {
             risk_score: result.riskScore,
             risk_level: result.riskLevel,
             summary: result.summary,
-            issues: result.issues.map(issue => ({
-              name: issue.summary,
-              description: issue.explanation,
-              severity: issue.severity,
-              legal_basis: issue.legalBasis,
-              suggested_text: issue.suggestedRevision,
+            issues: (result.issues || []).map((issue: any) => ({
+              name: issue.summary || issue.name || '',
+              description: issue.explanation || issue.description || '',
+              severity: issue.severity || 'medium',
+              legal_basis: issue.legalBasis || issue.legal_basis || [],
+              suggested_text: issue.suggestedRevision || issue.suggested_text || '',
             })),
             recommendations: [],
-            grounding: result.retrievedContexts.map(ctx => ({
+            grounding: (result.retrievedContexts || []).map((ctx: any) => ({
               source_id: '',
-              source_type: ctx.sourceType as 'law' | 'manual' | 'case',
-              title: ctx.title,
-              snippet: ctx.snippet,
+              source_type: ctx.sourceType || ctx.source_type || 'law',
+              title: ctx.title || '',
+              snippet: ctx.snippet || '',
               score: 0,
             })),
-            contract_text: '',
+            contract_text: contractText || '',
           }
           const savedId = await saveContractAnalysis(file, fileUrl, v1Format)
           console.log('분석 결과 DB 저장 완료, ID:', savedId)
         }
       } catch (saveError: any) {
         console.warn('DB 저장 실패, 로컬 스토리지만 사용:', saveError)
+        // DB 저장 실패해도 계속 진행 (로컬 스토리지에 이미 저장됨)
       }
-      
-      // 분석 결과를 로컬 스토리지에 저장 (fallback)
-      const analysisData = {
-        risk_score: result.riskScore,
-        risk_level: result.riskLevel,
-        summary: result.summary || '',
-        contractText: '',
-        issues: result.issues || [],
-        recommendations: [],
-        createdAt: result.createdAt,
-        fileUrl,
-      }
-      localStorage.setItem(`contract_analysis_${docId}`, JSON.stringify(analysisData))
       
       // 상세 페이지로 이동
       router.push(`/legal/contract/${docId}`)
     } catch (error: any) {
       console.error('분석 오류:', error)
-      setAnalysisError(error.message || '분석 중 오류가 발생했습니다.')
+      
+      // 에러 타입별 처리
+      let errorMessage = '분석 중 오류가 발생했습니다.'
+      let errorTitle = '분석 실패'
+      
+      if (error.message?.includes('400')) {
+        errorMessage = '파일 형식이 올바르지 않습니다. PDF 또는 HWPX 파일을 업로드해주세요.'
+        errorTitle = '파일 형식 오류'
+      } else if (error.message?.includes('422')) {
+        errorMessage = '파일 내용을 분석할 수 없습니다. 텍스트가 포함된 파일인지 확인해주세요.'
+        errorTitle = '파일 분석 불가'
+      } else if (error.message?.includes('500')) {
+        errorMessage = '서버 오류가 발생했습니다. 잠시 후 다시 시도해주세요.'
+        errorTitle = '서버 오류'
+      } else if (error.message?.includes('문서 ID')) {
+        errorMessage = '분석은 완료되었지만 문서 ID를 받지 못했습니다. 잠시 후 다시 시도해주세요.'
+        errorTitle = '문서 ID 오류'
+      } else {
+        errorMessage = error.message || errorMessage
+      }
+      
+      setAnalysisError(errorMessage)
       setIsAnalyzing(false)
       setAnalysisStep(0)
       toast({
         variant: 'destructive',
-        title: '분석 실패',
-        description: error.message || '분석 중 오류가 발생했습니다.',
+        title: errorTitle,
+        description: errorMessage,
       })
     }
   }

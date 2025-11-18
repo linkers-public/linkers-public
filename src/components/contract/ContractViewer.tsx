@@ -20,9 +20,18 @@ export function ContractViewer({
   const containerRef = useRef<HTMLDivElement>(null)
   const highlightedRefs = useRef<Map<string, HTMLSpanElement>>(new Map())
 
+  // 디버깅: contractText 확인
+  useEffect(() => {
+    console.log('[ContractViewer] contractText 확인:', {
+      length: contractText?.length || 0,
+      isEmpty: !contractText || contractText.trim().length === 0,
+      preview: contractText?.substring(0, 100) || '(없음)'
+    })
+  }, [contractText])
+
   // 텍스트를 문단 단위로 분리 (줄바꿈 2개 이상 또는 빈 줄 기준)
   // 줄바꿈 정보를 보존하기 위해 trim() 대신 끝부분의 연속 줄바꿈만 제거
-  const paragraphMatches = contractText.match(/(.+?)(\n\s*\n+|$)/gs) || []
+  const paragraphMatches = contractText?.match(/(.+?)(\n\s*\n+|$)/gs) || []
   const paragraphs = paragraphMatches
     .map(p => p.replace(/\n\s*\n+$/, '')) // 끝부분의 연속 줄바꿈만 제거
     .filter(p => p.trim().length > 0) // 빈 문단만 필터링
@@ -220,7 +229,20 @@ export function ContractViewer({
             <div className="p-4 bg-slate-100 rounded-full w-20 h-20 mx-auto mb-4 flex items-center justify-center">
               <FileText className="w-10 h-10 text-slate-400" />
             </div>
-            <p className="text-lg font-medium text-slate-600">계약서 내용이 없습니다.</p>
+            <p className="text-lg font-medium text-slate-600 mb-2">계약서 내용이 없습니다.</p>
+            <p className="text-sm text-slate-500">
+              {contractText && contractText.trim().length > 0 
+                ? '계약서 텍스트는 있지만 파싱할 수 없습니다.' 
+                : '계약서 텍스트를 불러올 수 없습니다. 계약서를 다시 업로드해주세요.'}
+            </p>
+            {contractText && contractText.trim().length > 0 && (
+              <div className="mt-4 p-4 bg-slate-50 rounded-lg max-w-2xl mx-auto">
+                <p className="text-xs text-slate-600 mb-2">원본 텍스트 (처음 500자):</p>
+                <pre className="text-xs text-slate-700 whitespace-pre-wrap break-words">
+                  {contractText.substring(0, 500)}
+                </pre>
+              </div>
+            )}
           </div>
         ) : (
           <div className="space-y-6 sm:space-y-7 bg-white rounded-xl p-6 sm:p-8 shadow-sm border border-slate-100">

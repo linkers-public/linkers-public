@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createServerSideClient } from '@/supabase/supabase-server';
 
 /**
  * GET /api/test-supabase
  * Supabase 연결 테스트 API
+ * 
+ * ⚠️ 주의: 이 API는 쿠키 기반 인증을 사용합니다.
+ * 403 에러가 발생하면 브라우저에서 로그아웃 후 재로그인하세요.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -26,8 +29,8 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Supabase 클라이언트 생성
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    // Supabase 클라이언트 생성 (쿠키 파싱 지원)
+    const supabase = await createServerSideClient();
 
     // 1. 연결 테스트 - 간단한 쿼리 실행
     const { data: healthCheck, error: healthError } = await supabase

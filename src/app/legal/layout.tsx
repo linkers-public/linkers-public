@@ -1,9 +1,13 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import { FileText, MessageSquare, BookOpen, Home, Scale } from 'lucide-react'
+import { usePathname, useRouter } from 'next/navigation'
+import { FileText, MessageSquare, BookOpen, Home, Scale, UserCircle, LogOut } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
+import { useState, useEffect } from 'react'
+import { createSupabaseBrowserClient } from '@/supabase/supabase-client'
+import { User as SupabaseUser } from '@supabase/supabase-js'
 
 export default function LegalLayout({
   children,
@@ -11,6 +15,42 @@ export default function LegalLayout({
   children: React.ReactNode
 }) {
   const pathname = usePathname()
+  const router = useRouter()
+  const [user, setUser] = useState<SupabaseUser | null>(null)
+  const supabase = createSupabaseBrowserClient()
+
+  useEffect(() => {
+    const getUser = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        setUser(user)
+      } catch (error) {
+        console.error('사용자 정보 조회 실패:', error)
+        setUser(null)
+      }
+    }
+
+    getUser()
+
+    // 인증 상태 변경 감지
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null)
+    })
+
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [supabase])
+
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut()
+      setUser(null)
+      router.push('/legal')
+    } catch (error) {
+      console.error('로그아웃 실패:', error)
+    }
+  }
 
   const navItems = [
     { href: '/legal', label: '홈', icon: Home },
@@ -72,6 +112,42 @@ export default function LegalLayout({
                 )
               })}
             </nav>
+
+            {/* 로그인/사용자 메뉴 */}
+            <div className="flex items-center gap-2">
+              {user ? (
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleLogout}
+                    className="text-slate-700 hover:text-slate-900 hover:bg-slate-100"
+                  >
+                    <LogOut className="w-4 h-4 mr-1.5" />
+                    <span className="hidden sm:inline">로그아웃</span>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => router.push('/my/profile')}
+                    className="text-slate-700 hover:text-slate-900 hover:bg-slate-100"
+                  >
+                    <UserCircle className="w-4 h-4 mr-1.5" />
+                    <span className="hidden sm:inline">마이페이지</span>
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  onClick={() => router.push('/auth?role=maker')}
+                  className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-sm"
+                  size="sm"
+                >
+                  <UserCircle className="w-4 h-4 mr-1.5" />
+                  <span className="hidden sm:inline">로그인</span>
+                  <span className="sm:hidden">로그인</span>
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       </header>

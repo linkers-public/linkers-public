@@ -48,9 +48,14 @@ class ContractStorageService:
         summary: str,
         retrieved_contexts: List[Dict[str, Any]],
         issues: List[Dict[str, Any]],
+        user_id: Optional[str] = None,
+        contract_text: Optional[str] = None,  # 계약서 원문 텍스트
     ) -> str:
         """
         계약서 분석 결과를 DB에 저장
+        
+        Args:
+            user_id: 사용자 ID (옵션)
         
         Returns:
             contract_analysis_id (UUID)
@@ -70,6 +75,14 @@ class ContractStorageService:
                 "summary": summary,
                 "retrieved_contexts": retrieved_contexts,
             }
+            
+            # 계약서 원문 텍스트 저장
+            if contract_text:
+                analysis_data["contract_text"] = contract_text
+            
+            # user_id가 제공된 경우 추가
+            if user_id:
+                analysis_data["user_id"] = user_id
             
             result = self.sb.table("contract_analyses").insert(analysis_data).execute()
             
@@ -115,7 +128,18 @@ class ContractStorageService:
         
         try:
             # contract_analyses 테이블에서 조회
+            # doc_id로 먼저 시도, 없으면 id로 시도 (기존 데이터 호환성)
             result = self.sb.table("contract_analyses").select("*").eq("doc_id", doc_id).execute()
+            
+            # doc_id로 찾지 못한 경우, id로 시도 (UUID 형식인 경우)
+            if not result.data or len(result.data) == 0:
+                try:
+                    # UUID 형식인지 확인
+                    import uuid
+                    uuid.UUID(doc_id)
+                    result = self.sb.table("contract_analyses").select("*").eq("id", doc_id).execute()
+                except (ValueError, AttributeError):
+                    pass
             
             if not result.data or len(result.data) == 0:
                 return None
@@ -146,8 +170,11 @@ class ContractStorageService:
                     })
             
             # v2 응답 형식으로 변환
+            # doc_id가 없으면 id를 사용 (기존 데이터 호환성)
+            doc_id_value = analysis.get("doc_id") or str(analysis["id"])
+            
             return {
-                "docId": analysis["doc_id"],
+                "docId": doc_id_value,
                 "title": analysis.get("title", ""),
                 "riskScore": float(analysis.get("risk_score", 0)),
                 "riskLevel": analysis.get("risk_level", "medium"),
@@ -155,6 +182,7 @@ class ContractStorageService:
                 "issues": issues,
                 "summary": analysis.get("summary", ""),
                 "retrievedContexts": analysis.get("retrieved_contexts", []),
+                "contractText": analysis.get("contract_text", ""),  # 계약서 원문 텍스트
                 "createdAt": analysis.get("created_at", ""),
             }
             
@@ -176,9 +204,13 @@ class ContractStorageService:
         analysis: Dict[str, Any],
         checklist: List[str],
         related_cases: List[Dict[str, Any]],
+        user_id: Optional[str] = None,
     ) -> str:
         """
         상황 분석 결과를 DB에 저장
+        
+        Args:
+            user_id: 사용자 ID (옵션)
         
         Returns:
             situation_analysis_id (UUID)
@@ -201,6 +233,10 @@ class ContractStorageService:
                 "related_cases": related_cases,
             }
             
+            # user_id가 제공된 경우 추가
+            if user_id:
+                data["user_id"] = user_id
+            
             result = self.sb.table("situation_analyses").insert(data).execute()
             
             if not result.data or len(result.data) == 0:
@@ -213,4 +249,68 @@ class ContractStorageService:
         except Exception as e:
             logger.error(f"상황 분석 결과 저장 중 오류: {str(e)}", exc_info=True)
             raise
+    
+    async def get_user_contract_analyses(
+        self,
+        user_id: str,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> List[Dict[str, Any]]:
+        """
+        사용자별 계약서 분석 히스토리 조회
+        
+        Args:
+            user_id: 사용자 ID
+            limit: 조회 개수
+            offset: 오프셋
+        
+        Returns:
+            계약서 분석 결과 리스트
+        """
+        self._ensure_initialized()
+        
+        try:
+            result = (
+                self.sb.table("contract_analyses")
+                .select("*")
+                .eq("user_id", user_id)
+                .order("created_at", desc=True)
+                .limit(limit)
+                .offset(offset)
+                .execute()
+            )
+            
+            analyses = []
+            if result.data:
+                for analysis in result.data:
+                    contract_analysis_id = analysis["id"]
+                    
+                    # 이슈 개수 조회
+                    issues_result = (
+                        self.sb.table("contract_issues")
+                        .select("id", count="exact")
+                        .eq("contract_analysis_id", contract_analysis_id)
+                        .execute()
+                    )
+                    
+                    # doc_id가 없으면 id를 사용 (기존 데이터 호환성)
+                    doc_id_value = analysis.get("doc_id") or str(analysis["id"])
+                    
+                    analyses.append({
+                        "id": analysis["id"],
+                        "doc_id": doc_id_value,
+                        "title": analysis.get("title", ""),
+                        "original_filename": analysis.get("original_filename", ""),
+                        "risk_score": float(analysis.get("risk_score", 0)),
+                        "risk_level": analysis.get("risk_level", "medium"),
+                        "summary": analysis.get("summary", ""),
+                        "created_at": analysis.get("created_at", ""),
+                        "issue_count": issues_result.count if hasattr(issues_result, 'count') else 0,
+                    })
+            
+            return analyses
+            
+        except Exception as e:
+            logger.error(f"사용자별 계약서 분석 조회 중 오류: {str(e)}", exc_info=True)
+            return []
 

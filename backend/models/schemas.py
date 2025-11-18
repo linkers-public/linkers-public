@@ -289,4 +289,5 @@ class ContractAnalysisResponseV2(BaseModel):
     issues: List[ContractIssueV2]
     summary: str
     retrievedContexts: List[dict]
+    contractText: str = ""  # 계약서 원문 텍스트 (기본값: 빈 문자열, Optional 제거)
     createdAt: str
