@@ -14,64 +14,67 @@ _local_embedding_model = None
 _ollama_llm = None
 
 def _get_local_embedding_model():
-    """로컬 임베딩 모델 지연 로드"""
+    """
+    로컬 임베딩 모델 지연 로드
+    
+    ⚠️ 중요: meta tensor 문제를 피하기 위해 .to(device) 절대 사용 금지
+    SentenceTransformer를 처음부터 target device로 직접 로드해야 함
+    """
     global _local_embedding_model
     if _local_embedding_model is None:
         try:
             from sentence_transformers import SentenceTransformer
             import torch
-            import os
             
             print(f"[로딩] 로컬 임베딩 모델: {settings.local_embedding_model}")
             
-            # GPU 우선 사용 (CUDA 사용 가능 시)
+            # meta tensor 문제 해결: CPU로 직접 로드 (GPU 이동 시도 안 함)
+            # bge-m3 모델은 meta tensor 상태로 초기화되므로 .to() 호출 시 에러 발생
+            # 따라서 처음부터 CPU로 로드하고 GPU 이동은 하지 않음
+            device = "cpu"  # 안전하게 CPU만 사용
+            
             if torch.cuda.is_available():
-                device = "cuda"
                 device_name = torch.cuda.get_device_name(0)
-                print(f"[GPU] CUDA 사용 가능: {device_name}")
+                print(f"[GPU] CUDA 사용 가능하지만 meta tensor 문제 방지를 위해 CPU 사용: {device_name}")
             else:
-                device = "cpu"
                 print(f"[CPU] CUDA 사용 불가, CPU 사용")
             
-            # 환경 변수로 device 강제 지정 (meta tensor 문제 방지)
-            os.environ.setdefault("TORCH_DEVICE", device)
-            
             try:
-                # 첫 번째 시도: device를 명시적으로 지정 (GPU 우선)
+                # 첫 번째 시도: CPU로 직접 로드 (trust_remote_code=True로 안전하게)
+                print(f"[로딩] CPU로 모델 직접 로드 중 (trust_remote_code=True)...")
                 _local_embedding_model = SentenceTransformer(
                     settings.local_embedding_model,
-                    device=device
+                    device=device,  # 처음부터 CPU로 로드
+                    trust_remote_code=True  # bge-m3 모델에 필요할 수 있음
                 )
                 print(f"[완료] 로컬 임베딩 모델 로드 완료 (device: {device})")
+                # ⚠️ 주의: .to(device) 호출 절대 금지 - meta tensor 에러 발생
+                    
             except Exception as e:
-                # meta tensor 에러 발생 시 다른 방법으로 재시도
+                # 에러 발생 시 재시도
                 if "meta tensor" in str(e).lower() or "to_empty" in str(e).lower():
                     print(f"[경고] 모델 로딩 에러 발생 (meta tensor), 재시도 중...: {str(e)}")
-                    # 모델 캐시를 우회하고 직접 로드 시도
                     try:
-                        # GPU가 있으면 GPU로, 없으면 CPU로 재시도
-                        retry_device = "cuda" if torch.cuda.is_available() else "cpu"
+                        # trust_remote_code와 함께 CPU로 재로드 시도
+                        print(f"[재시도] CPU로 모델 재로드 중 (trust_remote_code=True)...")
                         _local_embedding_model = SentenceTransformer(
                             settings.local_embedding_model,
-                            device=retry_device,
+                            device="cpu",
                             trust_remote_code=True
                         )
-                        print(f"[완료] 로컬 임베딩 모델 재로드 완료 (device: {retry_device})")
+                        print(f"[완료] 로컬 임베딩 모델 재로드 완료 (device: cpu)")
+                        # ⚠️ 주의: .to(device) 호출 절대 금지
+                            
                     except Exception as retry_e:
-                        # 최종 시도: GPU가 있으면 GPU로, 없으면 CPU로
-                        if torch.cuda.is_available():
-                            print(f"[경고] 재시도 실패, GPU로 최종 시도 중...: {str(retry_e)}")
-                            final_device = "cuda"
-                        else:
-                            print(f"[경고] 재시도 실패, CPU로 최종 시도 중...: {str(retry_e)}")
-                            final_device = "cpu"
-                        
+                        # 최종 시도: CPU로만 로드 (안전 모드)
+                        print(f"[최종 시도] CPU로만 로드 중...: {str(retry_e)}")
                         _local_embedding_model = SentenceTransformer(
                             settings.local_embedding_model,
                             trust_remote_code=True,
-                            device=final_device
+                            device="cpu"
                         )
-                        print(f"[완료] 로컬 임베딩 모델 최종 로드 완료 (device: {final_device})")
+                        print(f"[완료] 로컬 임베딩 모델 최종 로드 완료 (device: cpu)")
+                        # ⚠️ 주의: .to(device) 호출 절대 금지
                 else:
                     raise
         except ImportError:

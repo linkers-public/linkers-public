@@ -68,6 +68,7 @@ class ContractStorageService:
                 "doc_id": doc_id,
                 "title": title,
                 "original_filename": original_filename,
+                "file_name": original_filename or title or "unknown.pdf",  # file_name은 NOT NULL이므로 기본값 설정
                 "doc_type": doc_type,
                 "risk_score": int(round(float(risk_score))),  # DB는 integer 타입이므로 변환
                 "risk_level": risk_level,
