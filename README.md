@@ -399,10 +399,11 @@ curl -X POST "http://localhost:8000/api/v2/legal/analyze-contract" \
   - 각 시나리오별 법적 근거, 추천 대응 방법, 관련 법률 목록 표시
   - 위험도 레벨 표시 (높음/보통/낮음)
 - `/legal/situation` - 상황별 법률 분석 페이지
-  - 고용 형태, 근무 기간, 사회보험 등 상세 정보 입력
-  - 법적 상황 텍스트 입력
-  - 맞춤형 법률 분석 결과 제공
-  - 관련 케이스 및 대응 방법 제시
+  - 6가지 상황 템플릿 제공 (인턴/수습 해고, 무급 야근, 임금 체불, 직장 내 괴롭힘, 프리랜서 대금 미지급, 스톡옵션/성과급)
+  - 한 줄 요약 + 자세한 설명 입력
+  - 고용 형태, 근무 기간, 주당 근무시간, 수습 여부, 사회보험 등 고급 정보 입력 (선택사항)
+  - v2 API 기반 맞춤형 법률 분석 결과 제공
+  - 위험도 점수/레벨, 법적 근거, 체크리스트, 대화 스크립트, 유사 케이스 제공
 - `/legal/contract` - 계약서 분석 페이지 (v2)
   - 계약서 파일 업로드 (드래그 앤 드롭 지원)
   - PDF, HWPX, HWP 파일 지원
@@ -625,8 +626,10 @@ curl -X POST "http://localhost:8000/api/v2/legal/analyze-contract" \
   - 계약서에서 추출된 위험 조항 자동 연동
   - 문제 조항 선택 → 근거 기반 상담 → 수정문구 제안
 - **상황별 상담 (Situation-Based Talk)**:
-  - 상세 정보 입력 기반 맞춤 상담
-  - 고용 형태, 근무 기간 등 컨텍스트 활용
+  - 상황 템플릿 또는 직접 입력 기반 맞춤 상담
+  - 한 줄 요약 + 자세한 설명 입력
+  - 고용 형태, 근무 기간, 주당 근무시간, 수습 여부, 사회보험 등 컨텍스트 활용
+  - v2 API 기반 위험도 평가, 법적 근거, 체크리스트, 대화 스크립트, 유사 케이스 제공
 
 #### 7. 유사 케이스 페이지 (`/legal/cases`)
 - **케이스 검색 및 필터링**:
@@ -644,19 +647,39 @@ curl -X POST "http://localhost:8000/api/v2/legal/analyze-contract" \
   - 케이스 기반 상담 기능
 
 #### 8. 상황별 법률 분석 페이지 (`/legal/situation`)
-- **상세 정보 입력**: 
-  - 고용 형태 (정규직, 계약직, 인턴, 프리랜서 등)
-  - 근무 기간 (3개월 미만, 3~12개월, 1~3년, 3년 이상)
-  - 사회보험 가입 여부
-  - 법적 상황 카테고리 선택
+- **상황 템플릿 제공**: 
+  - 6가지 대표 상황 템플릿 제공 (인턴/수습 해고, 무급 야근, 임금 체불, 직장 내 괴롭힘, 프리랜서 대금 미지급, 스톡옵션/성과급)
+  - 템플릿 선택 시 자동으로 카테고리 및 입력 필드 채움
+  - 각 템플릿별 예시 가이드 제공
 - **법적 상황 입력**: 
-  - 상황을 자세히 텍스트로 입력
-- **맞춤형 분석 결과**:
-  - 위험도 점수 및 레벨
-  - 법적 리스크 상세 설명
-  - 관련 법률 조문
-  - 추천 대응 방법
-  - 유사 케이스 제공
+  - 한 줄 요약: 상황을 간단히 요약하여 입력
+  - 자세한 설명: 언제부터, 어떤 일이 반복되는지, 문제점 등을 상세히 입력
+  - 카테고리 선택: 인턴/수습 해고, 정규직 해고, 임금 체불, 무급 야근, 직장 내 괴롭힘, 프리랜서/용역, 스톡옵션/성과급, 기타/복합 상황
+- **고급 정보 입력** (선택사항):
+  - 고용 형태: 정규직, 계약직, 인턴, 프리랜서, 알바, 기타
+  - 근무 기간: 3개월 미만, 3~12개월, 1~3년, 3년 이상
+  - 주당 근무시간: 슬라이더로 입력 (기본 40시간)
+  - 수습 여부: 예/아니오/모름
+  - 사회보험 가입 여부: 모두 가입/일부만/전혀 없음/모름
+- **맞춤형 분석 결과** (v2 API 기반):
+  - **위험도 평가**: 
+    - 위험도 점수 (0~100점)
+    - 위험도 레벨 (High/Medium/Low)
+    - 자동 태깅 (상황 유형 분류)
+  - **법적 분석**:
+    - 상황 요약 및 법적 관점 분석
+    - 법적 근거 (관련 법령 조문 및 스니펫)
+    - 법적 근거별 출처 타입 표시 (law, manual, case 등)
+  - **실행 가능한 대응 방안**:
+    - 즉시 조치 체크리스트 (우선순위별)
+    - 권고사항 (단계별 대응 방법)
+    - 회사/상담사 대화 스크립트 제공
+  - **유사 케이스 추천**:
+    - 벡터 검색 기반 유사 상황 케이스 제공
+    - 각 케이스별 제목, 요약, 주요 이슈 표시
+- **API 엔드포인트**: `POST /api/v2/legal/analyze-situation`
+  - 요청: `SituationRequestV2` (situation, category, employmentType, workPeriod, socialInsurance 등)
+  - 응답: `SituationResponseV2` (riskScore, riskLevel, tags, analysis, checklist, scripts, relatedCases)
 
 ### UI 컴포넌트
 
@@ -707,10 +730,11 @@ curl -X POST "http://localhost:8000/api/v2/legal/analyze-contract" \
    - 검색 결과 확인
 4. **상황별 분석**:
    - `/legal/situation` 페이지로 이동
-   - 고용 형태, 근무 기간 등 상세 정보 입력
-   - 법적 상황을 텍스트로 입력
+   - 상황 템플릿 선택 (선택사항) 또는 직접 입력
+   - 한 줄 요약 및 자세한 설명 입력
+   - 고급 정보 입력 (고용 형태, 근무 기간, 주당 근무시간, 수습 여부, 사회보험 등 - 선택사항)
    - "분석 시작하기" 버튼 클릭
-   - 맞춤형 분석 결과 확인
+   - 맞춤형 분석 결과 확인 (위험도, 법적 근거, 체크리스트, 대화 스크립트, 유사 케이스)
 
 ### API 연동
 
@@ -726,10 +750,11 @@ curl -X POST "http://localhost:8000/api/v2/legal/analyze-contract" \
    - RAG 검색 API 엔드포인트 호출 추가
    - 예: `GET /api/v2/legal/search?q={query}`
 
-3. **상황별 분석 API 연동**:
-   - `src/app/legal/situation/page.tsx`의 `handleAnalyze` 함수 수정
-   - 백엔드 API 엔드포인트 호출 추가
-   - 예: `POST /api/v2/legal/analyze-situation`
+3. **상황별 분석 API 연동** (v2 API 사용 중):
+   - `src/app/legal/situation/page.tsx`의 `handleAnalyze` 함수에서 `analyzeSituationV2` 호출
+   - 백엔드 API 엔드포인트: `POST /api/v2/legal/analyze-situation`
+   - 요청 형식: `SituationRequestV2` (situation, category, employmentType, workPeriod, socialInsurance 등)
+   - 응답 형식: `SituationResponseV2` (riskScore, riskLevel, tags, analysis, checklist, scripts, relatedCases)
 
 ### 디자인 특징
 
