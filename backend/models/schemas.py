@@ -241,6 +241,7 @@ class LegalBasisItem(BaseModel):
     title: str
     snippet: str
     sourceType: str
+    status: Optional[str] = Field(None, description="판단 기준 충족 여부: likely|unclear|unlikely")
 
 
 class SituationAnalysisV2(BaseModel):

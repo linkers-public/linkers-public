@@ -788,25 +788,29 @@ async def analyze_situation(
         elif result["risk_score"] >= 40:
             risk_level = "medium"
         
-        # legalBasis 변환
+        # legalBasis 변환 (status 필드 보존)
         legal_basis = []
         for criteria in result.get("criteria", []):
             legal_basis.append({
                 "title": criteria.get("name", ""),
                 "snippet": criteria.get("reason", ""),
                 "sourceType": "law",
+                "status": criteria.get("status", "likely"),  # status 필드 보존
             })
         
-        # recommendations 추출
-        recommendations = []
+        # action_plan.steps에서 checklist와 recommendations 구분
         action_plan = result.get("action_plan", {})
-        for step in action_plan.get("steps", []):
-            recommendations.extend(step.get("items", []))
+        steps = action_plan.get("steps", [])
         
-        # checklist 추출
+        # checklist: 첫 번째 step의 items만 사용
         checklist = []
-        for step in action_plan.get("steps", []):
-            checklist.extend(step.get("items", []))
+        if len(steps) > 0:
+            checklist = steps[0].get("items", [])
+        
+        # recommendations: 나머지 steps의 items 병합
+        recommendations = []
+        for step in steps[1:]:
+            recommendations.extend(step.get("items", []))
         
         # scripts 변환
         scripts_data = result.get("scripts", {})
@@ -830,7 +834,8 @@ async def analyze_situation(
         # tags 추출 (classified_type 기반)
         tags = [result.get("classified_type", "unknown")]
         
-        return SituationResponseV2(
+        # v2 응답 생성
+        response = SituationResponseV2(
             riskScore=float(result["risk_score"]),
             riskLevel=risk_level,
             tags=tags,
@@ -843,6 +848,35 @@ async def analyze_situation(
             scripts=scripts,
             relatedCases=related_cases,
         )
+        
+        # DB에 저장 (비동기, 실패해도 응답은 반환)
+        try:
+            storage_service = get_storage_service()
+            await storage_service.save_situation_analysis(
+                situation=payload.situation,
+                category=payload.category,
+                employment_type=payload.employmentType,
+                company_size=payload.companySize,
+                work_period=payload.workPeriod,
+                has_written_contract=payload.hasWrittenContract,
+                social_insurance=payload.socialInsurance,
+                risk_score=float(result["risk_score"]),
+                risk_level=risk_level,
+                analysis={
+                    "summary": result.get("summary", ""),
+                    "legalBasis": legal_basis,
+                    "recommendations": recommendations,
+                },
+                checklist=checklist,
+                related_cases=related_cases,
+                user_id=x_user_id,
+            )
+            logger.info(f"상황 분석 결과 DB 저장 완료 (user_id: {x_user_id})")
+        except Exception as save_error:
+            # DB 저장 실패해도 분석 결과는 반환
+            logger.warning(f"상황 분석 결과 DB 저장 실패 (응답은 정상 반환): {str(save_error)}")
+        
+        return response
     except Exception as e:
         logger.error(f"상황 분석 중 오류 발생: {str(e)}", exc_info=True)
         raise HTTPException(

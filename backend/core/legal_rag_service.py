@@ -1052,17 +1052,111 @@ class LegalRAGService:
                 
                 response_text = llm.invoke(prompt)
                 
-                # JSON 추출
+                # JSON 추출 및 파싱
                 try:
                     json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
                     if json_match:
-                        diagnosis = json.loads(json_match.group())
+                        json_str = json_match.group()
+                        
+                        # JSON 파싱 전에 summary 필드의 마크다운 코드 블록 제거
+                        # summary 필드 내부의 ```markdown ... ``` 패턴 제거
+                        json_str_cleaned = re.sub(
+                            r'"summary"\s*:\s*"```markdown\s*',
+                            '"summary": "',
+                            json_str,
+                            flags=re.IGNORECASE | re.DOTALL
+                        )
+                        # summary 필드 내부의 ``` ... ``` 패턴 제거 (markdown 없이)
+                        json_str_cleaned = re.sub(
+                            r'"summary"\s*:\s*"```\s*',
+                            '"summary": "',
+                            json_str_cleaned,
+                            flags=re.IGNORECASE | re.DOTALL
+                        )
+                        # summary 필드 끝의 ``` 제거 (다중 라인)
+                        json_str_cleaned = re.sub(
+                            r'```"\s*',
+                            '"',
+                            json_str_cleaned,
+                            flags=re.MULTILINE
+                        )
+                        
+                        # 제어 문자 처리 (JSON에서 허용되지 않는 제어 문자 제거)
+                        # 줄바꿈(\n)은 유지하되, 탭(\t)과 캐리지 리턴(\r)은 제거
+                        json_str_cleaned = json_str_cleaned.replace('\t', ' ').replace('\r', '')
+                        
+                        # summary 필드 내부의 제어 문자를 이스케이프 처리
+                        # JSON 문자열 내부의 제어 문자(0x00-0x1F, \n 제외)를 유니코드 이스케이프로 변환
+                        def clean_summary_field(text):
+                            """summary 필드의 제어 문자를 이스케이프"""
+                            result = []
+                            for char in text:
+                                if ord(char) < 32:
+                                    if char == '\n':
+                                        result.append('\\n')
+                                    elif char == '\t':
+                                        result.append(' ')
+                                    else:
+                                        result.append(f'\\u{ord(char):04x}')
+                                else:
+                                    result.append(char)
+                            return ''.join(result)
+                        
+                        # summary 필드 찾아서 정리 (다중 라인 지원)
+                        summary_pattern = r'"summary"\s*:\s*"((?:[^"\\]|\\.|\\n)*)"'
+                        def replace_summary(match):
+                            content = match.group(1)
+                            # 마크다운 코드 블록 제거
+                            content = re.sub(r'```markdown\s*', '', content, flags=re.IGNORECASE)
+                            content = re.sub(r'```\s*$', '', content, flags=re.MULTILINE)
+                            # 제어 문자 이스케이프
+                            content = clean_summary_field(content)
+                            return f'"summary": "{content}"'
+                        
+                        json_str_cleaned = re.sub(summary_pattern, replace_summary, json_str_cleaned, flags=re.DOTALL)
+                        
+                        # JSON 파싱 시도
+                        try:
+                            diagnosis = json.loads(json_str_cleaned)
+                        except json.JSONDecodeError as json_err:
+                            # JSON 파싱 실패 시 더 강력한 정리 시도
+                            logger.warning(f"JSON 파싱 실패, 추가 정리 시도 중...: {str(json_err)}")
+                            
+                            # 중괄호 매칭으로 유효한 JSON 추출
+                            brace_count = 0
+                            last_valid_pos = -1
+                            for i, char in enumerate(json_str_cleaned):
+                                if char == '{':
+                                    brace_count += 1
+                                elif char == '}':
+                                    brace_count -= 1
+                                    if brace_count == 0:
+                                        last_valid_pos = i + 1
+                                        break
+                            
+                            if last_valid_pos > 0:
+                                json_str_cleaned = json_str_cleaned[:last_valid_pos]
+                                try:
+                                    diagnosis = json.loads(json_str_cleaned)
+                                except json.JSONDecodeError:
+                                    logger.error(f"JSON 파싱 최종 실패: {str(json_err)}")
+                                    raise json_err
+                            else:
+                                raise json_err
+                        
+                        # summary 필드에서 마크다운 코드 블록 제거 (파싱 후)
+                        summary = diagnosis.get("summary", "상황을 분석했습니다.")
+                        if summary:
+                            # ```markdown ... ``` 제거
+                            summary = re.sub(r'```markdown\s*', '', summary, flags=re.IGNORECASE)
+                            summary = re.sub(r'```\s*$', '', summary, flags=re.MULTILINE)
+                            summary = summary.strip()
                         
                         # 응답 형식 변환
                         return {
                             "classified_type": diagnosis.get("classified_type", category_hint),
                             "risk_score": diagnosis.get("risk_score", 50),
-                            "summary": diagnosis.get("summary", "상황을 분석했습니다."),
+                            "summary": summary,
                             "criteria": diagnosis.get("criteria", []),
                             "action_plan": diagnosis.get("action_plan", {"steps": []}),
                             "scripts": diagnosis.get("scripts", {}),

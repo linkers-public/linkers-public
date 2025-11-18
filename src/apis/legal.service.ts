@@ -246,6 +246,7 @@ export interface LegalBasisItemV2 {
   title: string;
   snippet: string;
   sourceType: string;
+  status?: 'likely' | 'unclear' | 'unlikely';  // 판단 기준 충족 여부
 }
 
 export interface SituationAnalysisV2 {

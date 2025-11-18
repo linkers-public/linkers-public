@@ -308,35 +308,36 @@ export default function SituationAnalysisPage() {
       const result = await analyzeSituationV2(request)
       
       // v2 응답을 v1 형식으로 변환 (기존 UI 호환성)
+      // 안전성 검사: 모든 필드에 기본값 제공
       const v1Format: SituationAnalysisResponse = {
-        classifiedType: (result.tags[0] || 'unknown') as SituationCategory,
-        riskScore: result.riskScore,
-        summary: result.analysis.summary,
-        criteria: result.analysis.legalBasis.map(basis => ({
-          name: basis.title,
-          status: 'likely' as const,
-          reason: basis.snippet,
+        classifiedType: (result?.tags?.[0] || 'unknown') as SituationCategory,
+        riskScore: result?.riskScore ?? 0,
+        summary: result?.analysis?.summary || '',
+        criteria: (result?.analysis?.legalBasis || []).map(basis => ({
+          name: basis?.title || '',
+          status: (basis?.status || 'likely') as 'likely' | 'unclear' | 'unlikely',
+          reason: basis?.snippet || '',
         })),
         actionPlan: {
           steps: [
             {
               title: '즉시 조치',
-              items: result.checklist.slice(0, 3),
+              items: (result?.checklist || []).slice(0, 3),
             },
             {
               title: '권고사항',
-              items: result.analysis.recommendations,
+              items: result?.analysis?.recommendations || [],
             },
           ],
         },
         scripts: {
-          toCompany: result.scripts?.toCompany,
-          toAdvisor: result.scripts?.toAdvisor,
+          toCompany: result?.scripts?.toCompany || undefined,
+          toAdvisor: result?.scripts?.toAdvisor || undefined,
         },
-        relatedCases: result.relatedCases.map(c => ({
-          id: c.id,
-          title: c.title,
-          summary: c.summary,
+        relatedCases: (result?.relatedCases || []).map(c => ({
+          id: c?.id || '',
+          title: c?.title || '',
+          summary: c?.summary || '',
         })),
       }
       
@@ -939,16 +940,27 @@ export default function SituationAnalysisPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-3">
-                  {analysisResult.criteria.map((criterion, index) => (
-                    <div key={index} className="flex items-start gap-3 p-3 bg-white rounded-lg border border-blue-100 shadow-sm">
-                      <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center mt-0.5">
-                        <span className="text-blue-600 font-bold text-xs">{index + 1}</span>
+                  {analysisResult.criteria && analysisResult.criteria.length > 0 ? (
+                    analysisResult.criteria.map((criterion, index) => (
+                      <div key={index} className="flex items-start gap-3 p-3 bg-white rounded-lg border border-blue-100 shadow-sm">
+                        <div className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center mt-0.5">
+                          <span className="text-blue-600 font-bold text-xs">{index + 1}</span>
+                        </div>
+                        <div className="flex-1 flex items-start gap-2">
+                          <div className="flex-shrink-0 mt-0.5">
+                            {getCriteriaStatusIcon(criterion.status)}
+                          </div>
+                          <p className="text-sm text-slate-700 leading-relaxed flex-1">
+                            {criterion.reason || `${criterion.name}: ${getCriteriaStatusLabel(criterion.status)}`}
+                          </p>
+                        </div>
                       </div>
-                      <p className="text-sm text-slate-700 leading-relaxed flex-1">
-                        {criterion.reason || `${criterion.name}: ${getCriteriaStatusLabel(criterion.status)}`}
-                      </p>
+                    ))
+                  ) : (
+                    <div className="p-4 bg-slate-50 border-2 border-slate-200 rounded-xl text-sm text-slate-600 text-center">
+                      법적 근거 정보가 아직 준비되지 않았습니다.
                     </div>
-                  ))}
+                  )}
                 </div>
                 <div className="bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-200 rounded-xl p-4 mt-5">
                   <div className="flex items-start gap-2">
