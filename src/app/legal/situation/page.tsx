@@ -233,7 +233,25 @@ export default function SituationAnalysisPage() {
           steps: [
             {
               title: '즉시 조치',
-              items: (analysis?.checklist || []).slice(0, 3),
+              items: (() => {
+                // checklist가 있으면 사용
+                if (analysis?.checklist && analysis.checklist.length > 0) {
+                  return analysis.checklist.slice(0, 3)
+                }
+                // checklist가 없으면 summary에서 "지금 당장 할 수 있는 행동" 섹션 파싱
+                const summary = analysis?.analysis?.summary || ''
+                const actionSectionMatch = summary.match(/##\s*🎯\s*지금\s*당장\s*할\s*수\s*있는\s*행동\s*\n([\s\S]*?)(?=##|$)/i)
+                if (actionSectionMatch) {
+                  const actionContent = actionSectionMatch[1].trim()
+                  const actionItems = actionContent
+                    .split('\n')
+                    .map(line => line.replace(/^[-*]\s*/, '').trim())
+                    .filter(item => item.length > 0)
+                    .slice(0, 5)
+                  return actionItems
+                }
+                return []
+              })(),
             },
             {
               title: '권고사항',
@@ -419,7 +437,25 @@ export default function SituationAnalysisPage() {
           steps: [
             {
               title: '즉시 조치',
-              items: (result?.checklist || []).slice(0, 3),
+              items: (() => {
+                // checklist가 있으면 사용
+                if (result?.checklist && result.checklist.length > 0) {
+                  return result.checklist.slice(0, 3)
+                }
+                // checklist가 없으면 summary에서 "지금 당장 할 수 있는 행동" 섹션 파싱
+                const summary = result?.analysis?.summary || result?.summary || ''
+                const actionSectionMatch = summary.match(/##\s*🎯\s*지금\s*당장\s*할\s*수\s*있는\s*행동\s*\n([\s\S]*?)(?=##|$)/i)
+                if (actionSectionMatch) {
+                  const actionContent = actionSectionMatch[1].trim()
+                  const actionItems = actionContent
+                    .split('\n')
+                    .map(line => line.replace(/^[-*]\s*/, '').trim())
+                    .filter(item => item.length > 0)
+                    .slice(0, 5)
+                  return actionItems
+                }
+                return []
+              })(),
             },
             {
               title: '권고사항',

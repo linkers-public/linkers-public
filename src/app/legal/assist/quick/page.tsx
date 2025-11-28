@@ -311,8 +311,19 @@ export default function QuickAssistPage() {
             }
             
             // localStorage 대화 추가 (reportId가 없거나 DB에 없는 경우만)
+            // 단, DB에 데이터가 없으면 reportId가 있는 localStorage 대화는 제거 (DB 삭제 반영)
             for (const localConv of localConversations) {
-              if (!localConv.reportId || !reportIdSet.has(localConv.reportId)) {
+              if (!localConv.reportId) {
+                // reportId가 없는 로컬 대화는 유지 (DB에 저장되지 않은 대화)
+                mergedConversations.push(localConv)
+              } else if (reportIdSet.has(localConv.reportId)) {
+                // DB에 있는 대화는 이미 추가됨
+                continue
+              } else if (dbConversations.length === 0) {
+                // DB에 데이터가 없으면 reportId가 있는 localStorage 대화는 제거 (DB 삭제 반영)
+                continue
+              } else {
+                // DB에 데이터가 있지만 해당 reportId가 없는 경우 (다른 사용자의 데이터일 수 있음)
                 mergedConversations.push(localConv)
               }
             }
@@ -324,7 +335,7 @@ export default function QuickAssistPage() {
             
             setConversations(mergedConversations)
             
-            // localStorage 업데이트 (DB 데이터 포함)
+            // localStorage 업데이트 (DB 데이터 포함, DB 삭제 반영)
             localStorage.setItem('legal_assist_conversations', JSON.stringify(mergedConversations))
           } else {
             // 사용자 ID가 없으면 localStorage만 사용
@@ -635,7 +646,7 @@ export default function QuickAssistPage() {
     })
   }
 
-  // 리포트 아카이브 로드 (DB에서 가져오기)
+  // 상황 분석 아카이브 로드 (DB에서 가져오기 - 상황 분석 데이터만)
   const loadReports = async () => {
     setIsLoadingReports(true)
     try {
@@ -649,7 +660,7 @@ export default function QuickAssistPage() {
         return
       }
 
-      // DB에서 상황 분석 히스토리 가져오기
+      // DB에서 상황 분석 히스토리 가져오기 (situation_analyses 테이블에서만)
       const situationHistory = await getSituationHistoryV2(20, 0, userId)
       
       // Report 형식으로 변환
@@ -672,10 +683,10 @@ export default function QuickAssistPage() {
       
       setReports(reportsData)
     } catch (error: any) {
-      console.error('리포트 로드 실패:', error)
+      console.error('상황 분석 로드 실패:', error)
       toast({
-        title: '리포트 로드 실패',
-        description: error.message || '리포트를 불러오는 중 오류가 발생했습니다.',
+        title: '상황 분석 로드 실패',
+        description: error.message || '상황 분석을 불러오는 중 오류가 발생했습니다.',
         variant: 'destructive',
       })
       setReports([])
@@ -684,32 +695,32 @@ export default function QuickAssistPage() {
     }
   }
 
-  // 리포트 아카이브 모달 열기
+  // 상황 분석 아카이브 모달 열기
   const handleOpenArchiveModal = () => {
     setShowArchiveModal(true)
     loadReports()
   }
 
-  // 리포트 삭제
+  // 상황 분석 삭제
   const handleDeleteReport = async (reportId: string, e: React.MouseEvent) => {
-    e.stopPropagation() // 버튼 클릭 시 리포트 선택 방지
+    e.stopPropagation() // 버튼 클릭 시 분석 선택 방지
     
     try {
-      // 리포트 삭제는 situation_analyses 테이블을 사용하도록 변경됨
+      // 상황 분석 삭제는 situation_analyses 테이블을 사용하도록 변경됨
       // 필요시 백엔드 API 추가 필요
       // 현재는 로컬에서만 제거
       const updatedReports = reports.filter(r => r.id !== reportId)
       setReports(updatedReports)
       
       toast({
-        title: "리포트 삭제 완료",
-        description: "리포트가 삭제되었습니다.",
+        title: "상황 분석 삭제 완료",
+        description: "상황 분석이 삭제되었습니다.",
       })
     } catch (error: any) {
-      console.error('리포트 삭제 실패:', error)
+      console.error('상황 분석 삭제 실패:', error)
       toast({
-        title: "리포트 삭제 실패",
-        description: error.message || "리포트 삭제 중 오류가 발생했습니다.",
+        title: "상황 분석 삭제 실패",
+        description: error.message || "상황 분석 삭제 중 오류가 발생했습니다.",
         variant: 'destructive',
       })
     }
@@ -1024,9 +1035,9 @@ export default function QuickAssistPage() {
     })
   }
 
-  // 리포트 보기 (페이지로 이동)
+  // 리포트 보기 (SIMULATION 상세 페이지로 이동)
   const handleViewReport = (reportId: string) => {
-    router.push(`/legal/assist/quick/report/${reportId}`)
+    router.push(`/legal/situation?analysisId=${reportId}`)
   }
 
   // 새 대화 시작
@@ -1205,7 +1216,7 @@ export default function QuickAssistPage() {
                 className="text-slate-700 hover:text-slate-900 border-slate-300 hover:border-slate-400 hover:bg-slate-50 transition-all h-8 px-3"
               >
                 <FolderArchive className="w-3.5 h-3.5 mr-1.5" />
-                <span className="text-xs">아카이브</span>
+                <span className="text-xs">상황 분석</span>
               </Button>
             </div>
           </div>
@@ -1492,7 +1503,7 @@ export default function QuickAssistPage() {
         </DialogContent>
       </Dialog>
 
-      {/* 리포트 아카이브 모달 */}
+      {/* 상황 분석 아카이브 모달 */}
       <Dialog open={showArchiveModal} onOpenChange={setShowArchiveModal}>
         <DialogContent className="max-w-3xl max-h-[85vh] overflow-hidden flex flex-col p-0 gap-0">
           <DialogHeader className="px-6 pt-6 pb-4 border-b border-slate-200 bg-gradient-to-r from-blue-50/50 to-indigo-50/50">
@@ -1502,9 +1513,9 @@ export default function QuickAssistPage() {
               </div>
               <div>
                 <h3 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-                  리포트 아카이브
+                  상황 분석 아카이브
                 </h3>
-                <p className="text-xs text-slate-500 mt-0.5">저장된 상황 분석 리포트를 확인하세요</p>
+                <p className="text-xs text-slate-500 mt-0.5">저장된 상황 분석 결과를 확인하세요</p>
               </div>
             </DialogTitle>
           </DialogHeader>
@@ -1516,7 +1527,7 @@ export default function QuickAssistPage() {
                   <div className="w-16 h-16 border-4 border-blue-100 rounded-full"></div>
                   <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin absolute top-0 left-0"></div>
                 </div>
-                <p className="text-sm text-slate-600 mt-4 font-medium">리포트를 불러오는 중...</p>
+                <p className="text-sm text-slate-600 mt-4 font-medium">상황 분석을 불러오는 중...</p>
                 <p className="text-xs text-slate-400 mt-1">잠시만 기다려주세요</p>
               </div>
             ) : reports.length === 0 ? (
@@ -1524,8 +1535,8 @@ export default function QuickAssistPage() {
                 <div className="p-5 bg-gradient-to-br from-slate-100 to-slate-200 rounded-2xl w-20 h-20 mx-auto mb-5 flex items-center justify-center shadow-inner">
                   <FolderArchive className="w-10 h-10 text-slate-400" />
                 </div>
-                <h4 className="text-lg font-semibold text-slate-800 mb-2">저장된 리포트가 없습니다</h4>
-                <p className="text-sm text-slate-500 mb-1">상황 분석을 진행하면 리포트가 자동으로 저장됩니다</p>
+                <h4 className="text-lg font-semibold text-slate-800 mb-2">저장된 상황 분석이 없습니다</h4>
+                <p className="text-sm text-slate-500 mb-1">상황 분석을 진행하면 결과가 자동으로 저장됩니다</p>
                 <p className="text-xs text-slate-400">분석 결과를 나중에 다시 확인할 수 있어요</p>
               </div>
             ) : (
@@ -1555,7 +1566,7 @@ export default function QuickAssistPage() {
                             </div>
                             <div className="flex-1 min-w-0">
                               <h4 className="font-semibold text-base text-slate-900 mb-1.5 line-clamp-2 group-hover:text-blue-700 transition-colors">
-                                {report.question || '상황 분석 리포트'}
+                                {report.question || '상황 분석'}
                               </h4>
                               <div className="flex items-center gap-2 text-xs text-slate-500">
                                 <Clock className="w-3.5 h-3.5" />
@@ -1575,26 +1586,45 @@ export default function QuickAssistPage() {
                           {/* 위험도 표시 */}
                           {report.riskScore !== undefined && (
                             <div className="mb-3">
-                              <div className="flex items-center justify-between mb-2">
-                                <span className="text-xs font-semibold text-slate-700">위험도</span>
-                                <span className={cn(
-                                  "text-sm font-bold px-2 py-0.5 rounded-full",
-                                  report.riskScore > 70 ? "bg-red-100 text-red-700" : 
-                                  report.riskScore > 40 ? "bg-amber-100 text-amber-700" : "bg-green-100 text-green-700"
+                              <div className="flex items-center gap-3">
+                                {/* 위험도 레벨 배지 */}
+                                <div className={cn(
+                                  "flex items-center gap-2 px-3 py-1.5 rounded-lg font-bold text-sm",
+                                  "border-2 shadow-sm",
+                                  report.riskScore > 70 
+                                    ? "bg-red-50 border-red-300 text-red-700" 
+                                    : report.riskScore > 40 
+                                    ? "bg-amber-50 border-amber-300 text-amber-700" 
+                                    : "bg-green-50 border-green-300 text-green-700"
                                 )}>
-                                  {report.riskScore}점
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <div className="flex-1 h-2.5 bg-slate-200 rounded-full overflow-hidden shadow-inner">
-                                  <div
-                                    className={cn(
-                                      "h-full rounded-full transition-all duration-300 shadow-sm",
-                                      report.riskScore > 70 ? "bg-gradient-to-r from-red-500 to-red-600" : 
-                                      report.riskScore > 40 ? "bg-gradient-to-r from-amber-500 to-amber-600" : "bg-gradient-to-r from-green-500 to-green-600"
-                                    )}
-                                    style={{ width: `${report.riskScore}%` }}
-                                  />
+                                  {report.riskScore > 70 ? (
+                                    <>
+                                      <AlertTriangle className="w-4 h-4" />
+                                      <span>높음</span>
+                                    </>
+                                  ) : report.riskScore > 40 ? (
+                                    <>
+                                      <AlertTriangle className="w-4 h-4" />
+                                      <span>보통</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <CheckCircle2 className="w-4 h-4" />
+                                      <span>낮음</span>
+                                    </>
+                                  )}
+                                </div>
+                                
+                                {/* 점수 표시 */}
+                                <div className="flex items-baseline gap-1">
+                                  <span className={cn(
+                                    "text-2xl font-bold",
+                                    report.riskScore > 70 ? "text-red-600" : 
+                                    report.riskScore > 40 ? "text-amber-600" : "text-green-600"
+                                  )}>
+                                    {report.riskScore}
+                                  </span>
+                                  <span className="text-xs text-slate-500 font-medium">/ 100</span>
                                 </div>
                               </div>
                             </div>
@@ -1633,7 +1663,7 @@ export default function QuickAssistPage() {
                               "hover:bg-red-50 hover:text-red-600 text-slate-400",
                               "border border-transparent hover:border-red-200"
                             )}
-                            title="리포트 삭제"
+                            title="상황 분석 삭제"
                           >
                             <X className="w-4 h-4" />
                           </button>
@@ -1653,8 +1683,8 @@ export default function QuickAssistPage() {
           {reports.length > 0 && (
             <div className="px-6 py-3 border-t border-slate-200 bg-slate-50/50">
               <div className="flex items-center justify-between text-xs text-slate-600">
-                <span className="font-medium">총 {reports.length}개의 리포트</span>
-                <span className="text-slate-400">리포트를 클릭하면 상세 내용을 확인할 수 있습니다</span>
+                <span className="font-medium">총 {reports.length}개의 상황 분석</span>
+                <span className="text-slate-400">분석 결과를 클릭하면 상세 내용을 확인할 수 있습니다</span>
               </div>
             </div>
           )}

@@ -12,6 +12,7 @@ import asyncio
 from pathlib import Path
 from datetime import datetime
 import uuid
+import re
 
 from models.schemas import (
     ScriptsV2,
@@ -806,6 +807,27 @@ async def analyze_situation(
         # action_plan.steps에서 checklist와 recommendations 구분
         action_plan = result.get("action_plan", {})
         steps = action_plan.get("steps", [])
+        
+        # action_plan이 비어있으면 summary에서 "지금 당장 할 수 있는 행동" 섹션 파싱
+        if len(steps) == 0:
+            summary_text = result.get("summary", "")
+            # "## 🎯 지금 당장 할 수 있는 행동" 섹션 추출
+            action_section_match = re.search(
+                r'##\s*🎯\s*지금\s*당장\s*할\s*수\s*있는\s*행동\s*\n(.*?)(?=##|$)',
+                summary_text,
+                re.DOTALL | re.IGNORECASE
+            )
+            if action_section_match:
+                action_content = action_section_match.group(1).strip()
+                # "- " 또는 "* "로 시작하는 리스트 항목 추출
+                action_items = re.findall(r'[-*]\s*(.+?)(?=\n[-*]|\n##|$)', action_content, re.MULTILINE)
+                action_items = [item.strip() for item in action_items if item.strip()]
+                if action_items:
+                    # 첫 번째 step으로 추가
+                    steps = [{
+                        "title": "즉시 조치",
+                        "items": action_items[:5]  # 최대 5개
+                    }]
         
         # checklist: 첫 번째 step의 items만 사용
         checklist = []
