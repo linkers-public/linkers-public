@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     # API Keys (해커톤 모드에서는 사용 안 함)
     openai_api_key: Optional[str] = None
     anthropic_api_key: Optional[str] = None
+    groq_api_key: Optional[str] = None  # Groq API 키 (환경변수 GROQ_API_KEY에서 가져옴)
     
     # Supabase
     supabase_url: Optional[str] = None
@@ -26,14 +27,18 @@ class Settings(BaseSettings):
     doc_embed_model: str = "BAAI/bge-m3"  # 문서 임베딩: 법률/계약서/공고문 (1024차원, 다국어)
     company_embed_model: str = "BAAI/bge-small-en-v1.5"  # 기업 임베딩: 기업/팀 기술스택 및 수행이력 (384차원, 빠름, 레거시)
     
-    # LLM Model (Ollama 사용)
-    llm_temperature: float = 0.1
+    # LLM Model (Groq 사용)
+    llm_temperature: float = 0.5
     disable_llm: bool = False  # True면 LLM 분석 비활성화 (개발/테스트용)
     
-    # Ollama 설정 (로컬 LLM 사용)
+    # Groq 설정 (Groq LLM 사용)
+    groq_model: str = "llama-3.1-8b-instant"  # Groq 모델명 (빠르고 저렴한 모델)
+    use_groq: bool = True  # Groq 사용 (기본값: True)
+    
+    # Ollama 설정 (로컬 LLM 사용 - 레거시, Groq 사용 시 비활성화)
     ollama_base_url: str = "http://localhost:11434"  # Ollama 서버 주소
     ollama_model: str = "mistral"  # mistral (한국어 성능 우수), llama3, phi3 등
-    use_ollama: bool = True  # Ollama 사용 (로컬 LLM, 무료)
+    use_ollama: bool = False  # Ollama 사용 (로컬 LLM, 무료) - Groq 사용 시 False
     
     # 벡터 DB 선택
     use_chromadb: bool = False  # True면 ChromaDB 사용 (로컬), False면 Supabase

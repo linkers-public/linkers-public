@@ -46,6 +46,9 @@ ollama==0.6.1  # 로컬 LLM 클라이언트 (llama3, mistral, phi3)
 langchain-ollama==1.0.0  # Ollama LLM 지원 (langchain_community.llms.Ollama 대체)
 # chromadb==0.4.22  # Windows 빌드 문제로 임시 주석 처리 - Supabase pgvector 사용
 
+# Groq LLM (즉시상담용)
+groq>=0.4.0  # Groq API 클라이언트
+
 # 프론트엔드 (해커톤용)
 streamlit==1.31.0  # 간단한 웹 UI
 

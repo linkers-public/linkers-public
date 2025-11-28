@@ -662,12 +662,32 @@ class LegalRAGService:
         
 
         try:
-            # Ollama 사용
-            if self.generator.use_ollama:
-                from config import settings
-                import json
-                import re
+            # Groq 사용 (우선)
+            from config import settings
+            import json
+            import re
+            
+            if settings.use_groq:
+                from llm_api import ask_groq_with_messages
                 
+                # 프롬프트를 메시지 형식으로 변환
+                messages = [
+                    {"role": "system", "content": "너는 유능한 법률 AI야. 한국어로만 답변해주세요. JSON 형식으로 응답하세요."},
+                    {"role": "user", "content": prompt}
+                ]
+                
+                try:
+                    response_text = ask_groq_with_messages(
+                        messages=messages,
+                        temperature=settings.llm_temperature,
+                        model=settings.groq_model
+                    )
+                    logger.info(f"[Groq 호출 성공] 응답 길이: {len(response_text) if response_text else 0}자")
+                except Exception as groq_error:
+                    logger.error(f"[Groq 호출 실패] {str(groq_error)}", exc_info=True)
+                    raise  # 상위 except로 전달
+            # Ollama 사용 (레거시)
+            elif self.generator.use_ollama:
                 logger.info(f"[LLM 호출] Ollama 호출 시작: base_url={settings.ollama_base_url}, model={settings.ollama_model}")
                 
                 # langchain-ollama 우선 사용 (deprecated 경고 없음)
@@ -690,6 +710,9 @@ class LegalRAGService:
                 logger.info(f"[LLM 호출] 프롬프트 길이: {len(prompt)}자, invoke 호출 중...")
                 logger.debug(f"[LLM 호출] 프롬프트 미리보기 (처음 500자): {prompt[:500]}")
                 response_text = llm.invoke(prompt)
+            else:
+                # Groq와 Ollama 모두 사용 안 함
+                raise ValueError("LLM이 설정되지 않았습니다. use_groq 또는 use_ollama를 True로 설정하세요.")
                 logger.info(f"[LLM 호출] 응답 수신 완료, 응답 길이: {len(response_text) if response_text else 0}자")
                 logger.info(f"[LLM 호출] 응답 원문 (처음 1000자): {response_text[:1000] if response_text else 'None'}")
                 if response_text and len(response_text) > 1000:
@@ -948,6 +971,18 @@ class LegalRAGService:
 - 관련 법령: {', '.join(selected_issue.get('legalBasis', [])[:3])}
 """
         
+        # 분석 요약 정보 추가
+        analysis_context = ""
+        if analysis_summary:
+            analysis_context = f"""
+**분석 요약:**
+{analysis_summary}
+"""
+        if risk_score is not None:
+            analysis_context += f"\n**위험도 점수:** {risk_score}점"
+        if total_issues is not None:
+            analysis_context += f"\n**발견된 이슈 수:** {total_issues}개"
+        
         # 프롬프트 템플릿 사용
         prompt = build_legal_chat_prompt(
             query=query,
@@ -960,10 +995,32 @@ class LegalRAGService:
         )
 
         try:
-            # Ollama 사용
-            if self.generator.use_ollama:
-                from config import settings
+            # Groq 사용 (우선)
+            from config import settings
+            if settings.use_groq:
+                from llm_api import ask_groq_with_messages
                 
+                # 프롬프트를 메시지 형식으로 변환
+                # prompt는 이미 전체 프롬프트이므로, system과 user로 분리
+                messages = [
+                    {"role": "system", "content": "너는 유능한 법률 AI야. 한국어로만 답변해주세요."},
+                    {"role": "user", "content": prompt}
+                ]
+                
+                response_text = ask_groq_with_messages(
+                    messages=messages,
+                    temperature=settings.llm_temperature,
+                    model=settings.groq_model
+                )
+                
+                # 답변에 전문가 상담 권장 문구 추가 (없는 경우)
+                if "전문가 상담" not in response_text and "법률 자문" not in response_text:
+                    response_text += "\n\n---\n\n**⚠️ 참고:** 이 답변은 정보 안내를 위한 것이며 법률 자문이 아닙니다. 중요한 사안은 전문 변호사나 노동위원회 등 전문 기관에 상담하시기 바랍니다."
+                
+                return response_text
+            
+            # Ollama 사용 (레거시)
+            if self.generator.use_ollama:
                 # langchain-ollama 우선 사용
                 try:
                     from langchain_ollama import OllamaLLM
@@ -1077,12 +1134,32 @@ class LegalRAGService:
         
 
         try:
-            # Ollama 사용
-            if self.generator.use_ollama:
-                from config import settings
-                import json
-                import re
+            # Groq 사용 (우선)
+            from config import settings
+            import json
+            import re
+            
+            if settings.use_groq:
+                from llm_api import ask_groq_with_messages
                 
+                # 프롬프트를 메시지 형식으로 변환
+                messages = [
+                    {"role": "system", "content": "너는 유능한 법률 AI야. 한국어로만 답변해주세요. JSON 형식으로 응답하세요."},
+                    {"role": "user", "content": prompt}
+                ]
+                
+                try:
+                    response_text = ask_groq_with_messages(
+                        messages=messages,
+                        temperature=settings.llm_temperature,
+                        model=settings.groq_model
+                    )
+                    _logger.info(f"[Groq 호출 성공] 응답 길이: {len(response_text) if response_text else 0}자")
+                except Exception as groq_error:
+                    _logger.error(f"[Groq 호출 실패] {str(groq_error)}", exc_info=True)
+                    raise  # 상위 except로 전달
+            # Ollama 사용 (레거시)
+            elif self.generator.use_ollama:
                 # langchain-ollama 우선 사용
                 try:
                     from langchain_ollama import OllamaLLM
@@ -1099,222 +1176,189 @@ class LegalRAGService:
                     )
                 
                 response_text = llm.invoke(prompt)
-                
-                # JSON 추출 및 파싱
-                try:
-                    # 1. 외부 코드 블록 제거 (```json, ``` 등)
-                    response_clean = response_text.strip()
-                    if response_clean.startswith("```json"):
-                        response_clean = response_clean[7:]
-                    elif response_clean.startswith("```"):
-                        response_clean = response_clean[3:]
-                    if response_clean.endswith("```"):
-                        response_clean = response_clean[:-3]
-                    response_clean = response_clean.strip()
-                    
-                    # 2. JSON 객체 추출
-                    json_match = re.search(r'\{.*\}', response_clean, re.DOTALL)
-                    if not json_match:
-                        _logger.warning(f"LLM 응답에서 JSON 객체를 찾을 수 없습니다. 응답 (처음 500자): {response_clean[:500]}")
-                        raise ValueError("LLM 응답에서 JSON 객체를 찾을 수 없습니다.")
-                    
-                    json_str = json_match.group()
-                    
-                    # JSON 파싱 전에 summary 필드의 마크다운 코드 블록 제거
-                    # summary 필드 전체를 찾아서 정리 (다중 라인, 이스케이프된 따옴표 포함)
-                    def clean_summary_field_in_json(json_str):
-                        """summary 필드 내부의 마크다운 코드 블록과 특수 문자를 정리"""
-                        try:
-                            # summary 필드의 시작 위치 찾기
-                            summary_start = json_str.find('"summary"')
-                            if summary_start == -1:
-                                return json_str
-                            
-                            # summary 필드의 값 시작 위치 찾기 (콜론과 따옴표 이후)
-                            value_start = json_str.find('"', summary_start + 9)  # "summary" 길이 + 1
-                            if value_start == -1:
-                                return json_str
-                            
-                            value_start += 1  # 따옴표 다음부터
-                            
-                            # 문자열 끝 찾기 (이스케이프된 따옴표 고려)
-                            # 백슬래시가 홀수 개 연속으로 나오면 이스케이프된 따옴표
-                            value_end = value_start
-                            brace_count = 0  # 중첩된 객체/배열 추적
-                            in_string = True
-                            
-                            while value_end < len(json_str):
-                                char = json_str[value_end]
-                                
-                                # 이스케이프된 문자 건너뛰기
-                                if char == '\\' and value_end + 1 < len(json_str):
-                                    value_end += 2
-                                    continue
-                                
-                                # 따옴표 처리
-                                if char == '"':
-                                    # 앞의 백슬래시 개수 세기
-                                    backslash_count = 0
-                                    i = value_end - 1
-                                    while i >= value_start and json_str[i] == '\\':
-                                        backslash_count += 1
-                                        i -= 1
-                                    # 홀수 개의 백슬래시면 이스케이프된 따옴표, 짝수 개면 문자열 끝
-                                    if backslash_count % 2 == 0:
-                                        break
-                                
-                                value_end += 1
-                            
-                            if value_end >= len(json_str):
-                                # 문자열 끝을 찾지 못한 경우, 다음 큰따옴표까지 찾기
-                                next_quote = json_str.find('"', value_start)
-                                if next_quote > value_start:
-                                    value_end = next_quote
-                                else:
-                                    return json_str
-                            
-                            # summary 필드 내용 추출
-                            content = json_str[value_start:value_end]
-                            
-                            # 이스케이프된 문자를 실제 문자로 변환 (일시적)
-                            content_decoded = content.replace('\\n', '\n').replace('\\r', '\r').replace('\\t', '\t').replace('\\"', '"').replace('\\\\', '\\')
-                            
-                            # 마크다운 코드 블록 제거
-                            content_decoded = re.sub(r'```markdown\s*', '', content_decoded, flags=re.IGNORECASE)
-                            content_decoded = re.sub(r'```\s*', '', content_decoded, flags=re.MULTILINE)
-                            
-                            # 제어 문자를 JSON 이스케이프로 변환
-                            result = []
-                            for char in content_decoded:
-                                if char == '\n':
-                                    result.append('\\n')
-                                elif char == '\r':
-                                    result.append('\\r')
-                                elif char == '\t':
-                                    result.append('\\t')
-                                elif char == '"':
-                                    result.append('\\"')
-                                elif char == '\\':
-                                    result.append('\\\\')
-                                elif ord(char) < 32:
-                                    result.append(f'\\u{ord(char):04x}')
-                                else:
-                                    result.append(char)
-                            
-                            # summary 필드 교체
-                            cleaned_content = ''.join(result)
-                            return json_str[:value_start] + cleaned_content + json_str[value_end:]
-                        except Exception as e:
-                            _logger.warning(f"summary 필드 정리 중 오류 발생: {str(e)}, 원본 JSON 사용")
-                            return json_str
-                    
-                    # summary 필드 정리
-                    json_str_cleaned = clean_summary_field_in_json(json_str)
-                    
-                    # 제어 문자 처리 (전체 JSON 문자열)
-                    json_str_cleaned = json_str_cleaned.replace('\t', ' ').replace('\r', '')
-                    
-                    # JSON 파싱 시도
-                    try:
-                        diagnosis = json.loads(json_str_cleaned)
-                    except json.JSONDecodeError as json_err:
-                        # JSON 파싱 실패 시 더 강력한 정리 시도
-                        _logger.warning(f"JSON 파싱 실패, 추가 정리 시도 중...: {str(json_err)}")
-                        
-                        # 중괄호 매칭으로 유효한 JSON 추출
-                        brace_count = 0
-                        last_valid_pos = -1
-                        for i, char in enumerate(json_str_cleaned):
-                            if char == '{':
-                                brace_count += 1
-                            elif char == '}':
-                                brace_count -= 1
-                                if brace_count == 0:
-                                    last_valid_pos = i + 1
-                                    break
-                        
-                        if last_valid_pos > 0:
-                            json_str_cleaned = json_str_cleaned[:last_valid_pos]
-                            try:
-                                diagnosis = json.loads(json_str_cleaned)
-                            except json.JSONDecodeError:
-                                _logger.error(f"JSON 파싱 최종 실패: {str(json_err)}")
-                                raise json_err
-                        else:
-                            raise json_err
-                    
-                    # summary 필드에서 마크다운 코드 블록 제거 (파싱 후)
-                    summary = diagnosis.get("summary", "상황을 분석했습니다.")
-                    if summary:
-                        # ```markdown ... ``` 제거
-                        summary = re.sub(r'```markdown\s*', '', summary, flags=re.IGNORECASE)
-                        summary = re.sub(r'```\s*$', '', summary, flags=re.MULTILINE)
-                        summary = summary.strip()
-                    
-                    # 응답 형식 변환
-                    return {
-                        "classified_type": diagnosis.get("classified_type", category_hint),
-                        "risk_score": diagnosis.get("risk_score", 50),
-                        "summary": summary,
-                        "criteria": diagnosis.get("criteria", []),
-                        "action_plan": diagnosis.get("action_plan", {"steps": []}),
-                        "scripts": diagnosis.get("scripts", {}),
-                        "related_cases": [],  # 나중에 추가됨
-                    }
-                except json.JSONDecodeError as e:
-                    _logger.error(f"LLM 진단 응답 JSON 파싱 실패: {str(e)}", exc_info=True)
-                    _logger.error(f"LLM 응답 원문 (처음 500자): {response_text[:500] if response_text else 'None'}")
-                    # JSON 파싱 실패 시 기본 응답 반환
-                    raise  # 상위 except로 전달하여 기본 응답 반환
-                except Exception as e:
-                    _logger.error(f"LLM 진단 응답 파싱 실패: {str(e)}", exc_info=True)
-                    _logger.error(f"LLM 응답 원문 (처음 500자): {response_text[:500] if response_text else 'None'}")
-                    # 파싱 실패 시 기본 응답 반환
-                    raise  # 상위 except로 전달하여 기본 응답 반환
             else:
-                # Ollama가 아닌 경우 (OpenAI 등) - LLMGenerator 사용
+                # Groq와 Ollama 모두 사용 안 함
+                raise ValueError("LLM이 설정되지 않았습니다. use_groq 또는 use_ollama를 True로 설정하세요.")
+            
+            # JSON 추출 및 파싱 (Groq와 Ollama 모두 공통)
+            try:
+                # 1. 외부 코드 블록 제거 (```json, ``` 등)
+                response_clean = response_text.strip()
+                if response_clean.startswith("```json"):
+                    response_clean = response_clean[7:]
+                elif response_clean.startswith("```"):
+                    response_clean = response_clean[3:]
+                if response_clean.endswith("```"):
+                    response_clean = response_clean[:-3]
+                response_clean = response_clean.strip()
+                
+                # 2. JSON 객체 추출
+                json_match = re.search(r'\{.*\}', response_clean, re.DOTALL)
+                if not json_match:
+                    _logger.warning(f"LLM 응답에서 JSON 객체를 찾을 수 없습니다. 응답 (처음 500자): {response_clean[:500]}")
+                    raise ValueError("LLM 응답에서 JSON 객체를 찾을 수 없습니다.")
+                
+                json_str = json_match.group()
+                
+                # JSON 파싱 전에 summary 필드의 마크다운 코드 블록 제거
+                # summary 필드 전체를 찾아서 정리 (다중 라인, 이스케이프된 따옴표 포함)
+                def clean_summary_field_in_json(json_str):
+                    """summary 필드 내부의 마크다운 코드 블록과 특수 문자를 정리"""
+                    try:
+                        # Python 삼중 따옴표 제거 (""" ... """)
+                        json_str = re.sub(r'"""\s*', '"', json_str)  # 시작 삼중 따옴표
+                        json_str = re.sub(r'\s*"""', '"', json_str)  # 끝 삼중 따옴표
+                        
+                        # summary 필드의 시작 위치 찾기
+                        summary_start = json_str.find('"summary"')
+                        if summary_start == -1:
+                            return json_str
+                        
+                        # summary 필드의 값 시작 위치 찾기 (콜론과 따옴표 이후)
+                        value_start = json_str.find('"', summary_start + 9)  # "summary" 길이 + 1
+                        if value_start == -1:
+                            return json_str
+                        
+                        value_start += 1  # 따옴표 다음부터
+                        
+                        # 문자열 끝 찾기 (이스케이프된 따옴표 고려)
+                        # 백슬래시가 홀수 개 연속으로 나오면 이스케이프된 따옴표
+                        value_end = value_start
+                        brace_count = 0  # 중첩된 객체/배열 추적
+                        in_string = True
+                        
+                        while value_end < len(json_str):
+                            char = json_str[value_end]
+                            
+                            # 이스케이프된 문자 건너뛰기
+                            if char == '\\' and value_end + 1 < len(json_str):
+                                value_end += 2
+                                continue
+                            
+                            # 따옴표 처리
+                            if char == '"':
+                                # 앞의 백슬래시 개수 세기
+                                backslash_count = 0
+                                i = value_end - 1
+                                while i >= value_start and json_str[i] == '\\':
+                                    backslash_count += 1
+                                    i -= 1
+                                # 홀수 개의 백슬래시면 이스케이프된 따옴표, 짝수 개면 문자열 끝
+                                if backslash_count % 2 == 0:
+                                    break
+                            
+                            value_end += 1
+                        
+                        if value_end >= len(json_str):
+                            # 문자열 끝을 찾지 못한 경우, 다음 큰따옴표까지 찾기
+                            next_quote = json_str.find('"', value_start)
+                            if next_quote > value_start:
+                                value_end = next_quote
+                            else:
+                                return json_str
+                        
+                        # summary 필드 내용 추출
+                        content = json_str[value_start:value_end]
+                        
+                        # 이스케이프된 문자를 실제 문자로 변환 (일시적)
+                        content_decoded = content.replace('\\n', '\n').replace('\\r', '\r').replace('\\t', '\t').replace('\\"', '"').replace('\\\\', '\\')
+                        
+                        # Python 삼중 따옴표 제거 (""" ... """)
+                        content_decoded = re.sub(r'"""\s*', '', content_decoded)
+                        content_decoded = re.sub(r'\s*"""', '', content_decoded)
+                        
+                        # 마크다운 코드 블록 제거
+                        content_decoded = re.sub(r'```markdown\s*', '', content_decoded, flags=re.IGNORECASE)
+                        content_decoded = re.sub(r'```\s*', '', content_decoded, flags=re.MULTILINE)
+                        
+                        # 제어 문자를 JSON 이스케이프로 변환
+                        result = []
+                        for char in content_decoded:
+                            if char == '\n':
+                                result.append('\\n')
+                            elif char == '\r':
+                                result.append('\\r')
+                            elif char == '\t':
+                                result.append('\\t')
+                            elif char == '"':
+                                result.append('\\"')
+                            elif char == '\\':
+                                result.append('\\\\')
+                            elif ord(char) < 32:
+                                result.append(f'\\u{ord(char):04x}')
+                            else:
+                                result.append(char)
+                        
+                        # summary 필드 교체
+                        cleaned_content = ''.join(result)
+                        return json_str[:value_start] + cleaned_content + json_str[value_end:]
+                    except Exception as e:
+                        _logger.warning(f"summary 필드 정리 중 오류 발생: {str(e)}, 원본 JSON 사용")
+                        return json_str
+                
+                # summary 필드 정리
+                json_str_cleaned = clean_summary_field_in_json(json_str)
+                
+                # 제어 문자 처리 (전체 JSON 문자열)
+                json_str_cleaned = json_str_cleaned.replace('\t', ' ').replace('\r', '')
+                
+                # JSON 파싱 시도
                 try:
-                    response_text = await self.generator.generate_text(prompt)
+                    diagnosis = json.loads(json_str_cleaned)
+                except json.JSONDecodeError as json_err:
+                    # JSON 파싱 실패 시 더 강력한 정리 시도
+                    _logger.warning(f"JSON 파싱 실패, 추가 정리 시도 중...: {str(json_err)}")
                     
-                    # JSON 추출 및 파싱 (Ollama와 동일한 로직)
-                    import json
-                    import re
+                    # 중괄호 매칭으로 유효한 JSON 추출
+                    brace_count = 0
+                    last_valid_pos = -1
+                    for i, char in enumerate(json_str_cleaned):
+                        if char == '{':
+                            brace_count += 1
+                        elif char == '}':
+                            brace_count -= 1
+                            if brace_count == 0:
+                                last_valid_pos = i + 1
+                                break
                     
-                    response_clean = response_text.strip()
-                    if response_clean.startswith("```json"):
-                        response_clean = response_clean[7:]
-                    elif response_clean.startswith("```"):
-                        response_clean = response_clean[3:]
-                    if response_clean.endswith("```"):
-                        response_clean = response_clean[:-3]
-                    response_clean = response_clean.strip()
-                    
-                    json_match = re.search(r'\{.*\}', response_clean, re.DOTALL)
-                    if json_match:
-                        json_str = json_match.group()
-                        diagnosis = json.loads(json_str)
-                        
-                        summary = diagnosis.get("summary", "상황을 분석했습니다.")
-                        if summary:
-                            summary = re.sub(r'```markdown\s*', '', summary, flags=re.IGNORECASE)
-                            summary = re.sub(r'```\s*$', '', summary, flags=re.MULTILINE)
-                            summary = summary.strip()
-                        
-                        return {
-                            "classified_type": diagnosis.get("classified_type", category_hint),
-                            "risk_score": diagnosis.get("risk_score", 50),
-                            "summary": summary,
-                            "criteria": diagnosis.get("criteria", []),
-                            "action_plan": diagnosis.get("action_plan", {"steps": []}),
-                            "scripts": diagnosis.get("scripts", {}),
-                            "related_cases": [],
-                        }
+                    if last_valid_pos > 0:
+                        json_str_cleaned = json_str_cleaned[:last_valid_pos]
+                        try:
+                            diagnosis = json.loads(json_str_cleaned)
+                        except json.JSONDecodeError:
+                            _logger.error(f"JSON 파싱 최종 실패: {str(json_err)}")
+                            raise json_err
                     else:
-                        _logger.warning("LLM 응답에서 JSON 객체를 찾을 수 없습니다.")
-                        raise ValueError("JSON 객체를 찾을 수 없습니다.")
-                except Exception as e:
-                    _logger.error(f"LLM (non-Ollama) 진단 응답 생성 실패: {str(e)}", exc_info=True)
-                    raise  # 상위 except로 전달하여 기본 응답 반환
+                        raise json_err
+                
+                # summary 필드에서 마크다운 코드 블록 제거 (파싱 후)
+                summary = diagnosis.get("summary", "상황을 분석했습니다.")
+                if summary:
+                    # ```markdown ... ``` 제거
+                    summary = re.sub(r'```markdown\s*', '', summary, flags=re.IGNORECASE)
+                    summary = re.sub(r'```\s*$', '', summary, flags=re.MULTILINE)
+                    summary = summary.strip()
+                
+                # 응답 형식 변환
+                return {
+                    "classified_type": diagnosis.get("classified_type", category_hint),
+                    "risk_score": diagnosis.get("risk_score", 50),
+                    "summary": summary,
+                    "criteria": diagnosis.get("criteria", []),
+                    "action_plan": diagnosis.get("action_plan", {"steps": []}),
+                    "scripts": diagnosis.get("scripts", {}),
+                    "related_cases": [],  # 나중에 추가됨
+                }
+            except json.JSONDecodeError as e:
+                _logger.error(f"LLM 진단 응답 JSON 파싱 실패: {str(e)}", exc_info=True)
+                _logger.error(f"LLM 응답 원문 (처음 500자): {response_text[:500] if response_text else 'None'}")
+                # JSON 파싱 실패 시 기본 응답 반환
+                raise  # 상위 except로 전달하여 기본 응답 반환
+            except Exception as e:
+                _logger.error(f"LLM 진단 응답 파싱 실패: {str(e)}", exc_info=True)
+                _logger.error(f"LLM 응답 원문 (처음 500자): {response_text[:500] if response_text else 'None'}")
+                # 파싱 실패 시 기본 응답 반환
+                raise  # 상위 except로 전달하여 기본 응답 반환
         except Exception as e:
             _logger.error(f"LLM 진단 응답 생성 실패: {str(e)}", exc_info=True)
             _logger.error(f"에러 타입: {type(e).__name__}, 에러 메시지: {str(e)}")
