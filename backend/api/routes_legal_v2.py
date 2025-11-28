@@ -199,9 +199,14 @@ async def analyze_contract(
         temp_file.write(content)
         temp_file.close()
         
-        # 텍스트 추출
+        # 텍스트 추출 (계약서는 이미지 기반 PDF일 가능성이 높으므로 OCR 우선 사용)
         processor = get_processor()
-        extracted_text, _ = processor.process_file(temp_path, file_type=None)
+        # mode="contract"이면 자동으로 prefer_ocr=True가 적용됨
+        extracted_text, _ = processor.process_file(
+            temp_path, 
+            file_type=None, 
+            mode="contract"
+        )
         
         # extracted_text 추출 확인 로깅
         logger.info(f"[계약서 분석] 텍스트 추출 완료: extracted_text 길이={len(extracted_text) if extracted_text else 0}, 미리보기={extracted_text[:100] if extracted_text else '(없음)'}")

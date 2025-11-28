@@ -837,70 +837,73 @@ class LegalRAGService:
                         summary=summary,
                         issues=issues,
                         recommendations=recommendations,
-                            grounding=grounding_chunks,
-                        )
-                        
-                        logger.info(f"[LLM 응답 파싱] 최종 결과:")
-                        logger.info(f"  - risk_score: {result.risk_score}, risk_level: {result.risk_level}")
-                        logger.info(f"  - summary: {result.summary[:100]}..." if len(result.summary) > 100 else f"  - summary: {result.summary}")
-                        logger.info(f"  - issues 개수: {len(result.issues)}")
-                        logger.info(f"  - recommendations 개수: {len(result.recommendations)}")
-                        logger.info(f"  - grounding_chunks 개수: {len(result.grounding)}")
-                        for idx, issue in enumerate(result.issues[:3]):  # 처음 3개만 로깅
-                            logger.info(f"  - issue[{idx}]: name={issue.name[:50]}, severity={issue.severity}, description 길이={len(issue.description)}")
-                        
-                        return result
-                except Exception as e:
-                    logger.error(f"LLM 응답 파싱 실패: {str(e)}", exc_info=True)
-                    logger.error(f"LLM 응답 원문 (처음 1000자): {response_text[:1000] if response_text else 'None'}")
+                        grounding=grounding_chunks,
+                    )
                     
-                    # 파싱 실패 시에도 최소한의 정보 추출 시도
-                    try:
-                        # risk_score, risk_level, summary만이라도 추출 시도
-                        risk_score_match = re.search(r'"risk_score"\s*:\s*(\d+)', response_text)
-                        risk_level_match = re.search(r'"risk_level"\s*:\s*"([^"]+)"', response_text)
-                        summary_match = re.search(r'"summary"\s*:\s*"([^"]+)"', response_text)
-                        
-                        risk_score = int(risk_score_match.group(1)) if risk_score_match else 50
-                        risk_level = risk_level_match.group(1) if risk_level_match else "medium"
-                        summary = summary_match.group(1) if summary_match else f"LLM 분석 중 오류가 발생했습니다. RAG 검색 결과는 {len(grounding_chunks)}개 발견되었습니다."
-                        
-                        # issues 배열에서 최소한의 정보 추출 시도
-                        issues = []
-                        issues_matches = re.finditer(r'\{\s*"name"\s*:\s*"([^"]+)"\s*,\s*"description"\s*:\s*"([^"]+)"\s*,\s*"severity"\s*:\s*"([^"]+)"', response_text)
-                        for match in issues_matches:
-                            issues.append(LegalIssue(
-                                name=match.group(1),
-                                description=match.group(2),
-                                severity=match.group(3),
-                                legal_basis=[],
-                                suggested_text=None,
-                                rationale=None,
-                                suggested_questions=[]
-                            ))
-                        
-                        if issues:
-                            logger.info(f"파싱 실패했지만 {len(issues)}개 이슈를 정규식으로 추출했습니다.")
-                        
-                        return LegalAnalysisResult(
-                            risk_score=risk_score,
-                            risk_level=risk_level,
-                            summary=summary,
-                            issues=issues,
-                            recommendations=[],
-                            grounding=grounding_chunks,
-                        )
-                    except Exception as fallback_error:
-                        logger.error(f"Fallback 파싱도 실패: {str(fallback_error)}")
-                        # 최종 fallback: 빈 이슈 리스트 반환
-                        return LegalAnalysisResult(
-                            risk_score=50,
-                            risk_level="medium",
-                            summary=f"LLM 분석 중 오류가 발생했습니다. RAG 검색 결과는 {len(grounding_chunks)}개 발견되었습니다.",
-                            issues=[],
-                            recommendations=[],
-                            grounding=grounding_chunks,
-                        )
+                    logger.info(f"[LLM 응답 파싱] 최종 결과:")
+                    logger.info(f"  - risk_score: {result.risk_score}, risk_level: {result.risk_level}")
+                    logger.info(f"  - summary: {result.summary[:100]}..." if len(result.summary) > 100 else f"  - summary: {result.summary}")
+                    logger.info(f"  - issues 개수: {len(result.issues)}")
+                    logger.info(f"  - recommendations 개수: {len(result.recommendations)}")
+                    logger.info(f"  - grounding_chunks 개수: {len(result.grounding)}")
+                    for idx, issue in enumerate(result.issues[:3]):  # 처음 3개만 로깅
+                        logger.info(f"  - issue[{idx}]: name={issue.name[:50]}, severity={issue.severity}, description 길이={len(issue.description)}")
+                    
+                    return result
+                else:
+                    # json_match가 None인 경우
+                    raise ValueError("JSON 객체를 찾을 수 없습니다.")
+            except Exception as e:
+                logger.error(f"LLM 응답 파싱 실패: {str(e)}", exc_info=True)
+                logger.error(f"LLM 응답 원문 (처음 1000자): {response_text[:1000] if response_text else 'None'}")
+                
+                # 파싱 실패 시에도 최소한의 정보 추출 시도
+                try:
+                    # risk_score, risk_level, summary만이라도 추출 시도
+                    risk_score_match = re.search(r'"risk_score"\s*:\s*(\d+)', response_text)
+                    risk_level_match = re.search(r'"risk_level"\s*:\s*"([^"]+)"', response_text)
+                    summary_match = re.search(r'"summary"\s*:\s*"([^"]+)"', response_text)
+                    
+                    risk_score = int(risk_score_match.group(1)) if risk_score_match else 50
+                    risk_level = risk_level_match.group(1) if risk_level_match else "medium"
+                    summary = summary_match.group(1) if summary_match else f"LLM 분석 중 오류가 발생했습니다. RAG 검색 결과는 {len(grounding_chunks)}개 발견되었습니다."
+                    
+                    # issues 배열에서 최소한의 정보 추출 시도
+                    issues = []
+                    issues_matches = re.finditer(r'\{\s*"name"\s*:\s*"([^"]+)"\s*,\s*"description"\s*:\s*"([^"]+)"\s*,\s*"severity"\s*:\s*"([^"]+)"', response_text)
+                    for match in issues_matches:
+                        issues.append(LegalIssue(
+                            name=match.group(1),
+                            description=match.group(2),
+                            severity=match.group(3),
+                            legal_basis=[],
+                            suggested_text=None,
+                            rationale=None,
+                            suggested_questions=[]
+                        ))
+                    
+                    if issues:
+                        logger.info(f"파싱 실패했지만 {len(issues)}개 이슈를 정규식으로 추출했습니다.")
+                    
+                    return LegalAnalysisResult(
+                        risk_score=risk_score,
+                        risk_level=risk_level,
+                        summary=summary,
+                        issues=issues,
+                        recommendations=[],
+                        grounding=grounding_chunks,
+                    )
+                except Exception as fallback_error:
+                    logger.error(f"Fallback 파싱도 실패: {str(fallback_error)}")
+                    # 최종 fallback: 빈 이슈 리스트 반환
+                    return LegalAnalysisResult(
+                        risk_score=50,
+                        risk_level="medium",
+                        summary=f"LLM 분석 중 오류가 발생했습니다. RAG 검색 결과는 {len(grounding_chunks)}개 발견되었습니다.",
+                        issues=[],
+                        recommendations=[],
+                        grounding=grounding_chunks,
+                    )
         except Exception as e:
             logger.error(f"[LLM 호출] LLM 호출 실패: {str(e)}", exc_info=True)
             logger.error(f"[LLM 호출] 예외 타입: {type(e).__name__}")
