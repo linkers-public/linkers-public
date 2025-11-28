@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import { Loader2, AlertCircle, MessageSquare, FileText, X, ChevronDown } from 'lucide-react'
 import { ContractViewer } from '@/components/contract/ContractViewer'
@@ -41,6 +41,11 @@ export default function ContractDetailPage() {
   
   // 스와이프 최소 거리 (px)
   const minSwipeDistance = 50
+
+  // 스크롤 동기화를 위한 ref
+  const contractViewerScrollRef = useRef<HTMLDivElement>(null)
+  const analysisPanelScrollRef = useRef<HTMLDivElement>(null)
+  const isScrollingRef = useRef(false)
 
   // 분석 결과 로드
   useEffect(() => {
@@ -384,6 +389,54 @@ export default function ContractDetailPage() {
     return () => window.removeEventListener('keydown', handleEscape)
   }, [isChatOpen])
 
+  // 스크롤 동기화
+  useEffect(() => {
+    const contractViewer = contractViewerScrollRef.current
+    const analysisPanel = analysisPanelScrollRef.current
+
+    if (!contractViewer || !analysisPanel || !analysisResult) return
+
+    const syncScroll = (source: HTMLDivElement, target: HTMLDivElement) => {
+      if (isScrollingRef.current) return
+      
+      isScrollingRef.current = true
+      
+      const sourceScrollTop = source.scrollTop
+      const sourceScrollHeight = source.scrollHeight - source.clientHeight
+      const targetScrollHeight = target.scrollHeight - target.clientHeight
+      
+      if (sourceScrollHeight > 0 && targetScrollHeight > 0) {
+        const scrollRatio = sourceScrollTop / sourceScrollHeight
+        const targetScrollTop = scrollRatio * targetScrollHeight
+        target.scrollTop = targetScrollTop
+      }
+      
+      requestAnimationFrame(() => {
+        isScrollingRef.current = false
+      })
+    }
+
+    const handleContractViewerScroll = () => {
+      if (!isScrollingRef.current && analysisPanel) {
+        syncScroll(contractViewer, analysisPanel)
+      }
+    }
+
+    const handleAnalysisPanelScroll = () => {
+      if (!isScrollingRef.current && contractViewer) {
+        syncScroll(analysisPanel, contractViewer)
+      }
+    }
+
+    contractViewer.addEventListener('scroll', handleContractViewerScroll, { passive: true })
+    analysisPanel.addEventListener('scroll', handleAnalysisPanelScroll, { passive: true })
+
+    return () => {
+      contractViewer.removeEventListener('scroll', handleContractViewerScroll)
+      analysisPanel.removeEventListener('scroll', handleAnalysisPanelScroll)
+    }
+  }, [analysisResult])
+
   // 스와이프 제스처 처리
   const onTouchStart = (e: React.TouchEvent) => {
     setTouchEnd(null)
@@ -490,10 +543,13 @@ export default function ContractDetailPage() {
         )}>
           {/* 왼쪽: 계약서 뷰어 */}
           <div className={cn(
-            "w-full flex-shrink-0 bg-white border-r border-slate-200/60 shadow-sm transition-[width] duration-300",
+            "w-full flex-shrink-0 bg-white border-r border-slate-200/60 shadow-sm transition-[width] duration-300 flex flex-col",
             isChatOpen ? "lg:w-[58%]" : "lg:w-1/2"
           )}>
-            <div className="h-full max-h-[calc(100vh-64px)] overflow-y-auto">
+            <div 
+              ref={contractViewerScrollRef}
+              className="flex-1 overflow-y-auto min-h-0"
+            >
               {isSummaryOnly ? (
                 <div className="h-full flex items-center justify-center p-8">
                 <div className="text-center max-w-md">
@@ -520,6 +576,7 @@ export default function ContractDetailPage() {
                 onIssueClick={setSelectedIssueId}
                 highlightedTexts={highlightedTexts}
                 clauses={clauses}  // ✨ 조항 목록 전달
+                scrollContainerRef={contractViewerScrollRef}
               />
             )}
             </div>
@@ -530,7 +587,10 @@ export default function ContractDetailPage() {
             "w-full lg:flex-shrink-0 overflow-hidden bg-white shadow-sm flex flex-col transition-[width] duration-300",
             isChatOpen ? "lg:w-[42%]" : "lg:w-1/2"
           )}>
-            <div className="flex-1 overflow-y-auto min-h-0">
+            <div 
+              ref={analysisPanelScrollRef}
+              className="flex-1 overflow-y-auto min-h-0"
+            >
               <AnalysisPanel
                 issues={analysisResult.issues}
                 totalIssues={analysisResult.totalIssues}

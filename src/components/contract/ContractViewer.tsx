@@ -40,6 +40,7 @@ interface ContractViewerProps {
     articleNumber?: number
     category?: string
   }>
+  scrollContainerRef?: React.RefObject<HTMLDivElement>
 }
 
 export function ContractViewer({
@@ -49,8 +50,13 @@ export function ContractViewer({
   onIssueClick,
   highlightedTexts = [],
   clauses: clausesProp = [],
+  scrollContainerRef,
 }: ContractViewerProps) {
-  const containerRef = useRef<HTMLDivElement>(null)
+  // 외부 스크롤 컨테이너를 사용하는 경우 (scrollContainerRef가 전달된 경우)
+  const isExternalScroll = !!scrollContainerRef
+  
+  const internalContainerRef = useRef<HTMLDivElement>(null)
+  const containerRef = scrollContainerRef || internalContainerRef
   const highlightedRefs = useRef<Map<string, HTMLSpanElement>>(new Map())
   const clauseRefs = useRef<Map<number, HTMLDivElement>>(new Map())
   const [currentHoveredIssue, setCurrentHoveredIssue] = useState<LegalIssue | null>(null)
@@ -465,10 +471,15 @@ export function ContractViewer({
   // 스크롤 진행률 계산 및 툴팁 위치 업데이트
   useEffect(() => {
     const handleScroll = () => {
-      if (!containerRef.current) return
-      const container = containerRef.current
-      const scrollTop = container.scrollTop
-      const scrollHeight = container.scrollHeight - container.clientHeight
+      // 외부 스크롤 컨테이너를 사용하는 경우 외부 컨테이너의 스크롤을 기준으로 계산
+      const scrollContainer = isExternalScroll && scrollContainerRef?.current 
+        ? scrollContainerRef.current 
+        : containerRef.current
+      
+      if (!scrollContainer) return
+      
+      const scrollTop = scrollContainer.scrollTop
+      const scrollHeight = scrollContainer.scrollHeight - scrollContainer.clientHeight
       const progress = scrollHeight > 0 ? (scrollTop / scrollHeight) * 100 : 0
       setScrollProgress(progress)
       
@@ -483,13 +494,16 @@ export function ContractViewer({
       }
     }
 
-    const container = containerRef.current
-    if (container) {
-      container.addEventListener('scroll', handleScroll)
+    const scrollContainer = isExternalScroll && scrollContainerRef?.current 
+      ? scrollContainerRef.current 
+      : containerRef.current
+    
+    if (scrollContainer) {
+      scrollContainer.addEventListener('scroll', handleScroll, { passive: true })
       handleScroll() // 초기값 설정
-      return () => container.removeEventListener('scroll', handleScroll)
+      return () => scrollContainer.removeEventListener('scroll', handleScroll)
     }
-  }, [contractText, tooltipPosition])
+  }, [contractText, tooltipPosition, isExternalScroll, scrollContainerRef])
 
   // 컴포넌트 언마운트 시 타임아웃 정리
   useEffect(() => {
@@ -643,23 +657,28 @@ export function ContractViewer({
   }, [parsedClauses])
 
   return (
-    <div className="h-full flex flex-col relative">
-      {/* 스크롤 진행률 표시 바 */}
-      <div className="absolute top-0 left-0 right-0 h-1 bg-slate-200/50 z-30">
-        <div 
-          className="h-full bg-gradient-to-r from-blue-500 to-indigo-600 transition-all duration-150"
-          style={{ width: `${scrollProgress}%` }}
-          aria-hidden="true"
-        />
-      </div>
+    <div className="min-h-full flex flex-col relative">
+      {/* 스크롤 진행률 표시 바 - 외부 스크롤 사용 시에만 표시 */}
+      {isExternalScroll && containerRef.current && (
+        <div className="absolute top-0 left-0 right-0 h-1 bg-slate-200/50 z-30">
+          <div 
+            className="h-full bg-gradient-to-r from-blue-500 to-indigo-600 transition-all duration-150"
+            style={{ width: `${scrollProgress}%` }}
+            aria-hidden="true"
+          />
+        </div>
+      )}
       
       <div 
-        className="flex-1 overflow-y-auto bg-gradient-to-b from-slate-50/80 to-white" 
+        className={cn(
+          "bg-gradient-to-b from-slate-50/80 to-white",
+          isExternalScroll ? "min-h-full" : "flex-1 overflow-y-auto"
+        )}
         ref={containerRef}
         role="main"
         aria-label="계약서 전문 뷰어"
       >
-      <div className="w-full max-w-none lg:max-w-6xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 pb-4 sm:pb-6 lg:pb-8">
+      <div className="w-full max-w-none lg:max-w-6xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 pb-4 sm:pb-6 lg:pb-8 min-h-full">
         {/* 상단 요약 헤더 - 개선된 레이아웃 */}
         <div className="sticky top-0 bg-white/95 backdrop-blur-md z-20 pt-2 sm:pt-3 pb-2 sm:pb-3 mb-3 sm:mb-4 border-b border-slate-200/60 shadow-sm">
           {/* 위험 타임라인 네비게이션 - 개선된 크기와 가시성 */}
