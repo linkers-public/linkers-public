@@ -3,7 +3,7 @@ Legal RAG Service - 법률 도메인 RAG 서비스
 계약서 분석, 상황 분석, 케이스 검색 기능 제공
 """
 
-from typing import List, Optional, OrderedDict, Dict
+from typing import List, Optional, OrderedDict
 from pathlib import Path
 from collections import OrderedDict as OrderedDictType
 import asyncio
@@ -108,10 +108,6 @@ class LegalRAGService:
         extracted_text: str,
         description: Optional[str] = None,
         doc_id: Optional[str] = None,
-        clauses: Optional[List[Dict]] = None,
-        contract_type: Optional[str] = None,
-        user_role: Optional[str] = None,
-        field: Optional[str] = None,
     ) -> LegalAnalysisResult:
         """
         계약서 분석 (Dual RAG 지원)
@@ -141,8 +137,8 @@ class LegalRAGService:
                 logger.warning(f"[계약서 분석] contract_chunks 검색 실패 (계속 진행): {str(e)}")
                 contract_chunks = []
         
-        # 2-2. 외부 법령 검색 (더 많은 법령 정보 활용)
-        legal_chunks = await self._search_legal_chunks(query=query, top_k=15)
+        # 2-2. 외부 법령 검색
+        legal_chunks = await self._search_legal_chunks(query=query, top_k=8)
 
         # 3. LLM으로 리스크 요약/분류 (Dual RAG 컨텍스트 포함)
         result = await self._llm_summarize_risk(
@@ -150,11 +146,6 @@ class LegalRAGService:
             contract_text=extracted_text,
             contract_chunks=contract_chunks,
             grounding_chunks=legal_chunks,
-            clauses=clauses,
-            contract_type=contract_type,
-            user_role=user_role,
-            field=field,
-            concerns=description,
         )
         return result
 
@@ -633,11 +624,6 @@ class LegalRAGService:
         contract_text: Optional[str],
         grounding_chunks: List[LegalGroundingChunk],
         contract_chunks: Optional[List[dict]] = None,
-        clauses: Optional[List[Dict]] = None,
-        contract_type: Optional[str] = None,
-        user_role: Optional[str] = None,
-        field: Optional[str] = None,
-        concerns: Optional[str] = None,
     ) -> LegalAnalysisResult:
         """
         LLM 프롬프트를 통해:
@@ -666,38 +652,42 @@ class LegalRAGService:
                 grounding=grounding_chunks,
             )
         
-        # 프롬프트 템플릿 사용 (clause_id 기반)
-        # clauses가 있으면 새 방식, 없으면 레거시 방식
-        if clauses:
-            prompt = build_contract_analysis_prompt(
-                contract_text=contract_text or "",
-                clauses=clauses,
-                grounding_chunks=grounding_chunks,
-                contract_chunks=contract_chunks,
-                description=concerns if concerns else (query if query else None),
-                contract_type=contract_type,
-                user_role=user_role,
-                field=field,
-                concerns=concerns,
-            )
-        else:
-            # 레거시: clauses 없이 호출 (하위 호환성)
-            prompt = build_contract_analysis_prompt(
-                contract_text=contract_text or "",
-                clauses=None,
-                grounding_chunks=grounding_chunks,
-                contract_chunks=contract_chunks,
-                description=query if query else None,
-            )
+        # 프롬프트 템플릿 사용 (Dual RAG 지원)
+        prompt = build_contract_analysis_prompt(
+            contract_text=contract_text or "",
+            grounding_chunks=grounding_chunks,
+            contract_chunks=contract_chunks,
+            description=query if query else None,
+        )
         
 
         try:
-            # Ollama 사용
-            if self.generator.use_ollama:
-                from config import settings
-                import json
-                import re
+            # Groq 사용 (우선)
+            from config import settings
+            import json
+            import re
+            
+            if settings.use_groq:
+                from llm_api import ask_groq_with_messages
                 
+                # 프롬프트를 메시지 형식으로 변환
+                messages = [
+                    {"role": "system", "content": "너는 유능한 법률 AI야. 한국어로만 답변해주세요. JSON 형식으로 응답하세요."},
+                    {"role": "user", "content": prompt}
+                ]
+                
+                try:
+                    response_text = ask_groq_with_messages(
+                        messages=messages,
+                        temperature=settings.llm_temperature,
+                        model=settings.groq_model
+                    )
+                    logger.info(f"[Groq 호출 성공] 응답 길이: {len(response_text) if response_text else 0}자")
+                except Exception as groq_error:
+                    logger.error(f"[Groq 호출 실패] {str(groq_error)}", exc_info=True)
+                    raise  # 상위 except로 전달
+            # Ollama 사용 (레거시)
+            elif self.generator.use_ollama:
                 logger.info(f"[LLM 호출] Ollama 호출 시작: base_url={settings.ollama_base_url}, model={settings.ollama_model}")
                 
                 # langchain-ollama 우선 사용 (deprecated 경고 없음)
@@ -720,190 +710,133 @@ class LegalRAGService:
                 logger.info(f"[LLM 호출] 프롬프트 길이: {len(prompt)}자, invoke 호출 중...")
                 logger.debug(f"[LLM 호출] 프롬프트 미리보기 (처음 500자): {prompt[:500]}")
                 response_text = llm.invoke(prompt)
-                logger.info(f"[LLM 호출] 응답 수신 완료, 응답 길이: {len(response_text) if response_text else 0}자")
-                logger.info(f"[LLM 호출] 응답 원문 (처음 1000자): {response_text[:1000] if response_text else 'None'}")
-                if response_text and len(response_text) > 1000:
-                    logger.info(f"[LLM 호출] 응답 원문 (마지막 500자): ...{response_text[-500:]}")
+            else:
+                # Groq와 Ollama 모두 사용 안 함
+                raise ValueError("LLM이 설정되지 않았습니다. use_groq 또는 use_ollama를 True로 설정하세요.")
+            
+            # JSON 추출 및 파싱 (Groq와 Ollama 모두 공통)
+            logger.info(f"[LLM 호출] 응답 수신 완료, 응답 길이: {len(response_text) if response_text else 0}자")
+            logger.info(f"[LLM 호출] 응답 원문 (처음 1000자): {response_text[:1000] if response_text else 'None'}")
+            if response_text and len(response_text) > 1000:
+                logger.info(f"[LLM 호출] 응답 원문 (마지막 500자): ...{response_text[-500:]}")
+            
+            # JSON 추출 (더 robust한 파싱)
+            try:
+                # 1. 코드 블록 제거
+                response_clean = response_text.strip()
+                if response_clean.startswith("```json"):
+                    response_clean = response_clean[7:]
+                elif response_clean.startswith("```"):
+                    response_clean = response_clean[3:]
+                if response_clean.endswith("```"):
+                    response_clean = response_clean[:-3]
+                response_clean = response_clean.strip()
                 
-                # JSON 추출 (더 robust한 파싱)
-                try:
-                    # 1. 코드 블록 제거
-                    response_clean = response_text.strip()
-                    if response_clean.startswith("```json"):
-                        response_clean = response_clean[7:]
-                    elif response_clean.startswith("```"):
-                        response_clean = response_clean[3:]
-                    if response_clean.endswith("```"):
-                        response_clean = response_clean[:-3]
-                    response_clean = response_clean.strip()
-                    
-                    # 2. JSON 객체 찾기 (더 정확한 정규식)
-                    json_match = re.search(r'\{[\s\S]*\}', response_clean, re.DOTALL)
-                    if json_match:
-                        json_str = json_match.group()
-                        # 3. JSON 유효성 검사 및 파싱
-                        try:
-                            analysis = json.loads(json_str)
-                        except json.JSONDecodeError as json_err:
-                            # JSON이 유효하지 않으면 수정 시도
-                            logger.warning(f"JSON 파싱 실패, 수정 시도 중...: {str(json_err)}")
-                            # 마지막 중괄호까지 찾기
-                            brace_count = 0
-                            last_valid_pos = -1
-                            for i, char in enumerate(json_str):
-                                if char == '{':
-                                    brace_count += 1
-                                elif char == '}':
-                                    brace_count -= 1
-                                    if brace_count == 0:
-                                        last_valid_pos = i + 1
-                                        break
-                            
-                            if last_valid_pos > 0:
-                                json_str = json_str[:last_valid_pos]
-                                try:
-                                    analysis = json.loads(json_str)
-                                except:
-                                    raise json_err
-                            else:
+                # 2. JSON 객체 찾기 (더 정확한 정규식)
+                json_match = re.search(r'\{[\s\S]*\}', response_clean, re.DOTALL)
+                if json_match:
+                    json_str = json_match.group()
+                    # 3. JSON 유효성 검사 및 파싱
+                    try:
+                        analysis = json.loads(json_str)
+                    except json.JSONDecodeError as json_err:
+                        # JSON이 유효하지 않으면 수정 시도
+                        logger.warning(f"JSON 파싱 실패, 수정 시도 중...: {str(json_err)}")
+                        # 마지막 중괄호까지 찾기
+                        brace_count = 0
+                        last_valid_pos = -1
+                        for i, char in enumerate(json_str):
+                            if char == '{':
+                                brace_count += 1
+                            elif char == '}':
+                                brace_count -= 1
+                                if brace_count == 0:
+                                    last_valid_pos = i + 1
+                                    break
+                        
+                        if last_valid_pos > 0:
+                            json_str = json_str[:last_valid_pos]
+                            try:
+                                analysis = json.loads(json_str)
+                            except:
                                 raise json_err
-                        risk_score = analysis.get("risk_score", 50)
-                        risk_level = analysis.get("risk_level", "medium")
-                        summary = analysis.get("summary", "")
+                        else:
+                            raise json_err
+                    risk_score = analysis.get("risk_score", 50)
+                    risk_level = analysis.get("risk_level", "medium")
+                    summary = analysis.get("summary", "")
+                    
+                    logger.info(f"[LLM 응답 파싱] JSON 파싱 성공: risk_score={risk_score}, risk_level={risk_level}, summary 길이={len(summary)}")
+                    logger.info(f"[LLM 응답 파싱] issues 배열 길이: {len(analysis.get('issues', []))}")
+                    
+                    issues = []
+                    for issue_data in analysis.get("issues", []):
+                        # original_text 우선 사용 (LLM이 반환한 실제 원문 텍스트)
+                        original_text = issue_data.get("original_text", "")
+                        description = issue_data.get("description", "")
                         
-                        # 새로운 독소조항 탐지 필드 파싱
-                        one_line_summary = analysis.get("one_line_summary")
-                        risk_traffic_light = analysis.get("risk_traffic_light")
-                        top3_action_points = analysis.get("top3_action_points", [])
-                        risk_summary_table = analysis.get("risk_summary_table", [])
-                        toxic_clauses = analysis.get("toxic_clauses", [])
-                        negotiation_questions = analysis.get("negotiation_questions", [])
+                        # original_text가 없으면 description 사용 (하위 호환성)
+                        if not original_text:
+                            original_text = description
                         
-                        logger.info(f"[LLM 응답 파싱] JSON 파싱 성공: risk_score={risk_score}, risk_level={risk_level}, summary 길이={len(summary)}")
-                        logger.info(f"[LLM 응답 파싱] issues 배열 길이: {len(analysis.get('issues', []))}")
-                        logger.info(f"[LLM 응답 파싱] 독소조항 필드: one_line_summary={bool(one_line_summary)}, risk_traffic_light={risk_traffic_light}, top3_action_points={len(top3_action_points)}, toxic_clauses={len(toxic_clauses)}")
+                        # 계약서 텍스트에서 해당 조항 위치 찾기
+                        start_index = None
+                        end_index = None
                         
-                        issues = []
-                        # clauses가 있으면 clause_id 기반 처리, 없으면 레거시 방식
-                        clauses_by_id = {c["id"]: c for c in clauses} if clauses else {}
-                        
-                        for issue_data in analysis.get("issues", []):
-                            # 새 방식: clause_id 기반
-                            clause_id = issue_data.get("clause_id")
-                            if clause_id and clauses_by_id:
-                                clause = clauses_by_id.get(clause_id)
-                                if clause:
-                                    # clause의 content를 original_text로 사용
-                                    original_text = clause.get("content", "")
-                                    start_index = clause.get("startIndex")
-                                    end_index = clause.get("endIndex")
-                                    logger.debug(f"[LLM 응답 파싱] clause_id 기반: clause_id={clause_id}, start={start_index}, end={end_index}")
-                                else:
-                                    logger.warning(f"[LLM 응답 파싱] clause_id를 찾을 수 없음: {clause_id}")
-                                    original_text = ""
-                                    start_index = None
-                                    end_index = None
+                        if contract_text and original_text:
+                            # original_text를 사용하여 정확한 위치 찾기
+                            start_index = contract_text.find(original_text)
+                            if start_index >= 0:
+                                end_index = start_index + len(original_text)
                             else:
-                                # 레거시 방식: original_text 직접 사용
-                                original_text = issue_data.get("original_text", "")
-                                description = issue_data.get("description", "")
-                                
-                                # original_text가 없으면 description 사용 (하위 호환성)
-                                if not original_text:
-                                    original_text = description
-                                
-                                # 계약서 텍스트에서 해당 조항 위치 찾기
-                                start_index = None
-                                end_index = None
-                                
-                                if contract_text and original_text:
-                                    # original_text를 사용하여 정확한 위치 찾기
-                                    start_index = contract_text.find(original_text)
-                                    if start_index >= 0:
-                                        end_index = start_index + len(original_text)
-                                    else:
-                                        # 정확히 일치하지 않으면 부분 매칭 시도
-                                        start_index = contract_text.find(original_text[:50])
-                                        if start_index >= 0:
-                                            end_pos = min(start_index + len(original_text), len(contract_text))
-                                            while end_pos < len(contract_text) and contract_text[end_pos] not in ['\n', '。', '.']:
-                                                end_pos += 1
-                                            end_index = end_pos
-                                        else:
-                                            logger.warning(f"[LLM 응답 파싱] originalText를 계약서에서 찾을 수 없음: {original_text[:50]}...")
-                            
-                            # issue_id 추출 (새 스키마에서는 issue_id 필드 사용)
-                            issue_id = issue_data.get("issue_id") or issue_data.get("name", "")
-                            description = issue_data.get("summary") or issue_data.get("description", "")
-                            
-                            # 독소조항 상세 정보 파싱
-                            toxic_clause_detail = None
-                            toxic_detail_data = issue_data.get("toxic_clause_detail")
-                            if toxic_detail_data:
-                                from models.schemas import ToxicClauseDetail
-                                try:
-                                    toxic_clause_detail = ToxicClauseDetail(
-                                        clauseLocation=toxic_detail_data.get("clause_location", ""),
-                                        contentSummary=toxic_detail_data.get("content_summary", ""),
-                                        whyRisky=toxic_detail_data.get("why_risky", ""),
-                                        realWorldProblems=toxic_detail_data.get("real_world_problems", ""),
-                                        suggestedRevisionLight=toxic_detail_data.get("suggested_revision_light", ""),
-                                        suggestedRevisionFormal=toxic_detail_data.get("suggested_revision_formal", ""),
-                                    )
-                                except Exception as toxic_err:
-                                    logger.warning(f"[LLM 응답 파싱] toxic_clause_detail 파싱 실패: {str(toxic_err)}")
-                            
-                            issue_obj = LegalIssue(
-                                name=issue_id,  # issue_id를 name으로 사용
-                                description=description,
-                                severity=issue_data.get("severity", "medium"),
-                                legal_basis=issue_data.get("legal_basis", []),
-                                start_index=start_index,
-                                end_index=end_index,
-                                suggested_text=issue_data.get("suggested_revision") or issue_data.get("suggested_text"),
-                                rationale=issue_data.get("reason") or issue_data.get("rationale"),
-                                suggested_questions=issue_data.get("suggested_questions", []),
-                                original_text=original_text,
-                                clause_id=clause_id,  # clause_id 추가 (나중에 사용)
-                                category=issue_data.get("category"),  # category 추가
-                                toxic_clause_detail=toxic_clause_detail,  # 독소조항 상세 정보
-                            )
-                            issues.append(issue_obj)
-                            logger.debug(f"[LLM 응답 파싱] issue[{len(issues)}]: issue_id={issue_id}, clause_id={clause_id}, severity={issue_obj.severity}")
-                        
-                        logger.info(f"[LLM 응답 파싱] 최종 이슈 개수: {len(issues)}개")
-                        
-                        # recommendations 파싱 (에러가 나도 issues는 유지)
-                        recommendations = []
-                        try:
-                            for rec_data in analysis.get("recommendations", []):
-                                # recommendations가 문자열 배열일 수도 있음
-                                if isinstance(rec_data, str):
-                                    # 문자열이면 title로 사용
-                                    recommendations.append(LegalRecommendation(
-                                        title="권장사항",
-                                        description=rec_data,
-                                        steps=[]
-                                    ))
-                                elif isinstance(rec_data, dict):
-                                    # dict면 기존 로직 사용
-                                    recommendations.append(LegalRecommendation(
-                                        title=rec_data.get("title", ""),
-                                        description=rec_data.get("description", ""),
-                                        steps=rec_data.get("steps", [])
-                                    ))
+                                # 정확히 일치하지 않으면 부분 매칭 시도
+                                # 1. 처음 100자로 검색
+                                start_index = contract_text.find(original_text[:100])
+                                if start_index >= 0:
+                                    end_index = start_index + len(original_text)
                                 else:
-                                    logger.warning(f"[LLM 응답 파싱] 알 수 없는 recommendations 형식: {type(rec_data)}")
-                        except Exception as rec_error:
-                            logger.warning(f"[LLM 응답 파싱] recommendations 파싱 실패 (issues는 유지): {str(rec_error)}")
-                            recommendations = []
+                                    # 2. 처음 50자로 검색
+                                    start_index = contract_text.find(original_text[:50])
+                                    if start_index >= 0:
+                                        # 문장 단위로 확장
+                                        end_pos = min(start_index + len(original_text), len(contract_text))
+                                        while end_pos < len(contract_text) and contract_text[end_pos] not in ['\n', '。', '.']:
+                                            end_pos += 1
+                                        end_index = end_pos
+                                    else:
+                                        logger.warning(f"[LLM 응답 파싱] originalText를 계약서에서 찾을 수 없음: {original_text[:50]}...")
                         
-                        result = LegalAnalysisResult(
-                            risk_score=risk_score,
-                            risk_level=risk_level,
-                            summary=summary,
-                            issues=issues,
-                            recommendations=recommendations,
+                        issue_obj = LegalIssue(
+                            name=issue_data.get("name", ""),
+                            description=description,
+                            severity=issue_data.get("severity", "medium"),
+                            legal_basis=issue_data.get("legal_basis", []),
+                            start_index=start_index,
+                            end_index=end_index,
+                            suggested_text=issue_data.get("suggested_text"),
+                            rationale=issue_data.get("rationale"),
+                            suggested_questions=issue_data.get("suggested_questions", []),
+                            original_text=original_text  # original_text 필드 추가
+                        )
+                        issues.append(issue_obj)
+                        logger.debug(f"[LLM 응답 파싱] issue[{len(issues)}]: name={issue_obj.name[:50]}, severity={issue_obj.severity}, description 길이={len(description)}")
+                    
+                    logger.info(f"[LLM 응답 파싱] 최종 이슈 개수: {len(issues)}개")
+                    
+                    recommendations = []
+                    for rec_data in analysis.get("recommendations", []):
+                        recommendations.append(LegalRecommendation(
+                            title=rec_data.get("title", ""),
+                            description=rec_data.get("description", ""),
+                            steps=rec_data.get("steps", [])
+                        ))
+                    
+                    result = LegalAnalysisResult(
+                        risk_score=risk_score,
+                        risk_level=risk_level,
+                        summary=summary,
+                        issues=issues,
+                        recommendations=recommendations,
                             grounding=grounding_chunks,
                         )
                         
@@ -1040,6 +973,18 @@ class LegalRAGService:
 - 관련 법령: {', '.join(selected_issue.get('legalBasis', [])[:3])}
 """
         
+        # 분석 요약 정보 추가
+        analysis_context = ""
+        if analysis_summary:
+            analysis_context = f"""
+**분석 요약:**
+{analysis_summary}
+"""
+        if risk_score is not None:
+            analysis_context += f"\n**위험도 점수:** {risk_score}점"
+        if total_issues is not None:
+            analysis_context += f"\n**발견된 이슈 수:** {total_issues}개"
+        
         # 프롬프트 템플릿 사용
         prompt = build_legal_chat_prompt(
             query=query,
@@ -1052,10 +997,32 @@ class LegalRAGService:
         )
 
         try:
-            # Ollama 사용
-            if self.generator.use_ollama:
-                from config import settings
+            # Groq 사용 (우선)
+            from config import settings
+            if settings.use_groq:
+                from llm_api import ask_groq_with_messages
                 
+                # 프롬프트를 메시지 형식으로 변환
+                # prompt는 이미 전체 프롬프트이므로, system과 user로 분리
+                messages = [
+                    {"role": "system", "content": "너는 유능한 법률 AI야. 한국어로만 답변해주세요."},
+                    {"role": "user", "content": prompt}
+                ]
+                
+                response_text = ask_groq_with_messages(
+                    messages=messages,
+                    temperature=settings.llm_temperature,
+                    model=settings.groq_model
+                )
+                
+                # 답변에 전문가 상담 권장 문구 추가 (없는 경우)
+                if "전문가 상담" not in response_text and "법률 자문" not in response_text:
+                    response_text += "\n\n---\n\n**⚠️ 참고:** 이 답변은 정보 안내를 위한 것이며 법률 자문이 아닙니다. 중요한 사안은 전문 변호사나 노동위원회 등 전문 기관에 상담하시기 바랍니다."
+                
+                return response_text
+            
+            # Ollama 사용 (레거시)
+            if self.generator.use_ollama:
                 # langchain-ollama 우선 사용
                 try:
                     from langchain_ollama import OllamaLLM
@@ -1169,12 +1136,32 @@ class LegalRAGService:
         
 
         try:
-            # Ollama 사용
-            if self.generator.use_ollama:
-                from config import settings
-                import json
-                import re
+            # Groq 사용 (우선)
+            from config import settings
+            import json
+            import re
+            
+            if settings.use_groq:
+                from llm_api import ask_groq_with_messages
                 
+                # 프롬프트를 메시지 형식으로 변환
+                messages = [
+                    {"role": "system", "content": "너는 유능한 법률 AI야. 한국어로만 답변해주세요. JSON 형식으로 응답하세요."},
+                    {"role": "user", "content": prompt}
+                ]
+                
+                try:
+                    response_text = ask_groq_with_messages(
+                        messages=messages,
+                        temperature=settings.llm_temperature,
+                        model=settings.groq_model
+                    )
+                    _logger.info(f"[Groq 호출 성공] 응답 길이: {len(response_text) if response_text else 0}자")
+                except Exception as groq_error:
+                    _logger.error(f"[Groq 호출 실패] {str(groq_error)}", exc_info=True)
+                    raise  # 상위 except로 전달
+            # Ollama 사용 (레거시)
+            elif self.generator.use_ollama:
                 # langchain-ollama 우선 사용
                 try:
                     from langchain_ollama import OllamaLLM
@@ -1191,222 +1178,189 @@ class LegalRAGService:
                     )
                 
                 response_text = llm.invoke(prompt)
-                
-                # JSON 추출 및 파싱
-                try:
-                    # 1. 외부 코드 블록 제거 (```json, ``` 등)
-                    response_clean = response_text.strip()
-                    if response_clean.startswith("```json"):
-                        response_clean = response_clean[7:]
-                    elif response_clean.startswith("```"):
-                        response_clean = response_clean[3:]
-                    if response_clean.endswith("```"):
-                        response_clean = response_clean[:-3]
-                    response_clean = response_clean.strip()
-                    
-                    # 2. JSON 객체 추출
-                    json_match = re.search(r'\{.*\}', response_clean, re.DOTALL)
-                    if not json_match:
-                        _logger.warning(f"LLM 응답에서 JSON 객체를 찾을 수 없습니다. 응답 (처음 500자): {response_clean[:500]}")
-                        raise ValueError("LLM 응답에서 JSON 객체를 찾을 수 없습니다.")
-                    
-                    json_str = json_match.group()
-                    
-                    # JSON 파싱 전에 summary 필드의 마크다운 코드 블록 제거
-                    # summary 필드 전체를 찾아서 정리 (다중 라인, 이스케이프된 따옴표 포함)
-                    def clean_summary_field_in_json(json_str):
-                        """summary 필드 내부의 마크다운 코드 블록과 특수 문자를 정리"""
-                        try:
-                            # summary 필드의 시작 위치 찾기
-                            summary_start = json_str.find('"summary"')
-                            if summary_start == -1:
-                                return json_str
-                            
-                            # summary 필드의 값 시작 위치 찾기 (콜론과 따옴표 이후)
-                            value_start = json_str.find('"', summary_start + 9)  # "summary" 길이 + 1
-                            if value_start == -1:
-                                return json_str
-                            
-                            value_start += 1  # 따옴표 다음부터
-                            
-                            # 문자열 끝 찾기 (이스케이프된 따옴표 고려)
-                            # 백슬래시가 홀수 개 연속으로 나오면 이스케이프된 따옴표
-                            value_end = value_start
-                            brace_count = 0  # 중첩된 객체/배열 추적
-                            in_string = True
-                            
-                            while value_end < len(json_str):
-                                char = json_str[value_end]
-                                
-                                # 이스케이프된 문자 건너뛰기
-                                if char == '\\' and value_end + 1 < len(json_str):
-                                    value_end += 2
-                                    continue
-                                
-                                # 따옴표 처리
-                                if char == '"':
-                                    # 앞의 백슬래시 개수 세기
-                                    backslash_count = 0
-                                    i = value_end - 1
-                                    while i >= value_start and json_str[i] == '\\':
-                                        backslash_count += 1
-                                        i -= 1
-                                    # 홀수 개의 백슬래시면 이스케이프된 따옴표, 짝수 개면 문자열 끝
-                                    if backslash_count % 2 == 0:
-                                        break
-                                
-                                value_end += 1
-                            
-                            if value_end >= len(json_str):
-                                # 문자열 끝을 찾지 못한 경우, 다음 큰따옴표까지 찾기
-                                next_quote = json_str.find('"', value_start)
-                                if next_quote > value_start:
-                                    value_end = next_quote
-                                else:
-                                    return json_str
-                            
-                            # summary 필드 내용 추출
-                            content = json_str[value_start:value_end]
-                            
-                            # 이스케이프된 문자를 실제 문자로 변환 (일시적)
-                            content_decoded = content.replace('\\n', '\n').replace('\\r', '\r').replace('\\t', '\t').replace('\\"', '"').replace('\\\\', '\\')
-                            
-                            # 마크다운 코드 블록 제거
-                            content_decoded = re.sub(r'```markdown\s*', '', content_decoded, flags=re.IGNORECASE)
-                            content_decoded = re.sub(r'```\s*', '', content_decoded, flags=re.MULTILINE)
-                            
-                            # 제어 문자를 JSON 이스케이프로 변환
-                            result = []
-                            for char in content_decoded:
-                                if char == '\n':
-                                    result.append('\\n')
-                                elif char == '\r':
-                                    result.append('\\r')
-                                elif char == '\t':
-                                    result.append('\\t')
-                                elif char == '"':
-                                    result.append('\\"')
-                                elif char == '\\':
-                                    result.append('\\\\')
-                                elif ord(char) < 32:
-                                    result.append(f'\\u{ord(char):04x}')
-                                else:
-                                    result.append(char)
-                            
-                            # summary 필드 교체
-                            cleaned_content = ''.join(result)
-                            return json_str[:value_start] + cleaned_content + json_str[value_end:]
-                        except Exception as e:
-                            _logger.warning(f"summary 필드 정리 중 오류 발생: {str(e)}, 원본 JSON 사용")
-                            return json_str
-                    
-                    # summary 필드 정리
-                    json_str_cleaned = clean_summary_field_in_json(json_str)
-                    
-                    # 제어 문자 처리 (전체 JSON 문자열)
-                    json_str_cleaned = json_str_cleaned.replace('\t', ' ').replace('\r', '')
-                    
-                    # JSON 파싱 시도
-                    try:
-                        diagnosis = json.loads(json_str_cleaned)
-                    except json.JSONDecodeError as json_err:
-                        # JSON 파싱 실패 시 더 강력한 정리 시도
-                        _logger.warning(f"JSON 파싱 실패, 추가 정리 시도 중...: {str(json_err)}")
-                        
-                        # 중괄호 매칭으로 유효한 JSON 추출
-                        brace_count = 0
-                        last_valid_pos = -1
-                        for i, char in enumerate(json_str_cleaned):
-                            if char == '{':
-                                brace_count += 1
-                            elif char == '}':
-                                brace_count -= 1
-                                if brace_count == 0:
-                                    last_valid_pos = i + 1
-                                    break
-                        
-                        if last_valid_pos > 0:
-                            json_str_cleaned = json_str_cleaned[:last_valid_pos]
-                            try:
-                                diagnosis = json.loads(json_str_cleaned)
-                            except json.JSONDecodeError:
-                                _logger.error(f"JSON 파싱 최종 실패: {str(json_err)}")
-                                raise json_err
-                        else:
-                            raise json_err
-                    
-                    # summary 필드에서 마크다운 코드 블록 제거 (파싱 후)
-                    summary = diagnosis.get("summary", "상황을 분석했습니다.")
-                    if summary:
-                        # ```markdown ... ``` 제거
-                        summary = re.sub(r'```markdown\s*', '', summary, flags=re.IGNORECASE)
-                        summary = re.sub(r'```\s*$', '', summary, flags=re.MULTILINE)
-                        summary = summary.strip()
-                    
-                    # 응답 형식 변환
-                    return {
-                        "classified_type": diagnosis.get("classified_type", category_hint),
-                        "risk_score": diagnosis.get("risk_score", 50),
-                        "summary": summary,
-                        "criteria": diagnosis.get("criteria", []),
-                        "action_plan": diagnosis.get("action_plan", {"steps": []}),
-                        "scripts": diagnosis.get("scripts", {}),
-                        "related_cases": [],  # 나중에 추가됨
-                    }
-                except json.JSONDecodeError as e:
-                    _logger.error(f"LLM 진단 응답 JSON 파싱 실패: {str(e)}", exc_info=True)
-                    _logger.error(f"LLM 응답 원문 (처음 500자): {response_text[:500] if response_text else 'None'}")
-                    # JSON 파싱 실패 시 기본 응답 반환
-                    raise  # 상위 except로 전달하여 기본 응답 반환
-                except Exception as e:
-                    _logger.error(f"LLM 진단 응답 파싱 실패: {str(e)}", exc_info=True)
-                    _logger.error(f"LLM 응답 원문 (처음 500자): {response_text[:500] if response_text else 'None'}")
-                    # 파싱 실패 시 기본 응답 반환
-                    raise  # 상위 except로 전달하여 기본 응답 반환
             else:
-                # Ollama가 아닌 경우 (OpenAI 등) - LLMGenerator 사용
+                # Groq와 Ollama 모두 사용 안 함
+                raise ValueError("LLM이 설정되지 않았습니다. use_groq 또는 use_ollama를 True로 설정하세요.")
+            
+            # JSON 추출 및 파싱 (Groq와 Ollama 모두 공통)
+            try:
+                # 1. 외부 코드 블록 제거 (```json, ``` 등)
+                response_clean = response_text.strip()
+                if response_clean.startswith("```json"):
+                    response_clean = response_clean[7:]
+                elif response_clean.startswith("```"):
+                    response_clean = response_clean[3:]
+                if response_clean.endswith("```"):
+                    response_clean = response_clean[:-3]
+                response_clean = response_clean.strip()
+                
+                # 2. JSON 객체 추출
+                json_match = re.search(r'\{.*\}', response_clean, re.DOTALL)
+                if not json_match:
+                    _logger.warning(f"LLM 응답에서 JSON 객체를 찾을 수 없습니다. 응답 (처음 500자): {response_clean[:500]}")
+                    raise ValueError("LLM 응답에서 JSON 객체를 찾을 수 없습니다.")
+                
+                json_str = json_match.group()
+                
+                # JSON 파싱 전에 summary 필드의 마크다운 코드 블록 제거
+                # summary 필드 전체를 찾아서 정리 (다중 라인, 이스케이프된 따옴표 포함)
+                def clean_summary_field_in_json(json_str):
+                    """summary 필드 내부의 마크다운 코드 블록과 특수 문자를 정리"""
+                    try:
+                        # Python 삼중 따옴표 제거 (""" ... """)
+                        json_str = re.sub(r'"""\s*', '"', json_str)  # 시작 삼중 따옴표
+                        json_str = re.sub(r'\s*"""', '"', json_str)  # 끝 삼중 따옴표
+                        
+                        # summary 필드의 시작 위치 찾기
+                        summary_start = json_str.find('"summary"')
+                        if summary_start == -1:
+                            return json_str
+                        
+                        # summary 필드의 값 시작 위치 찾기 (콜론과 따옴표 이후)
+                        value_start = json_str.find('"', summary_start + 9)  # "summary" 길이 + 1
+                        if value_start == -1:
+                            return json_str
+                        
+                        value_start += 1  # 따옴표 다음부터
+                        
+                        # 문자열 끝 찾기 (이스케이프된 따옴표 고려)
+                        # 백슬래시가 홀수 개 연속으로 나오면 이스케이프된 따옴표
+                        value_end = value_start
+                        brace_count = 0  # 중첩된 객체/배열 추적
+                        in_string = True
+                        
+                        while value_end < len(json_str):
+                            char = json_str[value_end]
+                            
+                            # 이스케이프된 문자 건너뛰기
+                            if char == '\\' and value_end + 1 < len(json_str):
+                                value_end += 2
+                                continue
+                            
+                            # 따옴표 처리
+                            if char == '"':
+                                # 앞의 백슬래시 개수 세기
+                                backslash_count = 0
+                                i = value_end - 1
+                                while i >= value_start and json_str[i] == '\\':
+                                    backslash_count += 1
+                                    i -= 1
+                                # 홀수 개의 백슬래시면 이스케이프된 따옴표, 짝수 개면 문자열 끝
+                                if backslash_count % 2 == 0:
+                                    break
+                            
+                            value_end += 1
+                        
+                        if value_end >= len(json_str):
+                            # 문자열 끝을 찾지 못한 경우, 다음 큰따옴표까지 찾기
+                            next_quote = json_str.find('"', value_start)
+                            if next_quote > value_start:
+                                value_end = next_quote
+                            else:
+                                return json_str
+                        
+                        # summary 필드 내용 추출
+                        content = json_str[value_start:value_end]
+                        
+                        # 이스케이프된 문자를 실제 문자로 변환 (일시적)
+                        content_decoded = content.replace('\\n', '\n').replace('\\r', '\r').replace('\\t', '\t').replace('\\"', '"').replace('\\\\', '\\')
+                        
+                        # Python 삼중 따옴표 제거 (""" ... """)
+                        content_decoded = re.sub(r'"""\s*', '', content_decoded)
+                        content_decoded = re.sub(r'\s*"""', '', content_decoded)
+                        
+                        # 마크다운 코드 블록 제거
+                        content_decoded = re.sub(r'```markdown\s*', '', content_decoded, flags=re.IGNORECASE)
+                        content_decoded = re.sub(r'```\s*', '', content_decoded, flags=re.MULTILINE)
+                        
+                        # 제어 문자를 JSON 이스케이프로 변환
+                        result = []
+                        for char in content_decoded:
+                            if char == '\n':
+                                result.append('\\n')
+                            elif char == '\r':
+                                result.append('\\r')
+                            elif char == '\t':
+                                result.append('\\t')
+                            elif char == '"':
+                                result.append('\\"')
+                            elif char == '\\':
+                                result.append('\\\\')
+                            elif ord(char) < 32:
+                                result.append(f'\\u{ord(char):04x}')
+                            else:
+                                result.append(char)
+                        
+                        # summary 필드 교체
+                        cleaned_content = ''.join(result)
+                        return json_str[:value_start] + cleaned_content + json_str[value_end:]
+                    except Exception as e:
+                        _logger.warning(f"summary 필드 정리 중 오류 발생: {str(e)}, 원본 JSON 사용")
+                        return json_str
+                
+                # summary 필드 정리
+                json_str_cleaned = clean_summary_field_in_json(json_str)
+                
+                # 제어 문자 처리 (전체 JSON 문자열)
+                json_str_cleaned = json_str_cleaned.replace('\t', ' ').replace('\r', '')
+                
+                # JSON 파싱 시도
                 try:
-                    response_text = await self.generator.generate_text(prompt)
+                    diagnosis = json.loads(json_str_cleaned)
+                except json.JSONDecodeError as json_err:
+                    # JSON 파싱 실패 시 더 강력한 정리 시도
+                    _logger.warning(f"JSON 파싱 실패, 추가 정리 시도 중...: {str(json_err)}")
                     
-                    # JSON 추출 및 파싱 (Ollama와 동일한 로직)
-                    import json
-                    import re
+                    # 중괄호 매칭으로 유효한 JSON 추출
+                    brace_count = 0
+                    last_valid_pos = -1
+                    for i, char in enumerate(json_str_cleaned):
+                        if char == '{':
+                            brace_count += 1
+                        elif char == '}':
+                            brace_count -= 1
+                            if brace_count == 0:
+                                last_valid_pos = i + 1
+                                break
                     
-                    response_clean = response_text.strip()
-                    if response_clean.startswith("```json"):
-                        response_clean = response_clean[7:]
-                    elif response_clean.startswith("```"):
-                        response_clean = response_clean[3:]
-                    if response_clean.endswith("```"):
-                        response_clean = response_clean[:-3]
-                    response_clean = response_clean.strip()
-                    
-                    json_match = re.search(r'\{.*\}', response_clean, re.DOTALL)
-                    if json_match:
-                        json_str = json_match.group()
-                        diagnosis = json.loads(json_str)
-                        
-                        summary = diagnosis.get("summary", "상황을 분석했습니다.")
-                        if summary:
-                            summary = re.sub(r'```markdown\s*', '', summary, flags=re.IGNORECASE)
-                            summary = re.sub(r'```\s*$', '', summary, flags=re.MULTILINE)
-                            summary = summary.strip()
-                        
-                        return {
-                            "classified_type": diagnosis.get("classified_type", category_hint),
-                            "risk_score": diagnosis.get("risk_score", 50),
-                            "summary": summary,
-                            "criteria": diagnosis.get("criteria", []),
-                            "action_plan": diagnosis.get("action_plan", {"steps": []}),
-                            "scripts": diagnosis.get("scripts", {}),
-                            "related_cases": [],
-                        }
+                    if last_valid_pos > 0:
+                        json_str_cleaned = json_str_cleaned[:last_valid_pos]
+                        try:
+                            diagnosis = json.loads(json_str_cleaned)
+                        except json.JSONDecodeError:
+                            _logger.error(f"JSON 파싱 최종 실패: {str(json_err)}")
+                            raise json_err
                     else:
-                        _logger.warning("LLM 응답에서 JSON 객체를 찾을 수 없습니다.")
-                        raise ValueError("JSON 객체를 찾을 수 없습니다.")
-                except Exception as e:
-                    _logger.error(f"LLM (non-Ollama) 진단 응답 생성 실패: {str(e)}", exc_info=True)
-                    raise  # 상위 except로 전달하여 기본 응답 반환
+                        raise json_err
+                
+                # summary 필드에서 마크다운 코드 블록 제거 (파싱 후)
+                summary = diagnosis.get("summary", "상황을 분석했습니다.")
+                if summary:
+                    # ```markdown ... ``` 제거
+                    summary = re.sub(r'```markdown\s*', '', summary, flags=re.IGNORECASE)
+                    summary = re.sub(r'```\s*$', '', summary, flags=re.MULTILINE)
+                    summary = summary.strip()
+                
+                # 응답 형식 변환
+                return {
+                    "classified_type": diagnosis.get("classified_type", category_hint),
+                    "risk_score": diagnosis.get("risk_score", 50),
+                    "summary": summary,
+                    "criteria": diagnosis.get("criteria", []),
+                    "action_plan": diagnosis.get("action_plan", {"steps": []}),
+                    "scripts": diagnosis.get("scripts", {}),
+                    "related_cases": [],  # 나중에 추가됨
+                }
+            except json.JSONDecodeError as e:
+                _logger.error(f"LLM 진단 응답 JSON 파싱 실패: {str(e)}", exc_info=True)
+                _logger.error(f"LLM 응답 원문 (처음 500자): {response_text[:500] if response_text else 'None'}")
+                # JSON 파싱 실패 시 기본 응답 반환
+                raise  # 상위 except로 전달하여 기본 응답 반환
+            except Exception as e:
+                _logger.error(f"LLM 진단 응답 파싱 실패: {str(e)}", exc_info=True)
+                _logger.error(f"LLM 응답 원문 (처음 500자): {response_text[:500] if response_text else 'None'}")
+                # 파싱 실패 시 기본 응답 반환
+                raise  # 상위 except로 전달하여 기본 응답 반환
         except Exception as e:
             _logger.error(f"LLM 진단 응답 생성 실패: {str(e)}", exc_info=True)
             _logger.error(f"에러 타입: {type(e).__name__}, 에러 메시지: {str(e)}")

@@ -301,11 +301,15 @@ export default function QuickAssistPage() {
             // reportId가 같은 경우 DB 데이터로 덮어쓰기 (최신 데이터 우선)
             const mergedConversations: ConversationSession[] = []
             const reportIdSet = new Set<string>()
+            const idSet = new Set<string>()  // ID 중복 방지
             
             // DB 대화를 먼저 추가 (최신 데이터)
             for (const dbConv of dbConversations) {
               if (dbConv.reportId) {
                 reportIdSet.add(dbConv.reportId)
+              }
+              if (!idSet.has(dbConv.id)) {
+                idSet.add(dbConv.id)
                 mergedConversations.push(dbConv)
               }
             }
@@ -313,17 +317,24 @@ export default function QuickAssistPage() {
             // localStorage 대화 추가 (reportId가 없거나 DB에 없는 경우만)
             // 단, DB에 데이터가 없으면 reportId가 있는 localStorage 대화는 제거 (DB 삭제 반영)
             for (const localConv of localConversations) {
+              // ID 중복 체크
+              if (idSet.has(localConv.id)) {
+                continue
+              }
+              
               if (!localConv.reportId) {
                 // reportId가 없는 로컬 대화는 유지 (DB에 저장되지 않은 대화)
+                idSet.add(localConv.id)
                 mergedConversations.push(localConv)
               } else if (reportIdSet.has(localConv.reportId)) {
-                // DB에 있는 대화는 이미 추가됨
+                // DB에 있는 대화는 이미 추가됨 (같은 reportId를 가진 DB 대화가 있음)
                 continue
               } else if (dbConversations.length === 0) {
                 // DB에 데이터가 없으면 reportId가 있는 localStorage 대화는 제거 (DB 삭제 반영)
                 continue
               } else {
                 // DB에 데이터가 있지만 해당 reportId가 없는 경우 (다른 사용자의 데이터일 수 있음)
+                idSet.add(localConv.id)
                 mergedConversations.push(localConv)
               }
             }
@@ -426,9 +437,14 @@ export default function QuickAssistPage() {
                 reportId: parsed.situationAnalysisId,  // situation_analyses의 ID
               }
               
-              // 대화 세션 추가
+              // 대화 세션 추가 (중복 제거)
               setConversations((prev) => {
-                const updated = [newConversation, ...prev]
+                // 같은 ID나 reportId를 가진 대화가 이미 있으면 제거
+                const filtered = prev.filter(
+                  c => c.id !== newConversation.id && 
+                  (!newConversation.reportId || c.reportId !== newConversation.reportId)
+                )
+                const updated = [newConversation, ...filtered]
                 localStorage.setItem('legal_assist_conversations', JSON.stringify(updated))
                 return updated
               })
@@ -460,6 +476,8 @@ export default function QuickAssistPage() {
       if (conversation) {
         // reportId가 있으면 DB에서 최신 메시지 가져오기
         if (conversation.reportId) {
+          let isCancelled = false
+          
           const loadLatestMessages = async () => {
             try {
               const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client')
@@ -467,8 +485,12 @@ export default function QuickAssistPage() {
               const { data: { user } } = await supabase.auth.getUser()
               const userId = user?.id || null
               
+              if (isCancelled) return
+              
               if (userId) {
                 const messages = await getConversationsV2(conversation.reportId!, userId)
+                
+                if (isCancelled) return
                 
                 // 메시지를 ChatMessage 형식으로 변환
                 const chatMessages: ChatMessage[] = messages
@@ -494,17 +516,26 @@ export default function QuickAssistPage() {
                 setHasInitialGreeting(true)
               } else {
                 // 사용자 ID가 없으면 기존 메시지 사용
+                if (!isCancelled) {
+                  setMessages(conversation.messages)
+                  setHasInitialGreeting(true)
+                }
+              }
+            } catch (error) {
+              if (!isCancelled) {
+                console.warn('DB에서 최신 메시지 로드 실패, 기존 메시지 사용:', error)
                 setMessages(conversation.messages)
                 setHasInitialGreeting(true)
               }
-            } catch (error) {
-              console.warn('DB에서 최신 메시지 로드 실패, 기존 메시지 사용:', error)
-              setMessages(conversation.messages)
-              setHasInitialGreeting(true)
             }
           }
           
           loadLatestMessages()
+          
+          // cleanup 함수: 컴포넌트 언마운트 시 요청 취소
+          return () => {
+            isCancelled = true
+          }
         } else {
           // reportId가 없으면 기존 메시지 사용 (localStorage만)
           setMessages(conversation.messages)
@@ -1166,17 +1197,25 @@ export default function QuickAssistPage() {
                           </div>
                         )}
                       </div>
-                      <button
+                      <div
                         onClick={(e) => handleDeleteConversation(conv.id, e)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault()
+                            handleDeleteConversation(conv.id, e as any)
+                          }
+                        }}
+                        role="button"
+                        tabIndex={0}
                         className={cn(
-                          "opacity-0 group-hover:opacity-100 rounded-lg p-1.5 transition-all",
+                          "opacity-0 group-hover:opacity-100 rounded-lg p-1.5 transition-all cursor-pointer",
                           "hover:bg-red-100 hover:text-red-600",
                           selectedConversationId === conv.id && "opacity-100"
                         )}
                         title="대화 삭제"
                       >
                         <X className="w-4 h-4" />
-                      </button>
+                      </div>
                     </div>
                   </button>
                 ))}
@@ -1244,7 +1283,7 @@ export default function QuickAssistPage() {
                         key={index}
                         onClick={() => handleSituationSelect(situation)}
                         className="p-4 bg-white border-2 border-slate-200 rounded-xl hover:border-blue-400 hover:bg-blue-50 transition-all text-left group active:scale-95"
-                        title={situation.description}
+                        title={situation.text}
                       >
                         <Icon className="w-5 h-5 text-blue-600 mb-2" />
                         <div className="text-sm font-semibold text-slate-800 group-hover:text-blue-700">
