@@ -180,14 +180,12 @@ def build_contract_analysis_prompt(
         logger.warning("[프롬프트 생성] clauses가 비어있습니다. 빈 프롬프트 반환.")
         return ""
     
-    # clause 컨텍스트 문자열 만들기 (최대 20개로 제한하여 프롬프트 길이 최적화)
+    # clause 컨텍스트 문자열 만들기
     clause_lines = []
-    max_clauses = min(len(clauses), 20)  # 최대 20개만 사용
-    for c in clauses[:max_clauses]:
+    for c in clauses:
         snippet = c.get("content", "")
-        # snippet 길이를 250자로 줄여서 프롬프트 최적화
-        if len(snippet) > 250:
-            snippet = snippet[:250] + "..."
+        if len(snippet) > 400:
+            snippet = snippet[:400] + "..."
         clause_id = c.get("id", "")
         title = c.get("title", "")
         clause_lines.append(
@@ -195,23 +193,19 @@ def build_contract_analysis_prompt(
         )
     clause_context = "\n".join(clause_lines)
     
-    # clauses가 20개를 초과하면 경고 로그
-    if len(clauses) > max_clauses:
-        logger.warning(f"[프롬프트 생성] clauses가 {len(clauses)}개인데 {max_clauses}개만 사용합니다. 프롬프트 길이 최적화를 위해 제한했습니다.")
-    
-    # 법령 컨텍스트 준비 (최대 8개로 제한하여 프롬프트 길이 최적화)
+    # 법령 컨텍스트 준비
     legal_lines = []
     if grounding_chunks:
-        # 최대 8개로 제한 (15개 → 8개로 줄여서 프롬프트 최적화)
-        max_legal_chunks = min(len(grounding_chunks), 8)
+        # 검색된 모든 legal_chunks 사용 (최대 15개로 제한하여 프롬프트 길이 관리)
+        max_legal_chunks = min(len(grounding_chunks), 15)
         for g in grounding_chunks[:max_legal_chunks]:
             # LegalGroundingChunk는 Pydantic 모델이므로 getattr 사용
             source_type = getattr(g, 'source_type', 'law')
             title = getattr(g, 'title', '')
             snippet = getattr(g, 'snippet', getattr(g, 'content', ''))
-            # snippet 길이를 200자로 줄여서 프롬프트 최적화 (300자 → 200자)
-            if len(snippet) > 200:
-                snippet = snippet[:200] + "..."
+            # snippet 길이를 300자로 늘려서 더 많은 정보 제공
+            if len(snippet) > 300:
+                snippet = snippet[:300] + "..."
             legal_lines.append(
                 f'- ({source_type}) {title}: "{snippet}"'
             )
@@ -309,31 +303,67 @@ def build_contract_analysis_prompt(
 
 [출력 형식]
 
-아래 JSON 스키마를 지키세요. (간소화)
+아래 JSON 스키마를 지키세요.
 
 {{
   "risk_score": 0-100,
-  "risk_level": "low|medium|high",
-  "summary": "한 줄 요약",
-  "one_line_summary": "을에게 불리한 조항 N개, 특히 [주요 문제] 과도함",
-  "risk_traffic_light": "🟢|🟡|🔴",
-  "top3_action_points": ["포인트1", "포인트2", "포인트3"],
-  "risk_summary_table": [{{"item": "대금 지급", "risk_level": "high", "problem_point": "검수 후 지급, 기한 없음", "simple_explanation": "갑이 무기한 검수 지연 가능", "revision_keyword": "검수 후 ○일 이내 지급 명시"}}],
-  "issues": [{{
-    "issue_id": "issue-1",
-    "clause_id": "clause-번호",
-    "category": "wage|working_hours|payment|ip|nda|non_compete|liability|dispute",
-    "severity": "low|medium|high",
-    "summary": "이슈 요약",
-    "reason": "왜 문제인지",
-    "legal_basis": ["법조항"],
-    "suggested_revision": "수정 제안",
-    "suggested_questions": ["질문"],
-    "toxic_clause_detail": {{"clause_location": "제○조", "content_summary": "요약", "why_risky": "위험 이유", "real_world_problems": "현실 문제", "suggested_revision_light": "라이트 수정안", "suggested_revision_formal": "포멀 수정안"}}
-  }}],
-  "toxic_clauses": [{{"clause_location": "제○조", "content_summary": "요약", "why_risky": "이유", "real_world_problems": "문제", "suggested_revision_light": "라이트", "suggested_revision_formal": "포멀"}}],
-  "negotiation_questions": ["질문1", "질문2", "질문3"],
-  "recommendations": ["권고사항"]
+  "risk_level": "low" | "medium" | "high",
+  "summary": "계약서 전체 위험도에 대한 한 줄 요약 (한국어)",
+  "one_line_summary": "을(프리랜서/근로자)에게 불리한 조항이 N개 있으며, 특히 [주요 문제]가 과도한 편입니다. 협의·수정 없이 그대로 서명하는 것은 권장되지 않습니다.",
+  "risk_traffic_light": "🟢 | 🟡 | 🔴",
+  "top3_action_points": [
+    "지금 당장 확인하거나 물어봐야 할 포인트 1",
+    "지금 당장 확인하거나 물어봐야 할 포인트 2",
+    "지금 당장 확인하거나 물어봐야 할 포인트 3"
+  ],
+  "risk_summary_table": [
+    {{
+      "item": "대금 지급",
+      "risk_level": "low | medium | high",
+      "problem_point": "검수 후 지급, 기한 없음",
+      "simple_explanation": "갑이 무기한 검수 지연 가능",
+      "revision_keyword": "검수 후 ○일 이내 지급 명시"
+    }}
+  ],
+  "issues": [
+    {{
+      "issue_id": "문자열, 예: issue-1",
+      "clause_id": "clause-번호 (반드시 위 목록에 있는 것만 사용)",
+      "category": "wage | working_hours | job_stability | dismissal | payment | ip | nda | non_compete | liability | dispute",
+      "severity": "low | medium | high",
+      "summary": "이슈를 한 줄로 요약 (한국어)",
+      "reason": "왜 문제가 되는지 구체적으로 설명 (한국어)",
+      "legal_basis": ["관련 법조항 또는 가이드라인"],
+      "suggested_revision": "가능하다면 더 안전한 문구 제안 (한국어)",
+      "suggested_questions": ["사업주에게 확인해볼 질문 목록 (한국어)"],
+      "toxic_clause_detail": {{
+        "clause_location": "제○조(손해배상)",
+        "content_summary": "내용 요약",
+        "why_risky": "왜 위험한지",
+        "real_world_problems": "현실에서 생길 수 있는 문제",
+        "suggested_revision_light": "라이트 버전 수정 제안 (일반인 말투)",
+        "suggested_revision_formal": "포멀 버전 수정 제안 (로펌/변호사용)"
+      }}
+    }}
+  ],
+  "toxic_clauses": [
+    {{
+      "clause_location": "제○조(손해배상)",
+      "content_summary": "내용 요약",
+      "why_risky": "왜 위험한지",
+      "real_world_problems": "현실에서 생길 수 있는 문제",
+      "suggested_revision_light": "라이트 버전 수정 제안",
+      "suggested_revision_formal": "포멀 버전 수정 제안"
+    }}
+  ],
+  "negotiation_questions": [
+    "검수 기간을 최대 ○일로 제한할 수 있을까요?",
+    "지연 시 지연이자/지급 기한을 명시해주실 수 있을까요?",
+    "손해배상 한도를 '총 계약금액' 수준으로 제한할 수 있을까요?"
+  ],
+  "recommendations": [
+    "전반적인 개선 권고사항 (한국어)"
+  ]
 }}
 
 [중요 규칙]
@@ -351,11 +381,9 @@ def build_contract_analysis_prompt(
 
 {user_prompt}"""
     
-    # 실제 사용된 chunks 개수 계산
-    used_clauses = min(len(clauses), 20)
-    used_legal_chunks = min(len(grounding_chunks), 8) if grounding_chunks else 0
-    prompt_length = len(prompt)
-    logger.info(f"[프롬프트 생성] 프롬프트 생성 완료: clauses={len(clauses)}개(사용 {used_clauses}개), legal_chunks={len(grounding_chunks) if grounding_chunks else 0}개(사용 {used_legal_chunks}개), 프롬프트 길이={prompt_length}자")
+    # 실제 사용된 legal_chunks 개수 계산
+    used_legal_chunks = min(len(grounding_chunks), 15) if grounding_chunks else 0
+    logger.info(f"[프롬프트 생성] clause 기반 프롬프트 생성 완료: clauses={len(clauses)}개, legal_chunks={len(grounding_chunks) if grounding_chunks else 0}개 검색됨, {used_legal_chunks}개 프롬프트에 사용")
     
     return prompt
 
