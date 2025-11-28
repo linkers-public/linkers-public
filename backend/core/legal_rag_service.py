@@ -1182,6 +1182,14 @@ class LegalRAGService:
                     model=settings.groq_model
                 )
                 
+                # LLM 출력 로깅
+                logger.info("=" * 80)
+                logger.info("[LLM OUTPUT] Legal Chat Response")
+                logger.info("=" * 80)
+                logger.info(f"Response Length: {len(response_text)} characters")
+                logger.info(f"Response Content:\n{response_text}")
+                logger.info("=" * 80)
+                
                 # 답변에 전문가 상담 권장 문구 추가 (없는 경우)
                 if "전문가 상담" not in response_text and "법률 자문" not in response_text:
                     response_text += "\n\n---\n\n**⚠️ 참고:** 이 답변은 정보 안내를 위한 것이며 법률 자문이 아닙니다. 중요한 사안은 전문 변호사나 노동위원회 등 전문 기관에 상담하시기 바랍니다."
@@ -1206,6 +1214,14 @@ class LegalRAGService:
                     )
                 
                 response_text = llm.invoke(prompt)
+                
+                # LLM 출력 로깅
+                logger.info("=" * 80)
+                logger.info("[LLM OUTPUT] Legal Chat Response (Ollama)")
+                logger.info("=" * 80)
+                logger.info(f"Response Length: {len(response_text)} characters")
+                logger.info(f"Response Content:\n{response_text}")
+                logger.info("=" * 80)
                 
                 # 한국어가 포함되어 있는지 확인 (한글 유니코드 범위: AC00-D7A3)
                 # 첫 200자 중 한국어가 없으면 재시도
@@ -1248,6 +1264,14 @@ class LegalRAGService:
 [관련 법령 요약 및 출처 (한국어)]
 """
                         response_text = llm.invoke(retry_prompt)
+                        
+                        # 재시도 후 LLM 출력 로깅
+                        logger.info("=" * 80)
+                        logger.info("[LLM OUTPUT] Legal Chat Response (Ollama - Retry)")
+                        logger.info("=" * 80)
+                        logger.info(f"Response Length: {len(response_text)} characters")
+                        logger.info(f"Response Content:\n{response_text}")
+                        logger.info("=" * 80)
                 
                 # 답변에 전문가 상담 권장 문구 추가 (없는 경우)
                 if "전문가 상담" not in response_text and "법률 자문" not in response_text:

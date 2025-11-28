@@ -374,24 +374,25 @@ export function ContractViewer({
       <span className="relative inline-block group">
         <span
           className={cn(
-            "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium mr-1.5 align-middle transition-all",
+            "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold mr-2 align-middle transition-all shadow-sm border",
             SEVERITY_COLORS[issue.severity].badge,
+            "border-white/50"
           )}
         >
           {getCategoryIcon(issue.category)}
           <span>{getCategoryLabel(issue.category)}</span>
-          <span className="opacity-60">·</span>
+          <span className="opacity-50">·</span>
           <span>{getSeverityLabel(issue.severity)}</span>
         </span>
         <span
           className={cn(
-            "inline-block transition-all rounded-sm px-0.5 py-0.5",
+            "inline-block transition-all rounded-md px-1 py-0.5 font-semibold",
             FOCUS_STYLE,
             "highlight interactive",
-            issue.severity === 'high' && `highlight-severity-high ${SEVERITY_COLORS.high.bg}/70 hover:${SEVERITY_COLORS.high.bgHover} underline decoration-red-500 decoration-2 underline-offset-2 font-medium`,
-            issue.severity === 'medium' && `highlight-severity-medium ${SEVERITY_COLORS.medium.bg}/60 hover:${SEVERITY_COLORS.medium.bgHover} underline decoration-amber-500 decoration-2 underline-offset-2`,
-            issue.severity === 'low' && `highlight-severity-low ${SEVERITY_COLORS.low.bg}/50 hover:${SEVERITY_COLORS.low.bgHover} underline decoration-green-500 decoration-2 underline-offset-2`,
-            isSelected && "ring-2 ring-blue-500 ring-offset-2 shadow-lg scale-105"
+            issue.severity === 'high' && `highlight-severity-high ${SEVERITY_COLORS.high.bg}/80 hover:${SEVERITY_COLORS.high.bgHover} underline decoration-red-500 decoration-3 underline-offset-3 shadow-sm`,
+            issue.severity === 'medium' && `highlight-severity-medium ${SEVERITY_COLORS.medium.bg}/70 hover:${SEVERITY_COLORS.medium.bgHover} underline decoration-amber-500 decoration-3 underline-offset-3 shadow-sm`,
+            issue.severity === 'low' && `highlight-severity-low ${SEVERITY_COLORS.low.bg}/60 hover:${SEVERITY_COLORS.low.bgHover} underline decoration-green-500 decoration-3 underline-offset-3 shadow-sm`,
+            isSelected && "ring-4 ring-blue-500 ring-offset-2 shadow-xl scale-110"
           )}
           onMouseEnter={(e) => handleMouseEnter(e, issue)}
           onMouseLeave={handleMouseLeave}
@@ -548,7 +549,7 @@ export function ContractViewer({
     ].sort((a, b) => a.startIndex - b.startIndex)
 
     if (clauseHighlights.length === 0) {
-      return <p className="text-sm leading-relaxed whitespace-pre-wrap text-slate-800">{content}</p>
+      return <p className="text-sm sm:text-base leading-relaxed whitespace-pre-wrap text-slate-800 font-medium">{content}</p>
     }
 
     let lastIndex = 0
@@ -600,11 +601,11 @@ export function ContractViewer({
           onMouseEnter={(e) => handleMouseEnter(e, issue)}
           onMouseLeave={handleMouseLeave}
           className={cn(
-            "inline-block viewer-chunk cursor-pointer transition-all",
-            highlight.severity === 'high' && "highlight-severity-high hover:bg-red-100/50",
-            highlight.severity === 'medium' && "highlight-severity-medium hover:bg-amber-100/50",
-            highlight.severity === 'low' && "highlight-severity-low hover:bg-green-100/50",
-            isSelected && "ring-2 ring-blue-500 ring-offset-1 rounded"
+            "inline-block viewer-chunk cursor-pointer transition-all duration-200 rounded-md",
+            highlight.severity === 'high' && "highlight-severity-high hover:bg-red-100/60 hover:shadow-md",
+            highlight.severity === 'medium' && "highlight-severity-medium hover:bg-amber-100/60 hover:shadow-md",
+            highlight.severity === 'low' && "highlight-severity-low hover:bg-green-100/60 hover:shadow-md",
+            isSelected && "ring-4 ring-blue-500 ring-offset-2 rounded-lg shadow-xl scale-105"
           )}
         >
           {renderHighlightedText(highlightText, issue, isSelected)}
@@ -623,7 +624,7 @@ export function ContractViewer({
       )
     }
 
-    return <p className="text-sm leading-relaxed whitespace-pre-wrap text-slate-800">{elements}</p>
+    return <p className="text-sm sm:text-base leading-relaxed whitespace-pre-wrap text-slate-800 font-medium">{elements}</p>
   }
 
   // 요약 통계 계산
@@ -671,88 +672,115 @@ export function ContractViewer({
       
       <div 
         className={cn(
-          "bg-gradient-to-b from-slate-50/80 to-white",
+          "h-full overflow-x-hidden",
           isExternalScroll ? "min-h-full" : "flex-1 overflow-y-auto"
         )}
         ref={containerRef}
         role="main"
         aria-label="계약서 전문 뷰어"
       >
-      <div className="w-full max-w-none lg:max-w-6xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 pb-4 sm:pb-6 lg:pb-8 min-h-full">
-        {/* 상단 요약 헤더 - 개선된 레이아웃 */}
-        <div className="sticky top-0 bg-white/95 backdrop-blur-md z-20 pt-2 sm:pt-3 pb-2 sm:pb-3 mb-3 sm:mb-4 border-b border-slate-200/60 shadow-sm">
-          {/* 위험 타임라인 네비게이션 - 개선된 크기와 가시성 */}
-          {parsedClauses.length > 0 && (
-            <div 
-              className="mb-3 flex gap-1.5 sm:gap-2 overflow-x-auto pb-2 scrollbar-hide"
-              role="navigation"
-              aria-label="조항 네비게이션"
-            >
+      <div className="w-full pb-4 sm:pb-5 min-h-full" style={{ overflowX: 'hidden' }}>
+        {/* 상단 조항 네비게이션 - 마진 없이 전체 너비, 가로 스크롤만 */}
+        {parsedClauses.length > 0 && (
+          <div 
+            className="sticky top-0 bg-white backdrop-blur-xl z-20 pt-4 sm:pt-5 pb-3 mb-4 sm:mb-5 border-b-2 border-slate-200/80 shadow-lg shadow-slate-200/20 overflow-x-auto scrollbar-hide -mx-4 sm:-mx-6 md:-mx-8 lg:-mx-10 px-2 sm:px-3"
+            role="navigation"
+            aria-label="조항 네비게이션"
+          >
+            <div className="flex gap-2 sm:gap-3 min-w-max">
               {parsedClauses.map(clause => (
                 <button
                   key={clause.id}
-          onClick={() => scrollToClause(clause.number)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-              e.preventDefault()
-              scrollToClause(clause.number)
-            }
-          }}
-          aria-label={`제${clause.number}조 ${clause.title}로 이동, ${clause.maxSeverity ? getSeverityLabel(clause.maxSeverity) : '안전'} 위험도, 이슈 ${clause.issueCount}건`}
-          className={cn(
-            "flex flex-col items-center justify-center min-w-[44px] sm:min-w-[52px] px-2 sm:px-3 py-2 sm:py-2.5 rounded-lg transition-all duration-200 cursor-pointer",
-            "text-xs sm:text-sm",
-            `hover:bg-slate-100 hover:scale-105 active:scale-95 ${FOCUS_STYLE}`,
-            selectedClauseNumber === clause.number && "bg-blue-100 ring-2 ring-blue-400 scale-105 shadow-sm"
-          )}
+                  onClick={() => scrollToClause(clause.number)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      scrollToClause(clause.number)
+                    }
+                  }}
+                  aria-label={`제${clause.number}조 ${clause.title}로 이동, ${clause.maxSeverity ? getSeverityLabel(clause.maxSeverity) : '안전'} 위험도, 이슈 ${clause.issueCount}건`}
+                  className={cn(
+                    "flex flex-col items-center justify-center min-w-[56px] sm:min-w-[64px] px-3 sm:px-4 py-3 sm:py-3.5 rounded-xl transition-all duration-300 cursor-pointer group flex-shrink-0",
+                    "text-xs sm:text-sm",
+                    "hover:scale-110 hover:shadow-lg active:scale-95",
+                    selectedClauseNumber === clause.number 
+                      ? "bg-gradient-to-br from-blue-100 to-indigo-100 ring-2 ring-blue-400 ring-offset-2 scale-110 shadow-lg" 
+                      : "bg-gradient-to-br from-slate-50 to-slate-100 hover:from-slate-100 hover:to-slate-200 border border-slate-200/60",
+                    FOCUS_STYLE
+                  )}
                 >
-                  <span className="mb-1.5 text-xs sm:text-sm text-slate-700 font-semibold whitespace-nowrap">제{clause.number}조</span>
+                  <span className={cn(
+                    "mb-2 text-xs sm:text-sm font-bold whitespace-nowrap transition-colors",
+                    selectedClauseNumber === clause.number ? "text-blue-700" : "text-slate-700 group-hover:text-slate-900"
+                  )}>
+                    제{clause.number}조
+                  </span>
                   <span
                     className={cn(
-                      "h-3 w-3 sm:h-3.5 sm:w-3.5 rounded-full transition-transform shadow-sm",
-                      clause.maxSeverity === 'high' && SEVERITY_COLORS.high.solid,
-                      clause.maxSeverity === 'medium' && SEVERITY_COLORS.medium.solid,
-                      clause.maxSeverity === 'low' && SEVERITY_COLORS.low.solid,
-                      !clause.maxSeverity && "bg-slate-300"
+                      "h-4 w-4 sm:h-5 sm:w-5 rounded-full transition-all duration-300 shadow-md ring-2 ring-white",
+                      clause.maxSeverity === 'high' && `${SEVERITY_COLORS.high.solid} group-hover:scale-125 group-hover:shadow-lg`,
+                      clause.maxSeverity === 'medium' && `${SEVERITY_COLORS.medium.solid} group-hover:scale-125 group-hover:shadow-lg`,
+                      clause.maxSeverity === 'low' && `${SEVERITY_COLORS.low.solid} group-hover:scale-125 group-hover:shadow-lg`,
+                      !clause.maxSeverity && "bg-slate-300 group-hover:bg-slate-400"
                     )}
                     aria-hidden="true"
                   />
                   {clause.issueCount > 0 && (
-                    <span className="mt-1 text-[9px] sm:text-[10px] text-slate-500 font-medium">
+                    <span className={cn(
+                      "mt-2 text-[10px] sm:text-[11px] font-bold px-1.5 py-0.5 rounded-full",
+                      selectedClauseNumber === clause.number 
+                        ? "bg-blue-200 text-blue-800" 
+                        : "bg-slate-200 text-slate-600 group-hover:bg-slate-300 group-hover:text-slate-700"
+                    )}>
                       {clause.issueCount}건
                     </span>
                   )}
                 </button>
               ))}
             </div>
-          )}
+          </div>
+        )}
 
+        {/* 상단 요약 헤더 - 개선된 레이아웃 */}
+        <div className="sticky top-0 bg-white backdrop-blur-xl z-20 pt-4 sm:pt-5 pb-4 sm:pb-5 px-4 sm:px-6 md:px-8 lg:px-10 mb-6 sm:mb-8 border-b-2 border-slate-200/80 shadow-lg shadow-slate-200/20">
           {/* 요약 통계 - 간소화된 레이아웃 */}
-          <div className="space-y-2.5">
-            <div className="flex items-center gap-2 sm:gap-3">
-              <div className="p-1.5 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg shadow-md flex-shrink-0" aria-hidden="true">
-                <FileText className="w-4 h-4 text-white" />
+          <div className="space-y-3 sm:space-y-4">
+            <div className="flex items-center gap-3 sm:gap-4">
+              <div className="p-2.5 bg-gradient-to-br from-blue-500 via-blue-600 to-indigo-600 rounded-xl shadow-lg ring-2 ring-blue-200/50 flex-shrink-0" aria-hidden="true">
+                <FileText className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
               </div>
               <div className="min-w-0 flex-1">
-                <h2 className="text-base sm:text-lg lg:text-xl font-bold text-slate-900">계약서 전문</h2>
-                <p className="text-xs sm:text-sm text-slate-600 mt-0.5 line-clamp-1">
-                  위험 조항은 색상으로 표시됩니다. 하이라이트된 텍스트를 클릭하면 상세 정보를 확인할 수 있습니다.
+                <h2 className="text-lg sm:text-xl lg:text-2xl font-extrabold text-slate-900 bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent">
+                  계약서 전문
+                </h2>
+                <p className="text-xs sm:text-sm text-slate-600 mt-1.5 leading-relaxed">
+                  위험 조항은 <span className="font-semibold text-slate-700">색상으로 표시</span>됩니다. 하이라이트된 텍스트를 <span className="font-semibold text-blue-600">클릭</span>하면 상세 정보를 확인할 수 있습니다.
                 </p>
               </div>
             </div>
 
             {/* 카테고리별 위험도 바 - 컴팩트 버전 */}
             {Object.keys(summaryStats).length > 0 && (
-              <div className="flex flex-wrap gap-2 sm:gap-3" role="region" aria-label="카테고리별 위험도 통계">
+              <div className="flex flex-wrap gap-2.5 sm:gap-3" role="region" aria-label="카테고리별 위험도 통계">
                 {Object.entries(summaryStats).map(([category, stats]) => {
                   return (
-                    <div key={category} className="flex items-center gap-1.5 px-2 py-1 bg-slate-50 rounded-lg border border-slate-200">
-                      <span className="text-[10px] sm:text-xs text-slate-700 font-medium whitespace-nowrap">{getCategoryLabel(category)}</span>
+                    <div 
+                      key={category} 
+                      className={cn(
+                        "flex items-center gap-2 px-3 py-1.5 rounded-xl border-2 transition-all duration-200 hover:scale-105 hover:shadow-md",
+                        stats.maxSeverity === 'high' && "bg-gradient-to-br from-red-50 to-rose-50 border-red-300 shadow-sm shadow-red-200/50",
+                        stats.maxSeverity === 'medium' && "bg-gradient-to-br from-amber-50 to-orange-50 border-amber-300 shadow-sm shadow-amber-200/50",
+                        stats.maxSeverity === 'low' && "bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-300 shadow-sm shadow-blue-200/50",
+                        !stats.maxSeverity && "bg-slate-50 border-slate-200"
+                      )}
+                    >
+                      <span className="text-xs sm:text-sm text-slate-700 font-semibold whitespace-nowrap">{getCategoryLabel(category)}</span>
                       <span className={cn(
-                        "text-[10px] sm:text-xs font-bold px-1.5 py-0.5 rounded",
-                        stats.maxSeverity === 'high' && "bg-red-100 text-red-700",
-                        stats.maxSeverity === 'medium' && "bg-amber-100 text-amber-700",
-                        stats.maxSeverity === 'low' && "bg-blue-100 text-blue-700"
+                        "text-xs sm:text-sm font-extrabold px-2 py-0.5 rounded-lg shadow-sm",
+                        stats.maxSeverity === 'high' && "bg-red-200 text-red-800 border border-red-300",
+                        stats.maxSeverity === 'medium' && "bg-amber-200 text-amber-800 border border-amber-300",
+                        stats.maxSeverity === 'low' && "bg-blue-200 text-blue-800 border border-blue-300",
+                        !stats.maxSeverity && "bg-slate-200 text-slate-700 border border-slate-300"
                       )}>
                         {stats.count}
                       </span>
@@ -807,7 +835,7 @@ export function ContractViewer({
         {parsedClauses.length === 0 ? (
           // parsedClauses가 없어도 contractText가 있으면 직접 표시
           contractText && contractText.trim().length > 0 ? (
-            <div className="relative flex gap-3 lg:gap-4">
+            <div className="relative flex gap-3 lg:gap-4 px-4 sm:px-6 md:px-8 lg:px-10">
               {/* 중앙: 계약서 텍스트 (파싱 실패 시 원문 그대로 표시) */}
               <div className="flex-1 space-y-4 relative overflow-visible">
                 <div className="bg-white rounded-lg border border-slate-200 p-6 shadow-sm">
@@ -832,7 +860,7 @@ export function ContractViewer({
           </div>
           )
         ) : (
-          <div className="relative flex gap-3 lg:gap-4">
+          <div className="relative flex gap-3 lg:gap-4 px-4 sm:px-6 md:px-8 lg:px-10">
             {/* 왼쪽: 리스크 minimap */}
             <div 
               className="w-1 lg:w-1.5 flex-shrink-0 flex flex-col rounded-full overflow-hidden bg-slate-100"
@@ -872,7 +900,7 @@ export function ContractViewer({
             </div>
 
             {/* 중앙: 계약서 텍스트 */}
-            <div className="flex-1 space-y-4 relative overflow-visible">
+            <div className="flex-1 space-y-3 sm:space-y-4 relative overflow-visible px-4 sm:px-6 md:px-8 lg:px-10">
               {/* 호버 툴팁 - 호버한 위치에 표시 */}
               {(currentHoveredIssue || (pinnedTooltipIssueId && issues.find(i => i.id === pinnedTooltipIssueId))) && tooltipPosition && (
                 <div
@@ -894,22 +922,22 @@ export function ContractViewer({
                     const isPinned = pinnedTooltipIssueId === displayIssue.id
                     
                     return (
-                      <div className="bg-white rounded-lg border-2 border-slate-200 shadow-xl p-3 animate-in fade-in zoom-in-95 duration-200">
+                      <div className="bg-gradient-to-br from-white to-slate-50 rounded-xl border-2 shadow-2xl p-4 animate-in fade-in zoom-in-95 duration-200 backdrop-blur-sm">
                         {/* 툴팁 헤더 */}
-                        <div className="flex items-center gap-2 mb-2 pb-2 border-b border-slate-200">
+                        <div className="flex items-center gap-3 mb-3 pb-3 border-b-2 border-slate-200/60">
                           <div className={cn(
-                            "p-1.5 rounded-lg",
-                            displayIssue.severity === 'high' && "bg-red-100",
-                            displayIssue.severity === 'medium' && "bg-amber-100",
-                            displayIssue.severity === 'low' && "bg-blue-100"
+                            "p-2 rounded-xl shadow-sm ring-2 ring-white/50",
+                            displayIssue.severity === 'high' && "bg-gradient-to-br from-red-100 to-red-200",
+                            displayIssue.severity === 'medium' && "bg-gradient-to-br from-amber-100 to-amber-200",
+                            displayIssue.severity === 'low' && "bg-gradient-to-br from-blue-100 to-blue-200"
                           )}>
                             {getCategoryIcon(displayIssue.category)}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <div className="text-xs font-semibold text-slate-900 truncate">
+                            <div className="text-sm font-extrabold text-slate-900 truncate">
                               {getCategoryLabel(displayIssue.category)}
                             </div>
-                            <div className="text-[10px] text-slate-500">
+                            <div className="text-xs text-slate-600 mt-0.5 font-medium">
                               {getSeverityLabel(displayIssue.severity)} 위험도
                             </div>
                           </div>
@@ -917,20 +945,20 @@ export function ContractViewer({
                           <button
                             onClick={handleTooltipTogglePin}
                             className={cn(
-                              "p-1.5 rounded-lg transition-colors",
+                              "p-2 rounded-lg transition-all duration-200 shadow-sm border-2",
                               isPinned 
-                                ? "bg-blue-100 text-blue-600 hover:bg-blue-200" 
-                                : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                                ? "bg-gradient-to-br from-blue-100 to-blue-200 text-blue-700 border-blue-300 hover:from-blue-200 hover:to-blue-300 scale-110" 
+                                : "bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200 hover:scale-105"
                             )}
                             aria-label={isPinned ? "툴팁 고정 해제" : "툴팁 고정"}
                             title={isPinned ? "고정 해제" : "고정"}
                           >
                             {isPinned ? (
-                              <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                                 <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
                               </svg>
                             ) : (
-                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
                               </svg>
                             )}
@@ -938,22 +966,22 @@ export function ContractViewer({
                         </div>
                     
                         {/* 요약 */}
-                        <div className="mb-2">
-                          <p className="text-xs text-slate-700 line-clamp-2 leading-relaxed">
+                        <div className="mb-3">
+                          <p className="text-sm text-slate-800 line-clamp-3 leading-relaxed font-medium">
                             {displayIssue.summary}
                           </p>
                         </div>
                         
                         {/* 법적 근거 (있는 경우) */}
                         {displayIssue.legalBasis && displayIssue.legalBasis.length > 0 && (
-                          <div className="mt-2 pt-2 border-t border-slate-200">
-                            <div className="flex items-center gap-1 mb-1">
-                              <BookOpen className="w-3 h-3 text-slate-500" aria-hidden="true" />
-                              <span className="text-[10px] font-semibold text-slate-600">관련 법령</span>
+                          <div className="mt-3 pt-3 border-t-2 border-slate-200/60">
+                            <div className="flex items-center gap-2 mb-2">
+                              <BookOpen className="w-4 h-4 text-blue-600" aria-hidden="true" />
+                              <span className="text-xs font-extrabold text-slate-700">관련 법령</span>
                             </div>
-                            <div className="space-y-1">
+                            <div className="space-y-1.5">
                               {displayIssue.legalBasis.slice(0, 2).map((basis, idx) => (
-                                <div key={idx} className="text-[10px] text-slate-600 line-clamp-2">
+                                <div key={idx} className="text-xs text-slate-700 line-clamp-2 bg-blue-50/50 px-2 py-1.5 rounded-lg border border-blue-100">
                                   {basis}
                                 </div>
                               ))}
@@ -962,12 +990,12 @@ export function ContractViewer({
                         )}
                         
                         {/* 클릭 안내 */}
-                        <div className="mt-2 pt-2 border-t border-slate-200">
+                        <div className="mt-3 pt-3 border-t-2 border-slate-200/60">
                           <button
                             onClick={() => onIssueClick?.(displayIssue.id)}
-                            className="w-full text-[10px] text-blue-600 hover:text-blue-700 hover:underline text-center"
+                            className="w-full text-xs font-bold text-blue-700 hover:text-blue-800 hover:underline text-center bg-blue-50/50 px-3 py-2 rounded-lg border border-blue-200 hover:bg-blue-100 transition-colors duration-200"
                           >
-                            클릭하여 상세 정보 보기
+                            클릭하여 상세 정보 보기 →
                           </button>
                         </div>
                       </div>
@@ -988,13 +1016,13 @@ export function ContractViewer({
                     }
                   }}
                   className={cn(
-                    "mb-6 rounded-lg border bg-white shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-0.5",
-                    "focus-within:ring-2 focus-within:ring-blue-400 focus-within:ring-offset-2",
-                    clause.maxSeverity === 'high' && `${SEVERITY_COLORS.high.border} ${SEVERITY_COLORS.high.bg}/60`,
-                    clause.maxSeverity === 'medium' && `${SEVERITY_COLORS.medium.border} ${SEVERITY_COLORS.medium.bg}/60`,
-                    clause.maxSeverity === 'low' && `${SEVERITY_COLORS.low.border} ${SEVERITY_COLORS.low.bg}/30`,
-                    !clause.maxSeverity && "border-slate-200",
-                    selectedClauseNumber === clause.number && "ring-2 ring-blue-400 ring-offset-2 animate-pulse"
+                    "mb-4 sm:mb-5 rounded-2xl border-2 bg-white shadow-lg transition-all duration-300 hover:shadow-xl hover:-translate-y-1",
+                    "focus-within:ring-4 focus-within:ring-blue-400/50 focus-within:ring-offset-4",
+                    clause.maxSeverity === 'high' && `border-red-300 ${SEVERITY_COLORS.high.bg}/40 shadow-red-200/30 hover:shadow-red-300/40`,
+                    clause.maxSeverity === 'medium' && `border-amber-300 ${SEVERITY_COLORS.medium.bg}/40 shadow-amber-200/30 hover:shadow-amber-300/40`,
+                    clause.maxSeverity === 'low' && `border-blue-300 ${SEVERITY_COLORS.low.bg}/30 shadow-blue-200/20 hover:shadow-blue-300/30`,
+                    !clause.maxSeverity && "border-slate-200 shadow-slate-200/20",
+                    selectedClauseNumber === clause.number && "ring-4 ring-blue-400 ring-offset-4 shadow-2xl scale-[1.02]"
                   )}
                   aria-labelledby={`clause-${clause.number}-header`}
                 >
@@ -1003,33 +1031,33 @@ export function ContractViewer({
                     id={`clause-${clause.number}-header`}
                     onClick={() => scrollToClause(clause.number)}
                     className={cn(
-                      "flex items-center justify-between px-4 py-3 border-b transition-colors cursor-pointer",
-                      clause.maxSeverity === 'high' && `${SEVERITY_COLORS.high.bg}/80 ${SEVERITY_COLORS.high.border}`,
-                      clause.maxSeverity === 'medium' && `${SEVERITY_COLORS.medium.bg}/80 ${SEVERITY_COLORS.medium.border}`,
-                      clause.maxSeverity === 'low' && `${SEVERITY_COLORS.low.bg}/80 ${SEVERITY_COLORS.low.border}`,
-                      !clause.maxSeverity && "bg-slate-50/80 border-slate-200"
+                      "flex items-center justify-between px-5 sm:px-6 py-4 sm:py-5 border-b-2 transition-all duration-200 cursor-pointer hover:bg-opacity-90",
+                      clause.maxSeverity === 'high' && `bg-gradient-to-r ${SEVERITY_COLORS.high.bg}/90 to-red-50/80 border-red-300/60`,
+                      clause.maxSeverity === 'medium' && `bg-gradient-to-r ${SEVERITY_COLORS.medium.bg}/90 to-amber-50/80 border-amber-300/60`,
+                      clause.maxSeverity === 'low' && `bg-gradient-to-r ${SEVERITY_COLORS.low.bg}/90 to-blue-50/80 border-blue-300/60`,
+                      !clause.maxSeverity && "bg-gradient-to-r from-slate-50/90 to-slate-100/80 border-slate-200"
                     )}
                   >
-                    <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex items-center gap-4 min-w-0">
                       <div className={cn(
-                        "text-base font-bold flex-shrink-0 clause-number clause-number-clickable",
-                        clause.maxSeverity === 'high' && SEVERITY_COLORS.high.text,
-                        clause.maxSeverity === 'medium' && SEVERITY_COLORS.medium.text,
-                        clause.maxSeverity === 'low' && SEVERITY_COLORS.low.text,
-                        !clause.maxSeverity && "text-slate-700"
+                        "text-lg sm:text-xl font-extrabold flex-shrink-0 clause-number clause-number-clickable px-3 py-1.5 rounded-lg",
+                        clause.maxSeverity === 'high' && `${SEVERITY_COLORS.high.text} bg-red-100/50`,
+                        clause.maxSeverity === 'medium' && `${SEVERITY_COLORS.medium.text} bg-amber-100/50`,
+                        clause.maxSeverity === 'low' && `${SEVERITY_COLORS.low.text} bg-blue-100/50`,
+                        !clause.maxSeverity && "text-slate-700 bg-slate-100/50"
                       )}>
                         제{clause.number}조
                       </div>
-                      <div className="text-sm font-semibold text-slate-900 truncate">{clause.title}</div>
+                      <div className="text-base sm:text-lg font-bold text-slate-900 truncate">{clause.title}</div>
                     </div>
-                    <div className="flex items-center gap-2 text-xs flex-shrink-0">
+                    <div className="flex items-center gap-2.5 text-xs sm:text-sm flex-shrink-0">
                       {clause.maxSeverity && (
                         <span 
                           className={cn(
-                            "px-2 py-1 rounded-full font-semibold",
-                            clause.maxSeverity === 'high' && SEVERITY_COLORS.high.badge,
-                            clause.maxSeverity === 'medium' && SEVERITY_COLORS.medium.badge,
-                            clause.maxSeverity === 'low' && SEVERITY_COLORS.low.badge
+                            "px-3 py-1.5 rounded-full font-extrabold shadow-sm border-2",
+                            clause.maxSeverity === 'high' && `${SEVERITY_COLORS.high.badge} border-red-400`,
+                            clause.maxSeverity === 'medium' && `${SEVERITY_COLORS.medium.badge} border-amber-400`,
+                            clause.maxSeverity === 'low' && `${SEVERITY_COLORS.low.badge} border-blue-400`
                           )}
                           aria-label={`위험도: ${getSeverityLabel(clause.maxSeverity)}`}
                         >
@@ -1038,7 +1066,7 @@ export function ContractViewer({
                       )}
                       {clause.issueCount > 0 && (
                         <span 
-                          className="rounded-full bg-slate-100 px-2 py-1 text-slate-700 font-medium"
+                          className="rounded-full bg-gradient-to-br from-slate-100 to-slate-200 px-3 py-1.5 text-slate-700 font-bold border border-slate-300 shadow-sm"
                           aria-label={`이슈 ${clause.issueCount}건`}
                         >
                           이슈 {clause.issueCount}건
@@ -1048,7 +1076,7 @@ export function ContractViewer({
                   </header>
 
                   {/* 조항 내용 */}
-                  <div className="px-4 py-4">
+                  <div className="px-5 sm:px-6 py-5 sm:py-6 bg-gradient-to-b from-white to-slate-50/30">
                     {renderClauseContent(clause)}
                   </div>
                 </section>

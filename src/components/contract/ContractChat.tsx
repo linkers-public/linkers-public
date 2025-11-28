@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Loader2, Send, MessageSquare, Sparkles, Bot, User, FileText, Zap, RefreshCw, AlertCircle } from 'lucide-react'
 import { MarkdownRenderer } from '@/components/rag/MarkdownRenderer'
+import { LegalChatMessage } from './LegalChatMessage'
 import { cn } from '@/lib/utils'
 import { PRIMARY_GRADIENT, PRIMARY_GRADIENT_HOVER, FOCUS_STYLE } from './contract-design-tokens'
 import type { LegalIssue, ContractAnalysisResult } from '@/types/legal'
@@ -172,6 +173,7 @@ export function ContractChat({
           summary: selectedIssue.summary,
           severity: selectedIssue.severity,
           originalText: selectedIssue.originalText,
+          article_number: selectedIssue.location?.clauseNumber, // ✅ 조항 번호 추가
           legalBasis: legalBasisV2,
         } : undefined,
         analysisSummary: analysisSummary,
@@ -479,9 +481,12 @@ export function ContractChat({
                               )}
                             </div>
                           ) : (
-                            <div className="prose prose-sm max-w-none prose-headings:text-slate-900 prose-p:text-slate-700 prose-strong:text-slate-900 prose-code:text-blue-600 prose-pre:bg-slate-50 text-sm leading-relaxed">
-                              <MarkdownRenderer content={message.content} />
-                            </div>
+                            <LegalChatMessage
+                              content={message.content}
+                              selectedIssue={selectedIssueId 
+                                ? analysisResult.issues.find(i => i.id === selectedIssueId)
+                                : undefined}
+                            />
                           )}
                         </>
                       ) : (
