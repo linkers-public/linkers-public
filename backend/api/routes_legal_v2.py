@@ -4,7 +4,7 @@ Legal RAG API Routes v2
 """
 
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, status, Query, Header
-from typing import Optional, List
+from typing import Optional, List, Dict
 import tempfile
 import os
 import logging
@@ -44,6 +44,7 @@ from core.dependencies import (
     get_storage_service_dep,
 )
 from core.logging_config import get_logger
+from core.clause_extractor import extract_clauses
 
 router = APIRouter(
     prefix="/api/v2/legal",
@@ -133,15 +134,55 @@ async def analyze_contract(
     title: Optional[str] = Form(None, description="문서 이름"),
     doc_type: Optional[str] = Form(None, description="문서 타입 (employment, freelance 등)"),
     x_user_id: Optional[str] = Header(None, alias="X-User-Id", description="사용자 ID"),
+    contract_type: Optional[str] = Form(None, description="계약 종류: freelancer | part_time | regular | service | other"),
+    user_role: Optional[str] = Form(None, description="역할: worker (을/프리랜서/근로자) | employer (갑/발주사/고용주)"),
+    field: Optional[str] = Form(None, description="분야: it_dev | design | marketing | other"),
+    concerns: Optional[str] = Form(None, description="우선 확인하고 싶은 고민"),
 ):
     """
     계약서 PDF/HWPX 업로드 → 위험 분석
+    
+    같은 파일이면 DB에서 바로 불러오기 (캐시 조회)
     """
     logger.info(f"[계약서 분석] ========== v2 엔드포인트 호출 시작 ==========")
     logger.info(f"[계약서 분석] 파일명: {file.filename}, title: {title}, doc_type: {doc_type}, user_id: {x_user_id}")
     
     if not file.filename:
         raise HTTPException(status_code=400, detail="파일이 필요합니다.")
+
+    # STEP 1 - 캐시 조회: 같은 파일이면 DB에서 바로 불러오기
+    # ⚠️ 개발/테스트 단계: 캐시 조회 비활성화 (항상 분석 수행)
+    # TODO: 운영 환경에서는 아래 주석을 해제하여 캐시 조회 활성화
+    """
+    fileName = file.filename
+    logger.info(f"[계약서 분석] STEP 1 - 캐시 조회 시작: file_name={fileName}")
+    
+    try:
+        storage_service = get_storage_service()
+        cached_analysis = await storage_service.get_contract_analysis_by_filename(
+            file_name=fileName,
+            user_id=x_user_id
+        )
+        
+        if cached_analysis:
+            logger.info(f"[계약서 분석] ✅ 캐시에서 분석 결과 발견: doc_id={cached_analysis.get('docId')}, file_name={fileName}")
+            logger.info(f"[계약서 분석] 캐시 응답 반환: issues={len(cached_analysis.get('issues', []))}개, clauses={len(cached_analysis.get('clauses', []))}개")
+            
+            # v2 응답 형식으로 변환하여 반환
+            return ContractAnalysisResponseV2(**cached_analysis)
+        else:
+            logger.info(f"[계약서 분석] 캐시에 없음, 전체 파이프라인 실행: file_name={fileName}")
+    except Exception as cache_error:
+        logger.warning(f"[계약서 분석] 캐시 조회 실패, 전체 파이프라인 실행: {str(cache_error)}", exc_info=True)
+        # 캐시 조회 실패해도 계속 진행
+    """
+    
+    # 개발/테스트 단계: 항상 전체 파이프라인 실행
+    fileName = file.filename
+    logger.info(f"[계약서 분석] ⚠️ 개발 모드: 캐시 조회 비활성화, 항상 전체 파이프라인 실행: file_name={fileName}")
+    
+    # STEP 2 - 전체 파이프라인 실행
+    logger.info(f"[계약서 분석] STEP 2 - 전체 파이프라인 실행 시작: file_name={fileName}")
 
     temp_path = None
     try:
@@ -227,16 +268,25 @@ async def analyze_contract(
         # contract_chunks 저장을 먼저 완료
         chunks_saved = await prepare_contract_chunks()
         
+        # Step 1: canonical clause 리스트 생성
+        clauses = extract_clauses(extracted_text)
+        logger.info(f"[계약서 분석] clause 추출 완료: {len(clauses)}개")
+        
         # 저장 완료 후 분석 시작 (Dual RAG에서 contract_chunks 사용 가능)
         async def analyze_contract_risk():
-            """법률 리스크 분석 (Dual RAG 지원)"""
+            """법률 리스크 분석 (clause_id 기반)"""
             service = get_legal_service()
             # doc_id를 전달하여 contract_chunks도 검색
             # chunks_saved가 True면 contract_chunks가 저장되어 있으므로 검색 가능
+            # clauses를 전달하여 clause_id 기반 분석 수행
             return await service.analyze_contract(
                 extracted_text=extracted_text,
-                description=None,
+                description=concerns,  # 사용자 고민사항을 description으로 전달
                 doc_id=doc_id if chunks_saved else None,  # 저장 실패 시 None 전달
+                clauses=clauses,  # clause 리스트 전달
+                contract_type=contract_type,
+                user_role=user_role,
+                field=field,
             )
         
         # 분석 실행
@@ -258,54 +308,131 @@ async def analyze_contract(
             "stock_option_ip": 0,
         }
         
-        # issues 변환 및 originalText 검증
+        # issues 변환: clause_id 기반으로 original_text 채우기
         issues = []
-        for idx, issue in enumerate(result.issues):
-            # originalText 추출: LegalIssue의 original_text 필드 우선 사용
-            original_text = ""
-            if hasattr(issue, 'original_text') and issue.original_text:
-                original_text = issue.original_text
-            elif issue.description:
-                # 하위 호환성: original_text가 없으면 description 사용
-                original_text = issue.description[:200]
-            
-            # originalText 검증: 계약서 원문에 정확히 일치하는지 확인
-            original_text_validated = original_text
-            if original_text and extracted_text:
-                # 정확히 일치하는지 확인
-                if extracted_text.find(original_text) < 0:
-                    # 정확히 일치하지 않으면 부분 매칭 시도
-                    # originalText의 처음 50자로 검색
-                    partial_match = extracted_text.find(original_text[:50])
-                    if partial_match >= 0:
-                        # 부분 매칭된 경우, 해당 위치의 텍스트 추출
-                        # 문장 단위로 확장하여 추출
-                        start_pos = partial_match
-                        # 앞으로 문장 시작 찾기
-                        while start_pos > 0 and extracted_text[start_pos] not in ['\n', '。', '.']:
-                            start_pos -= 1
-                        start_pos = max(0, start_pos + 1)
-                        # 뒤로 문장 끝 찾기
-                        end_pos = min(partial_match + len(original_text), len(extracted_text))
-                        while end_pos < len(extracted_text) and extracted_text[end_pos] not in ['\n', '。', '.']:
-                            end_pos += 1
-                        original_text_validated = extracted_text[start_pos:end_pos].strip()
-                        logger.info(f"[originalText 검증] issue-{idx+1}: 부분 매칭으로 수정됨 (길이: {len(original_text)} -> {len(original_text_validated)})")
+        clauses_by_id = {c["id"]: c for c in clauses}
+        
+        logger.info(f"[계약서 분석] result.issues 개수: {len(result.issues) if result and result.issues else 0}")
+        
+        if not result:
+            logger.error(f"[계약서 분석] result가 None입니다!")
+        elif not result.issues:
+            logger.error(f"[계약서 분석] result.issues가 비어있습니다. result 타입: {type(result)}, result.issues 타입: {type(result.issues) if hasattr(result, 'issues') else 'N/A'}")
+        else:
+            logger.info(f"[계약서 분석] result.issues 타입: {type(result.issues)}, 첫 번째 issue 타입: {type(result.issues[0]) if result.issues else 'N/A'}")
+            for idx, issue in enumerate(result.issues):
+                try:
+                    # clause_id 기반으로 original_text 채우기
+                    # LegalIssue는 clause_id 필드를 사용
+                    clause_id = getattr(issue, 'clause_id', None)
+                    original_text = ""
+                    
+                    if clause_id and clause_id in clauses_by_id:
+                        # 새 방식: clause.content를 original_text로 사용
+                        clause = clauses_by_id[clause_id]
+                        original_text = clause.get("content", "")
+                        logger.info(f"[계약서 분석] issue-{idx+1}: clause_id={clause_id} 기반으로 original_text 설정 (길이={len(original_text)})")
                     else:
-                        logger.warning(f"[originalText 검증] issue-{idx+1}: originalText를 계약서 원문에서 찾을 수 없음. originalText 길이={len(original_text)}")
-                        # 검증 실패 시 원본 유지 (하위 호환성)
-            
-            issue_v2 = ContractIssueV2(
-                id=f"issue-{idx+1}",
-                category=issue.name.lower().replace(" ", "_"),
-                severity=issue.severity,
-                summary=issue.description,
-                originalText=original_text_validated,  # 검증된 originalText 사용
-                legalBasis=issue.legal_basis,
-                explanation=issue.rationale or issue.description,
-                suggestedRevision=issue.suggested_text or "",
-            )
-            issues.append(issue_v2)
+                        # clause_id가 있지만 clauses_by_id에 없는 경우
+                        if clause_id:
+                            logger.warning(f"[계약서 분석] issue-{idx+1}: clause_id={clause_id}가 clauses_by_id에 없습니다. 사용 가능한 clause_id: {list(clauses_by_id.keys())[:10]}")
+                            # 가장 유사한 clause 찾기 시도 (clause 번호만 추출)
+                            import re
+                            clause_num_match = re.search(r'clause-(\d+)', clause_id)
+                            if clause_num_match:
+                                clause_num = int(clause_num_match.group(1))
+                                # clause 번호가 범위를 벗어나면 가장 가까운 것으로 매핑
+                                if clause_num > len(clauses_by_id):
+                                    # 가장 마지막 clause 사용
+                                    last_clause_id = f"clause-{len(clauses_by_id)}"
+                                    if last_clause_id in clauses_by_id:
+                                        clause_id = last_clause_id
+                                        clause = clauses_by_id[clause_id]
+                                        original_text = clause.get("content", "")
+                                        logger.info(f"[계약서 분석] issue-{idx+1}: clause_id를 {last_clause_id}로 수정하여 매핑 (길이={len(original_text)})")
+                                    else:
+                                        original_text = ""
+                                else:
+                                    original_text = ""
+                            else:
+                                original_text = ""
+                        else:
+                            # clause_id가 없는 경우: 레거시 방식
+                            if hasattr(issue, 'original_text') and issue.original_text:
+                                original_text = issue.original_text
+                            elif hasattr(issue, 'description') and issue.description:
+                                original_text = issue.description[:200]
+                            else:
+                                original_text = ""
+                            logger.info(f"[계약서 분석] issue-{idx+1}: 레거시 방식으로 original_text 설정 (clause_id={clause_id})")
+                    
+                    # clause_id가 없으면 로깅
+                    if not clause_id:
+                        logger.warning(f"[계약서 분석] issue-{idx+1}: clause_id가 없습니다. issue 객체 속성: {[attr for attr in dir(issue) if not attr.startswith('_')]}")
+                    
+                    # issue_id 추출 (새 스키마에서는 name이 issue_id)
+                    issue_id = getattr(issue, 'name', None) or getattr(issue, 'issue_id', None) or f"issue-{idx+1}"
+                    
+                    # category 추출 (새 스키마에서는 category 필드 사용)
+                    category = getattr(issue, 'category', None) or (issue_id.lower().replace(" ", "_") if issue_id else "unknown")
+                    
+                    # severity 추출
+                    severity = getattr(issue, 'severity', 'medium')
+                    
+                    # description 추출
+                    description = getattr(issue, 'description', '') or getattr(issue, 'summary', '')
+                    
+                    # legal_basis 추출
+                    legal_basis = getattr(issue, 'legal_basis', []) or []
+                    
+                    # rationale 추출
+                    rationale = getattr(issue, 'rationale', None) or getattr(issue, 'reason', None) or description
+                    
+                    # suggested_text 추출
+                    suggested_text = getattr(issue, 'suggested_text', None) or getattr(issue, 'suggested_revision', None) or ""
+                    
+                    # toxic_clause_detail 추출
+                    toxic_clause_detail = getattr(issue, 'toxic_clause_detail', None)
+                    toxic_clause_detail_v2 = None
+                    if toxic_clause_detail:
+                        from models.schemas import ToxicClauseDetail
+                        try:
+                            # LegalIssue의 toxic_clause_detail이 이미 ToxicClauseDetail 객체인 경우
+                            if isinstance(toxic_clause_detail, ToxicClauseDetail):
+                                toxic_clause_detail_v2 = toxic_clause_detail
+                            # Dict인 경우 변환
+                            elif isinstance(toxic_clause_detail, dict):
+                                toxic_clause_detail_v2 = ToxicClauseDetail(
+                                    clauseLocation=toxic_clause_detail.get("clause_location", ""),
+                                    contentSummary=toxic_clause_detail.get("content_summary", ""),
+                                    whyRisky=toxic_clause_detail.get("why_risky", ""),
+                                    realWorldProblems=toxic_clause_detail.get("real_world_problems", ""),
+                                    suggestedRevisionLight=toxic_clause_detail.get("suggested_revision_light", ""),
+                                    suggestedRevisionFormal=toxic_clause_detail.get("suggested_revision_formal", ""),
+                                )
+                        except Exception as toxic_err:
+                            logger.warning(f"[계약서 분석] toxic_clause_detail 변환 실패: {str(toxic_err)}")
+                    
+                    issue_v2 = ContractIssueV2(
+                        id=issue_id,
+                        category=category,
+                        severity=severity,
+                        summary=description,
+                        originalText=original_text,  # clause.content 또는 issue.original_text
+                        legalBasis=legal_basis,
+                        explanation=rationale,
+                        suggestedRevision=suggested_text,
+                        clauseId=clause_id,  # clause_id 추가
+                        toxicClauseDetail=toxic_clause_detail_v2,  # 독소조항 상세 정보
+                    )
+                    issues.append(issue_v2)
+                    logger.debug(f"[계약서 분석] issue-{idx+1} 변환 완료: id={issue_id}, category={category}, severity={severity}")
+                except Exception as issue_error:
+                    logger.error(f"[계약서 분석] issue-{idx+1} 변환 실패: {str(issue_error)}", exc_info=True)
+                    # 개별 issue 변환 실패해도 계속 진행
+                    continue
+        
+        logger.info(f"[계약서 분석] 최종 issues 개수: {len(issues)}개")
         
         # retrievedContexts 변환
         retrieved_contexts = []
@@ -316,19 +443,168 @@ async def analyze_contract(
                 "snippet": chunk.snippet,
             })
         
-        # 조항 자동 분류 및 하이라이트
-        clauses = []
+        # clauses에 이슈 정보 attach 및 하이라이트 생성 헬퍼 함수
+        def attach_issue_info_to_clauses(clauses: List[Dict], issues: List) -> List[Dict]:
+            """clauses에 이슈 정보(severity, category) attach"""
+            clauses_by_id = {c["id"]: c.copy() for c in clauses}
+            severity_order = {"low": 1, "medium": 2, "high": 3}
+            
+            for issue in issues:
+                clause_id = getattr(issue, 'clauseId', None) or issue.clauseId if hasattr(issue, 'clauseId') else None
+                if not clause_id:
+                    continue
+                
+                clause = clauses_by_id.get(clause_id)
+                if not clause:
+                    continue
+                
+                # 최고 severity
+                current_severity = clause.get("severity")
+                new_severity = issue.severity
+                if new_severity and (
+                    not current_severity
+                    or severity_order.get(new_severity, 0) > severity_order.get(current_severity or "low", 0)
+                ):
+                    clause["severity"] = new_severity
+                
+                # 카테고리 (첫 번째 이슈의 category 사용)
+                if not clause.get("category") and issue.category:
+                    clause["category"] = issue.category
+            
+            return list(clauses_by_id.values())
+        
+        def build_highlights_from_clauses(clauses: List[Dict], issues: List) -> List[Dict]:
+            """clause 기준으로 하이라이트 생성"""
+            highlights = []
+            issues_by_clause = {}
+            
+            logger.info(f"[하이라이트 생성] issues 개수: {len(issues)}, clauses 개수: {len(clauses)}")
+            
+            # issues의 clauseId 수집
+            for issue in issues:
+                # ContractIssueV2는 clauseId 필드 사용
+                clause_id = getattr(issue, 'clauseId', None)
+                if not clause_id:
+                    # LegalIssue는 clause_id 필드 사용 (레거시)
+                    clause_id = getattr(issue, 'clause_id', None)
+                
+                if clause_id:
+                    issues_by_clause.setdefault(clause_id, []).append(issue)
+                    logger.debug(f"[하이라이트 생성] issue {getattr(issue, 'id', 'unknown')} -> clause_id={clause_id}")
+                else:
+                    logger.warning(f"[하이라이트 생성] issue {getattr(issue, 'id', 'unknown')}에 clause_id가 없습니다. issue 타입: {type(issue)}, 속성: {dir(issue) if hasattr(issue, '__dict__') else 'N/A'}")
+            
+            logger.info(f"[하이라이트 생성] issues_by_clause: {list(issues_by_clause.keys())}")
+            
+            # 사용 가능한 clause_id 목록
+            available_clause_ids = set()
+            for clause in clauses:
+                if isinstance(clause, dict):
+                    available_clause_ids.add(clause.get("id"))
+                else:
+                    available_clause_ids.add(getattr(clause, 'id', None))
+            logger.info(f"[하이라이트 생성] 사용 가능한 clause_id: {sorted(available_clause_ids)}")
+            
+            # 매칭되지 않는 clause_id 확인
+            unmatched_clause_ids = set(issues_by_clause.keys()) - available_clause_ids
+            if unmatched_clause_ids:
+                logger.warning(f"[하이라이트 생성] ⚠️ 매칭되지 않는 clause_id: {unmatched_clause_ids}")
+                # 가장 가까운 clause_id로 매핑 시도
+                for unmatched_id in unmatched_clause_ids:
+                    import re
+                    num_match = re.search(r'clause-(\d+)', unmatched_id)
+                    if num_match:
+                        unmatched_num = int(num_match.group(1))
+                        # 가장 가까운 clause 찾기
+                        best_match = None
+                        best_diff = float('inf')
+                        for clause_id in available_clause_ids:
+                            if clause_id:
+                                match = re.search(r'clause-(\d+)', clause_id)
+                                if match:
+                                    clause_num = int(match.group(1))
+                                    diff = abs(clause_num - unmatched_num)
+                                    if diff < best_diff:
+                                        best_diff = diff
+                                        best_match = clause_id
+                        
+                        if best_match and best_diff <= 3:  # 3 이내 차이만 허용
+                            logger.info(f"[하이라이트 생성] clause_id {unmatched_id}를 {best_match}로 매핑 (차이: {best_diff})")
+                            # issues_by_clause 업데이트
+                            if unmatched_id in issues_by_clause:
+                                issues_by_clause.setdefault(best_match, []).extend(issues_by_clause[unmatched_id])
+                                del issues_by_clause[unmatched_id]
+            
+            # clauses와 매칭
+            for clause in clauses:
+                # clause가 Dict인지 ClauseV2인지 확인
+                if isinstance(clause, dict):
+                    clause_id = clause.get("id")
+                    clause_content = clause.get("content", "")
+                    clause_start = clause.get("startIndex", 0)
+                    clause_end = clause.get("endIndex", 0)
+                else:
+                    # ClauseV2 객체
+                    clause_id = getattr(clause, 'id', None)
+                    clause_content = getattr(clause, 'content', "")
+                    clause_start = getattr(clause, 'startIndex', 0)
+                    clause_end = getattr(clause, 'endIndex', 0)
+                
+                if not clause_id:
+                    logger.warning(f"[하이라이트 생성] clause에 id가 없습니다: {clause}")
+                    continue
+                
+                clause_issues = issues_by_clause.get(clause_id, [])
+                if not clause_issues:
+                    continue
+                
+                logger.info(f"[하이라이트 생성] clause {clause_id}에 {len(clause_issues)}개 이슈 매칭됨")
+                
+                # clause에 걸린 이슈 중 최고 severity
+                severity = max(
+                    (getattr(i, 'severity', 'low') for i in clause_issues),
+                    key=lambda s: {"low": 1, "medium": 2, "high": 3}.get(s or "low", 0),
+                    default="low",
+                )
+                
+                highlights.append({
+                    "text": clause_content,
+                    "startIndex": clause_start,
+                    "endIndex": clause_end,
+                    "severity": severity,
+                    "clauseId": clause_id,
+                    "issueIds": [getattr(i, 'id', str(i)) for i in clause_issues],
+                })
+            
+            logger.info(f"[하이라이트 생성] 최종 하이라이트 개수: {len(highlights)}")
+            return highlights
+        
+        # clauses에 이슈 정보 attach 및 하이라이트 생성
         highlighted_texts = []
         
         try:
-            # 1. 조항 자동 분류
-            labeling_tool = ClauseLabelingTool()
-            labeling_result = await labeling_tool.execute(
-                contract_text=extracted_text,
-                issues=[issue.model_dump() for issue in issues]
-            )
+            # clauses를 Dict 형식으로 변환 (하이라이트 생성 전에)
+            clauses_dict = [
+                {
+                    "id": c.get("id") if isinstance(c, dict) else getattr(c, 'id', ''),
+                    "title": c.get("title") if isinstance(c, dict) else getattr(c, 'title', ''),
+                    "content": c.get("content") if isinstance(c, dict) else getattr(c, 'content', ''),
+                    "articleNumber": c.get("articleNumber") if isinstance(c, dict) else getattr(c, 'articleNumber', None),
+                    "startIndex": c.get("startIndex", 0) if isinstance(c, dict) else getattr(c, 'startIndex', 0),
+                    "endIndex": c.get("endIndex", 0) if isinstance(c, dict) else getattr(c, 'endIndex', 0),
+                    "category": c.get("category") if isinstance(c, dict) else getattr(c, 'category', None),
+                }
+                for c in clauses
+            ]
             
-            clauses = [
+            # 1. clauses에 이슈 정보 attach (severity, category)
+            clauses_dict = attach_issue_info_to_clauses(clauses_dict, issues)
+            
+            # 2. clause 기준으로 하이라이트 생성 (Dict 리스트)
+            highlighted_texts_dict = build_highlights_from_clauses(clauses_dict, issues)
+            
+            # 3. clauses를 ClauseV2 형식으로 변환
+            clauses_v2 = [
                 ClauseV2(
                     id=clause["id"],
                     title=clause["title"],
@@ -338,57 +614,59 @@ async def analyze_contract(
                     endIndex=clause.get("endIndex", 0),
                     category=clause.get("category")
                 )
-                for clause in labeling_result.get("clauses", [])
+                for clause in clauses
             ]
+            clauses = clauses_v2
             
-            # issue에 clauseId 매핑
-            issue_clause_mapping = labeling_result.get("issue_clause_mapping", {})
+            # 4. highlighted_texts를 HighlightedTextV2 형식으로 변환 (프론트엔드 호환성)
+            # 프론트엔드는 issueId를 기대하므로 각 issueId마다 별도로 생성
+            highlighted_texts = []
+            for ht_dict in highlighted_texts_dict:
+                issue_ids = ht_dict.get("issueIds", [])
+                if issue_ids:
+                    # 각 issueId마다 별도의 HighlightedTextV2 생성
+                    for issue_id in issue_ids:
+                        highlighted_texts.append(
+                            HighlightedTextV2(
+                                text=ht_dict["text"],
+                                startIndex=ht_dict["startIndex"],
+                                endIndex=ht_dict["endIndex"],
+                                severity=ht_dict["severity"],
+                                issueId=issue_id,
+                            )
+                        )
+                else:
+                    # issueIds가 없으면 clauseId를 issueId로 사용 (하위 호환성)
+                    highlighted_texts.append(
+                        HighlightedTextV2(
+                            text=ht_dict["text"],
+                            startIndex=ht_dict["startIndex"],
+                            endIndex=ht_dict["endIndex"],
+                            severity=ht_dict["severity"],
+                            issueId=ht_dict.get("clauseId", ""),
+                        )
+                    )
+            
+            # 5. issue에 startIndex, endIndex 추가 (clause 기준)
             for issue_v2 in issues:
-                matched_clause_ids = issue_clause_mapping.get(issue_v2.id, [])
-                if matched_clause_ids:
-                    issue_v2.clauseId = matched_clause_ids[0]  # 첫 번째 매칭된 조항
+                if issue_v2.clauseId:
+                    # clauses_dict에서 찾기
+                    matched_clause = next((c for c in clauses_dict if c.get("id") == issue_v2.clauseId), None)
+                    if matched_clause:
+                        issue_v2.startIndex = matched_clause.get("startIndex")
+                        issue_v2.endIndex = matched_clause.get("endIndex")
+                        logger.debug(f"[하이라이트 생성] issue {issue_v2.id}에 startIndex={issue_v2.startIndex}, endIndex={issue_v2.endIndex} 설정")
+                    else:
+                        logger.warning(f"[하이라이트 생성] issue {issue_v2.id}의 clauseId {issue_v2.clauseId}를 clauses_dict에서 찾을 수 없음")
             
-            # 2. 위험 조항 하이라이트
-            highlight_tool = HighlightTool()
-            highlight_result = await highlight_tool.execute(
-                contract_text=extracted_text,
-                issues=[issue.model_dump() for issue in issues]
-            )
-            
-            highlighted_texts = [
-                HighlightedTextV2(
-                    text=ht["text"],
-                    startIndex=ht["startIndex"],
-                    endIndex=ht["endIndex"],
-                    severity=ht["severity"],
-                    issueId=ht["issueId"]
-                )
-                for ht in highlight_result.get("highlightedTexts", [])
-            ]
-            
-            # issue에 startIndex, endIndex 추가
-            for issue_v2 in issues:
-                for ht in highlighted_texts:
-                    if ht.issueId == issue_v2.id:
-                        issue_v2.startIndex = ht.startIndex
-                        issue_v2.endIndex = ht.endIndex
-                        break
-            
-            logger.info(f"[계약서 분석] 조항 분류 완료: {len(clauses)}개 조항, {len(highlighted_texts)}개 하이라이트")
+            logger.info(f"[계약서 분석] clause 기반 처리 완료: {len(clauses)}개 조항, {len(highlighted_texts)}개 하이라이트")
             
             # 검증: clauses가 비어있으면 경고
             if not clauses:
-                logger.warning(f"[계약서 분석] ⚠️ 조항이 추출되지 않았습니다. 계약서에 '제n조' 패턴이 없을 수 있습니다.")
-            
-            # 검증: highlightedTexts가 비어있으면 경고
-            if not highlighted_texts and issues:
-                logger.warning(f"[계약서 분석] ⚠️ 하이라이트된 텍스트가 없습니다. originalText 매칭 실패 가능성.")
-                # originalText가 있는 issues 개수 확인
-                issues_with_original = sum(1 for issue in issues if issue.originalText and issue.originalText.strip())
-                logger.info(f"[계약서 분석] originalText가 있는 issues: {issues_with_original}/{len(issues)}개")
+                logger.warning(f"[계약서 분석] ⚠️ 조항이 추출되지 않았습니다.")
         except Exception as e:
-            logger.warning(f"[계약서 분석] 조항 분류/하이라이트 실패: {str(e)}", exc_info=True)
-            # 실패해도 계속 진행 (clauses와 highlightedTexts는 빈 배열로 유지)
+            logger.warning(f"[계약서 분석] clause 기반 처리 실패: {str(e)}", exc_info=True)
+            # 실패해도 계속 진행
         
         # 결과 저장 (DB에 저장)
         # contractText 설정 전 확인
@@ -397,6 +675,45 @@ async def analyze_contract(
         # extracted_text가 None이면 빈 문자열로 변환
         contract_text_value = extracted_text if extracted_text else ""
         logger.info(f"[계약서 분석] contractText 값 설정: 길이={len(contract_text_value)}, 비어있음={not contract_text_value or contract_text_value.strip() == ''}")
+        
+        # 새로운 독소조항 탐지 필드 추출
+        one_line_summary = getattr(result, 'one_line_summary', None)
+        risk_traffic_light = getattr(result, 'risk_traffic_light', None)
+        top3_action_points = getattr(result, 'top3_action_points', None)
+        risk_summary_table = getattr(result, 'risk_summary_table', None)
+        toxic_clauses = getattr(result, 'toxic_clauses', None)
+        negotiation_questions = getattr(result, 'negotiation_questions', None)
+        
+        # risk_summary_table을 Dict로 변환 (JSON 직렬화를 위해)
+        risk_summary_table_dict = None
+        if risk_summary_table:
+            from models.schemas import RiskSummaryItem
+            risk_summary_table_dict = [
+                {
+                    "item": item.item,
+                    "riskLevel": item.riskLevel,
+                    "problemPoint": item.problemPoint,
+                    "simpleExplanation": item.simpleExplanation,
+                    "revisionKeyword": item.revisionKeyword,
+                }
+                for item in risk_summary_table
+            ]
+        
+        # toxic_clauses를 Dict로 변환
+        toxic_clauses_dict = None
+        if toxic_clauses:
+            from models.schemas import ToxicClauseDetail
+            toxic_clauses_dict = [
+                {
+                    "clauseLocation": detail.clauseLocation,
+                    "contentSummary": detail.contentSummary,
+                    "whyRisky": detail.whyRisky,
+                    "realWorldProblems": detail.realWorldProblems,
+                    "suggestedRevisionLight": detail.suggestedRevisionLight,
+                    "suggestedRevisionFormal": detail.suggestedRevisionFormal,
+                }
+                for detail in toxic_clauses
+            ]
         
         analysis_result = ContractAnalysisResponseV2(
             docId=doc_id,
@@ -411,6 +728,13 @@ async def analyze_contract(
             clauses=clauses,  # 조항 목록
             highlightedTexts=highlighted_texts,  # 하이라이트된 텍스트
             createdAt=datetime.utcnow().isoformat() + "Z",
+            # 새로운 독소조항 탐지 필드
+            oneLineSummary=one_line_summary,
+            riskTrafficLight=risk_traffic_light,
+            top3ActionPoints=top3_action_points,
+            riskSummaryTable=risk_summary_table_dict,
+            toxicClauses=toxic_clauses_dict,
+            negotiationQuestions=negotiation_questions,
         )
         
         # 생성 후 확인
@@ -463,16 +787,25 @@ async def analyze_contract(
                 for clause in clauses
             ] if clauses else []
             
-            highlighted_texts_for_db = [
-                {
-                    "text": ht.text,
-                    "startIndex": ht.startIndex,
-                    "endIndex": ht.endIndex,
-                    "severity": ht.severity,
-                    "issueId": ht.issueId,
-                }
-                for ht in highlighted_texts
-            ] if highlighted_texts else []
+            # highlighted_texts는 HighlightedTextV2 객체 리스트이므로 Dict로 변환
+            highlighted_texts_for_db = []
+            if highlighted_texts:
+                for ht in highlighted_texts:
+                    if isinstance(ht, dict):
+                        # 이미 Dict면 그대로 사용
+                        highlighted_texts_for_db.append(ht)
+                    else:
+                        # HighlightedTextV2 객체면 Dict로 변환
+                        highlighted_texts_for_db.append({
+                            "text": getattr(ht, 'text', ''),
+                            "startIndex": getattr(ht, 'startIndex', 0),
+                            "endIndex": getattr(ht, 'endIndex', 0),
+                            "severity": getattr(ht, 'severity', 'low'),
+                            "issueId": getattr(ht, 'issueId', ''),
+                            "clauseId": getattr(ht, 'clauseId', None),
+                            "issueIds": getattr(ht, 'issueIds', []),
+                        })
+            logger.info(f"[DB 저장] highlighted_texts_for_db 개수: {len(highlighted_texts_for_db)}")
             
             await storage_service.save_contract_analysis(
                 doc_id=doc_id,

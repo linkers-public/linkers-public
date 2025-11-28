@@ -65,6 +65,9 @@ class LegalIssue(BaseModel):
     rationale: Optional[str] = Field(None, description="수정 이유/근거")
     suggested_questions: List[str] = Field(default_factory=list, description="협상/질문 스크립트")
     original_text: Optional[str] = Field(None, description="계약서 원문에서 해당 위험 조항의 실제 텍스트")
+    clause_id: Optional[str] = Field(None, description="연결된 clause ID (새 파이프라인)")
+    category: Optional[str] = Field(None, description="이슈 카테고리 (wage, working_hours, job_stability, dismissal 등)")
+    toxic_clause_detail: Optional["ToxicClauseDetail"] = Field(None, description="독소조항 상세 정보")
 
 
 class LegalRecommendation(BaseModel):
@@ -95,6 +98,13 @@ class LegalAnalysisResult(BaseModel):
         default_factory=list,
         description="RAG로 가져온 근거 텍스트 목록",
     )
+    # 새로운 독소조항 탐지 필드
+    one_line_summary: Optional[str] = Field(None, description="한 줄 총평")
+    risk_traffic_light: Optional[str] = Field(None, description="리스크 신호등: 🟢 | 🟡 | 🔴")
+    top3_action_points: Optional[List[str]] = Field(None, description="지금 당장 확인하거나 물어봐야 할 포인트 3개")
+    risk_summary_table: Optional[List["RiskSummaryItem"]] = Field(None, description="리스크 요약 테이블")
+    toxic_clauses: Optional[List["ToxicClauseDetail"]] = Field(None, description="독소조항 상세 목록")
+    negotiation_questions: Optional[List[str]] = Field(None, description="협상 시 질문 리스트")
 
 
 class LegalAnalyzeContractRequest(BaseModel):
@@ -102,6 +112,23 @@ class LegalAnalyzeContractRequest(BaseModel):
     description: Optional[str] = Field(
         None,
         description="사용자가 설명한 법적 상황/걱정 포인트",
+    )
+    # 새로운 사용자 입력 파라미터
+    contract_type: Optional[str] = Field(
+        None,
+        description="계약 종류: freelancer | part_time | regular | service | other",
+    )
+    user_role: Optional[str] = Field(
+        None,
+        description="역할: worker (을/프리랜서/근로자) | employer (갑/발주사/고용주)",
+    )
+    field: Optional[str] = Field(
+        None,
+        description="분야: it_dev | design | marketing | other",
+    )
+    concerns: Optional[str] = Field(
+        None,
+        description="우선 확인하고 싶은 고민 (예: '대금 미지급이 걱정', '야근/추가근로', '경업금지')",
     )
 
 
@@ -306,6 +333,23 @@ class HighlightedTextV2(BaseModel):
     issueId: str  # 연결된 issue ID
 
 
+class ToxicClauseDetail(BaseModel):
+    """독소조항 상세 정보"""
+    clauseLocation: str = Field(..., description="조항 위치 (예: '제○조(손해배상)')")
+    contentSummary: str = Field(..., description="내용 요약")
+    whyRisky: str = Field(..., description="왜 위험한지")
+    realWorldProblems: str = Field(..., description="현실에서 생길 수 있는 문제")
+    suggestedRevisionLight: str = Field(..., description="라이트 버전 수정 제안 (일반인 말투)")
+    suggestedRevisionFormal: str = Field(..., description="포멀 버전 수정 제안 (로펌/변호사용)")
+
+class RiskSummaryItem(BaseModel):
+    """리스크 요약 테이블 항목"""
+    item: str = Field(..., description="항목명 (예: '대금 지급')")
+    riskLevel: str = Field(..., description="리스크 수준: low | medium | high")
+    problemPoint: str = Field(..., description="문제 포인트")
+    simpleExplanation: str = Field(..., description="간단 설명")
+    revisionKeyword: str = Field(..., description="수정 제안 키워드")
+
 class ContractIssueV2(BaseModel):
     """계약서 이슈 (v2)"""
     id: str
@@ -319,6 +363,8 @@ class ContractIssueV2(BaseModel):
     clauseId: Optional[str] = None  # 연결된 조항 ID
     startIndex: Optional[int] = None  # 원문에서 시작 위치
     endIndex: Optional[int] = None  # 원문에서 종료 위치
+    # 독소조항 관련 필드
+    toxicClauseDetail: Optional[ToxicClauseDetail] = None  # 독소조항 상세 정보
 
 
 class ContractAnalysisResponseV2(BaseModel):
@@ -335,6 +381,13 @@ class ContractAnalysisResponseV2(BaseModel):
     clauses: List[ClauseV2] = []  # 조항 목록 (자동 분류)
     highlightedTexts: List[HighlightedTextV2] = []  # 하이라이트된 텍스트
     createdAt: str
+    # 새로운 독소조항 탐지 결과 필드
+    oneLineSummary: Optional[str] = Field(None, description="한 줄 총평")
+    riskTrafficLight: Optional[str] = Field(None, description="리스크 신호등: 🟢 | 🟡 | 🔴")
+    top3ActionPoints: Optional[List[str]] = Field(None, description="지금 당장 확인하거나 물어봐야 할 포인트 3개")
+    riskSummaryTable: Optional[List[RiskSummaryItem]] = Field(None, description="리스크 요약 테이블")
+    toxicClauses: Optional[List[ToxicClauseDetail]] = Field(None, description="독소조항 상세 목록")
+    negotiationQuestions: Optional[List[str]] = Field(None, description="협상 시 질문 리스트")
 
 
 class ContractComparisonRequestV2(BaseModel):

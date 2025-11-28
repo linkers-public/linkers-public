@@ -27,6 +27,13 @@ export default function ContractDetailPage() {
   const [externalMessage, setExternalMessage] = useState<string>('')
   const [clauses, setClauses] = useState<any[]>([])  // ✨ 추가
   const [highlightedTexts, setHighlightedTexts] = useState<any[]>([])  // ✨ 추가
+  // 새로운 독소조항 탐지 필드
+  const [oneLineSummary, setOneLineSummary] = useState<string | undefined>()
+  const [riskTrafficLight, setRiskTrafficLight] = useState<string | undefined>()
+  const [top3ActionPoints, setTop3ActionPoints] = useState<string[]>([])
+  const [riskSummaryTable, setRiskSummaryTable] = useState<any[]>([])
+  const [toxicClauses, setToxicClauses] = useState<any[]>([])
+  const [negotiationQuestions, setNegotiationQuestions] = useState<string[]>([])
   
   // 스와이프 제스처 상태
   const [touchStart, setTouchStart] = useState<{ x: number; y: number } | null>(null)
@@ -100,6 +107,13 @@ export default function ContractDetailPage() {
           issues: localData?.issues || localData?.risks || [],
           risk_score: localData?.risk_score || localData?.riskScore || 0,
           summary: localData?.summary || '',
+          // 새로운 독소조항 탐지 필드
+          oneLineSummary: localData?.oneLineSummary,
+          riskTrafficLight: localData?.riskTrafficLight,
+          top3ActionPoints: localData?.top3ActionPoints,
+          riskSummaryTable: localData?.riskSummaryTable,
+          toxicClauses: localData?.toxicClauses,
+          negotiationQuestions: localData?.negotiationQuestions,
         } : (v2Data ? {
           // uuid + v2Data 있음: v2 API 응답 우선 사용
           risk_score: v2Data.riskScore,
@@ -112,12 +126,26 @@ export default function ContractDetailPage() {
           recommendations: [],
           createdAt: v2Data.createdAt,
           fileUrl: null,
+          // 새로운 독소조항 탐지 필드
+          oneLineSummary: v2Data.oneLineSummary,
+          riskTrafficLight: v2Data.riskTrafficLight,
+          top3ActionPoints: v2Data.top3ActionPoints,
+          riskSummaryTable: v2Data.riskSummaryTable,
+          toxicClauses: v2Data.toxicClauses,
+          negotiationQuestions: v2Data.negotiationQuestions,
         } : {
           // uuid + v2Data 없음: 로컬 스토리지 fallback
           ...localData,
           contractText: localData?.contractText || localData?.contract_text || '',
           contract_text: localData?.contract_text || localData?.contractText || '',
           issues: localData?.issues || localData?.risks || [],
+          // 새로운 독소조항 탐지 필드
+          oneLineSummary: localData?.oneLineSummary,
+          riskTrafficLight: localData?.riskTrafficLight,
+          top3ActionPoints: localData?.top3ActionPoints,
+          riskSummaryTable: localData?.riskSummaryTable,
+          toxicClauses: localData?.toxicClauses,
+          negotiationQuestions: localData?.negotiationQuestions,
         })
         
         if (normalizedData) {
@@ -309,6 +337,14 @@ export default function ContractDetailPage() {
           })
           setClauses(clausesData)
           setHighlightedTexts(normalizedData.highlightedTexts || [])
+          
+          // 새로운 독소조항 탐지 필드 저장
+          setOneLineSummary(normalizedData.oneLineSummary || v2Data?.oneLineSummary)
+          setRiskTrafficLight(normalizedData.riskTrafficLight || v2Data?.riskTrafficLight)
+          setTop3ActionPoints(normalizedData.top3ActionPoints || v2Data?.top3ActionPoints || [])
+          setRiskSummaryTable(normalizedData.riskSummaryTable || v2Data?.riskSummaryTable || [])
+          setToxicClauses(normalizedData.toxicClauses || v2Data?.toxicClauses || [])
+          setNegotiationQuestions(normalizedData.negotiationQuestions || v2Data?.negotiationQuestions || [])
 
           setAnalysisResult(result)
         } else {

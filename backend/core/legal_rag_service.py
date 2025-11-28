@@ -3,7 +3,7 @@ Legal RAG Service - 법률 도메인 RAG 서비스
 계약서 분석, 상황 분석, 케이스 검색 기능 제공
 """
 
-from typing import List, Optional, OrderedDict
+from typing import List, Optional, OrderedDict, Dict
 from pathlib import Path
 from collections import OrderedDict as OrderedDictType
 import asyncio
@@ -108,6 +108,10 @@ class LegalRAGService:
         extracted_text: str,
         description: Optional[str] = None,
         doc_id: Optional[str] = None,
+        clauses: Optional[List[Dict]] = None,
+        contract_type: Optional[str] = None,
+        user_role: Optional[str] = None,
+        field: Optional[str] = None,
     ) -> LegalAnalysisResult:
         """
         계약서 분석 (Dual RAG 지원)
@@ -137,8 +141,8 @@ class LegalRAGService:
                 logger.warning(f"[계약서 분석] contract_chunks 검색 실패 (계속 진행): {str(e)}")
                 contract_chunks = []
         
-        # 2-2. 외부 법령 검색
-        legal_chunks = await self._search_legal_chunks(query=query, top_k=8)
+        # 2-2. 외부 법령 검색 (더 많은 법령 정보 활용)
+        legal_chunks = await self._search_legal_chunks(query=query, top_k=15)
 
         # 3. LLM으로 리스크 요약/분류 (Dual RAG 컨텍스트 포함)
         result = await self._llm_summarize_risk(
@@ -146,6 +150,11 @@ class LegalRAGService:
             contract_text=extracted_text,
             contract_chunks=contract_chunks,
             grounding_chunks=legal_chunks,
+            clauses=clauses,
+            contract_type=contract_type,
+            user_role=user_role,
+            field=field,
+            concerns=description,
         )
         return result
 
@@ -624,6 +633,11 @@ class LegalRAGService:
         contract_text: Optional[str],
         grounding_chunks: List[LegalGroundingChunk],
         contract_chunks: Optional[List[dict]] = None,
+        clauses: Optional[List[Dict]] = None,
+        contract_type: Optional[str] = None,
+        user_role: Optional[str] = None,
+        field: Optional[str] = None,
+        concerns: Optional[str] = None,
     ) -> LegalAnalysisResult:
         """
         LLM 프롬프트를 통해:
@@ -652,13 +666,29 @@ class LegalRAGService:
                 grounding=grounding_chunks,
             )
         
-        # 프롬프트 템플릿 사용 (Dual RAG 지원)
-        prompt = build_contract_analysis_prompt(
-            contract_text=contract_text or "",
-            grounding_chunks=grounding_chunks,
-            contract_chunks=contract_chunks,
-            description=query if query else None,
-        )
+        # 프롬프트 템플릿 사용 (clause_id 기반)
+        # clauses가 있으면 새 방식, 없으면 레거시 방식
+        if clauses:
+            prompt = build_contract_analysis_prompt(
+                contract_text=contract_text or "",
+                clauses=clauses,
+                grounding_chunks=grounding_chunks,
+                contract_chunks=contract_chunks,
+                description=concerns if concerns else (query if query else None),
+                contract_type=contract_type,
+                user_role=user_role,
+                field=field,
+                concerns=concerns,
+            )
+        else:
+            # 레거시: clauses 없이 호출 (하위 호환성)
+            prompt = build_contract_analysis_prompt(
+                contract_text=contract_text or "",
+                clauses=None,
+                grounding_chunks=grounding_chunks,
+                contract_chunks=contract_chunks,
+                description=query if query else None,
+            )
         
 
         try:
@@ -741,39 +771,60 @@ class LegalRAGService:
                         risk_level = analysis.get("risk_level", "medium")
                         summary = analysis.get("summary", "")
                         
+                        # 새로운 독소조항 탐지 필드 파싱
+                        one_line_summary = analysis.get("one_line_summary")
+                        risk_traffic_light = analysis.get("risk_traffic_light")
+                        top3_action_points = analysis.get("top3_action_points", [])
+                        risk_summary_table = analysis.get("risk_summary_table", [])
+                        toxic_clauses = analysis.get("toxic_clauses", [])
+                        negotiation_questions = analysis.get("negotiation_questions", [])
+                        
                         logger.info(f"[LLM 응답 파싱] JSON 파싱 성공: risk_score={risk_score}, risk_level={risk_level}, summary 길이={len(summary)}")
                         logger.info(f"[LLM 응답 파싱] issues 배열 길이: {len(analysis.get('issues', []))}")
+                        logger.info(f"[LLM 응답 파싱] 독소조항 필드: one_line_summary={bool(one_line_summary)}, risk_traffic_light={risk_traffic_light}, top3_action_points={len(top3_action_points)}, toxic_clauses={len(toxic_clauses)}")
                         
                         issues = []
+                        # clauses가 있으면 clause_id 기반 처리, 없으면 레거시 방식
+                        clauses_by_id = {c["id"]: c for c in clauses} if clauses else {}
+                        
                         for issue_data in analysis.get("issues", []):
-                            # original_text 우선 사용 (LLM이 반환한 실제 원문 텍스트)
-                            original_text = issue_data.get("original_text", "")
-                            description = issue_data.get("description", "")
-                            
-                            # original_text가 없으면 description 사용 (하위 호환성)
-                            if not original_text:
-                                original_text = description
-                            
-                            # 계약서 텍스트에서 해당 조항 위치 찾기
-                            start_index = None
-                            end_index = None
-                            
-                            if contract_text and original_text:
-                                # original_text를 사용하여 정확한 위치 찾기
-                                start_index = contract_text.find(original_text)
-                                if start_index >= 0:
-                                    end_index = start_index + len(original_text)
+                            # 새 방식: clause_id 기반
+                            clause_id = issue_data.get("clause_id")
+                            if clause_id and clauses_by_id:
+                                clause = clauses_by_id.get(clause_id)
+                                if clause:
+                                    # clause의 content를 original_text로 사용
+                                    original_text = clause.get("content", "")
+                                    start_index = clause.get("startIndex")
+                                    end_index = clause.get("endIndex")
+                                    logger.debug(f"[LLM 응답 파싱] clause_id 기반: clause_id={clause_id}, start={start_index}, end={end_index}")
                                 else:
-                                    # 정확히 일치하지 않으면 부분 매칭 시도
-                                    # 1. 처음 100자로 검색
-                                    start_index = contract_text.find(original_text[:100])
+                                    logger.warning(f"[LLM 응답 파싱] clause_id를 찾을 수 없음: {clause_id}")
+                                    original_text = ""
+                                    start_index = None
+                                    end_index = None
+                            else:
+                                # 레거시 방식: original_text 직접 사용
+                                original_text = issue_data.get("original_text", "")
+                                description = issue_data.get("description", "")
+                                
+                                # original_text가 없으면 description 사용 (하위 호환성)
+                                if not original_text:
+                                    original_text = description
+                                
+                                # 계약서 텍스트에서 해당 조항 위치 찾기
+                                start_index = None
+                                end_index = None
+                                
+                                if contract_text and original_text:
+                                    # original_text를 사용하여 정확한 위치 찾기
+                                    start_index = contract_text.find(original_text)
                                     if start_index >= 0:
                                         end_index = start_index + len(original_text)
                                     else:
-                                        # 2. 처음 50자로 검색
+                                        # 정확히 일치하지 않으면 부분 매칭 시도
                                         start_index = contract_text.find(original_text[:50])
                                         if start_index >= 0:
-                                            # 문장 단위로 확장
                                             end_pos = min(start_index + len(original_text), len(contract_text))
                                             while end_pos < len(contract_text) and contract_text[end_pos] not in ['\n', '。', '.']:
                                                 end_pos += 1
@@ -781,30 +832,71 @@ class LegalRAGService:
                                         else:
                                             logger.warning(f"[LLM 응답 파싱] originalText를 계약서에서 찾을 수 없음: {original_text[:50]}...")
                             
+                            # issue_id 추출 (새 스키마에서는 issue_id 필드 사용)
+                            issue_id = issue_data.get("issue_id") or issue_data.get("name", "")
+                            description = issue_data.get("summary") or issue_data.get("description", "")
+                            
+                            # 독소조항 상세 정보 파싱
+                            toxic_clause_detail = None
+                            toxic_detail_data = issue_data.get("toxic_clause_detail")
+                            if toxic_detail_data:
+                                from models.schemas import ToxicClauseDetail
+                                try:
+                                    toxic_clause_detail = ToxicClauseDetail(
+                                        clauseLocation=toxic_detail_data.get("clause_location", ""),
+                                        contentSummary=toxic_detail_data.get("content_summary", ""),
+                                        whyRisky=toxic_detail_data.get("why_risky", ""),
+                                        realWorldProblems=toxic_detail_data.get("real_world_problems", ""),
+                                        suggestedRevisionLight=toxic_detail_data.get("suggested_revision_light", ""),
+                                        suggestedRevisionFormal=toxic_detail_data.get("suggested_revision_formal", ""),
+                                    )
+                                except Exception as toxic_err:
+                                    logger.warning(f"[LLM 응답 파싱] toxic_clause_detail 파싱 실패: {str(toxic_err)}")
+                            
                             issue_obj = LegalIssue(
-                                name=issue_data.get("name", ""),
+                                name=issue_id,  # issue_id를 name으로 사용
                                 description=description,
                                 severity=issue_data.get("severity", "medium"),
                                 legal_basis=issue_data.get("legal_basis", []),
                                 start_index=start_index,
                                 end_index=end_index,
-                                suggested_text=issue_data.get("suggested_text"),
-                                rationale=issue_data.get("rationale"),
+                                suggested_text=issue_data.get("suggested_revision") or issue_data.get("suggested_text"),
+                                rationale=issue_data.get("reason") or issue_data.get("rationale"),
                                 suggested_questions=issue_data.get("suggested_questions", []),
-                                original_text=original_text  # original_text 필드 추가
+                                original_text=original_text,
+                                clause_id=clause_id,  # clause_id 추가 (나중에 사용)
+                                category=issue_data.get("category"),  # category 추가
+                                toxic_clause_detail=toxic_clause_detail,  # 독소조항 상세 정보
                             )
                             issues.append(issue_obj)
-                            logger.debug(f"[LLM 응답 파싱] issue[{len(issues)}]: name={issue_obj.name[:50]}, severity={issue_obj.severity}, description 길이={len(description)}")
+                            logger.debug(f"[LLM 응답 파싱] issue[{len(issues)}]: issue_id={issue_id}, clause_id={clause_id}, severity={issue_obj.severity}")
                         
                         logger.info(f"[LLM 응답 파싱] 최종 이슈 개수: {len(issues)}개")
                         
+                        # recommendations 파싱 (에러가 나도 issues는 유지)
                         recommendations = []
-                        for rec_data in analysis.get("recommendations", []):
-                            recommendations.append(LegalRecommendation(
-                                title=rec_data.get("title", ""),
-                                description=rec_data.get("description", ""),
-                                steps=rec_data.get("steps", [])
-                            ))
+                        try:
+                            for rec_data in analysis.get("recommendations", []):
+                                # recommendations가 문자열 배열일 수도 있음
+                                if isinstance(rec_data, str):
+                                    # 문자열이면 title로 사용
+                                    recommendations.append(LegalRecommendation(
+                                        title="권장사항",
+                                        description=rec_data,
+                                        steps=[]
+                                    ))
+                                elif isinstance(rec_data, dict):
+                                    # dict면 기존 로직 사용
+                                    recommendations.append(LegalRecommendation(
+                                        title=rec_data.get("title", ""),
+                                        description=rec_data.get("description", ""),
+                                        steps=rec_data.get("steps", [])
+                                    ))
+                                else:
+                                    logger.warning(f"[LLM 응답 파싱] 알 수 없는 recommendations 형식: {type(rec_data)}")
+                        except Exception as rec_error:
+                            logger.warning(f"[LLM 응답 파싱] recommendations 파싱 실패 (issues는 유지): {str(rec_error)}")
+                            recommendations = []
                         
                         result = LegalAnalysisResult(
                             risk_score=risk_score,

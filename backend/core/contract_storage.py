@@ -98,13 +98,49 @@ class ContractStorageService:
             if contract_text:
                 analysis_data["contract_text"] = contract_text
             
-            # 조항 목록 저장 (JSONB)
+            # 조항 목록 저장 (JSONB) - Pydantic 모델을 dict로 변환
             if clauses:
-                analysis_data["clauses"] = clauses
+                try:
+                    from fastapi.encoders import jsonable_encoder
+                    clauses_json = jsonable_encoder(clauses)
+                    analysis_data["clauses"] = clauses_json
+                    logger.debug(f"[DB 저장] clauses 변환 완료: {len(clauses_json)}개, 타입: {type(clauses_json)}")
+                except Exception as e:
+                    logger.error(f"[DB 저장] clauses 변환 실패: {str(e)}", exc_info=True)
+                    # Fallback: 수동 변환
+                    clauses_json = []
+                    for clause in clauses:
+                        if hasattr(clause, 'model_dump'):  # Pydantic v2
+                            clauses_json.append(clause.model_dump())
+                        elif hasattr(clause, 'dict'):  # Pydantic v1
+                            clauses_json.append(clause.dict())
+                        elif isinstance(clause, dict):
+                            clauses_json.append(clause)
+                        else:
+                            logger.warning(f"[DB 저장] clause 변환 실패: {type(clause)}")
+                    analysis_data["clauses"] = clauses_json
             
-            # 하이라이트된 텍스트 저장 (JSONB)
+            # 하이라이트된 텍스트 저장 (JSONB) - Pydantic 모델을 dict로 변환
             if highlighted_texts:
-                analysis_data["highlighted_texts"] = highlighted_texts
+                try:
+                    from fastapi.encoders import jsonable_encoder
+                    highlighted_json = jsonable_encoder(highlighted_texts)
+                    analysis_data["highlighted_texts"] = highlighted_json
+                    logger.debug(f"[DB 저장] highlighted_texts 변환 완료: {len(highlighted_json)}개, 타입: {type(highlighted_json)}")
+                except Exception as e:
+                    logger.error(f"[DB 저장] highlighted_texts 변환 실패: {str(e)}", exc_info=True)
+                    # Fallback: 수동 변환
+                    highlighted_json = []
+                    for ht in highlighted_texts:
+                        if hasattr(ht, 'model_dump'):  # Pydantic v2
+                            highlighted_json.append(ht.model_dump())
+                        elif hasattr(ht, 'dict'):  # Pydantic v1
+                            highlighted_json.append(ht.dict())
+                        elif isinstance(ht, dict):
+                            highlighted_json.append(ht)
+                        else:
+                            logger.warning(f"[DB 저장] highlighted_text 변환 실패: {type(ht)}")
+                    analysis_data["highlighted_texts"] = highlighted_json
             
             # user_id가 제공된 경우 추가
             if user_id:
@@ -154,6 +190,147 @@ class ContractStorageService:
         except Exception as e:
             logger.error(f"계약서 분석 결과 저장 중 오류: {str(e)}", exc_info=True)
             raise
+    
+    async def get_contract_analysis_by_filename(
+        self, 
+        file_name: str, 
+        user_id: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        """
+        file_name으로 계약서 분석 결과를 조회 (캐시 조회용)
+        
+        Args:
+            file_name: 파일명
+            user_id: 사용자 ID (옵션, 필터링용)
+        
+        Returns:
+            계약서 분석 결과 딕셔너리 또는 None
+            분석이 완료된 경우에만 반환 (clauses가 비어있지 않거나 analysis_result IS NOT NULL)
+        """
+        self._ensure_initialized()
+        
+        try:
+            # contract_analyses 테이블에서 file_name으로 조회
+            # ORDER BY created_at DESC LIMIT 1로 가장 최근 것만 가져옴
+            query = (
+                self.sb.table("contract_analyses")
+                .select("*")
+                .eq("file_name", file_name)
+                .order("created_at", desc=True)
+                .limit(1)
+            )
+            
+            # user_id가 제공된 경우 필터링 (선택사항, 로그인 없이도 사용 가능하므로 필터링하지 않음)
+            # 지시서: "로그인 없이도 사용 가능"이므로 user_id 필터링은 하지 않음
+            
+            result = query.execute()
+            
+            if not result.data or len(result.data) == 0:
+                logger.info(f"[캐시 조회] file_name으로 분석 결과를 찾을 수 없음: {file_name}")
+                return None
+            
+            analysis = result.data[0]
+            
+            # 분석 완료 여부 확인
+            # 지시서: "clauses가 []가 아니거나 analysis_result IS NOT NULL" 둘 중 하나 이상 만족
+            clauses = analysis.get("clauses", [])
+            analysis_result = analysis.get("analysis_result")
+            
+            # clauses가 비어있지 않은지 확인
+            has_clauses = clauses and isinstance(clauses, list) and len(clauses) > 0
+            # analysis_result가 NULL이 아닌지 확인
+            has_analysis_result = analysis_result is not None
+            
+            if not has_clauses and not has_analysis_result:
+                logger.info(f"[캐시 조회] 분석이 완료되지 않은 결과 발견: file_name={file_name}, clauses={len(clauses) if isinstance(clauses, list) else 0}, analysis_result={analysis_result is not None}")
+                return None
+            
+            logger.info(f"[캐시 조회] 분석 완료된 결과 발견: file_name={file_name}, doc_id={analysis.get('doc_id')}, clauses={len(clauses) if isinstance(clauses, list) else 0}, analysis_result={analysis_result is not None}")
+            
+            # 분석이 완료된 경우, get_contract_analysis와 동일한 방식으로 데이터 구성
+            contract_analysis_id = analysis["id"]
+            doc_id_value = analysis.get("doc_id") or str(analysis["id"])
+            
+            # contract_issues 테이블에서 이슈들 조회
+            issues = []
+            try:
+                issues_result = (
+                    self.sb.table("contract_issues")
+                    .select("*")
+                    .eq("contract_analysis_id", contract_analysis_id)
+                    .execute()
+                )
+                
+                if issues_result.data:
+                    for issue in issues_result.data:
+                        issues.append({
+                            "id": issue.get("issue_id", ""),
+                            "category": issue.get("category", ""),
+                            "severity": issue.get("severity", "medium"),
+                            "summary": issue.get("summary", ""),
+                            "originalText": issue.get("original_text", ""),
+                            "legalBasis": issue.get("legal_basis", []),
+                            "explanation": issue.get("explanation", ""),
+                            "suggestedRevision": issue.get("suggested_revision", ""),
+                        })
+            except Exception as e:
+                logger.warning(f"[캐시 조회] contract_issues 조회 실패: {str(e)}")
+                issues = []
+            
+            # clauses와 highlightedTexts 조회 (JSONB 컬럼)
+            clauses_data = analysis.get("clauses", [])
+            highlighted_texts_data = analysis.get("highlighted_texts", [])
+            
+            # None 값 처리: Pydantic 검증을 위해 기본값 제공
+            title_value = analysis.get("title")
+            if title_value is None:
+                title_value = analysis.get("file_name") or analysis.get("original_filename") or "계약서"
+            
+            sections_value = analysis.get("sections")
+            if sections_value is None or not isinstance(sections_value, dict):
+                sections_value = {}
+            
+            retrieved_contexts_value = analysis.get("retrieved_contexts")
+            if retrieved_contexts_value is None or not isinstance(retrieved_contexts_value, list):
+                retrieved_contexts_value = []
+            
+            summary_value = analysis.get("summary")
+            if summary_value is None:
+                summary_value = ""
+            
+            contract_text_value = analysis.get("contract_text")
+            if contract_text_value is None:
+                contract_text_value = ""
+            
+            created_at_value = analysis.get("created_at")
+            if created_at_value is None:
+                from datetime import datetime
+                created_at_value = datetime.utcnow().isoformat() + "Z"
+            elif isinstance(created_at_value, str):
+                # 이미 문자열이면 그대로 사용
+                pass
+            else:
+                # datetime 객체면 ISO 형식으로 변환
+                created_at_value = created_at_value.isoformat() + "Z" if hasattr(created_at_value, 'isoformat') else str(created_at_value)
+            
+            return {
+                "docId": doc_id_value,
+                "title": title_value,
+                "riskScore": float(analysis.get("risk_score", 0)),
+                "riskLevel": analysis.get("risk_level", "medium"),
+                "sections": sections_value,
+                "issues": issues,
+                "summary": summary_value,
+                "retrievedContexts": retrieved_contexts_value,
+                "contractText": contract_text_value,  # 계약서 원문 텍스트
+                "clauses": clauses_data if isinstance(clauses_data, list) else [],  # 조항 목록
+                "highlightedTexts": highlighted_texts_data if isinstance(highlighted_texts_data, list) else [],  # 하이라이트된 텍스트
+                "createdAt": created_at_value,
+            }
+            
+        except Exception as e:
+            logger.error(f"[캐시 조회] file_name으로 계약서 분석 결과 조회 중 오류: {str(e)}", exc_info=True)
+            return None
     
     async def get_contract_analysis(self, doc_id: str, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """

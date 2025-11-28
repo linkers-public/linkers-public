@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useMemo, useEffect, useRef } from 'react'
-import { Filter, AlertTriangle, CheckCircle2, FileText, BookOpen, Scale, Calendar, BarChart3, TrendingUp, Shield } from 'lucide-react'
+import { Filter, AlertTriangle, CheckCircle2, FileText, BookOpen, Scale, Calendar, BarChart3, TrendingUp, Shield, MessageSquare } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { AnalysisIssueCard } from './AnalysisIssueCard'
@@ -35,6 +35,26 @@ interface AnalysisPanelProps {
   clauses?: Clause[]
   selectedClauseId?: string
   onClauseClick?: (clauseId: string) => void
+  // 새로운 독소조항 탐지 필드
+  oneLineSummary?: string
+  riskTrafficLight?: string
+  top3ActionPoints?: string[]
+  riskSummaryTable?: Array<{
+    item: string
+    riskLevel: 'low' | 'medium' | 'high'
+    problemPoint: string
+    simpleExplanation: string
+    revisionKeyword: string
+  }>
+  toxicClauses?: Array<{
+    clauseLocation: string
+    contentSummary: string
+    whyRisky: string
+    realWorldProblems: string
+    suggestedRevisionLight: string
+    suggestedRevisionFormal: string
+  }>
+  negotiationQuestions?: string[]
 }
 
 export function AnalysisPanel({
@@ -52,6 +72,12 @@ export function AnalysisPanel({
   clauses = [],
   selectedClauseId,
   onClauseClick,
+  oneLineSummary,
+  riskTrafficLight,
+  top3ActionPoints = [],
+  riskSummaryTable = [],
+  toxicClauses = [],
+  negotiationQuestions = [],
 }: AnalysisPanelProps) {
   const [activeTab, setActiveTab] = useState('summary')
   const [showFilters, setShowFilters] = useState(false)
@@ -506,6 +532,153 @@ export function AnalysisPanel({
           {/* 요약 보기 탭 */}
           <TabsContent value="summary" className="p-3 sm:p-4 lg:p-6 mt-0">
             <div className="space-y-3">
+              {/* 한 줄 총평 */}
+              {oneLineSummary && (
+                <div className="bg-gradient-to-br from-amber-50 to-orange-50 border-2 border-amber-300 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="p-2 bg-amber-100 rounded-lg flex-shrink-0">
+                      <AlertTriangle className="w-5 h-5 text-amber-700" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-sm font-bold text-amber-900 mb-1">한 줄 총평</h3>
+                      <p className="text-sm text-amber-800 leading-relaxed">{oneLineSummary}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 리스크 신호등 + 지금 당장 확인해야 할 포인트 */}
+              {(riskTrafficLight || top3ActionPoints.length > 0) && (
+                <div className="bg-gradient-to-br from-slate-50 to-white border border-slate-200 rounded-lg p-4">
+                  {riskTrafficLight && (
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="text-2xl">{riskTrafficLight}</span>
+                      <span className="text-sm font-semibold text-slate-900">리스크 수준</span>
+                    </div>
+                  )}
+                  {top3ActionPoints.length > 0 && (
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-900 mb-2">지금 당장 확인하거나 물어봐야 할 포인트</h3>
+                      <ul className="space-y-2">
+                        {top3ActionPoints.map((point, idx) => (
+                          <li key={idx} className="flex items-start gap-2 text-sm text-slate-700">
+                            <span className="flex-shrink-0 w-5 h-5 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold mt-0.5">
+                              {idx + 1}
+                            </span>
+                            <span>{point}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 리스크 요약 테이블 */}
+              {riskSummaryTable.length > 0 && (
+                <div className="bg-white border border-slate-200 rounded-lg overflow-hidden">
+                  <div className="px-4 py-3 bg-gradient-to-r from-slate-50 to-slate-100 border-b border-slate-200">
+                    <h3 className="text-sm font-bold text-slate-900">리스크 요약</h3>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-slate-50">
+                        <tr>
+                          <th className="px-3 py-2 text-left text-xs font-semibold text-slate-700 border-b border-slate-200">항목</th>
+                          <th className="px-3 py-2 text-left text-xs font-semibold text-slate-700 border-b border-slate-200">리스크 수준</th>
+                          <th className="px-3 py-2 text-left text-xs font-semibold text-slate-700 border-b border-slate-200">문제 포인트</th>
+                          <th className="px-3 py-2 text-left text-xs font-semibold text-slate-700 border-b border-slate-200">간단 설명</th>
+                          <th className="px-3 py-2 text-left text-xs font-semibold text-slate-700 border-b border-slate-200">수정 제안</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {riskSummaryTable.map((item, idx) => (
+                          <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50">
+                            <td className="px-3 py-2 font-medium text-slate-900">{item.item}</td>
+                            <td className="px-3 py-2">
+                              <span className={cn(
+                                "px-2 py-0.5 rounded text-xs font-semibold",
+                                item.riskLevel === 'high' ? 'bg-red-100 text-red-700' :
+                                item.riskLevel === 'medium' ? 'bg-amber-100 text-amber-700' :
+                                'bg-green-100 text-green-700'
+                              )}>
+                                {item.riskLevel === 'high' ? '🔴 높음' :
+                                 item.riskLevel === 'medium' ? '🟡 보통' :
+                                 '🟢 낮음'}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 text-slate-700">{item.problemPoint}</td>
+                            <td className="px-3 py-2 text-slate-600">{item.simpleExplanation}</td>
+                            <td className="px-3 py-2 text-blue-700 font-medium">{item.revisionKeyword}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* 독소조항 상세 */}
+              {toxicClauses.length > 0 && (
+                <div className="bg-gradient-to-br from-red-50 to-rose-50 border-2 border-red-300 rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <AlertTriangle className="w-5 h-5 text-red-600" />
+                    <h3 className="text-sm font-bold text-red-900">독소조항 상세</h3>
+                    <span className="text-xs bg-red-200 text-red-800 px-2 py-0.5 rounded-full">
+                      {toxicClauses.length}개
+                    </span>
+                  </div>
+                  <div className="space-y-4">
+                    {toxicClauses.map((toxic, idx) => (
+                      <div key={idx} className="bg-white rounded-lg p-4 border border-red-200">
+                        <div className="mb-3">
+                          <h4 className="text-sm font-bold text-red-900 mb-1">{toxic.clauseLocation}</h4>
+                          <p className="text-xs text-red-700">{toxic.contentSummary}</p>
+                        </div>
+                        <div className="space-y-2 text-sm">
+                          <div>
+                            <span className="font-semibold text-slate-900">왜 위험한지: </span>
+                            <span className="text-slate-700">{toxic.whyRisky}</span>
+                          </div>
+                          <div>
+                            <span className="font-semibold text-slate-900">현실에서 생길 수 있는 문제: </span>
+                            <span className="text-slate-700">{toxic.realWorldProblems}</span>
+                          </div>
+                          <div className="mt-3 pt-3 border-t border-red-200">
+                            <p className="text-xs font-semibold text-slate-600 mb-1">수정 제안 (라이트 버전):</p>
+                            <p className="text-sm text-slate-800 bg-blue-50 p-2 rounded">{toxic.suggestedRevisionLight}</p>
+                          </div>
+                          <div className="pt-2">
+                            <p className="text-xs font-semibold text-slate-600 mb-1">수정 제안 (포멀 버전):</p>
+                            <p className="text-sm text-slate-800 bg-slate-50 p-2 rounded">{toxic.suggestedRevisionFormal}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* 협상 질문 리스트 */}
+              {negotiationQuestions.length > 0 && (
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <MessageSquare className="w-5 h-5 text-blue-600" />
+                    <h3 className="text-sm font-bold text-blue-900">협상 시 질문 리스트</h3>
+                  </div>
+                  <ul className="space-y-2">
+                    {negotiationQuestions.map((question, idx) => (
+                      <li key={idx} className="flex items-start gap-2 text-sm text-blue-800">
+                        <span className="flex-shrink-0 w-5 h-5 rounded-full bg-blue-200 text-blue-700 flex items-center justify-center text-xs font-bold mt-0.5">
+                          Q{idx + 1}
+                        </span>
+                        <span>{question}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               {/* 조항 목록 (있는 경우) - 접을 수 있는 섹션 */}
               {clauses.length > 0 && (
                 <div className="bg-gradient-to-br from-slate-50 to-white border border-slate-200 rounded-lg overflow-hidden">

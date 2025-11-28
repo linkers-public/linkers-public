@@ -22,6 +22,13 @@ class Chunk(BaseModel):
     metadata: Dict[str, Any]
 
 
+class SimpleDocument:
+    """간단한 문서 클래스 (LangChain Document 호환)"""
+    def __init__(self, page_content: str, metadata: Dict[str, Any]):
+        self.page_content = page_content
+        self.metadata = metadata
+
+
 class SimpleTextSplitter:
     """간단한 텍스트 분할기 (langchain_text_splitters 대체용)"""
     
@@ -30,7 +37,7 @@ class SimpleTextSplitter:
         self.chunk_overlap = chunk_overlap
         self.separators = separators or ["\n\n", "\n", ". ", " ", ""]
     
-    def create_documents(self, texts: List[str], metadatas: List[Dict[str, Any]] = None) -> List[Any]:
+    def create_documents(self, texts: List[str], metadatas: List[Dict[str, Any]] = None) -> List[SimpleDocument]:
         """텍스트 리스트를 문서 리스트로 변환"""
         if metadatas is None:
             metadatas = [{}] * len(texts)
@@ -39,11 +46,10 @@ class SimpleTextSplitter:
         for text, metadata in zip(texts, metadatas):
             chunks = self._split_text(text)
             for i, chunk_text in enumerate(chunks):
-                # LangChain Document 형식과 호환되도록 page_content 속성 추가
-                doc = type('Document', (), {
-                    'page_content': chunk_text,
-                    'metadata': {**metadata, 'chunk_index': i}
-                })()
+                doc = SimpleDocument(
+                    page_content=chunk_text,
+                    metadata={**metadata, 'chunk_index': i}
+                )
                 documents.append(doc)
         
         return documents
@@ -98,13 +104,21 @@ class SimpleTextSplitter:
 
 
 class ContractArticleSplitter:
-    """계약서 조항 단위 분할기 (제n조 패턴 기반)"""
+    """계약서 조항 단위 분할기 (제n조 패턴 + 번호 기반 헤더 패턴)"""
     
     # 조항 패턴: "제1조", "제 1 조", "제1조 (제목)" 등 다양한 형식 지원
     ARTICLE_PATTERN = re.compile(
         r'(제\s*\d+\s*조(?:\s*\([^)]+\))?[^\n]*)'  # 조항 헤더 (제1조 (제목))
         r'([\s\S]*?)'  # 조항 본문
         r'(?=제\s*\d+\s*조|$)',  # 다음 조항 또는 끝까지
+        re.MULTILINE
+    )
+    
+    # ✅ 새로 추가: "1. 근로계약기간 :" 같은 한 줄 헤더 패턴
+    NUMBERED_HEADER_PATTERN = re.compile(
+        r'^\s*(\d{1,2})\.\s*'          # 1. / 10.
+        r'([가-힣A-Za-z0-9\s·]+?)'     # 제목 (근로계약기간, 임 금 등)
+        r'\s*[:：]?\s*(.*)$',          # 같은 줄에 이어지는 본문 (있어도 되고 없어도 됨)
         re.MULTILINE
     )
     
@@ -131,49 +145,151 @@ class ContractArticleSplitter:
             }]
         """
         chunks = []
+        text = text.strip()
+        
+        # 1️⃣ 먼저 "제n조" 패턴 시도
         matches = list(self.ARTICLE_PATTERN.finditer(text))
         
-        if not matches:
-            # 조항 패턴이 없으면 전체를 하나의 청크로
-            return [{
-                "content": text.strip(),
-                "article_number": 0,
-                "article_header": "",
-                "chunk_index": 0,
-                "type": "article"
-            }]
+        if matches:
+            for idx, match in enumerate(matches):
+                header = match.group(1).strip()
+                body = match.group(2).strip()
+                full_content = f"{header}\n{body}".strip()
+                
+                # 조항 번호 추출
+                article_num_match = re.search(r'제\s*(\d+)\s*조', header)
+                article_number = int(article_num_match.group(1)) if article_num_match else idx + 1
+                
+                # 조항이 너무 길면 문단으로 분할
+                if len(full_content) > self.max_article_length:
+                    paragraph_chunks = self.paragraph_splitter.split_article_into_paragraphs(
+                        full_content, article_number
+                    )
+                    chunks.extend(paragraph_chunks)
+                else:
+                    chunks.append({
+                        "content": full_content,
+                        "article_number": article_number,
+                        "article_header": header,
+                        "chunk_index": idx,
+                        "type": "article"
+                    })
+            
+            return chunks
         
-        for idx, match in enumerate(matches):
-            header = match.group(1).strip()
-            body = match.group(2).strip()
-            full_content = f"{header}\n{body}".strip()
+        # 2️⃣ "제n조"가 전혀 없으면 "1. 근로계약기간" 형식으로 분할
+        numbered_chunks = self._split_by_numbered_headers(text)
+        if numbered_chunks:
+            return numbered_chunks
+        
+        # 3️⃣ 그래도 못 찾으면 전체를 하나의 청크로
+        return [{
+            "content": text,
+            "article_number": 0,
+            "article_header": "",
+            "chunk_index": 0,
+            "type": "article"
+        }]
+    
+    def _split_by_numbered_headers(self, text: str) -> List[Dict[str, Any]]:
+        """
+        '1. 근로계약기간 :' 형식 번호 기반 헤더로 조항 분할
+        """
+        lines = text.splitlines()
+        clauses: List[Dict[str, Any]] = []
+        
+        current_header: str | None = None
+        current_number: int | None = None
+        current_body_lines: List[str] = []
+        chunk_index = 0
+        
+        for line in lines:
+            line = line.strip()
+            if not line:
+                # 빈 줄은 본문에 그냥 붙인다
+                if current_header is not None:
+                    current_body_lines.append("")
+                continue
             
-            # 조항 번호 추출
-            article_num_match = re.search(r'제\s*(\d+)\s*조', header)
-            article_number = int(article_num_match.group(1)) if article_num_match else idx + 1
+            m = self.NUMBERED_HEADER_PATTERN.match(line)
             
-            # 조항이 너무 길면 문단으로 분할
+            if m:
+                # 이전 조항 flush
+                if current_header is not None:
+                    full_content = (current_header + "\n" + "\n".join(current_body_lines)).strip()
+                    if len(full_content) > self.max_article_length:
+                        paragraph_chunks = self.paragraph_splitter.split_article_into_paragraphs(
+                            full_content,
+                            current_number or 0
+                        )
+                        # paragraph_chunks 안의 chunk_index 는 내부에서 다시 매김
+                        for pc in paragraph_chunks:
+                            pc.setdefault("article_header", current_header)
+                        clauses.extend(paragraph_chunks)
+                    else:
+                        clauses.append({
+                            "content": full_content,
+                            "article_number": current_number or 0,
+                            "article_header": current_header,
+                            "chunk_index": chunk_index,
+                            "type": "article"
+                        })
+                        chunk_index += 1
+                
+                # 새 헤더 시작
+                number = int(m.group(1))
+                title = m.group(2).strip()
+                same_line_body = m.group(3).strip()
+                
+                current_header = f"{number}. {title}"
+                current_number = number
+                current_body_lines = []
+                if same_line_body:
+                    current_body_lines.append(same_line_body)
+            else:
+                # 헤더가 열린 상태에서만 본문으로 추가
+                if current_header is not None:
+                    current_body_lines.append(line)
+                else:
+                    # 앞부분 인사말/머리말 등은 article_number=0 번으로 모으고 싶으면 여기 별도 처리
+                    continue
+        
+        # 마지막 조항 flush
+        if current_header is not None:
+            full_content = (current_header + "\n" + "\n".join(current_body_lines)).strip()
             if len(full_content) > self.max_article_length:
                 paragraph_chunks = self.paragraph_splitter.split_article_into_paragraphs(
-                    full_content, article_number
+                    full_content,
+                    current_number or 0
                 )
-                chunks.extend(paragraph_chunks)
+                for pc in paragraph_chunks:
+                    pc.setdefault("article_header", current_header)
+                clauses.extend(paragraph_chunks)
             else:
-                chunks.append({
+                clauses.append({
                     "content": full_content,
-                    "article_number": article_number,
-                    "article_header": header,
-                    "chunk_index": idx,
+                    "article_number": current_number or 0,
+                    "article_header": current_header,
+                    "chunk_index": chunk_index,
                     "type": "article"
                 })
         
-        return chunks
+        return clauses
     
     @staticmethod
     def extract_article_number(header: str) -> int:
         """조항 헤더에서 조항 번호 추출"""
+        # 제n조 패턴 시도
         match = re.search(r'제\s*(\d+)\s*조', header)
-        return int(match.group(1)) if match else 0
+        if match:
+            return int(match.group(1))
+        
+        # 번호. 제목 패턴 시도
+        match = re.search(r'^(\d{1,2})\.', header)
+        if match:
+            return int(match.group(1))
+        
+        return 0
 
 
 class ArticleParagraphSplitter:
@@ -351,187 +467,480 @@ class DocumentProcessor:
     
     def pdf_to_text(self, pdf_path: str) -> str:
         """
-        PDF → 텍스트 추출
+        PDF → 텍스트 추출 (PyMuPDF 먼저 시도 → OCR fallback)
         
-        여러 방법을 시도:
-        1. PyMuPDF (fitz) - 가장 강력함, 이미지 기반 PDF도 처리 가능
-        2. pdfplumber - 표와 구조화된 데이터에 좋음
-        3. PyPDFLoader - 기본 방법
-        
-        Args:
-            pdf_path: PDF 파일 경로
-        
-        Returns:
-            추출된 텍스트
+        텍스트 PDF는 PyMuPDF로 빠르게 추출하고,
+        이미지 기반 PDF는 OCR로 추출합니다.
         """
-        # 파일 존재 확인
         if not os.path.exists(pdf_path):
             raise FileNotFoundError(f"PDF 파일을 찾을 수 없습니다: {pdf_path}")
+
+        error_messages: List[str] = []
         
-        text = None
-        error_messages = []
+        # 1️⃣ PyMuPDF 먼저 시도 (텍스트 PDF)
+        print("[PDF 처리] PyMuPDF로 텍스트 추출 시도 중...")
+        text = self._extract_with_pymupdf(pdf_path, error_messages)
         
-        # 방법 1: PyMuPDF (fitz) 시도 - 가장 강력함
-        try:
-            import fitz  # PyMuPDF
-            doc = fitz.open(pdf_path)
-            text_parts = []
+        # 한글·숫자 검증 (의미있는 텍스트가 있는지 확인)
+        if text:
+            korean_count = sum(1 for ch in text if '가' <= ch <= '힣')
+            digit_count = sum(ch.isdigit() for ch in text)
             
-            print(f"[PDF 처리] PyMuPDF로 시도 중... (파일: {os.path.basename(pdf_path)})")
-            
-            for page_num in range(len(doc)):
-                page = doc[page_num]
-                # 텍스트 추출
-                page_text = page.get_text()
-                if page_text and page_text.strip():
-                    text_parts.append(page_text)
-                    print(f"[PDF 처리] 페이지 {page_num + 1}: {len(page_text)}자 추출")
-            
-            doc.close()
-            
-            if text_parts:
-                text = "\n".join(text_parts)
+            # 한글 10자 이상 또는 숫자 5개 이상이면 성공으로 간주
+            if korean_count >= 10 or digit_count >= 5:
+                print(f"[PDF 처리] PyMuPDF 성공: 한글 {korean_count}자, 숫자 {digit_count}개")
+                text = self._clean_text(text)
                 if text and text.strip():
-                    print(f"[PDF 처리] PyMuPDF로 텍스트 추출 성공 ({len(text_parts)}페이지, 총 {len(text)}자)")
-                else:
-                    print(f"[PDF 처리] PyMuPDF: 텍스트 추출했지만 내용이 비어있음")
-                    error_messages.append("PyMuPDF: 텍스트를 추출했지만 내용이 비어있습니다")
+                    return text
             else:
-                print(f"[PDF 처리] PyMuPDF: 텍스트를 추출할 수 없음 (이미지 기반 PDF일 수 있음)")
-                error_messages.append("PyMuPDF: 텍스트를 추출할 수 없습니다 (이미지 기반 PDF일 수 있음)")
-        except ImportError:
-            print(f"[PDF 처리] PyMuPDF가 설치되지 않았습니다")
-            error_messages.append("PyMuPDF가 설치되지 않았습니다 (pip install pymupdf)")
-        except Exception as e:
-            print(f"[PDF 처리] PyMuPDF 오류: {str(e)}")
-            error_messages.append(f"PyMuPDF 실패: {str(e)}")
+                print(f"[PDF 처리] PyMuPDF 결과 부족: 한글 {korean_count}자, 숫자 {digit_count}개 → OCR 시도")
+                error_messages.append(f"PyMuPDF: 한글/숫자 부족 (한글 {korean_count}자, 숫자 {digit_count}개)")
         
-        # 방법 2: pdfplumber 시도 (표 처리에 좋음)
-        if not text or not text.strip():
-            try:
-                import pdfplumber
-                print(f"[PDF 처리] pdfplumber로 시도 중...")
-                with pdfplumber.open(pdf_path) as pdf:
-                    text_parts = []
-                    for page_num, page in enumerate(pdf.pages):
-                        page_text = page.extract_text()
-                        if page_text and page_text.strip():
-                            text_parts.append(page_text)
-                            print(f"[PDF 처리] pdfplumber 페이지 {page_num + 1}: {len(page_text)}자 추출")
-                    
-                    if text_parts:
-                        text = "\n".join(text_parts)
-                        if text and text.strip():
-                            print(f"[PDF 처리] pdfplumber로 텍스트 추출 성공 ({len(text_parts)}페이지, 총 {len(text)}자)")
-                        else:
-                            print(f"[PDF 처리] pdfplumber: 텍스트 추출했지만 내용이 비어있음")
-                            error_messages.append("pdfplumber: 텍스트를 추출했지만 내용이 비어있습니다")
-                    else:
-                        print(f"[PDF 처리] pdfplumber: 텍스트를 추출할 수 없음")
-                        error_messages.append("pdfplumber: 텍스트를 추출할 수 없습니다")
-            except ImportError:
-                print(f"[PDF 처리] pdfplumber가 설치되지 않았습니다")
-                error_messages.append("pdfplumber가 설치되지 않았습니다 (pip install pdfplumber)")
-            except Exception as e:
-                print(f"[PDF 처리] pdfplumber 오류: {str(e)}")
-                error_messages.append(f"pdfplumber 실패: {str(e)}")
+        # 2️⃣ PyMuPDF 실패 시 pdfplumber 시도
+        print("[PDF 처리] pdfplumber로 텍스트 추출 시도 중...")
+        text = self._extract_with_pdfplumber(pdf_path, error_messages)
         
-        # 방법 3: pypdf 시도 (기본 방법)
-        if not text or not text.strip():
-            try:
-                from pypdf import PdfReader
-                print(f"[PDF 처리] pypdf로 시도 중...")
-                reader = PdfReader(pdf_path)
-                pages = []
-                
-                for page_num, page in enumerate(reader.pages):
-                    page_text = page.extract_text()
-                    if page_text:
-                        pages.append(page_text)
-                
-                if pages:
-                    text = "\n".join(pages)
-                    if text and text.strip():
-                        print(f"[PDF 처리] pypdf로 텍스트 추출 성공 ({len(pages)}페이지, 총 {len(text)}자)")
-                    else:
-                        print(f"[PDF 처리] pypdf: 텍스트 추출했지만 내용이 비어있음")
-                        error_messages.append("pypdf: 텍스트를 추출했지만 내용이 비어있습니다")
-                else:
-                    print(f"[PDF 처리] pypdf: 페이지를 읽을 수 없음")
-                    error_messages.append("pypdf: 페이지를 읽을 수 없습니다")
-            except ImportError:
-                print(f"[PDF 처리] pypdf가 설치되지 않았습니다")
-                error_messages.append("pypdf가 설치되지 않았습니다 (pip install pypdf)")
-            except Exception as e:
-                print(f"[PDF 처리] pypdf 오류: {str(e)}")
-                error_messages.append(f"pypdf 실패: {str(e)}")
+        if text:
+            korean_count = sum(1 for ch in text if '가' <= ch <= '힣')
+            digit_count = sum(ch.isdigit() for ch in text)
+            
+            if korean_count >= 10 or digit_count >= 5:
+                print(f"[PDF 처리] pdfplumber 성공: 한글 {korean_count}자, 숫자 {digit_count}개")
+                text = self._clean_text(text)
+                if text and text.strip():
+                    return text
+            else:
+                print(f"[PDF 처리] pdfplumber 결과 부족: 한글 {korean_count}자, 숫자 {digit_count}개 → OCR 시도")
+                error_messages.append(f"pdfplumber: 한글/숫자 부족 (한글 {korean_count}자, 숫자 {digit_count}개)")
         
-        # 방법 4: OCR 시도 (스캔된 이미지 PDF용)
-        if not text or not text.strip():
-            try:
-                import pytesseract
-                from pdf2image import convert_from_path
-                print(f"[PDF 처리] OCR로 시도 중... (스캔된 PDF 처리)")
-                
-                # PDF를 이미지로 변환
-                images = convert_from_path(pdf_path, dpi=300)
-                text_parts = []
-                
-                for page_num, image in enumerate(images):
-                    # OCR 수행
-                    page_text = pytesseract.image_to_string(image, lang='kor+eng')
-                    if page_text and page_text.strip():
-                        text_parts.append(page_text)
-                        print(f"[PDF 처리] OCR 페이지 {page_num + 1}: {len(page_text)}자 추출")
-                
-                if text_parts:
-                    text = "\n".join(text_parts)
-                    if text and text.strip():
-                        print(f"[PDF 처리] OCR로 텍스트 추출 성공 ({len(text_parts)}페이지, 총 {len(text)}자)")
-                    else:
-                        print(f"[PDF 처리] OCR: 텍스트 추출했지만 내용이 비어있음")
-                        error_messages.append("OCR: 텍스트를 추출했지만 내용이 비어있습니다")
-                else:
-                    print(f"[PDF 처리] OCR: 텍스트를 추출할 수 없음")
-                    error_messages.append("OCR: 텍스트를 추출할 수 없습니다")
-            except ImportError as e:
-                missing_module = str(e).split("'")[1] if "'" in str(e) else "pytesseract 또는 pdf2image"
-                print(f"[PDF 처리] OCR 라이브러리가 설치되지 않았습니다: {missing_module}")
-                error_messages.append(f"OCR: {missing_module}가 설치되지 않았습니다 (pip install pytesseract pdf2image)")
-            except Exception as e:
-                print(f"[PDF 처리] OCR 오류: {str(e)}")
-                error_messages.append(f"OCR 실패: {str(e)}")
+        # 3️⃣ 마지막으로 OCR 시도 (이미지 PDF)
+        print("[PDF 처리] OCR로 이미지 기반 추출 시도 중...")
+        text = self._extract_with_ocr(pdf_path, error_messages)
         
-        # 모든 방법 실패
+        # 정제
+        if text:
+            text = self._clean_text(text)
+
+        # 최종 검증
         if not text or not text.strip():
             error_msg = "PDF 파일에서 텍스트를 추출할 수 없습니다.\n"
-            error_msg += "파일이 이미지로만 구성되어 있거나 텍스트가 없을 수 있습니다.\n\n"
-            
             if error_messages:
                 error_msg += "시도한 방법:\n"
                 for msg in error_messages:
                     error_msg += f"  - {msg}\n"
-            else:
-                error_msg += "시도한 방법: PyMuPDF, pdfplumber, pypdf, OCR 모두 시도했지만 텍스트를 추출할 수 없었습니다.\n"
-            
             error_msg += "\n[해결 방법]\n"
-            error_msg += "1. PyMuPDF 설치 확인: pip install pymupdf\n"
-            error_msg += "2. pdfplumber 설치 확인: pip install pdfplumber\n"
-            error_msg += "3. OCR 설치 (스캔된 PDF용): pip install pytesseract pdf2image\n"
-            error_msg += "   - Tesseract OCR 엔진도 설치 필요: https://github.com/tesseract-ocr/tesseract\n"
-            error_msg += "4. 다른 PDF 파일로 테스트해보세요."
-            
-            print(f"[PDF 처리] 최종 실패: 모든 방법 시도 완료, 텍스트 추출 불가")
+            error_msg += "1. OCR 설치: pip install pytesseract pdf2image\n"
+            error_msg += "2. Tesseract OCR 엔진 설치: https://github.com/tesseract-ocr/tesseract\n"
+            error_msg += "3. Poppler 설치 (Windows): https://github.com/oschwartz10612/poppler-windows/releases\n"
             raise ValueError(error_msg)
-        
-        # 텍스트 정제
-        text = self._clean_text(text)
-        
-        # 정제 후에도 텍스트가 있는지 확인
-        if not text or not text.strip():
-            raise ValueError(f"PDF 텍스트 정제 후 내용이 비어있습니다. 파일 형식이 올바르지 않을 수 있습니다: {pdf_path}")
-        
+
         return text
+
+    def _has_digits(self, text: str, min_count: int = 1) -> bool:
+        """텍스트에 최소 개수의 숫자가 포함되어 있는지 확인"""
+        if not text:
+            return False
+        return sum(ch.isdigit() for ch in text) >= min_count
+
+    def _extract_with_pymupdf(self, pdf_path: str, error_messages: List[str]) -> str:
+        """PyMuPDF 기반 텍스트 추출 (일반 텍스트 위주, 숫자까지 집착하지 않음)"""
+        try:
+            import fitz  # PyMuPDF
+        except ImportError:
+            msg = "PyMuPDF가 설치되지 않았습니다 (pip install pymupdf)"
+            print(f"[PDF 처리] {msg}")
+            error_messages.append(msg)
+            return ""
+
+        try:
+            doc = fitz.open(pdf_path)
+        except Exception as e:
+            msg = f"PyMuPDF로 PDF를 여는 데 실패했습니다: {e}"
+            print(f"[PDF 처리] {msg}")
+            error_messages.append(msg)
+            return ""
+
+        pages: List[str] = []
+        print(f"[PDF 처리] PyMuPDF로 시도 중... (파일: {os.path.basename(pdf_path)})")
+
+        for i, page in enumerate(doc):
+            try:
+                page_text = page.get_text("text") or ""
+            except Exception:
+                try:
+                    page_text = page.get_text() or ""
+                except Exception:
+                    page_text = ""
+
+            if page_text.strip():
+                pages.append(page_text)
+                print(f"[PDF 처리] PyMuPDF 페이지 {i + 1}: {len(page_text)}자 추출")
+
+        doc.close()
+
+        if pages:
+            text = "\n".join(pages)
+            digit_count = sum(ch.isdigit() for ch in text)
+            if digit_count > 0:
+                print(f"[PDF 처리] PyMuPDF 성공: {len(pages)}페이지, 총 {len(text)}자, 숫자 {digit_count}개 포함")
+            else:
+                print(f"[PDF 처리] PyMuPDF 성공: {len(pages)}페이지, 총 {len(text)}자 (⚠️ 숫자 없음)")
+            return text
+
+        msg = "PyMuPDF: 텍스트를 추출할 수 없습니다 (이미지 기반 PDF일 수 있음)"
+        print(f"[PDF 처리] {msg}")
+        error_messages.append(msg)
+        return ""
+
+    def _extract_with_pdfplumber(self, pdf_path: str, error_messages: List[str]) -> str:
+        """pdfplumber 기반 텍스트 추출 (표·숫자에 비교적 강함)"""
+        try:
+            import pdfplumber
+        except ImportError:
+            msg = "pdfplumber가 설치되지 않았습니다 (pip install pdfplumber)"
+            print(f"[PDF 처리] {msg}")
+            error_messages.append(msg)
+            return ""
+
+        try:
+            print("[PDF 처리] pdfplumber로 시도 중...")
+            text_parts: List[str] = []
+            with pdfplumber.open(pdf_path) as pdf:
+                for i, page in enumerate(pdf.pages):
+                    page_text = page.extract_text() or ""
+                    if page_text.strip():
+                        text_parts.append(page_text)
+                        digit_count = sum(ch.isdigit() for ch in page_text)
+                        print(f"[PDF 처리] pdfplumber 페이지 {i + 1}: {len(page_text)}자, 숫자 {digit_count}개")
+
+            if text_parts:
+                text = "\n".join(text_parts)
+                digit_count = sum(ch.isdigit() for ch in text)
+                if digit_count > 0:
+                    print(f"[PDF 처리] pdfplumber 성공: {len(text_parts)}페이지, 총 {len(text)}자, 숫자 {digit_count}개 포함")
+                else:
+                    print(f"[PDF 처리] pdfplumber 성공: {len(text_parts)}페이지, 총 {len(text)}자 (⚠️ 숫자 없음)")
+                return text
+
+            msg = "pdfplumber: 텍스트를 추출할 수 없습니다"
+            print(f"[PDF 처리] {msg}")
+            error_messages.append(msg)
+            return ""
+        except Exception as e:
+            msg = f"pdfplumber 실패: {e}"
+            print(f"[PDF 처리] {msg}")
+            error_messages.append(msg)
+            return ""
+
+    def _extract_with_pypdf(self, pdf_path: str, error_messages: List[str]) -> str:
+        """pypdf 기반 텍스트 추출 (마지막 텍스트 기반 fallback)"""
+        try:
+            from pypdf import PdfReader
+        except ImportError:
+            msg = "pypdf가 설치되지 않았습니다 (pip install pypdf)"
+            print(f"[PDF 처리] {msg}")
+            error_messages.append(msg)
+            return ""
+
+        try:
+            print("[PDF 처리] pypdf로 시도 중...")
+            reader = PdfReader(pdf_path)
+            pages: List[str] = []
+
+            for i, page in enumerate(reader.pages):
+                page_text = page.extract_text() or ""
+                if page_text.strip():
+                    pages.append(page_text)
+                    print(f"[PDF 처리] pypdf 페이지 {i + 1}: {len(page_text)}자 추출")
+
+            if pages:
+                text = "\n".join(pages)
+                digit_count = sum(ch.isdigit() for ch in text)
+                if digit_count > 0:
+                    print(f"[PDF 처리] pypdf 성공: {len(pages)}페이지, 총 {len(text)}자, 숫자 {digit_count}개 포함")
+                else:
+                    print(f"[PDF 처리] pypdf 성공: {len(pages)}페이지, 총 {len(text)}자 (⚠️ 숫자 없음)")
+                return text
+
+            msg = "pypdf: 텍스트를 추출할 수 없습니다"
+            print(f"[PDF 처리] {msg}")
+            error_messages.append(msg)
+            return ""
+        except Exception as e:
+            msg = f"pypdf 실패: {e}"
+            print(f"[PDF 처리] {msg}")
+            error_messages.append(msg)
+            return ""
+
+    def _extract_with_ocr(self, pdf_path: str, error_messages: List[str]) -> str:
+        """
+        이미지 기반 OCR 추출 (숫자 인식 담당)
+        - pytesseract + pdf2image 사용
+        """
+        try:
+            import pytesseract
+            from pdf2image import convert_from_path
+            
+            # Windows에서 Tesseract 경로 자동 설정
+            import platform
+            if platform.system() == "Windows":
+                tesseract_paths = [
+                    r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+                    r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+                ]
+                for tesseract_path in tesseract_paths:
+                    if os.path.exists(tesseract_path):
+                        pytesseract.pytesseract.tesseract_cmd = tesseract_path
+                        print(f"[PDF 처리] Tesseract 경로 설정: {tesseract_path}")
+                        break
+                
+                # 한국어 언어 팩 확인
+                try:
+                    available_langs = pytesseract.get_languages()
+                    if 'kor' not in available_langs:
+                        print(f"[PDF 처리] ⚠️ 경고: 한국어 언어 팩(kor)이 설치되지 않았습니다. 설치된 언어: {available_langs}")
+                        print(f"[PDF 처리] 한국어 언어 팩 설치 방법: Tesseract 설치 시 'Additional language data'에서 'Korean' 선택")
+                    else:
+                        print(f"[PDF 처리] ✅ 한국어 언어 팩 확인됨")
+                except Exception as e:
+                    print(f"[PDF 처리] 언어 팩 확인 중 오류: {e}")
+        except ImportError as e:
+            missing = str(e).split("'")[1] if "'" in str(e) else "pytesseract 또는 pdf2image"
+            msg = f"OCR: {missing}가 설치되지 않았습니다 (pip install pytesseract pdf2image)"
+            print(f"[PDF 처리] {msg}")
+            error_messages.append(msg)
+            return ""
+
+        # Windows에서 Poppler 경로 자동 설정
+        poppler_path = None
+        if platform.system() == "Windows":
+            # 환경 변수 확인
+            poppler_path = os.getenv("POPPLER_PATH")
+            
+            # 기본 설치 경로 탐색
+            if not poppler_path:
+                # 하드코딩된 경로 (최우선)
+                hardcoded_path = r"C:\Users\suhyeonjang\Downloads\Release-25.11.0-0\poppler-25.11.0\Library\bin"
+                
+                # 사용자 홈 디렉토리 가져오기
+                user_home = os.path.expanduser("~")
+                downloads_dir = os.path.join(user_home, "Downloads")
+                
+                # Downloads 폴더에서 poppler 폴더 검색
+                possible_paths = [
+                    hardcoded_path,  # 하드코딩된 경로 최우선
+                    r"C:\Program Files\poppler\Library\bin",
+                    r"C:\Program Files (x86)\poppler\Library\bin",
+                    r"C:\poppler\Library\bin",
+                    os.path.join(os.getcwd(), "poppler", "Library", "bin"),
+                ]
+                
+                # Downloads 폴더에서 poppler 검색
+                if os.path.exists(downloads_dir):
+                    try:
+                        for item in os.listdir(downloads_dir):
+                            item_path = os.path.join(downloads_dir, item)
+                            if os.path.isdir(item_path) and "poppler" in item.lower():
+                                # poppler 폴더 내부에서 Library\bin 찾기
+                                for root, dirs, files in os.walk(item_path):
+                                    if "pdftoppm.exe" in files:
+                                        bin_dir = os.path.dirname(os.path.join(root, "pdftoppm.exe"))
+                                        if bin_dir not in possible_paths:
+                                            possible_paths.insert(0, bin_dir)  # 우선순위 높게
+                                        break
+                    except Exception as e:
+                        print(f"[PDF 처리] Downloads 폴더 검색 중 오류: {e}")
+                
+                # 경로 탐색
+                for path in possible_paths:
+                    pdftoppm_exe = os.path.join(path, "pdftoppm.exe")
+                    if os.path.exists(pdftoppm_exe):
+                        poppler_path = path
+                        print(f"[PDF 처리] Poppler 경로 자동 설정: {poppler_path}")
+                        break
+                    else:
+                        print(f"[PDF 처리] Poppler 경로 확인 실패: {path}")
+        
+        try:
+            print("[PDF 처리] OCR로 시도 중... (이미지 기반/숫자 추출용)")
+            # 해상도를 높여서 한글 인식 품질 개선 (600 DPI로 증가)
+            if poppler_path:
+                images = convert_from_path(pdf_path, dpi=600, poppler_path=poppler_path)
+            else:
+                images = convert_from_path(pdf_path, dpi=600)  # 해상도 높임
+            print(f"[PDF 처리] OCR: PDF를 {len(images)}개 이미지로 변환 완료 (600 DPI)")
+        except Exception as e:
+            error_str = str(e)
+            if "poppler" in error_str.lower() or "Unable to get page count" in error_str:
+                msg = f"OCR: Poppler가 설치되지 않았거나 PATH에 없습니다. Windows용 Poppler 다운로드: https://github.com/oschwartz10612/poppler-windows/releases"
+            else:
+                msg = f"OCR: PDF를 이미지로 변환하는 데 실패했습니다: {error_str}"
+            print(f"[PDF 처리] {msg}")
+            error_messages.append(msg)
+            return ""
+
+        text_parts: List[str] = []
+        
+        # PIL/Pillow를 사용한 이미지 전처리
+        try:
+            from PIL import Image, ImageEnhance, ImageFilter
+            use_image_preprocessing = True
+        except ImportError:
+            use_image_preprocessing = False
+            print("[PDF 처리] PIL/Pillow가 없어 이미지 전처리를 건너뜁니다")
+
+        for i, img in enumerate(images):
+            try:
+                # 이미지 전처리 (명암 조정, 선명도 향상)
+                if use_image_preprocessing:
+                    # 그레이스케일 변환
+                    if img.mode != 'L':
+                        img = img.convert('L')
+                    
+                    # 이진화 (numpy 사용 가능한 경우)
+                    try:
+                        import numpy as np
+                        img_array = np.array(img)
+                        # 간단한 임계값 처리 (128 기준)
+                        threshold = 128
+                        img_array = np.where(img_array > threshold, 255, 0).astype(np.uint8)
+                        img = Image.fromarray(img_array)
+                    except ImportError:
+                        # numpy가 없으면 이진화 건너뛰기
+                        pass
+                    
+                    # 명암 조정 (약하게)
+                    enhancer = ImageEnhance.Contrast(img)
+                    img = enhancer.enhance(1.2)  # 대비 1.2배 증가
+                    
+                    # 선명도 향상 (약하게)
+                    enhancer = ImageEnhance.Sharpness(img)
+                    img = enhancer.enhance(1.5)  # 선명도 1.5배 증가
+                
+                # OCR 실행 - 여러 PSM 모드 시도
+                # PSM 6: 단일 균일 텍스트 블록 (계약서에 적합)
+                # PSM 11: 희미한 텍스트
+                # PSM 3: 완전 자동 페이지 분할 (기본값)
+                page_text = None
+                psm_modes = [6, 11, 3]  # 우선순위 순서
+                
+                for psm_mode in psm_modes:
+                    try:
+                        page_text = pytesseract.image_to_string(
+                            img,
+                            lang="kor+eng",
+                            config=f"--psm {psm_mode} -c preserve_interword_spaces=1"
+                        )
+                        if page_text and len(page_text.strip()) > 10:  # 의미있는 텍스트가 있으면
+                            print(f"[PDF 처리] OCR 페이지 {i + 1}: PSM {psm_mode} 모드로 인식 성공")
+                            break
+                    except Exception as e:
+                        print(f"[PDF 처리] OCR 페이지 {i + 1}: PSM {psm_mode} 모드 실패: {e}")
+                        continue
+                
+                if not page_text:
+                    # 모든 모드 실패 시 기본 모드로 재시도
+                    page_text = pytesseract.image_to_string(
+                        img,
+                        lang="kor+eng",
+                        config="--psm 6"
+                    )
+            except Exception as e:
+                error_str = str(e)
+                if "tesseract" in error_str.lower() or "TesseractNotFoundError" in str(type(e)):
+                    msg = f"OCR: Tesseract OCR이 설치되지 않았거나 PATH에 없습니다. 설치: https://github.com/tesseract-ocr/tesseract"
+                    print(f"[PDF 처리] {msg}")
+                    error_messages.append(msg)
+                    return ""
+                else:
+                    print(f"[PDF 처리] OCR 페이지 {i + 1} 실패: {error_str}")
+                    continue
+
+            if page_text and page_text.strip():
+                digit_count = sum(ch.isdigit() for ch in page_text)
+                korean_count = sum(1 for ch in page_text if '가' <= ch <= '힣')
+                preview = page_text[:100].replace('\n', ' ') if len(page_text) > 100 else page_text.replace('\n', ' ')
+                print(f"[PDF 처리] OCR 페이지 {i + 1}: {len(page_text)}자, 숫자 {digit_count}개, 한글 {korean_count}개")
+                print(f"[PDF 처리] OCR 미리보기: {preview}...")
+                text_parts.append(page_text)
+
+        if not text_parts:
+            msg = "OCR: 텍스트를 추출할 수 없습니다 (모든 페이지에서 실패)"
+            print(f"[PDF 처리] {msg}")
+            error_messages.append(msg)
+            return ""
+
+        text = "\n".join(text_parts)
+        
+        # OCR 결과 후처리 (끊긴 단어 복구)
+        text = self._postprocess_ocr_text(text)
+        
+        digit_count_total = sum(ch.isdigit() for ch in text)
+        if digit_count_total > 0:
+            print(f"[PDF 처리] OCR 성공: {len(text_parts)}페이지, 총 {len(text)}자, 숫자 {digit_count_total}개 포함 ✅")
+        else:
+            print(f"[PDF 처리] OCR 성공: {len(text_parts)}페이지, 총 {len(text)}자 (⚠️ 숫자 없음)")
+        return text
+    
+    def _postprocess_ocr_text(self, text: str) -> str:
+        """
+        OCR 결과 후처리: 끊긴 단어 복구 및 일반적인 오인식 교정
+        """
+        # 일반적인 OCR 오인식 패턴 교정 (계약서 용어 중심)
+        corrections = [
+            # 한글 오인식 패턴
+            (r'\bSHO\b', '정함'),
+            (r'\bBash\b', '라 함'),
+            (r'\bVerve Be\b', '다음과 같이'),
+            (r'\bAaa\)', '직접지급'),
+            (r'\bSEA\b', '근로자'),
+            (r'\baz\b', '지급'),
+            (r'\bOF S\b', '야 함'),
+            (r'\bAlc:\b', '식대'),
+            (r'\bAlok-\b', '근로자'),
+            (r'\bStr\.\b', '서명'),
+            (r'\bSo\b', '및'),
+            (r'\bAl\b', '원'),
+            # 공백 정리 (순서 중요)
+            (r'\s+([.,)])', r'\1'),  # 구두점 앞 공백 제거
+            (r'([(])\s+', r'\1'),  # 여는 괄호 뒤 공백 제거
+            (r'\s+', ' '),  # 연속된 공백을 하나로 (마지막에)
+        ]
+        
+        for pattern, replacement in corrections:
+            text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+        
+        # 한글과 영문/숫자 사이 공백 정리
+        text = re.sub(r'([가-힣])\s+([a-zA-Z0-9])', r'\1 \2', text)
+        text = re.sub(r'([a-zA-Z0-9])\s+([가-힣])', r'\1 \2', text)
+        
+        # 연속된 줄바꿈 정리
+        text = re.sub(r'\n{3,}', '\n\n', text)
+        
+        # 단어 경계에서 끊긴 한글 복구 시도 (간단한 휴리스틱)
+        # 예: "근 로자" → "근로자", "사 업주" → "사업주"
+        common_words = [
+            ('근 로자', '근로자'),
+            ('사 업주', '사업주'),
+            ('대 표', '대표'),
+            ('연 락', '연락'),
+            ('주 소', '주소'),
+            ('전 화', '전화'),
+            ('서 명', '서명'),
+            ('체 결', '체결'),
+            ('합 의', '합의'),
+            ('지 급', '지급'),
+            ('임 금', '임금'),
+            ('근 무', '근무'),
+            ('휴 게', '휴게'),
+            ('수 습', '수습'),
+            ('해 지', '해지'),
+        ]
+        
+        for broken, fixed in common_words:
+            text = text.replace(broken, fixed)
+        
+        return text.strip()
     
     def hwp_to_text(self, hwp_path: str) -> str:
         """
@@ -706,11 +1115,30 @@ class DocumentProcessor:
             raise Exception(f"HTML 처리 실패: {str(e)}")
     
     def _clean_text(self, text: str) -> str:
-        """텍스트 정제"""
-        # 중복 공백 제거
-        text = re.sub(r'\s+', ' ', text)
+        """텍스트 정제 (숫자 보존 강화)"""
+        # 원본에 숫자가 있는지 확인
+        has_numbers_before = any(c.isdigit() for c in text)
+        
+        # 중복 공백 제거 (줄바꿈은 유지)
+        text = re.sub(r'[ \t]+', ' ', text)  # 공백과 탭만 제거, 줄바꿈은 유지
+        # 줄바꿈 정리 (연속된 줄바꿈을 2개로 제한)
+        text = re.sub(r'\n{3,}', '\n\n', text)
+        
         # 불필요한 특수문자 제거 (한글, 영문, 숫자, 기본 구두점만 유지)
-        text = re.sub(r'[^\w\s가-힣.,()%\-:/]', '', text)
+        # 숫자와 금액 관련 특수문자(쉼표, 원화 기호 등) 보존 강화
+        # 금액 패턴: 2,000,000원, ₩1,000,000, 100만원 등
+        # 날짜 패턴: 2025-01-01, 2025.01.01, 2025/01/01 등
+        # 숫자 관련 특수문자: , (쉼표), . (소수점/날짜), - (하이픈/날짜), / (슬래시/날짜), : (시간)
+        text = re.sub(r'[^\w\s가-힣.,()%\-:/0-9₩원만억]', '', text)
+        
+        # 숫자 보존 확인 로깅 (디버깅용)
+        has_numbers_after = any(c.isdigit() for c in text)
+        if has_numbers_before and not has_numbers_after:
+            print(f"[텍스트 정제] ⚠️ 경고: 정제 후 텍스트에서 숫자가 사라졌습니다!")
+            print(f"[텍스트 정제] 원본 샘플 (처음 500자): {text[:500] if len(text) > 500 else text}")
+        elif not has_numbers_after and len(text) > 100:
+            print(f"[텍스트 정제] ⚠️ 경고: 정제 후 텍스트에 숫자가 없습니다. 원본 길이: {len(text)}")
+        
         return text.strip()
     
     def to_chunks(self, text: str, base_meta: Dict[str, Any] = None) -> List[Chunk]:
@@ -918,7 +1346,8 @@ class DocumentProcessor:
         self,
         file_path: str,
         file_type: str = None,
-        base_meta: Dict[str, Any] = None
+        base_meta: Dict[str, Any] = None,
+        mode: str = "normal"  # ✅ "contract" 추가
     ) -> tuple[str, List[Chunk]]:
         """
         파일 처리 (텍스트 추출 + 청킹)
@@ -927,6 +1356,7 @@ class DocumentProcessor:
             file_path: 파일 경로
             file_type: 파일 타입 ('pdf', 'text', 'hwp', 'hwpx', 'html') - None이면 자동 감지
             base_meta: 기본 메타데이터
+            mode: 처리 모드 ("normal" 또는 "contract") - "contract"이면 to_contract_chunks 사용
         
         Returns:
             (text, chunks)
@@ -988,7 +1418,11 @@ class DocumentProcessor:
         if not text_stripped:
             raise ValueError(f"추출된 텍스트가 비어있습니다: {file_path}")
         
-        chunks = self.to_chunks(text, base_meta)
+        # 텍스트 검증 후 여기에서 분기
+        if mode == "contract":
+            chunks = self.to_contract_chunks(text, base_meta)
+        else:
+            chunks = self.to_chunks(text, base_meta)
         
         return text, chunks
 

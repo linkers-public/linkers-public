@@ -92,13 +92,17 @@ export function ContractViewer({
                            severities.includes('medium') ? 'medium' :
                            severities.includes('low') ? 'low' : undefined
 
+        // clauses prop에서 startIndex와 endIndex 가져오기
+        const clauseStartIndex = clause.startIndex ?? 0
+        const clauseEndIndex = clause.endIndex ?? (clauseStartIndex + clause.content.length)
+        
         return {
           id: clause.id,
           number: clauseNumber,
           title: clause.title || `제${clauseNumber}조`,
           content: clause.content,
-          startIndex: 0, // TODO: 실제 위치 계산
-          endIndex: clause.content.length,
+          startIndex: clauseStartIndex, // clauses prop에서 전달된 실제 위치 사용
+          endIndex: clauseEndIndex,
           maxSeverity,
           issueCount: clauseIssues.length,
           issues: clauseIssues,
@@ -499,18 +503,34 @@ export function ContractViewer({
   // 조항별 텍스트 렌더링
   const renderClauseContent = (clause: Clause) => {
     const content = clause.content
+    // highlightedTexts에서 이 clause 범위에 있는 하이라이트 필터링
+    // startIndex/endIndex가 clause의 startIndex와 endIndex 사이에 있으면 포함
     const clauseHighlights = [
       ...highlightedTexts.filter(ht => {
-        const issue = issues.find(i => i.id === ht.issueId)
-        return issue && clause.issues.includes(issue)
+        // highlightedTexts의 startIndex/endIndex는 전체 contractText 기준
+        // clause의 startIndex/endIndex와 겹치는지 확인
+        const htStart = ht.startIndex
+        const htEnd = ht.endIndex
+        const clauseStart = clause.startIndex
+        const clauseEnd = clause.endIndex
+        
+        // 하이라이트가 clause 범위와 겹치는지 확인
+        const overlaps = (htStart < clauseEnd && htEnd > clauseStart)
+        return overlaps
       }),
-      ...clause.issues.map(issue => ({
-        startIndex: issue.location.startIndex ?? 0,
-        endIndex: issue.location.endIndex ?? (issue.location.startIndex ?? 0) + (issue.originalText?.length ?? 0),
-        severity: issue.severity,
-        issueId: issue.id,
-        text: issue.originalText || '',
-      }))
+      // fallback: clause.issues에서 하이라이트가 없는 경우
+      ...clause.issues
+        .filter(issue => {
+          // 이미 highlightedTexts에 포함된 이슈는 제외
+          return !highlightedTexts.some(ht => ht.issueId === issue.id)
+        })
+        .map(issue => ({
+          startIndex: issue.location.startIndex ?? 0,
+          endIndex: issue.location.endIndex ?? (issue.location.startIndex ?? 0) + (issue.originalText?.length ?? 0),
+          severity: issue.severity,
+          issueId: issue.id,
+          text: issue.originalText || '',
+        }))
     ].sort((a, b) => a.startIndex - b.startIndex)
 
     if (clauseHighlights.length === 0) {

@@ -133,9 +133,31 @@ class ClauseLabelingTool(BaseTool):
             article_number = self._extract_article_number(section.title)
             
             # 원문에서 위치 찾기
+            # 같은 제목이 여러 번 나올 수 있으므로, 이전 조항의 end_index 이후부터 검색
+            search_start = clauses[-1].end_index if clauses else 0
             full_text = section.title + "\n" + section.body
-            start_index = text.find(section.title)
-            end_index = start_index + len(full_text) if start_index >= 0 else 0
+            
+            # 이전 조항 이후부터 검색하여 중복 제목 문제 해결
+            search_text = text[search_start:]
+            relative_start = search_text.find(section.title)
+            
+            if relative_start >= 0:
+                start_index = search_start + relative_start
+                end_index = start_index + len(full_text)
+            else:
+                # 찾지 못한 경우 전체 텍스트에서 검색 (fallback)
+                start_index = text.find(section.title)
+                end_index = start_index + len(full_text) if start_index >= 0 else 0
+                if start_index >= 0 and clauses:
+                    # 이미 처리된 조항과 겹치면 다음 위치 찾기
+                    for prev_clause in clauses:
+                        if start_index < prev_clause.end_index:
+                            # 겹치는 경우 다음 위치 찾기
+                            next_start = text.find(section.title, prev_clause.end_index)
+                            if next_start >= 0:
+                                start_index = next_start
+                                end_index = start_index + len(full_text)
+                            break
             
             # 카테고리 추정
             category = self._infer_category(section.title, section.body)

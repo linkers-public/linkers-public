@@ -290,6 +290,7 @@ export interface ContractIssueV2 {
   clauseId?: string;  // 연결된 조항 ID
   startIndex?: number;  // 원문에서 시작 위치
   endIndex?: number;  // 원문에서 종료 위치
+  toxicClauseDetail?: ToxicClauseDetail;  // 독소조항 상세 정보
 }
 
 export interface ClauseV2 {
@@ -308,6 +309,24 @@ export interface HighlightedTextV2 {
   endIndex: number;
   severity: 'low' | 'medium' | 'high';
   issueId: string;
+}
+
+// 독소조항 관련 타입 추가
+export interface ToxicClauseDetail {
+  clauseLocation: string;
+  contentSummary: string;
+  whyRisky: string;
+  realWorldProblems: string;
+  suggestedRevisionLight: string;
+  suggestedRevisionFormal: string;
+}
+
+export interface RiskSummaryItem {
+  item: string;
+  riskLevel: 'low' | 'medium' | 'high';
+  problemPoint: string;
+  simpleExplanation: string;
+  revisionKeyword: string;
 }
 
 export interface ContractAnalysisResponseV2 {
@@ -332,6 +351,13 @@ export interface ContractAnalysisResponseV2 {
   clauses?: ClauseV2[];  // 조항 목록 (자동 분류)
   highlightedTexts?: HighlightedTextV2[];  // 하이라이트된 텍스트
   createdAt: string;
+  // 새로운 독소조항 탐지 필드
+  oneLineSummary?: string;  // 한 줄 총평
+  riskTrafficLight?: string;  // 리스크 신호등: 🟢 | 🟡 | 🔴
+  top3ActionPoints?: string[];  // 지금 당장 확인하거나 물어봐야 할 포인트 3개
+  riskSummaryTable?: RiskSummaryItem[];  // 리스크 요약 테이블
+  toxicClauses?: ToxicClauseDetail[];  // 독소조항 상세 목록
+  negotiationQuestions?: string[];  // 협상 시 질문 리스트
 }
 
 export interface ContractComparisonRequestV2 {
@@ -462,7 +488,11 @@ export const analyzeContractV2 = async (
   file: File,
   title?: string,
   docType?: string,
-  userId?: string | null
+  userId?: string | null,
+  contractType?: 'freelancer' | 'part_time' | 'regular' | 'service' | 'other',
+  userRole?: 'worker' | 'employer',
+  field?: 'it_dev' | 'design' | 'marketing' | 'other',
+  concerns?: string
 ): Promise<ContractAnalysisResponseV2> => {
   try {
     const url = `${LEGAL_API_BASE_V2}/analyze-contract`;
@@ -474,6 +504,18 @@ export const analyzeContractV2 = async (
     }
     if (docType) {
       formData.append('doc_type', docType);
+    }
+    if (contractType) {
+      formData.append('contract_type', contractType);
+    }
+    if (userRole) {
+      formData.append('user_role', userRole);
+    }
+    if (field) {
+      formData.append('field', field);
+    }
+    if (concerns) {
+      formData.append('concerns', concerns);
     }
 
     // 인증 헤더 가져오기 (Authorization + X-User-Id)

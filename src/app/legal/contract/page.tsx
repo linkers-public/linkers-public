@@ -400,12 +400,136 @@ export default function ContractAnalysisPage() {
   }
 
   const handleSampleContract = async (sampleType: 'intern' | 'freelancer') => {
-    // 샘플 계약서 처리 (백엔드에서 샘플 docId 제공 시 사용)
-    // 임시로 알림만 표시
-    toast({
-      title: '샘플 계약서',
-      description: '샘플 계약서 기능은 곧 제공될 예정입니다.',
-    })
+    try {
+      setIsAnalyzing(true)
+      setAnalysisError(null)
+      setAnalysisStep(1)
+
+      // 샘플 파일 경로 설정
+      const sampleFiles = {
+        intern: '/samples/sample_intern_contract.pdf',
+        freelancer: '/samples/sample_freelancer_contract.pdf'
+      }
+
+      const filePath = sampleFiles[sampleType]
+      const fileName = sampleType === 'intern' 
+        ? 'IT_인턴_근로계약서_샘플.pdf' 
+        : '프리랜서_용역계약서_샘플.pdf'
+
+      // 파일 fetch
+      const response = await fetch(filePath)
+      if (!response.ok) {
+        throw new Error(`샘플 파일을 불러올 수 없습니다: ${filePath}`)
+      }
+
+      const blob = await response.blob()
+      
+      // Blob을 File 객체로 변환
+      const sampleFile = new File([blob], fileName, { 
+        type: blob.type || 'application/pdf' 
+      })
+
+      setFile(sampleFile)
+      setAnalysisStep(2)
+
+      // Step 1: 파일 업로드 (선택적)
+      let fileUrl: string | null = null
+      try {
+        fileUrl = await uploadContractFile(sampleFile)
+        if (fileUrl) {
+          console.log('샘플 파일 업로드 완료:', fileUrl)
+        }
+      } catch (uploadError: any) {
+        console.warn('샘플 파일 업로드 실패, 분석은 계속 진행:', uploadError)
+        fileUrl = null
+      }
+
+      setAnalysisStep(3)
+
+      // Step 2: 계약서 분석 수행 (v2)
+      const docType = sampleType === 'intern' ? 'employment' : 'freelance'
+      const result = await analyzeContractV2(sampleFile, fileName, docType)
+      
+      // 응답 확인 및 로깅
+      console.log('📦 [샘플 계약서 분석] 응답 받음:', result)
+      
+      // docId 확인
+      let docId = result?.docId
+      if (!docId) {
+        console.warn('[샘플 계약서 분석] docId가 없어 임시 ID 생성')
+        docId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      }
+      
+      // contractText 확인
+      const contractText = result?.contractText || ''
+      
+      // Step 3: 분석 결과를 로컬 스토리지에 저장
+      const analysisData = {
+        ...result,
+        contractText: result.contractText ?? result.contract_text ?? contractText ?? '',
+        contract_text: result.contract_text ?? result.contractText ?? contractText ?? '',
+        risk_score: result.riskScore,
+        risk_level: result.riskLevel,
+        fileUrl,
+        docId: docId,
+      }
+      
+      localStorage.setItem(`contract_analysis_${docId}`, JSON.stringify(analysisData))
+      console.log('[샘플 계약서 분석] 로컬 스토리지에 저장 완료:', docId)
+      
+      // Step 4: 분석 결과를 DB에 저장 (선택적)
+      try {
+        if (fileUrl && result.issues && Array.isArray(result.issues)) {
+          const v1Format = {
+            risk_score: result.riskScore,
+            risk_level: result.riskLevel,
+            summary: result.summary,
+            issues: (result.issues || []).map((issue: any) => ({
+              name: issue.summary || issue.name || '',
+              description: issue.explanation || issue.description || '',
+              severity: issue.severity || 'medium',
+              legal_basis: issue.legalBasis || issue.legal_basis || [],
+              suggested_text: issue.suggestedRevision || issue.suggested_text || '',
+            })),
+            recommendations: [],
+            grounding: (result.retrievedContexts || []).map((ctx: any) => ({
+              source_id: '',
+              source_type: ctx.sourceType || ctx.source_type || 'law',
+              title: ctx.title || '',
+              snippet: ctx.snippet || '',
+              score: 0,
+            })),
+            contract_text: contractText || '',
+          }
+          await saveContractAnalysis(sampleFile, fileUrl, v1Format)
+          console.log('샘플 계약서 분석 결과 DB 저장 완료')
+        }
+      } catch (saveError: any) {
+        console.warn('샘플 계약서 DB 저장 실패, 로컬 스토리지만 사용:', saveError)
+      }
+      
+      // 히스토리 다시 로드
+      await loadHistory()
+      
+      // 상세 페이지로 이동
+      router.push(`/legal/contract/${docId}`)
+    } catch (error: any) {
+      console.error('샘플 계약서 분석 오류:', error)
+      
+      let errorMessage = '샘플 계약서 분석 중 오류가 발생했습니다.'
+      if (error.message?.includes('샘플 파일을 불러올 수 없습니다')) {
+        errorMessage = error.message
+      }
+      
+      setAnalysisError(errorMessage)
+      setIsAnalyzing(false)
+      setAnalysisStep(0)
+      toast({
+        variant: 'destructive',
+        title: '샘플 계약서 분석 실패',
+        description: errorMessage,
+      })
+    }
   }
 
   const formatFileSize = (bytes: number) => {

@@ -2,6 +2,11 @@
 법률/계약서 RAG 전용 프롬프트 템플릿
 """
 
+import logging
+from typing import Optional
+
+logger = logging.getLogger(__name__)
+
 # ============================================================================
 # 법률 상담 챗 프롬프트
 # ============================================================================
@@ -148,115 +153,237 @@ CONTRACT_ANALYSIS_SYSTEM_PROMPT = """당신은 한국 노동법 전문가입니�
 
 def build_contract_analysis_prompt(
     contract_text: str,
+    clauses: list = None,
     grounding_chunks: list = None,
     contract_chunks: list = None,
     description: str = None,
+    contract_type: Optional[str] = None,
+    user_role: Optional[str] = None,
+    field: Optional[str] = None,
+    concerns: Optional[str] = None,
 ) -> str:
     """
-    계약서 분석용 프롬프트 구성 (Dual RAG 지원)
+    계약서 분석용 프롬프트 구성 (clause_id 기반)
     
     Args:
-        contract_text: 계약서 텍스트
+        contract_text: 계약서 텍스트 (참고용)
+        clauses: 추출된 clause 리스트 (필수)
         grounding_chunks: 관련 법령 청크 (legal_chunks)
-        contract_chunks: 계약서 내부 청크 (contract_chunks)
+        contract_chunks: 계약서 내부 청크 (contract_chunks, 레거시 호환)
         description: 추가 상황 설명
     
     Returns:
         완성된 프롬프트 문자열
     """
-    # 계약서 내부 조항 컨텍스트 (Dual RAG)
-    contract_context = ""
-    if contract_chunks:
-        contract_context = "\n**계약서 주요 조항 (분석 대상):**\n"
-        for chunk in contract_chunks[:5]:  # 상위 5개만 사용
-            article_num = chunk.get("article_number", "")
-            content = chunk.get("content", "")[:400]  # 400자로 제한
-            contract_context += f"- 제{article_num}조:\n{content}\n\n"
+    # clauses가 없으면 에러
+    if not clauses:
+        logger.warning("[프롬프트 생성] clauses가 비어있습니다. 빈 프롬프트 반환.")
+        return ""
     
-    # 관련 법령 컨텍스트
-    legal_context = ""
+    # clause 컨텍스트 문자열 만들기
+    clause_lines = []
+    for c in clauses:
+        snippet = c.get("content", "")
+        if len(snippet) > 400:
+            snippet = snippet[:400] + "..."
+        clause_id = c.get("id", "")
+        title = c.get("title", "")
+        clause_lines.append(
+            f'- [{clause_id}] {title}\n  "{snippet}"'
+        )
+    clause_context = "\n".join(clause_lines)
+    
+    # 법령 컨텍스트 준비
+    legal_lines = []
     if grounding_chunks:
-        legal_context = "\n**참고 법령/가이드라인:**\n"
-        for chunk in grounding_chunks[:8]:
+        # 검색된 모든 legal_chunks 사용 (최대 15개로 제한하여 프롬프트 길이 관리)
+        max_legal_chunks = min(len(grounding_chunks), 15)
+        for g in grounding_chunks[:max_legal_chunks]:
             # LegalGroundingChunk는 Pydantic 모델이므로 getattr 사용
-            source_type = getattr(chunk, 'source_type', 'law')
-            title = getattr(chunk, 'title', '')
-            snippet = getattr(chunk, 'snippet', getattr(chunk, 'content', ''))[:300]
-            legal_context += f"- [{source_type}] {title}: {snippet}\n"
+            source_type = getattr(g, 'source_type', 'law')
+            title = getattr(g, 'title', '')
+            snippet = getattr(g, 'snippet', getattr(g, 'content', ''))
+            # snippet 길이를 300자로 늘려서 더 많은 정보 제공
+            if len(snippet) > 300:
+                snippet = snippet[:300] + "..."
+            legal_lines.append(
+                f'- ({source_type}) {title}: "{snippet}"'
+            )
+    legal_context = "\n".join(legal_lines) if legal_lines else "(참고 법령 없음)"
     
-    situation_context = ""
-    if description:
-        situation_context = f"\n**추가 상황 설명:**\n{description}\n"
+    # 사용자 컨텍스트 정보 구성
+    user_context = []
+    if contract_type:
+        contract_type_map = {
+            "freelancer": "프리랜서",
+            "part_time": "알바/파트타임",
+            "regular": "정규직",
+            "service": "용역",
+            "other": "기타"
+        }
+        user_context.append(f"- 계약 종류: {contract_type_map.get(contract_type, contract_type)}")
     
-    prompt = f"""{CONTRACT_ANALYSIS_SYSTEM_PROMPT}
+    if user_role:
+        role_map = {
+            "worker": "을(프리랜서/근로자)",
+            "employer": "갑(발주사/고용주)"
+        }
+        user_context.append(f"- 역할: {role_map.get(user_role, user_role)}")
+    
+    if field:
+        field_map = {
+            "it_dev": "IT 개발",
+            "design": "디자인",
+            "marketing": "마케팅",
+            "other": "기타"
+        }
+        user_context.append(f"- 분야: {field_map.get(field, field)}")
+    
+    if concerns:
+        user_context.append(f"- 우선 확인하고 싶은 고민: {concerns}")
+    
+    user_context_str = "\n".join(user_context) if user_context else "(사용자 컨텍스트 없음)"
+    
+    system_prompt = """당신은 프리랜서/청년 근로자 관점에서 계약서를 점검하는 계약 분석 어시스턴트입니다.
 
-**분석 대상 계약서:**
-{contract_text[:3000]}
-{contract_context}
-{situation_context}
+- 을(프리랜서/근로자)의 권리를 보호하는 관점에서 계약서를 분석합니다.
+- 독소조항(을에게 과도하게 불리한 조항)을 우선적으로 찾아냅니다.
+- 모든 응답은 반드시 한국어로 작성해야 합니다.
+"""
+    
+    user_prompt = f"""[사용자 컨텍스트]
+
+{user_context_str}
+
+[계약서 조항 목록]
+
+다음은 이 계약서를 조항별로 나눈 목록입니다.
+각 항목에는 "clause_id", "title", "content"가 포함됩니다.
+
+{clause_context}
+
+[참고 법령/가이드라인]
+
 {legal_context}
 
-위 계약서를 분석하여 다음 JSON 형식으로 응답해주세요:
+[분석 항목]
 
-**⚠️ 매우 중요: 반드시 유효한 JSON 형식으로만 응답하세요. 설명, 마크다운, 코드 블록 등은 절대 포함하지 마세요.**
+계약서를 다음 9개 항목별로 분석하세요:
+
+1. 핵심 요약: 계약 목적·업무 내용, 계약 기간, 총 금액·지급 방식
+2. 돈·대금: 지급 방식, 지급 기한, 지연 시 이자/지연손해금, 비용 포함 여부
+3. 업무 범위·근로조건: 업무 범위 포괄성, 추가 업무 규정, 근무 시간/휴게/연장근로 수당
+4. 기간·해지: 계약 기간, 자동 연장, 갑/을 해지권 대칭성, 해지 시 대금 정산, 위약금/손해배상
+5. 지식재산권(IP)·산출물: 산출물 저작권 소유자, 포트폴리오 사용 가능 여부, 2차적 저작물 금지 범위
+6. 비밀유지(NDA): 비밀 정보 범위, 비밀유지 기간, 위반 시 책임 범위
+7. 경쟁금지·겸업 제한: 계약 종료 후 금지 기간/범위, 지리적/업종 범위, 반대 급부 여부
+8. 책임·손해배상·면책: 무제한 책임 조항, 간접손해/특별손해 배상, 갑의 과실 책임 전가
+9. 분쟁해결: 관할 법원, 분쟁 해결 절차
+
+[독소조항 탐지 기준]
+
+아래에 해당하면 독소조항으로 표시하세요:
+
+- 대금 지급: "검수 완료 후 지급"만 있고 검수 기준/기간이 없음
+- 위약금·지연 손해금: 을에게만 과도한 위약금, 갑 지급 지연 시 패널티 없음
+- 무제한 손해배상: "어떤 경우에도 모든 손해를 전부 배상한다" 같은 조항
+- 일방적 해지권: 갑은 언제든 해지 가능, 을은 해지 어려움
+- 과도한 경쟁금지: 종료 후 1~3년 이상, 업계 전반 금지, 대가 없음
+- IP 완전 양도: 모든 창작물 저작권 영구 양도, 포트폴리오 금지
+- 일방적 변경 권한: 갑이 일방적으로 계약 수정 가능
+
+[해야 할 일]
+
+1. 각 clause를 위 9개 항목 관점에서 검토하여 문제가 되는 조항을 찾습니다.
+2. 독소조항 후보를 우선적으로 식별합니다.
+3. 이슈마다 어느 clause에 해당하는지 "clause_id"로 지정합니다.
+4. 반드시 내가 제공한 clause_id만 사용해야 하며, 새로운 텍스트를 만들어 '원문'인 것처럼 쓰지 마십시오.
+5. 한 clause에서 여러 개의 문제가 발견되면, 같은 clause_id로 여러 이슈를 생성해도 됩니다.
+6. JSON 형식만 출력합니다.
+
+[출력 형식]
+
+아래 JSON 스키마를 지키세요.
 
 {{
-    "risk_score": 0-100,
-    "risk_level": "low" | "medium" | "high",
-    "summary": "전체 위험도 요약 (2-3문장, 한국어)",
-    "issues": [
-        {{
-            "name": "이슈 이름 (한국어)",
-            "description": "위험 조항 내용 설명 (한국어, 요약 형식)",
-            "original_text": "계약서 원문에서 해당 위험 조항의 실제 텍스트 (반드시 계약서 원문과 정확히 일치해야 함)",
-            "severity": "low" | "medium" | "high",
-            "legal_basis": ["근로기준법 제XX조", ...],
-            "suggested_text": "개선된 조항 텍스트 (한국어)",
-            "rationale": "왜 위험한지 설명 (한국어)",
-            "suggested_questions": ["협상 시 물어볼 질문 1 (한국어)", ...]
-        }}
-    ],
-    "recommendations": [
-        {{
-            "title": "권장 사항 제목 (한국어)",
-            "description": "구체적인 권장 사항 (한국어)",
-            "steps": ["단계 1 (한국어)", "단계 2 (한국어)", ...]
-        }}
-    ]
+  "risk_score": 0-100,
+  "risk_level": "low" | "medium" | "high",
+  "summary": "계약서 전체 위험도에 대한 한 줄 요약 (한국어)",
+  "one_line_summary": "을(프리랜서/근로자)에게 불리한 조항이 N개 있으며, 특히 [주요 문제]가 과도한 편입니다. 협의·수정 없이 그대로 서명하는 것은 권장되지 않습니다.",
+  "risk_traffic_light": "🟢 | 🟡 | 🔴",
+  "top3_action_points": [
+    "지금 당장 확인하거나 물어봐야 할 포인트 1",
+    "지금 당장 확인하거나 물어봐야 할 포인트 2",
+    "지금 당장 확인하거나 물어봐야 할 포인트 3"
+  ],
+  "risk_summary_table": [
+    {{
+      "item": "대금 지급",
+      "risk_level": "low | medium | high",
+      "problem_point": "검수 후 지급, 기한 없음",
+      "simple_explanation": "갑이 무기한 검수 지연 가능",
+      "revision_keyword": "검수 후 ○일 이내 지급 명시"
+    }}
+  ],
+  "issues": [
+    {{
+      "issue_id": "문자열, 예: issue-1",
+      "clause_id": "clause-번호 (반드시 위 목록에 있는 것만 사용)",
+      "category": "wage | working_hours | job_stability | dismissal | payment | ip | nda | non_compete | liability | dispute",
+      "severity": "low | medium | high",
+      "summary": "이슈를 한 줄로 요약 (한국어)",
+      "reason": "왜 문제가 되는지 구체적으로 설명 (한국어)",
+      "legal_basis": ["관련 법조항 또는 가이드라인"],
+      "suggested_revision": "가능하다면 더 안전한 문구 제안 (한국어)",
+      "suggested_questions": ["사업주에게 확인해볼 질문 목록 (한국어)"],
+      "toxic_clause_detail": {{
+        "clause_location": "제○조(손해배상)",
+        "content_summary": "내용 요약",
+        "why_risky": "왜 위험한지",
+        "real_world_problems": "현실에서 생길 수 있는 문제",
+        "suggested_revision_light": "라이트 버전 수정 제안 (일반인 말투)",
+        "suggested_revision_formal": "포멀 버전 수정 제안 (로펌/변호사용)"
+      }}
+    }}
+  ],
+  "toxic_clauses": [
+    {{
+      "clause_location": "제○조(손해배상)",
+      "content_summary": "내용 요약",
+      "why_risky": "왜 위험한지",
+      "real_world_problems": "현실에서 생길 수 있는 문제",
+      "suggested_revision_light": "라이트 버전 수정 제안",
+      "suggested_revision_formal": "포멀 버전 수정 제안"
+    }}
+  ],
+  "negotiation_questions": [
+    "검수 기간을 최대 ○일로 제한할 수 있을까요?",
+    "지연 시 지연이자/지급 기한을 명시해주실 수 있을까요?",
+    "손해배상 한도를 '총 계약금액' 수준으로 제한할 수 있을까요?"
+  ],
+  "recommendations": [
+    "전반적인 개선 권고사항 (한국어)"
+  ]
 }}
 
-**응답 규칙 (반드시 준수):**
-1. **JSON 형식**: 반드시 유효한 JSON 형식으로만 응답. 설명, 마크다운, 코드 블록 등은 절대 포함하지 마세요.
-2. **언어**: summary, description, rationale, title, steps 등 모든 텍스트 필드는 반드시 한국어로 작성
-3. **legal_basis**: 법령명은 "근로기준법 제XX조" 형식으로 한국어로 작성, 최대 3개까지
-4. **문자 인코딩**: JSON 내 문자열에서 특수문자(따옴표, 줄바꿈 등)는 이스케이프 처리하세요.
-5. **issues**: 우선순위가 높은 것부터 최대 10개까지 식별
-6. **original_text 필수**: 각 issue의 "original_text" 필드는 반드시 계약서 원문에서 해당 위험 조항의 실제 텍스트를 그대로 복사해야 합니다. 요약이나 재작성이 아닌 원문 그대로여야 합니다.
-7. **risk_score**: 
-   - 0-30: low (전반적으로 양호)
-   - 31-60: medium (일부 개선 필요)
-   - 61-100: high (심각한 위험 조항 존재)
+[중요 규칙]
 
-**응답 예시:**
-{{
-    "risk_score": 65,
-    "risk_level": "high",
-    "summary": "이 계약서는 근로기준법 위반 가능성이 있는 조항이 포함되어 있습니다.",
-    "issues": [
-        {{
-            "name": "임금 지급 방법 불명확",
-            "description": "임금 지급일이 구체적으로 명시되지 않음",
-            "original_text": "임금은 매월 말일에 지급한다",
-            "severity": "high",
-            "legal_basis": ["근로기준법 제43조"],
-            "suggested_text": "임금은 매월 말일 오후 5시 이전에 근로자 명의 계좌로 입금한다",
-            "rationale": "임금 지급일이 불명확하면 분쟁 소지가 있습니다",
-            "suggested_questions": ["임금 지급일을 구체적으로 명시해주실 수 있나요?"]
-        }}
-    ],
-    "recommendations": []
-}}
+- 'original_text' 필드를 생성하지 마세요. 원문 텍스트는 내가 clause_id를 기반으로 따로 찾습니다.
+- clause.content를 다시 써서 요약하는 대신, 왜 위험한지 설명에 집중하십시오.
+- 독소조항은 toxic_clause_detail 필드에 상세 정보를 반드시 포함하세요.
+- JSON만 출력하고, 다른 설명 텍스트는 출력하지 마세요.
+- risk_score: 0-30(low), 31-60(medium), 61-100(high)
+- issues 최대 15개까지, 우선순위 높은 것부터 (독소조항 우선)
+- 독소조항은 toxic_clauses 배열에도 별도로 정리하세요.
 """
+    
+    prompt = f"""{system_prompt}
+
+{user_prompt}"""
+    
+    # 실제 사용된 legal_chunks 개수 계산
+    used_legal_chunks = min(len(grounding_chunks), 15) if grounding_chunks else 0
+    logger.info(f"[프롬프트 생성] clause 기반 프롬프트 생성 완료: clauses={len(clauses)}개, legal_chunks={len(grounding_chunks) if grounding_chunks else 0}개 검색됨, {used_legal_chunks}개 프롬프트에 사용")
     
     return prompt
 

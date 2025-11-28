@@ -74,28 +74,32 @@ class HighlightTool(BaseTool):
                     logger.debug(f"[하이라이트] issue={issue_id}: originalText가 없어 건너뜁니다")
                     continue
                 
-                # 원문에서 originalText 찾기
-                start_index = contract_text.find(original_text)
+                # originalText에서 페이지 정보 제거 (예: "페이지 2/2 1. 근로계약서" → "1. 근로계약서")
+                cleaned_original_text = self._clean_page_info(original_text)
+                
+                # 원문에서 originalText 찾기 (정확한 매칭 시도)
+                start_index = contract_text.find(cleaned_original_text)
                 
                 if start_index >= 0:
-                    end_index = start_index + len(original_text)
+                    end_index = start_index + len(cleaned_original_text)
                     
                     highlighted_text = HighlightedText(
-                        text=original_text,
+                        text=cleaned_original_text,
                         start_index=start_index,
                         end_index=end_index,
                         severity=severity,
                         issue_id=issue_id
                     )
                     highlighted_texts.append(highlighted_text)
+                    logger.debug(f"[하이라이트] issue={issue_id}: 정확한 매칭 성공 (start={start_index}, end={end_index})")
                 else:
                     # 정확히 일치하지 않으면 부분 매칭 시도
-                    # originalText의 핵심 키워드 추출
-                    keywords = self._extract_keywords(original_text)
+                    # 1. originalText의 핵심 키워드 추출
+                    keywords = self._extract_keywords(cleaned_original_text)
                     if keywords:
-                        # 키워드가 포함된 문장 찾기
+                        # 2. 키워드가 포함된 문장 찾기
                         matched_text, matched_start, matched_end = self._find_text_by_keywords(
-                            contract_text, keywords, original_text
+                            contract_text, keywords, cleaned_original_text
                         )
                         if matched_text:
                             highlighted_text = HighlightedText(
@@ -106,6 +110,24 @@ class HighlightTool(BaseTool):
                                 issue_id=issue_id
                             )
                             highlighted_texts.append(highlighted_text)
+                            logger.debug(f"[하이라이트] issue={issue_id}: 키워드 매칭 성공 (start={matched_start}, end={matched_end})")
+                        else:
+                            # 3. 키워드 매칭도 실패하면, originalText의 일부만으로 매칭 시도
+                            matched_text, matched_start, matched_end = self._find_partial_match(
+                                contract_text, cleaned_original_text
+                            )
+                            if matched_text:
+                                highlighted_text = HighlightedText(
+                                    text=matched_text,
+                                    start_index=matched_start,
+                                    end_index=matched_end,
+                                    severity=severity,
+                                    issue_id=issue_id
+                                )
+                                highlighted_texts.append(highlighted_text)
+                                logger.debug(f"[하이라이트] issue={issue_id}: 부분 매칭 성공 (start={matched_start}, end={matched_end})")
+                            else:
+                                logger.warning(f"[하이라이트] issue={issue_id}: 매칭 실패 - originalText='{original_text[:100]}...'")
             
             # 중복 제거 (같은 위치의 하이라이트는 하나만)
             unique_highlights = self._remove_overlaps(highlighted_texts)
@@ -129,6 +151,15 @@ class HighlightTool(BaseTool):
         except Exception as e:
             logger.error(f"[{self.name}] 실행 실패: {str(e)}", exc_info=True)
             raise
+    
+    def _clean_page_info(self, text: str) -> str:
+        """originalText에서 페이지 정보 제거"""
+        import re
+        # "페이지 2/2", "페이지 1/3" 같은 패턴 제거
+        text = re.sub(r'페이지\s*\d+/\d+\s*', '', text)
+        # "페이지 2/2 1. 근로계약서" → "1. 근로계약서"
+        text = text.strip()
+        return text
     
     def _extract_keywords(self, text: str) -> List[str]:
         """핵심 키워드 추출"""
@@ -173,6 +204,56 @@ class HighlightTool(BaseTool):
                 if start_index >= 0:
                     end_index = start_index + len(sentence)
                     return (sentence, start_index, end_index)
+        
+        return (None, 0, 0)
+    
+    def _find_partial_match(
+        self,
+        contract_text: str,
+        original_text: str
+    ) -> tuple:
+        """
+        originalText의 일부만으로 매칭 시도 (더 관대한 매칭)
+        
+        Returns:
+            (matched_text, start_index, end_index) 또는 (None, 0, 0)
+        """
+        if not original_text or len(original_text) < 10:
+            return (None, 0, 0)
+        
+        # originalText의 중간 부분부터 시도 (앞뒤가 잘릴 수 있음)
+        # 최소 20자 이상의 텍스트로 매칭 시도
+        min_length = min(20, len(original_text) // 2)
+        
+        # originalText의 중간 부분 추출
+        start_offset = len(original_text) // 4
+        end_offset = len(original_text) - start_offset
+        search_text = original_text[start_offset:end_offset]
+        
+        if len(search_text) < min_length:
+            # 너무 짧으면 전체 텍스트 사용
+            search_text = original_text
+        
+        # contract_text에서 찾기
+        start_index = contract_text.find(search_text)
+        
+        if start_index >= 0:
+            # 찾은 위치를 기준으로 앞뒤로 확장
+            # 앞으로 문장/문단 시작 찾기
+            expanded_start = start_index
+            while expanded_start > 0 and contract_text[expanded_start] not in ['\n', '。', '.', '제']:
+                expanded_start -= 1
+            expanded_start = max(0, expanded_start)
+            
+            # 뒤로 문장/문단 끝 찾기
+            expanded_end = start_index + len(search_text)
+            while expanded_end < len(contract_text) and contract_text[expanded_end] not in ['\n', '。', '.', '제']:
+                expanded_end += 1
+            expanded_end = min(len(contract_text), expanded_end)
+            
+            matched_text = contract_text[expanded_start:expanded_end].strip()
+            if len(matched_text) >= min_length:
+                return (matched_text, expanded_start, expanded_end)
         
         return (None, 0, 0)
     
