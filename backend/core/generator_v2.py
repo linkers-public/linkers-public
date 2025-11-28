@@ -6,7 +6,6 @@ Generator v2 - 실전형
 from typing import List, Dict, Any, Optional
 import os
 import json
-from openai import OpenAI
 from config import settings
 
 # 로컬 임베딩 모델 (선택사항)
@@ -120,12 +119,12 @@ def _get_ollama_llm():
 
 
 class LLMGenerator:
-    """LLM 생성기 - 임베딩 및 분석"""
+    """LLM 생성기 - 임베딩 및 분석 (Groq 기반)"""
     
-    def __init__(self):
+    def __init__(self, model: Optional[str] = None):
         # 로컬 임베딩 사용 가능 여부 확인
         try:
-            from sentence_transformers import SentenceTransformer
+            from sentence_transformers import SentenceTransformer  # noqa: F401
             settings.use_local_embedding = True
             _local_embedding_available = True
         except ImportError:
@@ -136,30 +135,59 @@ class LLMGenerator:
             print("   관리자 PowerShell: New-ItemProperty -Path \"HKLM:\\SYSTEM\\CurrentControlSet\\Control\\FileSystem\" -Name \"LongPathsEnabled\" -Value 1 -PropertyType DWORD -Force")
             raise ImportError("sentence-transformers가 필요합니다. Windows Long Path를 활성화하고 재시작한 후 pip install sentence-transformers를 실행하세요.")
         
-        settings.use_ollama = True
+        # Groq 클라이언트 초기화
+        api_key = os.environ.get("GROQ_API_KEY") or settings.groq_api_key
+        if not api_key:
+            raise RuntimeError(
+                "GROQ_API_KEY가 환경변수에 설정되지 않았습니다. "
+                ".env 파일에 GROQ_API_KEY=your_key를 추가하거나 환경변수로 설정하세요."
+            )
+        
+        try:
+            from groq import Groq
+            self.client = Groq(api_key=api_key)
+            
+            # 기본 모델: 환경변수 > settings > 하드코딩
+            self.model = (
+                model
+                or os.environ.get("GROQ_MODEL")
+                or getattr(settings, "groq_model", None)
+                or "llama-3.3-70b-versatile"
+            )
+            # 혹시 남아있는 옛 코드 호환용
+            self.llm_model = self.model
+            
+            print(f"[Groq] 클라이언트 초기화 완료 (모델: {self.model})")
+        except ImportError:
+            raise ImportError("groq 패키지가 설치되지 않았습니다. pip install groq 를 실행하세요.")
+        except Exception as e:
+            raise RuntimeError(f"Groq 클라이언트 초기화 실패: {str(e)}")
         
         # 벡터 DB 선택: Supabase가 연결되어 있으면 우선 사용
         if settings.supabase_url:
             settings.use_chromadb = False
-            print("[시스템] 무료 스택 사용")
+            print("[시스템] Groq LLM + 무료 스택 사용")
+            print(f"   - LLM: Groq ({self.model})")
             print(f"   - 벡터 DB: Supabase pgvector (연결됨)")
             print(f"   - 임베딩: 로컬 (sentence-transformers)")
         elif not settings.use_chromadb:
             # Supabase도 없고 ChromaDB도 명시 안 했으면 ChromaDB 기본 사용
             settings.use_chromadb = True
-            print("[시스템] 무료 스택 사용")
+            print("[시스템] Groq LLM + 무료 스택 사용")
+            print(f"   - LLM: Groq ({self.model})")
             print(f"   - 벡터 DB: ChromaDB (로컬)")
             print(f"   - 임베딩: 로컬 (sentence-transformers)")
         else:
-            print("[시스템] 무료 스택 사용")
+            print("[시스템] Groq LLM + 무료 스택 사용")
+            print(f"   - LLM: Groq ({self.model})")
             print(f"   - 벡터 DB: ChromaDB (로컬)")
             print(f"   - 임베딩: 로컬 (sentence-transformers)")
         
         self.use_local_embedding = settings.use_local_embedding
-        self.use_ollama = settings.use_ollama
+        self.use_groq = True          # Groq 사용
+        self.use_ollama = False       # Ollama 비활성화
         self.disable_llm = settings.disable_llm
-        self.use_openai = False  # 항상 False (무료 스택만 사용)
-        self.client = None  # OpenAI 클라이언트 사용 안 함
+        self.use_openai = False       # OpenAI 사용 안 함
         self.embedding_model = settings.local_embedding_model  # 로컬 임베딩 모델명 (호환성)
         
         self.llm_temperature = settings.llm_temperature
@@ -172,7 +200,7 @@ class LLMGenerator:
             texts: 텍스트 리스트
             model_type: 모델 타입 ("doc" 또는 "company")
                 - "doc": 문서 임베딩 (공고문용, BAAI/bge-m3 권장)
-                - "company": 기업 임베딩 (팀/기업용, multilingual-e5-large 또는 text-embedding-3-small)
+                - "company": 기업 임베딩 (팀/기업용, multilingual-e5-large 등)
         
         Returns:
             임베딩 벡터 리스트
@@ -183,42 +211,106 @@ class LLMGenerator:
         # 로컬 임베딩 모델 사용 (무료)
         if self.use_local_embedding:
             try:
-                # 모델 타입에 따라 다른 모델 사용 (선택사항)
-                # 현재는 기본 모델 사용, 추후 확장 가능
                 model = _get_local_embedding_model()
-                # 배치 크기 조정으로 속도 개선 (큰 배치는 더 빠름, 메모리 사용량 증가)
                 batch_size = min(64, len(texts))  # 최대 64개씩 배치 처리
                 embeddings = model.encode(
-                    texts, 
-                    convert_to_numpy=True, 
-                    show_progress_bar=True,  # 진행 상황 표시
+                    texts,
+                    convert_to_numpy=True,
+                    show_progress_bar=True,
                     batch_size=batch_size,
-                    normalize_embeddings=True  # 정규화로 품질 향상
+                    normalize_embeddings=True,
                 )
                 return embeddings.tolist()
             except Exception as e:
                 raise Exception(f"로컬 임베딩 생성 실패: {str(e)}")
         
-        # OpenAI 임베딩 사용 (유료)
-        try:
-            response = self.client.embeddings.create(
-                model=self.embedding_model,
-                input=texts
-            )
-            
-            return [item.embedding for item in response.data]
-        except Exception as e:
-            raise Exception(f"임베딩 생성 실패: {str(e)}")
+        # 그 외(원격 임베딩)는 현재 지원하지 않음
+        raise RuntimeError(
+            "현재 설정에서는 로컬 임베딩만 지원합니다. "
+            "settings.use_local_embedding=True 상태에서 sentence-transformers를 사용하세요."
+        )
     
     def embed_one(self, text: str, model_type: str = "doc") -> List[float]:
+        """단일 텍스트 임베딩"""
+        return self.embed([text], model_type=model_type)[0]
+    
+    def generate_content(
+        self,
+        messages: List[Dict[str, Any]],
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[Any] = None,
+        temperature: float = None,
+        max_tokens: int = 2048,
+    ):
         """
-        단일 텍스트 임베딩
+        OpenAI ChatCompletion과 거의 같은 느낌으로 래핑.
         
         Args:
-            text: 텍스트
-            model_type: 모델 타입 ("doc" 또는 "company")
+            messages: [{"role": "system"/"user"/"assistant", "content": "..."}]
+            tools: 도구 목록 (선택사항)
+            tool_choice: 도구 선택 옵션 (선택사항)
+            temperature: 온도 설정 (기본값: self.llm_temperature)
+            max_tokens: 최대 토큰 수
+        
+        Returns:
+            Groq ChatCompletion 응답 객체
         """
-        return self.embed([text], model_type=model_type)[0]
+        if self.disable_llm:
+            raise ValueError("LLM이 비활성화되어 있습니다.")
+        
+        if not self.client:
+            raise ValueError("Groq 클라이언트가 초기화되지 않았습니다.")
+        
+        params: Dict[str, Any] = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": temperature if temperature is not None else self.llm_temperature,
+            "max_tokens": max_tokens,
+        }
+        
+        # Groq는 tools/tool_choice를 지원할 수 있으므로 전달 (지원 여부는 Groq 문서 확인 필요)
+        if tools is not None:
+            params["tools"] = tools
+        if tool_choice is not None:
+            params["tool_choice"] = tool_choice
+        
+        response = self.client.chat.completions.create(**params)
+        return response
+    
+    @staticmethod
+    def get_text(response) -> str:
+        """
+        단순 텍스트 응답이 필요할 때 편하게 꺼내 쓰는 헬퍼
+        
+        Args:
+            response: Groq ChatCompletion 응답 객체
+        
+        Returns:
+            응답 텍스트
+        """
+        return response.choices[0].message.content
+    
+    async def generate(self, prompt: str, system_role: str = "너는 유능한 법률 AI야.") -> str:
+        """
+        간단한 프롬프트 생성 (기존 코드 호환성)
+        
+        Args:
+            prompt: 사용자 프롬프트
+            system_role: 시스템 역할
+        
+        Returns:
+            생성된 텍스트
+        """
+        if self.disable_llm:
+            return "LLM이 비활성화되어 있습니다."
+        
+        messages = [
+            {"role": "system", "content": system_role},
+            {"role": "user", "content": prompt}
+        ]
+        
+        response = self.generate_content(messages=messages)
+        return self.get_text(response)
     
     def analyze_announcement(
         self,
@@ -226,7 +318,7 @@ class LLMGenerator:
         seed_meta: Dict[str, Any] = None
     ) -> Dict[str, Any]:
         """
-        공고문 구조화 분석 (LLM)
+        공고문 구조화 분석 (LLM, Groq 사용)
         
         Args:
             text: 공고 본문 텍스트
@@ -291,49 +383,16 @@ class LLMGenerator:
                 "deadline": seed_meta.get("end_date")
             }
         
-        # Ollama 사용 (해커톤 모드)
-        if self.use_ollama:
-            try:
-                llm = _get_ollama_llm()
-                # LangChain Ollama는 ChatModel이 아니므로 직접 호출
-                prompt_text = "\n".join([f"{msg['role']}: {msg['content']}" for msg in messages])
-                prompt_text += "\n\nJSON 형식으로만 응답하세요."
-                
-                response_text = llm.invoke(prompt_text)
-                
-                # JSON 추출 시도
-                try:
-                    result = json.loads(response_text)
-                except:
-                    # JSON이 아닌 경우 텍스트에서 추출 시도
-                    import re
-                    json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
-                    if json_match:
-                        result = json.loads(json_match.group())
-                    else:
-                        result = {
-                            "project_name": seed_meta.get("title", "분석 완료"),
-                            "summary": response_text[:200]
-                        }
-                
-                return result
-            except Exception as e:
-                print(f"[경고] Ollama 분석 오류: {str(e)}")
-                return {
-                    "project_name": seed_meta.get("title", "분석 실패"),
-                    "summary": f"Ollama 분석 중 오류: {str(e)}"
-                }
-        
-        # OpenAI 사용
-        if not self.client:
-            raise ValueError("LLM 클라이언트가 초기화되지 않았습니다.")
+        # Groq 사용
+        if not hasattr(self, "client") or self.client is None:
+            raise ValueError("Groq LLM 클라이언트가 초기화되지 않았습니다.")
         
         try:
             response = self.client.chat.completions.create(
-                model=self.llm_model,
+                model=self.model,
                 messages=messages,
                 response_format={"type": "json_object"},
-                temperature=self.llm_temperature
+                temperature=self.llm_temperature,
             )
             
             result_text = response.choices[0].message.content
@@ -344,7 +403,7 @@ class LLMGenerator:
             print(f"JSON 파싱 오류: {str(e)}")
             return {
                 "project_name": "분석 실패",
-                "summary": "LLM 분석 중 오류가 발생했습니다."
+                "summary": "LLM 분석 중 JSON 파싱 오류가 발생했습니다."
             }
         except Exception as e:
             print(f"LLM 분석 오류: {str(e)}")
@@ -359,14 +418,7 @@ class LLMGenerator:
         requirements: Dict[str, Any]
     ) -> str:
         """
-        팀 추천 사유 생성
-        
-        Args:
-            team_data: 팀 정보
-            requirements: 프로젝트 요구사항
-        
-        Returns:
-            추천 사유 텍스트
+        팀 추천 사유 생성 (Groq 사용)
         """
         prompt = f"""다음 팀이 프로젝트에 적합한 이유를 3가지로 간결하게 요약하세요:
 
@@ -391,21 +443,12 @@ class LLMGenerator:
         if self.disable_llm:
             return "LLM이 비활성화되어 있습니다. 설정에서 DISABLE_LLM=false로 변경하세요."
         
-        # Ollama 사용
-        if self.use_ollama:
-            try:
-                llm = _get_ollama_llm()
-                full_prompt = f"당신은 프로젝트 매칭 전문가입니다.\n\n{prompt}"
-                return llm.invoke(full_prompt)
-            except Exception as e:
-                return f"Ollama 생성 실패: {str(e)}"
-        
-        if not self.client:
-            raise ValueError("LLM 클라이언트가 초기화되지 않았습니다.")
+        if not hasattr(self, "client") or self.client is None:
+            raise ValueError("Groq LLM 클라이언트가 초기화되지 않았습니다.")
         
         try:
             response = self.client.chat.completions.create(
-                model=self.llm_model,
+                model=self.model,
                 messages=[
                     {"role": "system", "content": "당신은 프로젝트 매칭 전문가입니다."},
                     {"role": "user", "content": prompt}
@@ -415,7 +458,7 @@ class LLMGenerator:
             
             return response.choices[0].message.content
         except Exception as e:
-            return f"매칭 사유 생성 실패: {str(e)}"
+            return f"Groq 매칭 사유 생성 실패: {str(e)}"
     
     def generate_estimate_draft(
         self,
@@ -424,15 +467,7 @@ class LLMGenerator:
         past_estimates: List[str] = None
     ) -> str:
         """
-        견적서 초안 생성
-        
-        Args:
-            project_info: 프로젝트 정보
-            team_info: 팀 정보
-            past_estimates: 과거 유사 견적서 (참고용)
-        
-        Returns:
-            견적서 초안 텍스트
+        견적서 초안 생성 (Groq 사용)
         """
         if past_estimates is None:
             past_estimates = []
@@ -465,21 +500,12 @@ class LLMGenerator:
         if self.disable_llm:
             return "LLM이 비활성화되어 있습니다. 설정에서 DISABLE_LLM=false로 변경하세요."
         
-        # Ollama 사용
-        if self.use_ollama:
-            try:
-                llm = _get_ollama_llm()
-                full_prompt = f"당신은 견적서 작성 전문가입니다.\n\n{prompt}"
-                return llm.invoke(full_prompt)
-            except Exception as e:
-                return f"Ollama 생성 실패: {str(e)}"
-        
-        if not self.client:
-            raise ValueError("LLM 클라이언트가 초기화되지 않았습니다.")
+        if not hasattr(self, "client") or self.client is None:
+            raise ValueError("Groq LLM 클라이언트가 초기화되지 않았습니다.")
         
         try:
             response = self.client.chat.completions.create(
-                model=self.llm_model,
+                model=self.model,
                 messages=[
                     {"role": "system", "content": "당신은 견적서 작성 전문가입니다."},
                     {"role": "user", "content": prompt}
@@ -489,5 +515,5 @@ class LLMGenerator:
             
             return response.choices[0].message.content
         except Exception as e:
-            return f"견적서 생성 실패: {str(e)}"
+            return f"Groq 견적서 생성 실패: {str(e)}"
 

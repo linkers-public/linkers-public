@@ -317,7 +317,14 @@ async def analyze_contract(
         issues = []
         clauses_by_id = {c["id"]: c for c in clauses}
         
-        logger.info(f"[계약서 분석] result.issues 개수: {len(result.issues) if result and result.issues else 0}")
+        # [DEBUG] rawIssues 확인 (result.issues가 rawIssues)
+        raw_issues_count = len(result.issues) if result and result.issues else 0
+        logger.info(f"[DEBUG] rawIssues 개수: {raw_issues_count}")
+        if result and result.issues and len(result.issues) > 0:
+            logger.info(f"[DEBUG] rawIssues[0] 샘플: {result.issues[0]}")
+            logger.info(f"[DEBUG] rawIssues[0] 속성: name={getattr(result.issues[0], 'name', 'N/A')}, clause_id={getattr(result.issues[0], 'clause_id', 'N/A')}, category={getattr(result.issues[0], 'category', 'N/A')}")
+        
+        logger.info(f"[계약서 분석] result.issues 개수: {raw_issues_count}")
         
         if not result:
             logger.error(f"[계약서 분석] result가 None입니다!")
@@ -437,7 +444,13 @@ async def analyze_contract(
                     # 개별 issue 변환 실패해도 계속 진행
                     continue
         
+        # [DEBUG] normalizedDataIssues 확인 (issues가 normalizedDataIssues)
+        logger.info(f"[DEBUG] normalizedDataIssues 개수: {len(issues)}개")
         logger.info(f"[계약서 분석] 최종 issues 개수: {len(issues)}개")
+        
+        # [DEBUG] validIssues 확인 (현재는 issues와 동일, 필터링 없음)
+        valid_issues = [i for i in issues if i.summary or i.description]  # 최소한 summary나 description이 있는 것만
+        logger.info(f"[DEBUG] validIssues 개수: {len(valid_issues)}개 (summary/description 필터 적용)")
         
         # retrievedContexts 변환
         retrieved_contexts = []

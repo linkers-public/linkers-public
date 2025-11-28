@@ -55,7 +55,7 @@ class APIResponse(BaseModel):
 
 class LegalIssue(BaseModel):
     """법적 이슈"""
-    name: str = Field(..., description="법적 이슈명 (예: 부당해고, 초과근로 수당 미지급)")
+    name: str = Field(..., description="법적 이슈명 (예: 부당해고, 초과근로 수당 미지급) 또는 issue_id")
     description: str
     severity: str = Field(..., description="low | medium | high 등급")
     legal_basis: List[str] = Field(default_factory=list, description="관련 법 조항/근거")
@@ -67,6 +67,7 @@ class LegalIssue(BaseModel):
     original_text: Optional[str] = Field(None, description="계약서 원문에서 해당 위험 조항의 실제 텍스트")
     clause_id: Optional[str] = Field(None, description="연결된 clause ID (새 파이프라인)")
     category: Optional[str] = Field(None, description="이슈 카테고리 (wage, working_hours, job_stability, dismissal 등)")
+    summary: Optional[str] = Field(None, description="이슈 요약 (새 스키마)")
     toxic_clause_detail: Optional["ToxicClauseDetail"] = Field(None, description="독소조항 상세 정보")
 
 

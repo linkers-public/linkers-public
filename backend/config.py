@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     # API Keys (해커톤 모드에서는 사용 안 함)
     openai_api_key: Optional[str] = None
     anthropic_api_key: Optional[str] = None
-    groq_api_key: Optional[str] = None  # Groq API 키 (환경변수 GROQ_API_KEY에서 가져옴)
+    groq_api_key: Optional[str] = None  # Groq API 키 (환경변수 GROQ_API_KEY에서 자동으로 가져옴)
     
     # Supabase
     supabase_url: Optional[str] = None
@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     disable_llm: bool = False  # True면 LLM 분석 비활성화 (개발/테스트용)
     
     # Groq 설정 (Groq LLM 사용)
-    groq_model: str = "llama-3.1-8b-instant"  # Groq 모델명 (빠르고 저렴한 모델)
+    groq_model: str = "llama-3.3-70b-versatile"  # Groq 모델명 (기본값, 환경변수 GROQ_MODEL로 오버라이드 가능)
     use_groq: bool = True  # Groq 사용 (기본값: True)
     
     # Ollama 설정 (로컬 LLM 사용 - 레거시, Groq 사용 시 비활성화)
@@ -56,8 +56,11 @@ class Settings(BaseSettings):
     
     model_config = SettingsConfigDict(
         env_file=".env",
+        env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore"  # 정의되지 않은 필드 무시
+        # pydantic_settings는 필드명을 대문자로 변환하여 환경변수에서 자동으로 읽음
+        # groq_api_key → GROQ_API_KEY 환경변수에서 자동으로 읽힘
     )
 
 

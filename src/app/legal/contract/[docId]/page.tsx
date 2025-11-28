@@ -577,6 +577,12 @@ export default function ContractDetailPage() {
                     }
                   }, 100)
                 }}
+                oneLineSummary={oneLineSummary}
+                riskTrafficLight={riskTrafficLight}
+                top3ActionPoints={top3ActionPoints}
+                riskSummaryTable={riskSummaryTable}
+                toxicClauses={toxicClauses}
+                negotiationQuestions={negotiationQuestions}
               />
             </div>
           </div>

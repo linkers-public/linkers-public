@@ -137,10 +137,12 @@ def setup_logging(
             "default": {
                 "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
                 "datefmt": "%Y-%m-%d %H:%M:%S",
+                "style": "%",  # Python 3.2+ 기본값, 명시적으로 지정
             },
             "access": {
                 "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
                 "datefmt": "%Y-%m-%d %H:%M:%S",
+                "style": "%",  # Python 3.2+ 기본값, 명시적으로 지정
             },
         },
         "handlers": {
