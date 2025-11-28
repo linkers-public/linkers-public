@@ -151,31 +151,31 @@ class ContractArticleSplitter:
         matches = list(self.ARTICLE_PATTERN.finditer(text))
         
         if matches:
-            for idx, match in enumerate(matches):
-                header = match.group(1).strip()
-                body = match.group(2).strip()
-                full_content = f"{header}\n{body}".strip()
-                
-                # 조항 번호 추출
-                article_num_match = re.search(r'제\s*(\d+)\s*조', header)
-                article_number = int(article_num_match.group(1)) if article_num_match else idx + 1
-                
-                # 조항이 너무 길면 문단으로 분할
-                if len(full_content) > self.max_article_length:
-                    paragraph_chunks = self.paragraph_splitter.split_article_into_paragraphs(
-                        full_content, article_number
-                    )
-                    chunks.extend(paragraph_chunks)
-                else:
-                    chunks.append({
-                        "content": full_content,
-                        "article_number": article_number,
-                        "article_header": header,
-                        "chunk_index": idx,
-                        "type": "article"
-                    })
+        for idx, match in enumerate(matches):
+            header = match.group(1).strip()
+            body = match.group(2).strip()
+            full_content = f"{header}\n{body}".strip()
             
-            return chunks
+            # 조항 번호 추출
+            article_num_match = re.search(r'제\s*(\d+)\s*조', header)
+            article_number = int(article_num_match.group(1)) if article_num_match else idx + 1
+            
+            # 조항이 너무 길면 문단으로 분할
+            if len(full_content) > self.max_article_length:
+                paragraph_chunks = self.paragraph_splitter.split_article_into_paragraphs(
+                    full_content, article_number
+                )
+                chunks.extend(paragraph_chunks)
+            else:
+                chunks.append({
+                    "content": full_content,
+                    "article_number": article_number,
+                    "article_header": header,
+                    "chunk_index": idx,
+                    "type": "article"
+                })
+        
+        return chunks
         
         # 2️⃣ "제n조"가 전혀 없으면 "1. 근로계약기간" 형식으로 분할
         numbered_chunks = self._split_by_numbered_headers(text)
@@ -441,7 +441,7 @@ class ArticleParagraphSplitter:
 class DocumentProcessor:
     """문서 처리기 - PDF/텍스트 → 청크"""
     
-    def __init__(self, chunk_size: int = None, chunk_overlap: int = None):
+    def __init__(self, chunk_size: int = None, chunk_overlap: int = None, verbose: bool = True):
         self.chunk_size = (
             int(os.getenv("CHUNK_SIZE", "1000")) 
             if chunk_size is None 
@@ -452,6 +452,7 @@ class DocumentProcessor:
             if chunk_overlap is None 
             else chunk_overlap
         )
+        self.verbose = verbose
         
         # 기본적으로 SimpleTextSplitter 사용 (Windows에서 scipy/nltk 로딩이 매우 느림)
         # langchain_text_splitters는 필요시에만 lazy import
@@ -465,62 +466,66 @@ class DocumentProcessor:
             max_article_length=int(os.getenv("CONTRACT_MAX_ARTICLE_LENGTH", "2000"))
         )
     
-    def pdf_to_text(self, pdf_path: str) -> str:
+    def _log(self, msg: str):
+        """verbose 모드일 때만 로그 출력"""
+        if self.verbose:
+            print(msg)
+    
+    def pdf_to_text(
+        self, 
+        pdf_path: str, 
+        force_ocr: bool = False,          # 무조건 OCR만 쓰고 싶을 때
+        prefer_ocr: bool = False          # 텍스트 추출 성공해도 OCR 품질을 우선할 때
+    ) -> str:
         """
-        PDF → 텍스트 추출 (PyMuPDF 먼저 시도 → OCR fallback)
+        PDF → 텍스트 추출 (텍스트 기반 → OCR 순서로 시도)
         
-        텍스트 PDF는 PyMuPDF로 빠르게 추출하고,
-        이미지 기반 PDF는 OCR로 추출합니다.
+        Args:
+            pdf_path: PDF 파일 경로
+            force_ocr: True면 무조건 OCR만 사용
+            prefer_ocr: True면 텍스트 추출 성공해도 OCR 품질을 우선
+        
+        Returns:
+            추출된 텍스트
         """
         if not os.path.exists(pdf_path):
             raise FileNotFoundError(f"PDF 파일을 찾을 수 없습니다: {pdf_path}")
-
+        
         error_messages: List[str] = []
+        text = ""
         
-        # 1️⃣ PyMuPDF 먼저 시도 (텍스트 PDF)
-        print("[PDF 처리] PyMuPDF로 텍스트 추출 시도 중...")
-        text = self._extract_with_pymupdf(pdf_path, error_messages)
-        
-        # 한글·숫자 검증 (의미있는 텍스트가 있는지 확인)
-        if text:
-            korean_count = sum(1 for ch in text if '가' <= ch <= '힣')
-            digit_count = sum(ch.isdigit() for ch in text)
-            
-            # 한글 10자 이상 또는 숫자 5개 이상이면 성공으로 간주
-            if korean_count >= 10 or digit_count >= 5:
-                print(f"[PDF 처리] PyMuPDF 성공: 한글 {korean_count}자, 숫자 {digit_count}개")
-                text = self._clean_text(text)
+        # 1) force_ocr면 바로 OCR
+        if force_ocr:
+            self._log("[PDF 처리] force_ocr=True → OCR만 사용")
+            text = self._extract_with_ocr(pdf_path, error_messages)
+        else:
+            # 2) 텍스트 기반 추출 순차 시도
+            for extractor in (
+                self._extract_with_pymupdf, 
+                self._extract_with_pdfplumber, 
+                self._extract_with_pypdf
+            ):
+                text = extractor(pdf_path, error_messages)
                 if text and text.strip():
-                    return text
-            else:
-                print(f"[PDF 처리] PyMuPDF 결과 부족: 한글 {korean_count}자, 숫자 {digit_count}개 → OCR 시도")
-                error_messages.append(f"PyMuPDF: 한글/숫자 부족 (한글 {korean_count}자, 숫자 {digit_count}개)")
-        
-        # 2️⃣ PyMuPDF 실패 시 pdfplumber 시도
-        print("[PDF 처리] pdfplumber로 텍스트 추출 시도 중...")
-        text = self._extract_with_pdfplumber(pdf_path, error_messages)
-        
-        if text:
-            korean_count = sum(1 for ch in text if '가' <= ch <= '힣')
-            digit_count = sum(ch.isdigit() for ch in text)
+                    # 너무 짧거나 숫자가 전혀 없는 경우는 '품질 낮음'으로 보고 패스 가능
+                    if len(text.strip()) < 50:
+                        self._log("[PDF 처리] 텍스트 추출 결과가 너무 짧아서 다음 방법 시도")
+                        text = ""
+                        continue
+                    break
             
-            if korean_count >= 10 or digit_count >= 5:
-                print(f"[PDF 처리] pdfplumber 성공: 한글 {korean_count}자, 숫자 {digit_count}개")
-                text = self._clean_text(text)
-                if text and text.strip():
-                    return text
-            else:
-                print(f"[PDF 처리] pdfplumber 결과 부족: 한글 {korean_count}자, 숫자 {digit_count}개 → OCR 시도")
-                error_messages.append(f"pdfplumber: 한글/숫자 부족 (한글 {korean_count}자, 숫자 {digit_count}개)")
-        
-        # 3️⃣ 마지막으로 OCR 시도 (이미지 PDF)
-        print("[PDF 처리] OCR로 이미지 기반 추출 시도 중...")
-        text = self._extract_with_ocr(pdf_path, error_messages)
+            # 3) prefer_ocr=True 이거나, 위 방법들로 실패한 경우 OCR 시도
+            if prefer_ocr or not text:
+                self._log("[PDF 처리] prefer_ocr 또는 텍스트 추출 실패 → OCR 시도")
+                ocr_text = self._extract_with_ocr(pdf_path, error_messages)
+                # OCR이 훨씬 길거나 숫자가 풍부하면 그쪽을 채택
+                if ocr_text and len(ocr_text) > len(text):
+                    text = ocr_text
         
         # 정제
         if text:
             text = self._clean_text(text)
-
+        
         # 최종 검증
         if not text or not text.strip():
             error_msg = "PDF 파일에서 텍스트를 추출할 수 없습니다.\n"
@@ -561,8 +566,8 @@ class DocumentProcessor:
             return ""
 
         pages: List[str] = []
-        print(f"[PDF 처리] PyMuPDF로 시도 중... (파일: {os.path.basename(pdf_path)})")
-
+            print(f"[PDF 처리] PyMuPDF로 시도 중... (파일: {os.path.basename(pdf_path)})")
+            
         for i, page in enumerate(doc):
             try:
                 page_text = page.get_text("text") or ""
@@ -575,15 +580,15 @@ class DocumentProcessor:
             if page_text.strip():
                 pages.append(page_text)
                 print(f"[PDF 처리] PyMuPDF 페이지 {i + 1}: {len(page_text)}자 추출")
-
-        doc.close()
-
+            
+            doc.close()
+            
         if pages:
             text = "\n".join(pages)
             digit_count = sum(ch.isdigit() for ch in text)
             if digit_count > 0:
                 print(f"[PDF 처리] PyMuPDF 성공: {len(pages)}페이지, 총 {len(text)}자, 숫자 {digit_count}개 포함")
-            else:
+                else:
                 print(f"[PDF 처리] PyMuPDF 성공: {len(pages)}페이지, 총 {len(text)}자 (⚠️ 숫자 없음)")
             return text
 
@@ -594,8 +599,8 @@ class DocumentProcessor:
 
     def _extract_with_pdfplumber(self, pdf_path: str, error_messages: List[str]) -> str:
         """pdfplumber 기반 텍스트 추출 (표·숫자에 비교적 강함)"""
-        try:
-            import pdfplumber
+            try:
+                import pdfplumber
         except ImportError:
             msg = "pdfplumber가 설치되지 않았습니다 (pip install pdfplumber)"
             print(f"[PDF 처리] {msg}")
@@ -605,20 +610,20 @@ class DocumentProcessor:
         try:
             print("[PDF 처리] pdfplumber로 시도 중...")
             text_parts: List[str] = []
-            with pdfplumber.open(pdf_path) as pdf:
+                with pdfplumber.open(pdf_path) as pdf:
                 for i, page in enumerate(pdf.pages):
                     page_text = page.extract_text() or ""
                     if page_text.strip():
-                        text_parts.append(page_text)
+                            text_parts.append(page_text)
                         digit_count = sum(ch.isdigit() for ch in page_text)
                         print(f"[PDF 처리] pdfplumber 페이지 {i + 1}: {len(page_text)}자, 숫자 {digit_count}개")
-
-            if text_parts:
-                text = "\n".join(text_parts)
+                    
+                    if text_parts:
+                        text = "\n".join(text_parts)
                 digit_count = sum(ch.isdigit() for ch in text)
                 if digit_count > 0:
                     print(f"[PDF 처리] pdfplumber 성공: {len(text_parts)}페이지, 총 {len(text)}자, 숫자 {digit_count}개 포함")
-                else:
+                        else:
                     print(f"[PDF 처리] pdfplumber 성공: {len(text_parts)}페이지, 총 {len(text)}자 (⚠️ 숫자 없음)")
                 return text
 
@@ -626,7 +631,7 @@ class DocumentProcessor:
             print(f"[PDF 처리] {msg}")
             error_messages.append(msg)
             return ""
-        except Exception as e:
+            except Exception as e:
             msg = f"pdfplumber 실패: {e}"
             print(f"[PDF 처리] {msg}")
             error_messages.append(msg)
@@ -634,8 +639,8 @@ class DocumentProcessor:
 
     def _extract_with_pypdf(self, pdf_path: str, error_messages: List[str]) -> str:
         """pypdf 기반 텍스트 추출 (마지막 텍스트 기반 fallback)"""
-        try:
-            from pypdf import PdfReader
+            try:
+                from pypdf import PdfReader
         except ImportError:
             msg = "pypdf가 설치되지 않았습니다 (pip install pypdf)"
             print(f"[PDF 처리] {msg}")
@@ -644,21 +649,21 @@ class DocumentProcessor:
 
         try:
             print("[PDF 처리] pypdf로 시도 중...")
-            reader = PdfReader(pdf_path)
+                reader = PdfReader(pdf_path)
             pages: List[str] = []
-
+                
             for i, page in enumerate(reader.pages):
                 page_text = page.extract_text() or ""
                 if page_text.strip():
-                    pages.append(page_text)
+                        pages.append(page_text)
                     print(f"[PDF 처리] pypdf 페이지 {i + 1}: {len(page_text)}자 추출")
-
-            if pages:
-                text = "\n".join(pages)
+                
+                if pages:
+                    text = "\n".join(pages)
                 digit_count = sum(ch.isdigit() for ch in text)
                 if digit_count > 0:
                     print(f"[PDF 처리] pypdf 성공: {len(pages)}페이지, 총 {len(text)}자, 숫자 {digit_count}개 포함")
-                else:
+                    else:
                     print(f"[PDF 처리] pypdf 성공: {len(pages)}페이지, 총 {len(text)}자 (⚠️ 숫자 없음)")
                 return text
 
@@ -666,7 +671,7 @@ class DocumentProcessor:
             print(f"[PDF 처리] {msg}")
             error_messages.append(msg)
             return ""
-        except Exception as e:
+            except Exception as e:
             msg = f"pypdf 실패: {e}"
             print(f"[PDF 처리] {msg}")
             error_messages.append(msg)
@@ -677,9 +682,9 @@ class DocumentProcessor:
         이미지 기반 OCR 추출 (숫자 인식 담당)
         - pytesseract + pdf2image 사용
         """
-        try:
-            import pytesseract
-            from pdf2image import convert_from_path
+            try:
+                import pytesseract
+                from pdf2image import convert_from_path
             
             # Windows에서 Tesseract 경로 자동 설정
             import platform
@@ -766,10 +771,10 @@ class DocumentProcessor:
             # 해상도를 높여서 한글 인식 품질 개선 (600 DPI로 증가)
             if poppler_path:
                 images = convert_from_path(pdf_path, dpi=600, poppler_path=poppler_path)
-            else:
+                else:
                 images = convert_from_path(pdf_path, dpi=600)  # 해상도 높임
             print(f"[PDF 처리] OCR: PDF를 {len(images)}개 이미지로 변환 완료 (600 DPI)")
-        except Exception as e:
+            except Exception as e:
             error_str = str(e)
             if "poppler" in error_str.lower() or "Unable to get page count" in error_str:
                 msg = f"OCR: Poppler가 설치되지 않았거나 PATH에 없습니다. Windows용 Poppler 다운로드: https://github.com/oschwartz10612/poppler-windows/releases"
@@ -852,7 +857,7 @@ class DocumentProcessor:
                     print(f"[PDF 처리] {msg}")
                     error_messages.append(msg)
                     return ""
-                else:
+            else:
                     print(f"[PDF 처리] OCR 페이지 {i + 1} 실패: {error_str}")
                     continue
 
@@ -1422,7 +1427,7 @@ class DocumentProcessor:
         if mode == "contract":
             chunks = self.to_contract_chunks(text, base_meta)
         else:
-            chunks = self.to_chunks(text, base_meta)
+        chunks = self.to_chunks(text, base_meta)
         
         return text, chunks
 

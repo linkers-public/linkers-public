@@ -245,8 +245,9 @@ export interface SituationRequestV2 {
 export interface LegalBasisItemV2 {
   title: string;
   snippet: string;
-  sourceType: string;
-  status?: 'likely' | 'unclear' | 'unlikely';  // 판단 기준 충족 여부
+  sourceType?: string;
+  // 백엔드에서 status(violation/likely 등)를 내려줄 수 있으므로 여유 있게 string 허용
+  status?: string;
 }
 
 export interface SituationAnalysisV2 {
@@ -328,6 +329,9 @@ export interface RiskSummaryItem {
   simpleExplanation: string;
   revisionKeyword: string;
 }
+
+// v2 API용 별칭 (호환성)
+export type RiskSummaryItemV2 = RiskSummaryItem;
 
 export interface ContractAnalysisResponseV2 {
   docId: string;
@@ -983,11 +987,11 @@ export interface LegalChatRequestV2 {
   docIds: string[]
   selectedIssueId?: string
   selectedIssue?: {
-    category: string
-    summary: string
-    severity: string
-    originalText: string
-    legalBasis: string[]
+    category?: string
+    summary?: string
+    severity?: string
+    originalText?: string
+    legalBasis?: LegalBasisItemV2[]  // string[]에서 LegalBasisItemV2[]로 변경
   }
   analysisSummary?: string
   riskScore?: number

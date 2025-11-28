@@ -140,6 +140,29 @@ export function ContractChat({
 
       // v2 API 직접 호출 (Dual RAG 지원)
       const { chatWithContractV2 } = await import('@/apis/legal.service')
+      
+      // legalBasis 타입 변환 (string[] → LegalBasisItemV2[])
+      let legalBasisV2: any[] | undefined = undefined
+      if (selectedIssue?.legalBasis) {
+        // legalBasis가 string[]인 경우 LegalBasisItemV2[]로 변환
+        if (Array.isArray(selectedIssue.legalBasis)) {
+          if (selectedIssue.legalBasis.length > 0) {
+            // 첫 번째 요소가 string인지 객체인지 확인
+            if (typeof selectedIssue.legalBasis[0] === 'string') {
+              // string[] → LegalBasisItemV2[] 변환
+              legalBasisV2 = (selectedIssue.legalBasis as string[]).map((basis: string) => ({
+                title: basis,
+                snippet: basis,
+                sourceType: 'law',
+              }))
+            } else {
+              // 이미 LegalBasisItemV2[] 형식
+              legalBasisV2 = selectedIssue.legalBasis as any[]
+            }
+          }
+        }
+      }
+      
       const data = await chatWithContractV2({
         query: query,
         docIds: [docId],
@@ -149,7 +172,7 @@ export function ContractChat({
           summary: selectedIssue.summary,
           severity: selectedIssue.severity,
           originalText: selectedIssue.originalText,
-          legalBasis: selectedIssue.legalBasis,
+          legalBasis: legalBasisV2,
         } : undefined,
         analysisSummary: analysisSummary,
         riskScore: analysisResult.riskScore,
