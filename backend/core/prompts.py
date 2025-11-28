@@ -80,13 +80,41 @@ def build_legal_chat_prompt(
     # 선택된 이슈 정보 추가
     issue_context = ""
     if selected_issue:
+        # [DEBUG] legalBasis 타입 확인
+        legal_basis_raw = selected_issue.get('legalBasis', [])
+        logger.debug(f"[prompt] selected_issue.legalBasis 타입: {[type(x).__name__ for x in legal_basis_raw]}")
+        logger.debug(f"[prompt] selected_issue.legalBasis 샘플: {legal_basis_raw[:2] if legal_basis_raw else '없음'}")
+        
+        # legalBasis 처리: string[] 또는 LegalBasisItemV2[] 형식 모두 지원
+        legal_basis_list = legal_basis_raw
+        legal_basis_texts = []
+        for basis in legal_basis_list[:3]:
+            try:
+                if isinstance(basis, dict):
+                    # LegalBasisItemV2 형식: { title, snippet, sourceType }
+                    title = basis.get('title', '')
+                    snippet = basis.get('snippet', '')
+                    legal_basis_texts.append(title or snippet or str(basis))
+                elif isinstance(basis, str):
+                    # string 형식
+                    legal_basis_texts.append(basis)
+                else:
+                    # 기타 형식은 문자열로 변환
+                    legal_basis_texts.append(str(basis))
+            except Exception as basis_err:
+                logger.warning(f"[prompt] legalBasis 항목 변환 실패: {str(basis_err)}, basis={basis}")
+                legal_basis_texts.append(str(basis) if basis else '알 수 없음')
+        
+        legal_basis_str = ', '.join(legal_basis_texts) if legal_basis_texts else '없음'
+        logger.debug(f"[prompt] legalBasis 변환 결과: {legal_basis_str}")
+        
         issue_context = f"""
 **선택된 위험 조항 정보:**
 - 카테고리: {selected_issue.get('category', '알 수 없음')}
 - 요약: {selected_issue.get('summary', '')}
 - 위험도: {selected_issue.get('severity', 'medium')}
 - 조항 내용: {selected_issue.get('originalText', '')[:500]}
-- 관련 법령: {', '.join(selected_issue.get('legalBasis', [])[:3])}
+- 관련 법령: {legal_basis_str}
 """
     
     # 분석 요약 추가
