@@ -88,6 +88,7 @@ class LegalGroundingChunk(BaseModel):
     file_path: Optional[str] = None  # 원본 파일 경로
     external_id: Optional[str] = None  # legal_chunks.external_id
     chunk_index: Optional[int] = None  # legal_chunks.chunk_index
+    file_url: Optional[str] = None  # 스토리지 Signed URL
 
 
 class LegalAnalysisResult(BaseModel):
@@ -296,6 +297,17 @@ class ScriptsV2(BaseModel):
     toAdvisor: Optional[str] = Field(None, description="상담 시 쓸 설명 템플릿")
 
 
+class SourceItemV2(BaseModel):
+    """RAG 검색 출처 항목 (v2)"""
+    sourceId: str
+    sourceType: str  # "law" | "manual" | "case"
+    title: str
+    snippet: str
+    score: float
+    externalId: Optional[str] = Field(None, description="파일 ID (스토리지 경로 생성용)")
+    fileUrl: Optional[str] = Field(None, description="스토리지 Signed URL (파일 다운로드용)")
+
+
 class SituationResponseV2(BaseModel):
     """상황 분석 응답 (v2)"""
     id: Optional[str] = Field(None, description="상황 분석 ID (situation_analyses 테이블의 id)")
@@ -306,6 +318,7 @@ class SituationResponseV2(BaseModel):
     checklist: List[str]
     scripts: Optional[ScriptsV2] = None
     relatedCases: List[RelatedCaseV2]
+    sources: List[SourceItemV2] = Field(default_factory=list, description="RAG 검색 출처 (법령/가이드라인)")
 
 
 class ConversationRequestV2(BaseModel):

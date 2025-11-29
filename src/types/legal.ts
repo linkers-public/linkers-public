@@ -141,6 +141,16 @@ export interface RelatedCase {
   summary: string
 }
 
+export interface SourceItem {
+  sourceId: string
+  sourceType: 'law' | 'manual' | 'case'
+  title: string
+  snippet: string
+  score: number
+  externalId?: string  // 파일 ID (스토리지 경로 생성용)
+  fileUrl?: string  // 스토리지 Signed URL (파일 다운로드용)
+}
+
 export interface SituationAnalysisResponse {
   classifiedType: SituationCategory
   riskScore: number // 0~100
@@ -149,5 +159,6 @@ export interface SituationAnalysisResponse {
   actionPlan: ActionPlan
   scripts: Scripts
   relatedCases: RelatedCase[]
+  sources?: SourceItem[] // RAG 검색 출처
 }
 

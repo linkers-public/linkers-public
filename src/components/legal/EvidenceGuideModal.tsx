@@ -178,11 +178,11 @@ export function EvidenceGuideModal({ open, onOpenChange, situationType }: Eviden
           </Button>
           <Button
             onClick={() => {
-              window.open('https://www.moel.go.kr/info/publict/publictNoticeView.do?bbs_seq=20241201001', '_blank')
+              window.open('https://1350.moel.go.kr/home/hp/main/hpmain.do', '_blank')
             }}
             className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white"
           >
-            고용노동부 상담센터
+            고용노동부 고객상담센터
           </Button>
         </div>
       </DialogContent>

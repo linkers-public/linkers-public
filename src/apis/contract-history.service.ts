@@ -72,7 +72,7 @@ export const uploadContractFile = async (file: File): Promise<string | null> => 
           uploadData = data
           usedBucket = bucketName
           break
-        } else if (error?.message?.includes('Bucket not found') || error?.statusCode === '404') {
+        } else if (error?.message?.includes('Bucket not found') || error?.message?.includes('404')) {
           // 이 버킷이 없으면 다음 버킷 시도
           continue
         } else {
@@ -119,10 +119,11 @@ export const saveContractAnalysis = async (
 
     // 분석 결과 저장 (user_id는 nullable이므로 null 허용)
     // fileUrl이 null이면 빈 문자열로 저장 (DB 저장은 계속 진행)
-    const { data, error } = await supabase
-      .from('contract_analyses')
+    // 타입 단언 사용: contract_analyses 테이블이 Supabase 타입 정의에 없을 수 있음
+    const { data, error } = await (supabase
+      .from('contract_analyses' as any)
       .insert({
-        user_id: userId, // null일 수 있음
+        user_id: userId || undefined, // null 대신 undefined 사용 (타입 호환성)
         file_name: file.name,
         file_url: fileUrl || '', // null이면 빈 문자열
         file_size: file.size,
@@ -138,10 +139,14 @@ export const saveContractAnalysis = async (
         },
       })
       .select('id')
-      .single()
+      .single() as any)
 
     if (error) {
       handleError('분석 결과 저장 실패', error)
+    }
+
+    if (!data || !data.id) {
+      handleError('분석 결과 저장 실패: 데이터가 반환되지 않았습니다')
     }
 
     return data.id
@@ -161,12 +166,12 @@ export const getContractAnalysisHistory = async (limit: number = 20) => {
 
     // 로그인한 경우에만 DB에서 조회
     if (userId) {
-      const { data, error } = await supabase
-        .from('contract_analyses')
+      const { data, error } = await (supabase
+        .from('contract_analyses' as any)
         .select('*')
         .eq('user_id', userId)
         .order('created_at', { ascending: false })
-        .limit(limit)
+        .limit(limit) as any)
 
       if (error) {
         console.warn('히스토리 조회 실패, 로컬 스토리지 확인:', error)
@@ -211,24 +216,24 @@ export const getContractAnalysis = async (analysisId: string) => {
 
     // 로그인한 경우 DB에서 조회
     if (userId) {
-      const { data, error } = await supabase
-        .from('contract_analyses')
+      const { data, error } = await (supabase
+        .from('contract_analyses' as any)
         .select('*')
         .eq('id', analysisId)
         .eq('user_id', userId)
-        .maybeSingle() // single() 대신 maybeSingle() 사용
+        .maybeSingle() as any) // single() 대신 maybeSingle() 사용
 
       if (!error && data) {
         return data
       }
     } else {
       // 로그인하지 않은 경우에도 DB에서 조회 시도 (user_id가 null인 경우)
-      const { data, error } = await supabase
-        .from('contract_analyses')
+      const { data, error } = await (supabase
+        .from('contract_analyses' as any)
         .select('*')
         .eq('id', analysisId)
         .is('user_id', null)
-        .maybeSingle()
+        .maybeSingle() as any)
 
       if (!error && data) {
         return data
@@ -266,11 +271,16 @@ export const deleteContractAnalysis = async (analysisId: string) => {
     const supabase = getSupabase()
     const userId = await checkSession()
 
-    const { error } = await supabase
-      .from('contract_analyses')
+    if (!userId) {
+      // 로그인하지 않은 경우 삭제 불가
+      throw new Error('로그인이 필요합니다.')
+    }
+
+    const { error } = await (supabase
+      .from('contract_analyses' as any)
       .delete()
       .eq('id', analysisId)
-      .eq('user_id', userId)
+      .eq('user_id', userId) as any)
 
     if (error) {
       handleError('분석 결과 삭제 실패', error)

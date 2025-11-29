@@ -469,7 +469,18 @@ class DocumentProcessor:
     def _log(self, msg: str):
         """verbose 모드일 때만 로그 출력"""
         if self.verbose:
-            print(msg)
+            # Windows에서 이모티콘 인코딩 오류 방지
+            import sys
+            if sys.platform == "win32":
+                # 이모티콘을 ASCII 문자로 대체
+                safe_msg = msg.replace('⚠️', '[경고]').replace('✅', '[완료]')
+                try:
+                    print(safe_msg)
+                except UnicodeEncodeError:
+                    # 인코딩 오류 발생 시 errors='replace' 사용
+                    print(safe_msg.encode('utf-8', errors='replace').decode('utf-8', errors='replace'))
+            else:
+                print(msg)
     
     def pdf_to_text(
         self, 
@@ -614,7 +625,7 @@ class DocumentProcessor:
             if digit_count > 0:
                 self._log(f"[PDF 처리] PyMuPDF 성공: {len(pages)}페이지, 총 {len(text)}자, 숫자 {digit_count}개 포함")
             else:
-                self._log(f"[PDF 처리] PyMuPDF 성공: {len(pages)}페이지, 총 {len(text)}자 (⚠️ 숫자 없음)")
+                self._log(f"[PDF 처리] PyMuPDF 성공: {len(pages)}페이지, 총 {len(text)}자 ([경고] 숫자 없음)")
             return text
 
         msg = "PyMuPDF: 텍스트를 추출할 수 없습니다 (이미지 기반 PDF일 수 있음)"
@@ -649,7 +660,7 @@ class DocumentProcessor:
                 if digit_count > 0:
                     self._log(f"[PDF 처리] pdfplumber 성공: {len(text_parts)}페이지, 총 {len(text)}자, 숫자 {digit_count}개 포함")
                 else:
-                    self._log(f"[PDF 처리] pdfplumber 성공: {len(text_parts)}페이지, 총 {len(text)}자 (⚠️ 숫자 없음)")
+                    self._log(f"[PDF 처리] pdfplumber 성공: {len(text_parts)}페이지, 총 {len(text)}자 ([경고] 숫자 없음)")
                 return text
 
             msg = "pdfplumber: 텍스트를 추출할 수 없습니다"
@@ -689,7 +700,7 @@ class DocumentProcessor:
                 if digit_count > 0:
                     self._log(f"[PDF 처리] pypdf 성공: {len(pages)}페이지, 총 {len(text)}자, 숫자 {digit_count}개 포함")
                 else:
-                    self._log(f"[PDF 처리] pypdf 성공: {len(pages)}페이지, 총 {len(text)}자 (⚠️ 숫자 없음)")
+                    self._log(f"[PDF 처리] pypdf 성공: {len(pages)}페이지, 총 {len(text)}자 ([경고] 숫자 없음)")
                 return text
 
             msg = "pypdf: 텍스트를 추출할 수 없습니다"
@@ -728,7 +739,7 @@ class DocumentProcessor:
                 try:
                     available_langs = pytesseract.get_languages()
                     if 'kor' not in available_langs:
-                        self._log(f"[PDF 처리] ⚠️ 경고: 한국어 언어 팩(kor)이 설치되지 않았습니다. 설치된 언어: {available_langs}")
+                        self._log(f"[PDF 처리] [경고] 한국어 언어 팩(kor)이 설치되지 않았습니다. 설치된 언어: {available_langs}")
                         self._log(f"[PDF 처리] 한국어 언어 팩 설치 방법: Tesseract 설치 시 'Additional language data'에서 'Korean' 선택")
                     else:
                         self._log(f"[PDF 처리] ✅ 한국어 언어 팩 확인됨")
@@ -921,7 +932,7 @@ class DocumentProcessor:
         if digit_count_total > 0:
             self._log(f"[PDF 처리] OCR 성공: {len(text_parts)}페이지, 총 {len(text)}자, 숫자 {digit_count_total}개 포함 ✅")
         else:
-            self._log(f"[PDF 처리] OCR 성공: {len(text_parts)}페이지, 총 {len(text)}자 (⚠️ 숫자 없음)")
+            self._log(f"[PDF 처리] OCR 성공: {len(text_parts)}페이지, 총 {len(text)}자 ([경고] 숫자 없음)")
         return text
     
     def _postprocess_ocr_text(self, text: str) -> str:
@@ -1177,10 +1188,10 @@ class DocumentProcessor:
         # 숫자 보존 확인 로깅 (디버깅용)
         has_numbers_after = any(c.isdigit() for c in text)
         if has_numbers_before and not has_numbers_after:
-            print(f"[텍스트 정제] ⚠️ 경고: 정제 후 텍스트에서 숫자가 사라졌습니다!")
+            print(f"[텍스트 정제] [경고] 정제 후 텍스트에서 숫자가 사라졌습니다!")
             print(f"[텍스트 정제] 원본 샘플 (처음 500자): {text[:500] if len(text) > 500 else text}")
         elif not has_numbers_after and len(text) > 100:
-            print(f"[텍스트 정제] ⚠️ 경고: 정제 후 텍스트에 숫자가 없습니다. 원본 길이: {len(text)}")
+            print(f"[텍스트 정제] [경고] 정제 후 텍스트에 숫자가 없습니다. 원본 길이: {len(text)}")
         
         return text.strip()
     

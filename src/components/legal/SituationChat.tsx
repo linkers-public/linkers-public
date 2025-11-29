@@ -22,6 +22,8 @@ interface Message {
 interface SituationChatProps {
   analysisResult: SituationAnalysisResponse
   situationSummary?: string
+  initialMessage?: string
+  suggestedQuestions?: string[]
   onLoadingChange?: (loading: boolean) => void
   onMessageCountChange?: (count: number) => void
 }
@@ -29,11 +31,42 @@ interface SituationChatProps {
 export function SituationChat({
   analysisResult,
   situationSummary,
+  initialMessage,
+  suggestedQuestions: propSuggestedQuestions,
   onLoadingChange,
   onMessageCountChange,
 }: SituationChatProps) {
   // 상황 분석 결과 기반 고유 ID 생성
   const chatId = `situation_${Date.now()}_${analysisResult.riskScore}`
+
+  // 초기 AI 메시지 생성
+  const generateInitialMessage = (): string => {
+    if (initialMessage) return initialMessage
+    
+    // 분석 결과 기반으로 초기 메시지 생성
+    const riskScore = analysisResult.riskScore || 50
+    const criteria = analysisResult.criteria || []
+    
+    if (criteria.length > 0) {
+      const firstCriterion = criteria[0]
+      const criterionName = firstCriterion.name || ''
+      
+      // 수습기간 관련 체크
+      if (criterionName.includes('수습') || criterionName.includes('인턴')) {
+        return '위 분석 결과를 보니 수습기간 관련 부분이 법적으로 모호해 보입니다. 이 부분에 대해 구체적으로 상담해 드릴까요?'
+      }
+      
+      // 임금 체불 관련
+      if (criterionName.includes('임금') || criterionName.includes('체불')) {
+        return '분석 결과에서 임금 체불 의심 사항이 확인되었습니다. 이 상황에서 어떤 조치를 취해야 하는지 자세히 알려드릴 수 있습니다.'
+      }
+      
+      // 일반적인 초기 메시지
+      return `위 분석 결과를 바탕으로 궁금한 점을 물어보세요. ${criterionName} 관련하여 더 자세한 설명이 필요하시면 언제든 말씀해 주세요.`
+    }
+    
+    return '분석 결과를 바탕으로 궁금한 점을 물어보세요. 법적 권리나 다음 단계에 대해 상담해 드릴 수 있습니다.'
+  }
 
   // localStorage에서 메시지 로드
   const loadMessages = (): Message[] => {
@@ -42,15 +75,31 @@ export function SituationChat({
       const stored = localStorage.getItem(`situation_chat_${chatId}`)
       if (stored) {
         const parsed = JSON.parse(stored)
-        return parsed.map((msg: any) => ({
+        const loaded = parsed.map((msg: any) => ({
           ...msg,
           timestamp: new Date(msg.timestamp),
         }))
+        // 초기 메시지가 없으면 추가
+        if (loaded.length === 0) {
+          return [{
+            id: 'initial',
+            role: 'assistant' as const,
+            content: generateInitialMessage(),
+            timestamp: new Date(),
+          }]
+        }
+        return loaded
       }
     } catch (error) {
       console.error('메시지 로드 실패:', error)
     }
-    return []
+    // 초기 메시지 반환
+    return [{
+      id: 'initial',
+      role: 'assistant' as const,
+      content: generateInitialMessage(),
+      timestamp: new Date(),
+    }]
   }
 
   // 메시지 저장
@@ -73,11 +122,18 @@ export function SituationChat({
 
   // 분석 결과 기반 추천 질문 생성
   const generateSuggestedQuestions = (): string[] => {
+    // prop으로 전달된 질문이 있으면 우선 사용
+    if (propSuggestedQuestions && propSuggestedQuestions.length > 0) {
+      return propSuggestedQuestions
+    }
+    
     const questions: string[] = []
     
-    // 상황 분석 결과 기반 질문
-    questions.push('이 상황에서 내가 가진 권리는 무엇인가요?')
+    // 기본 추천 질문
+    questions.push('지금 그만두면 손해인가요?')
+    questions.push('신고 절차 알려줘')
     
+    // 상황 분석 결과 기반 질문
     if (analysisResult.riskScore >= 70) {
       questions.push('위험이 높다고 나왔는데, 어떤 조치를 우선해야 하나요?')
     }
@@ -252,44 +308,6 @@ export function SituationChat({
 
   return (
     <div className="h-full flex flex-col bg-white">
-      {/* 추천 질문 */}
-      {messages.length === 0 && (
-        <div className="p-3 sm:p-4 border-b border-slate-100 bg-gradient-to-b from-slate-50 to-white flex-shrink-0">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="p-1.5 bg-blue-100 rounded-lg">
-              <Sparkles className="w-4 h-4 text-blue-600" />
-            </div>
-            <span className="text-sm font-semibold text-slate-700">추천 질문</span>
-          </div>
-          <p className="text-[11px] text-slate-500 mb-2">
-            자주 묻는 질문이에요. 하나 골라서 바로 시작해도 좋습니다.
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            {suggestedQuestions.map((question, index) => (
-              <button
-                key={index}
-                onClick={() => handleSendMessage(question)}
-                disabled={chatLoading}
-                aria-label={`추천 질문: ${question}`}
-                className={cn(
-                  "group relative px-3 py-2 text-xs font-medium min-h-[44px]",
-                  "bg-white border border-slate-200 rounded-xl",
-                  "hover:border-blue-400 hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50",
-                  "hover:shadow-md hover:scale-[1.02]",
-                  "transition-all duration-200",
-                  "disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100",
-                  "text-left cursor-pointer"
-                )}
-              >
-                <span className="relative z-10 text-slate-700 group-hover:text-blue-700 line-clamp-2">
-                  {question}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* 채팅 영역 */}
       <div
         ref={chatContainerRef}
@@ -413,6 +431,41 @@ export function SituationChat({
             </>
           )}
         </div>
+
+        {/* 추천 질문 칩 (입력창 위) */}
+        {messages.length > 0 && messages.length <= 2 && (
+          <div className="px-4 sm:px-6 py-3 border-t border-slate-100 bg-gradient-to-b from-slate-50 to-white flex-shrink-0">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="p-1.5 bg-blue-100 rounded-lg">
+                <Sparkles className="w-4 h-4 text-blue-600" />
+              </div>
+              <span className="text-xs font-semibold text-slate-700">추천 질문</span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {suggestedQuestions.map((question, index) => (
+                <button
+                  key={index}
+                  onClick={() => handleSendMessage(question)}
+                  disabled={chatLoading}
+                  aria-label={`추천 질문: ${question}`}
+                  className={cn(
+                    "group relative px-3 py-2 text-xs font-medium min-h-[44px]",
+                    "bg-white border border-slate-200 rounded-xl",
+                    "hover:border-blue-400 hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50",
+                    "hover:shadow-md hover:scale-[1.02]",
+                    "transition-all duration-200",
+                    "disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100",
+                    "text-left cursor-pointer"
+                  )}
+                >
+                  <span className="relative z-10 text-slate-700 group-hover:text-blue-700 line-clamp-2">
+                    {question}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* 입력 영역 */}
         <div className="flex-shrink-0 border-t border-slate-200 bg-white p-4">

@@ -171,6 +171,13 @@ export const analyzeSituationDetailed = async (
         title: caseItem.title,
         summary: caseItem.summary,
       })),
+      sources: (backendData.sources || []).map((source: any) => ({
+        sourceId: source.source_id || source.sourceId,
+        sourceType: source.source_type || source.sourceType,
+        title: source.title,
+        snippet: source.snippet,
+        score: source.score,
+      })),
     };
     
     return data;
@@ -269,6 +276,14 @@ export interface ScriptsV2 {
   toAdvisor?: string;
 }
 
+export interface SourceItemV2 {
+  sourceId: string;
+  sourceType: 'law' | 'manual' | 'case';
+  title: string;
+  snippet: string;
+  score: number;
+}
+
 export interface SituationResponseV2 {
   id?: string;  // situation_analyses 테이블의 ID
   riskScore: number;
@@ -278,6 +293,7 @@ export interface SituationResponseV2 {
   checklist: string[];
   scripts?: ScriptsV2;
   relatedCases: RelatedCaseV2[];
+  sources?: SourceItemV2[]; // RAG 검색 출처
 }
 
 export interface ContractIssueV2 {
@@ -425,11 +441,14 @@ export const searchLegalV2 = async (
 
     // 인증 헤더 가져오기 (선택적 - 검색은 인증 없이도 가능)
     const authHeaders = await getAuthHeaders();
-    authHeaders['Content-Type'] = 'application/json';
+    const headers = {
+      ...(authHeaders as Record<string, string>),
+      'Content-Type': 'application/json',
+    };
 
     const response = await fetch(`${url}?${params}`, {
       method: 'GET',
-      headers: authHeaders,
+      headers,
     });
 
     if (!response.ok) {
@@ -528,14 +547,16 @@ export const analyzeContractV2 = async (
     const authHeaders = await getAuthHeaders();
     
     // user_id가 명시적으로 제공된 경우 덮어쓰기
-    if (userId !== undefined) {
-      authHeaders['X-User-Id'] = userId;
+    const headersForFormData: Record<string, string> = {
+      ...(authHeaders as Record<string, string>),
+    };
+    if (userId !== undefined && userId !== null) {
+      headersForFormData['X-User-Id'] = userId;
     }
 
     // FormData 전송 시 Content-Type은 브라우저가 자동으로 설정하므로 제거
     // (multipart/form-data boundary는 브라우저가 자동 생성)
-    const headersForFormData: HeadersInit = { ...authHeaders };
-    delete (headersForFormData as any)['Content-Type'];
+    delete headersForFormData['Content-Type'];
 
     const response = await fetch(url, {
       method: 'POST',
@@ -687,11 +708,14 @@ export const getContractAnalysisV2 = async (
 
     // 인증 헤더 가져오기
     const authHeaders = await getAuthHeaders();
-    authHeaders['Content-Type'] = 'application/json';
+    const headers = {
+      ...(authHeaders as Record<string, string>),
+      'Content-Type': 'application/json',
+    };
 
     const response = await fetch(url, {
       method: 'GET',
-      headers: authHeaders,
+      headers,
     });
 
     if (!response.ok) {
@@ -719,16 +743,19 @@ export const analyzeSituationV2 = async (
     
     // 인증 헤더 가져오기 (Authorization + X-User-Id)
     const authHeaders = await getAuthHeaders();
-    authHeaders['Content-Type'] = 'application/json';
+    const headers: Record<string, string> = {
+      ...(authHeaders as Record<string, string>),
+      'Content-Type': 'application/json',
+    };
     
     // user_id가 명시적으로 제공된 경우 덮어쓰기
-    if (userId !== undefined) {
-      authHeaders['X-User-Id'] = userId;
+    if (userId !== undefined && userId !== null) {
+      headers['X-User-Id'] = userId;
     }
     
     const response = await fetch(url, {
       method: 'POST',
-      headers: authHeaders,
+      headers,
       body: JSON.stringify(request),
     });
 
@@ -768,15 +795,18 @@ export const getContractHistoryV2 = async (
     
     // 인증 헤더 가져오기 (Authorization + X-User-Id)
     const authHeaders = await getAuthHeaders();
-    authHeaders['Content-Type'] = 'application/json';
+    const headers: Record<string, string> = {
+      ...(authHeaders as Record<string, string>),
+      'Content-Type': 'application/json',
+    };
     
     // user_id가 명시적으로 제공된 경우 덮어쓰기
-    if (userId !== undefined) {
-      authHeaders['X-User-Id'] = userId;
+    if (userId !== undefined && userId !== null) {
+      headers['X-User-Id'] = userId;
     }
     
     // user_id가 없으면 빈 배열 반환 (에러 대신)
-    if (!authHeaders['X-User-Id']) {
+    if (!headers['X-User-Id']) {
       console.warn('사용자 ID가 없어 히스토리를 조회할 수 없습니다. 로컬 스토리지를 확인하세요.');
       return [];
     }
@@ -788,7 +818,7 @@ export const getContractHistoryV2 = async (
 
     const response = await fetch(`${url}?${params}`, {
       method: 'GET',
-      headers: authHeaders,
+      headers,
     });
 
     if (!response.ok) {
@@ -824,13 +854,16 @@ export const getSituationHistoryV2 = async (
     const url = `${LEGAL_API_BASE_V2}/situations/history`;
     
     const authHeaders = await getAuthHeaders();
-    authHeaders['Content-Type'] = 'application/json';
+    const headers: Record<string, string> = {
+      ...(authHeaders as Record<string, string>),
+      'Content-Type': 'application/json',
+    };
     
-    if (userId !== undefined) {
-      authHeaders['X-User-Id'] = userId;
+    if (userId !== undefined && userId !== null) {
+      headers['X-User-Id'] = userId;
     }
     
-    if (!authHeaders['X-User-Id']) {
+    if (!headers['X-User-Id']) {
       console.warn('사용자 ID가 없어 히스토리를 조회할 수 없습니다.');
       return [];
     }
@@ -842,7 +875,7 @@ export const getSituationHistoryV2 = async (
 
     const response = await fetch(`${url}?${params}`, {
       method: 'GET',
-      headers: authHeaders,
+      headers,
     });
 
     if (!response.ok) {
@@ -869,15 +902,18 @@ export const getSituationAnalysisByIdV2 = async (
     const url = `${LEGAL_API_BASE_V2}/situations/${situationId}`;
     
     const authHeaders = await getAuthHeaders();
-    authHeaders['Content-Type'] = 'application/json';
+    const headers: Record<string, string> = {
+      ...(authHeaders as Record<string, string>),
+      'Content-Type': 'application/json',
+    };
     
-    if (userId !== undefined) {
-      authHeaders['X-User-Id'] = userId;
+    if (userId !== undefined && userId !== null) {
+      headers['X-User-Id'] = userId;
     }
 
     const response = await fetch(url, {
       method: 'GET',
-      headers: authHeaders,
+      headers,
     });
 
     if (!response.ok) {
@@ -908,15 +944,18 @@ export const saveConversationV2 = async (
     const url = `${LEGAL_API_BASE_V2}/conversations`;
     
     const authHeaders = await getAuthHeaders();
-    authHeaders['Content-Type'] = 'application/json';
+    const headers: Record<string, string> = {
+      ...(authHeaders as Record<string, string>),
+      'Content-Type': 'application/json',
+    };
     
-    if (userId !== undefined) {
-      authHeaders['X-User-Id'] = userId;
+    if (userId !== undefined && userId !== null) {
+      headers['X-User-Id'] = userId;
     }
 
     const response = await fetch(url, {
       method: 'POST',
-      headers: authHeaders,
+      headers,
       body: JSON.stringify({
         report_id: reportId,
         message: message,
@@ -959,15 +998,18 @@ export const getConversationsV2 = async (
     const url = `${LEGAL_API_BASE_V2}/conversations/${reportId}`;
     
     const authHeaders = await getAuthHeaders();
-    authHeaders['Content-Type'] = 'application/json';
+    const headers: Record<string, string> = {
+      ...(authHeaders as Record<string, string>),
+      'Content-Type': 'application/json',
+    };
     
-    if (userId !== undefined) {
-      authHeaders['X-User-Id'] = userId;
+    if (userId !== undefined && userId !== null) {
+      headers['X-User-Id'] = userId;
     }
 
     const response = await fetch(url, {
       method: 'GET',
-      headers: authHeaders,
+      headers,
     });
 
     if (!response.ok) {
@@ -1033,11 +1075,14 @@ export const chatWithContractV2 = async (
     
     // 인증 헤더 가져오기
     const authHeaders = await getAuthHeaders()
-    authHeaders['Content-Type'] = 'application/json'
+    const headers = {
+      ...(authHeaders as Record<string, string>),
+      'Content-Type': 'application/json',
+    }
     
     const response = await fetch(url, {
       method: 'POST',
-      headers: authHeaders,
+      headers,
       body: JSON.stringify(request),
     })
 

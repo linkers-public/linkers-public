@@ -4,13 +4,27 @@ Groq 관련 코드를 한 곳에 모아두는 모듈
 """
 
 import os
+import logging
 from groq import Groq
 from config import settings
+
+logger = logging.getLogger(__name__)
 
 # 1. 클라이언트 설정 (여기서만 딱 한 번 설정)
 # config.py의 groq_api_key는 환경변수 GROQ_API_KEY에서 자동으로 읽힘
 # pydantic_settings가 자동으로 환경변수를 필드에 매핑함
 GROQ_API_KEY = settings.groq_api_key or os.getenv("GROQ_API_KEY")
+
+# 디버깅: 어떤 키가 사용되는지 확인 (print로 즉시 출력)
+if GROQ_API_KEY and GROQ_API_KEY != "not_set":
+    masked_key = GROQ_API_KEY[:8] + "..." + GROQ_API_KEY[-8:] if len(GROQ_API_KEY) > 16 else "***"
+    print(f"[llm_api] GROQ_API_KEY 로드됨: {masked_key} (길이: {len(GROQ_API_KEY)})")
+    print(f"[llm_api] settings.groq_api_key: {settings.groq_api_key[:8] + '...' if settings.groq_api_key and len(settings.groq_api_key) > 8 else 'None'}")
+    print(f"[llm_api] os.getenv('GROQ_API_KEY'): {os.getenv('GROQ_API_KEY')[:8] + '...' if os.getenv('GROQ_API_KEY') and len(os.getenv('GROQ_API_KEY')) > 8 else 'None'}")
+    logger.info(f"[llm_api] GROQ_API_KEY 로드됨: {masked_key} (길이: {len(GROQ_API_KEY)})")
+else:
+    print("[llm_api] ⚠️ GROQ_API_KEY가 설정되지 않았습니다!")
+    logger.warning("[llm_api] GROQ_API_KEY가 설정되지 않았습니다!")
 
 if not GROQ_API_KEY:
     import warnings
@@ -24,6 +38,10 @@ if not GROQ_API_KEY:
     GROQ_API_KEY = "not_set"
 
 CLIENT = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY != "not_set" else None
+if CLIENT:
+    logger.info("[llm_api] Groq CLIENT 초기화 완료")
+else:
+    logger.warning("[llm_api] Groq CLIENT 초기화 실패 (API 키 없음)")
 
 
 def ask_groq(user_input: str, system_role: str = "너는 유능한 법률 AI야.") -> str:
@@ -74,6 +92,13 @@ def ask_groq_with_messages(messages: list, temperature: float = 0.5, model: str 
     if not CLIENT:
         raise ValueError("Groq API 키가 설정되지 않았습니다. 환경변수 GROQ_API_KEY를 설정하세요.")
     
+    # 디버깅: 실제 사용 중인 키 확인 (첫 호출 시에만)
+    if not hasattr(ask_groq_with_messages, '_key_logged'):
+        masked_key = GROQ_API_KEY[:8] + "..." + GROQ_API_KEY[-8:] if GROQ_API_KEY != "not_set" and len(GROQ_API_KEY) > 16 else "***"
+        logger.info(f"[llm_api] 실제 사용 중인 GROQ_API_KEY: {masked_key} (길이: {len(GROQ_API_KEY) if GROQ_API_KEY != 'not_set' else 0})")
+        print(f"[llm_api] 실제 사용 중인 GROQ_API_KEY: {masked_key}")
+        ask_groq_with_messages._key_logged = True
+    
     try:
         completion = CLIENT.chat.completions.create(
             model=model,
@@ -88,8 +113,6 @@ def ask_groq_with_messages(messages: list, temperature: float = 0.5, model: str 
         
     except Exception as e:
         # 예외를 그대로 전파하여 상위에서 처리할 수 있도록 함
-        import logging
-        logger = logging.getLogger(__name__)
         logger.error(f"Groq API 호출 실패: {str(e)}", exc_info=True)
         raise
 
