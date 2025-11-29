@@ -1,7 +1,7 @@
 # backend/models/schemas.py
 
 from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 from datetime import datetime
 
 
@@ -81,10 +81,13 @@ class LegalRecommendation(BaseModel):
 class LegalGroundingChunk(BaseModel):
     """RAG 검색 결과 청크"""
     source_id: str
-    source_type: str  # "law" | "manual" | "case"
+    source_type: str  # "law" | "manual" | "case" | "standard_contract"
     title: str
     snippet: str
     score: float
+    file_path: Optional[str] = None  # 원본 파일 경로
+    external_id: Optional[str] = None  # legal_chunks.external_id
+    chunk_index: Optional[int] = None  # legal_chunks.chunk_index
 
 
 class LegalAnalysisResult(BaseModel):
@@ -351,6 +354,18 @@ class RiskSummaryItem(BaseModel):
     simpleExplanation: str = Field(..., description="간단 설명")
     revisionKeyword: str = Field(..., description="수정 제안 키워드")
 
+class LegalBasisItemV2(BaseModel):
+    """법적 근거 항목 (구조화된 형식) - RAG Citation 객체"""
+    title: str  # 문서 이름 (legal_chunks.title)
+    snippet: str  # 참고한 content (legal_chunks.content 일부)
+    sourceType: Optional[str] = "law"  # "law" | "manual" | "case" | "standard_contract"
+    status: Optional[str] = None  # "likely" | "unclear" | "unlikely"
+    filePath: Optional[str] = None  # 스토리지 키 (예: "standard_contract/xxx.pdf")
+    similarityScore: Optional[float] = None  # 벡터 유사도 (RAG 근거용)
+    chunkIndex: Optional[int] = None  # 몇 번째 청크인지 (legal_chunks.chunk_index)
+    externalId: Optional[str] = None  # legal_chunks.external_id (디버그/관리용)
+    reason: Optional[str] = None  # "왜 이 이슈에 이 근거가 붙었는지" LLM 한 줄 설명
+
 class ContractIssueV2(BaseModel):
     """계약서 이슈 (v2)"""
     id: str
@@ -358,7 +373,7 @@ class ContractIssueV2(BaseModel):
     severity: str  # "low" | "medium" | "high"
     summary: str
     originalText: str
-    legalBasis: List[str]
+    legalBasis: Union[List[str], List[LegalBasisItemV2]]  # string[] 또는 구조화된 형식 지원
     explanation: str
     suggestedRevision: str
     clauseId: Optional[str] = None  # 연결된 조항 ID
@@ -382,6 +397,7 @@ class ContractAnalysisResponseV2(BaseModel):
     clauses: List[ClauseV2] = []  # 조항 목록 (자동 분류)
     highlightedTexts: List[HighlightedTextV2] = []  # 하이라이트된 텍스트
     createdAt: str
+    fileUrl: Optional[str] = None  # Supabase Storage에 저장된 원본 파일 URL
     # 새로운 독소조항 탐지 결과 필드
     oneLineSummary: Optional[str] = Field(None, description="한 줄 총평")
     riskTrafficLight: Optional[str] = Field(None, description="리스크 신호등: 🟢 | 🟡 | 🔴")
@@ -411,6 +427,7 @@ class ClauseRewriteRequestV2(BaseModel):
     clauseId: str
     originalText: str
     issueId: Optional[str] = None  # 관련 issue ID
+    legalBasis: Optional[List[str]] = None  # 법적 근거 (있는 경우)
 
 
 class ClauseRewriteResponseV2(BaseModel):

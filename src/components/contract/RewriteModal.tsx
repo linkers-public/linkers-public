@@ -5,6 +5,7 @@ import { rewriteClauseV2 } from '@/apis/legal.service'
 import { Button } from '@/components/ui/button'
 import { Loader2, Sparkles, X } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
+import type { LegalBasisItem } from '@/types/legal'
 
 interface RewriteModalProps {
   clauseId: string
@@ -107,9 +108,36 @@ export function RewriteModal({ clauseId, originalText, issueId, onClose }: Rewri
                 <div>
                   <h3 className="font-semibold mb-2 text-slate-700">법적 근거</h3>
                   <ul className="list-disc list-inside space-y-1 bg-slate-50 p-3 rounded">
-                    {rewritten.legalBasis.map((basis: string, idx: number) => (
-                      <li key={idx} className="text-sm text-slate-600">{basis}</li>
-                    ))}
+                    {rewritten.legalBasis.map((basis: any, idx: number) => {
+                      // 구조화된 형식인지 확인
+                      const isStructured = typeof basis === 'object' && basis !== null && 'title' in basis;
+                      
+                      if (isStructured) {
+                        const basisItem = basis as LegalBasisItem;
+                        return (
+                          <li key={idx} className="text-sm text-slate-600">
+                            <span className="font-semibold">{basisItem.title}</span>
+                            {basisItem.snippet && <span>: {basisItem.snippet.substring(0, 100)}...</span>}
+                            {basisItem.filePath && (
+                              <a
+                                href={`${process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://localhost:8000'}/api/v2/legal/file?path=${encodeURIComponent(basisItem.filePath)}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-700 hover:text-blue-800 hover:underline ml-2"
+                                title="파일 열기"
+                              >
+                                [열기]
+                              </a>
+                            )}
+                          </li>
+                        );
+                      } else {
+                        const basisText = typeof basis === 'string' ? basis : JSON.stringify(basis);
+                        return (
+                          <li key={idx} className="text-sm text-slate-600">{basisText}</li>
+                        );
+                      }
+                    })}
                   </ul>
                 </div>
               )}

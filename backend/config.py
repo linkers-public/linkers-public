@@ -27,18 +27,19 @@ class Settings(BaseSettings):
     doc_embed_model: str = "BAAI/bge-m3"  # 문서 임베딩: 법률/계약서/공고문 (1024차원, 다국어)
     company_embed_model: str = "BAAI/bge-small-en-v1.5"  # 기업 임베딩: 기업/팀 기술스택 및 수행이력 (384차원, 빠름, 레거시)
     
-    # LLM Model (Groq 사용)
+    # LLM Model Provider 선택 (환경변수 LLM_PROVIDER로 설정: "groq" 또는 "ollama")
+    llm_provider: str = "groq"  # "groq" 또는 "ollama" (환경변수 LLM_PROVIDER로 오버라이드 가능)
     llm_temperature: float = 0.5
     disable_llm: bool = False  # True면 LLM 분석 비활성화 (개발/테스트용)
     
     # Groq 설정 (Groq LLM 사용)
     groq_model: str = "llama-3.3-70b-versatile"  # Groq 모델명 (기본값, 환경변수 GROQ_MODEL로 오버라이드 가능)
-    use_groq: bool = True  # Groq 사용 (기본값: True)
+    use_groq: bool = True  # Groq 사용 여부 (llm_provider에 따라 자동 설정됨)
     
     # Ollama 설정 (로컬 LLM 사용 - 레거시, Groq 사용 시 비활성화)
     ollama_base_url: str = "http://localhost:11434"  # Ollama 서버 주소
     ollama_model: str = "mistral"  # mistral (한국어 성능 우수), llama3, phi3 등
-    use_ollama: bool = False  # Ollama 사용 (로컬 LLM, 무료) - Groq 사용 시 False
+    use_ollama: bool = False  # Ollama 사용 여부 (llm_provider에 따라 자동 설정됨)
     
     # 벡터 DB 선택
     use_chromadb: bool = False  # True면 ChromaDB 사용 (로컬), False면 Supabase
@@ -65,4 +66,26 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+# LLM_PROVIDER 환경변수에 따라 use_groq와 use_ollama 자동 설정
+# 환경변수에서 직접 읽기 (pydantic_settings가 처리하기 전에)
+import os
+llm_provider_env = os.getenv("LLM_PROVIDER", "").lower().strip()
+if llm_provider_env:
+    settings.llm_provider = llm_provider_env
+
+# llm_provider에 따라 use_groq와 use_ollama 자동 설정
+if settings.llm_provider.lower() == "ollama":
+    settings.use_groq = False
+    settings.use_ollama = True
+    print(f"[설정] LLM Provider: Ollama (모델: {settings.ollama_model})")
+elif settings.llm_provider.lower() == "groq":
+    settings.use_groq = True
+    settings.use_ollama = False
+    print(f"[설정] LLM Provider: Groq (모델: {settings.groq_model})")
+else:
+    # 기본값: Groq 사용
+    settings.use_groq = True
+    settings.use_ollama = False
+    print(f"[설정] LLM Provider: Groq (기본값, 모델: {settings.groq_model})")
 

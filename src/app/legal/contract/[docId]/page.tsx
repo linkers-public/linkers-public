@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useRef } from 'react'
 import { useParams } from 'next/navigation'
-import { Loader2, AlertCircle, MessageSquare, FileText, X, ChevronDown } from 'lucide-react'
+import { Loader2, AlertCircle, MessageSquare, FileText, X, ChevronDown, Download, ExternalLink } from 'lucide-react'
 import { ContractViewer } from '@/components/contract/ContractViewer'
 import { AnalysisPanel } from '@/components/contract/AnalysisPanel'
 import { ContractChat } from '@/components/contract/ContractChat'
@@ -34,6 +34,8 @@ export default function ContractDetailPage() {
   const [riskSummaryTable, setRiskSummaryTable] = useState<any[]>([])
   const [toxicClauses, setToxicClauses] = useState<any[]>([])
   const [negotiationQuestions, setNegotiationQuestions] = useState<string[]>([])
+  const [retrievedContexts, setRetrievedContexts] = useState<any[]>([])
+  const [fileUrl, setFileUrl] = useState<string | null>(null)  // 원본 파일 URL
   
   // 스와이프 제스처 상태
   const [touchStart, setTouchStart] = useState<{ x: number; y: number } | null>(null)
@@ -119,6 +121,7 @@ export default function ContractDetailPage() {
           riskSummaryTable: localData?.riskSummaryTable,
           toxicClauses: localData?.toxicClauses,
           negotiationQuestions: localData?.negotiationQuestions,
+          retrievedContexts: localData?.retrievedContexts || localData?.retrieved_contexts || [],
         } : (v2Data ? {
           // uuid + v2Data 있음: v2 API 응답 우선 사용
           risk_score: v2Data.riskScore,
@@ -130,7 +133,7 @@ export default function ContractDetailPage() {
           highlightedTexts: v2Data.highlightedTexts || [], // ✨ 하이라이트된 텍스트
           recommendations: [],
           createdAt: v2Data.createdAt,
-          fileUrl: null,
+          fileUrl: v2Data.fileUrl || null,
           // 새로운 독소조항 탐지 필드
           oneLineSummary: v2Data.oneLineSummary,
           riskTrafficLight: v2Data.riskTrafficLight,
@@ -138,6 +141,7 @@ export default function ContractDetailPage() {
           riskSummaryTable: v2Data.riskSummaryTable,
           toxicClauses: v2Data.toxicClauses,
           negotiationQuestions: v2Data.negotiationQuestions,
+          retrievedContexts: v2Data.retrievedContexts || [],
         } : {
           // uuid + v2Data 없음: 로컬 스토리지 fallback
           ...localData,
@@ -245,9 +249,29 @@ export default function ContractDetailPage() {
               originalText: originalText,
               suggestedText: issue.suggestedRevision || issue.suggested_text || issue.suggestedText || '',
               rationale: issue.explanation || issue.rationale || issue.description || '',
-              legalBasis: Array.isArray(issue.legalBasis) ? issue.legalBasis : 
+              legalBasis: (() => {
+                // legalBasis 추출
+                const basis = Array.isArray(issue.legalBasis) ? issue.legalBasis : 
                          (Array.isArray(issue.legal_basis) ? issue.legal_basis : 
-                         (Array.isArray(issue.related_law) ? issue.related_law : [])),
+                             (Array.isArray(issue.related_law) ? issue.related_law : []));
+                
+                // JSON 문자열인 경우 파싱
+                return basis.map((item: any) => {
+                  if (typeof item === 'string') {
+                    // JSON 문자열인지 확인
+                    if (item.trim().startsWith('{') && item.trim().endsWith('}')) {
+                      try {
+                        return JSON.parse(item);
+                      } catch (e) {
+                        // 파싱 실패하면 문자열 그대로 반환
+                        return item;
+                      }
+                    }
+                    return item;
+                  }
+                  return item;
+                });
+              })(),
               suggestedQuestions: [],
             } as LegalIssue
           })
@@ -350,6 +374,7 @@ export default function ContractDetailPage() {
           setRiskSummaryTable(normalizedData.riskSummaryTable || v2Data?.riskSummaryTable || [])
           setToxicClauses(normalizedData.toxicClauses || v2Data?.toxicClauses || [])
           setNegotiationQuestions(normalizedData.negotiationQuestions || v2Data?.negotiationQuestions || [])
+          setRetrievedContexts(normalizedData.retrievedContexts || normalizedData.retrieved_contexts || v2Data?.retrievedContexts || [])
 
           setAnalysisResult(result)
         } else {
@@ -546,6 +571,36 @@ export default function ContractDetailPage() {
             "w-full flex-shrink-0 bg-white border-r border-slate-200/60 shadow-sm transition-[width] duration-300 flex flex-col",
             isChatOpen ? "lg:w-[58%]" : "lg:w-1/2"
           )}>
+            {/* 파일 다운로드 버튼 (파일 URL이 있는 경우) */}
+            {fileUrl && (
+              <div className="px-4 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-slate-200 flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm text-slate-700">
+                  <FileText className="w-4 h-4" />
+                  <span className="font-medium">원본 파일</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <a
+                    href={fileUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-1.5 text-xs font-semibold text-blue-700 bg-white border border-blue-300 rounded-lg hover:bg-blue-50 transition-colors flex items-center gap-1.5"
+                    title="새 탭에서 열기"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    열기
+                  </a>
+                  <a
+                    href={fileUrl}
+                    download
+                    className="px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-1.5"
+                    title="파일 다운로드"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    다운로드
+                  </a>
+                </div>
+              </div>
+            )}
             <div 
               ref={contractViewerScrollRef}
               className="flex-1 overflow-y-auto min-h-0"
@@ -643,6 +698,7 @@ export default function ContractDetailPage() {
                 riskSummaryTable={riskSummaryTable}
                 toxicClauses={toxicClauses}
                 negotiationQuestions={negotiationQuestions}
+                retrievedContexts={retrievedContexts}
               />
             </div>
           </div>

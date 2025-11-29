@@ -9,6 +9,13 @@ export type LegalCategory =
   | 'stock_option' 
   | 'ip' 
   | 'harassment'
+  | 'job_stability'  // 고용안정
+  | 'dismissal'      // 해고·해지
+  | 'payment'        // 보수·수당 (wage와 유사하지만 별도)
+  | 'non_compete'    // 경업금지
+  | 'liability'      // 손해배상
+  | 'dispute'        // 분쟁해결
+  | 'nda'            // 비밀유지
   | 'other'
 
 export type Severity = 'low' | 'medium' | 'high'
@@ -29,6 +36,19 @@ export interface LegalIssueMetrics {
   priority: Priority
 }
 
+// 법적 근거 항목 (구조화된 형식) - RAG Citation 객체
+export interface LegalBasisItem {
+  sourceType: 'law' | 'manual' | 'case' | 'standard_contract' | string
+  title: string             // legal_chunks.title (문서 이름)
+  snippet: string           // legal_chunks.content 일부 (참조한 텍스트)
+  filePath: string          // 스토리지 object key (예: "law/xxx.pdf")
+  externalId?: string       // legal_chunks.external_id
+  chunkIndex?: number       // legal_chunks.chunk_index
+  similarityScore?: number  // (선택) 벡터 유사도
+  reason?: string           // 이 이슈에 이 근거를 붙인 이유 (LLM 한 줄 설명)
+  status?: string           // "likely" | "unclear" | "unlikely" (레거시 호환)
+}
+
 export interface LegalIssue {
   id: string
   category: LegalCategory
@@ -40,7 +60,7 @@ export interface LegalIssue {
   suggestedText?: string
   rationale?: string
   suggestedQuestions?: string[]
-  legalBasis?: string[]
+  legalBasis?: string[] | LegalBasisItem[]  // string[] 또는 구조화된 형식 지원
 }
 
 export interface ContractAnalysisResult {

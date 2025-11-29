@@ -1,13 +1,12 @@
 'use client'
 
 import { useState } from 'react'
-import { AlertTriangle, Eye, FileEdit, Copy, ChevronDown, ChevronUp, MessageSquare, Sparkles } from 'lucide-react'
+import { AlertTriangle, Eye, FileEdit, Copy, ChevronDown, ChevronUp, MessageSquare } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/hooks/use-toast'
-import { RewriteModal } from './RewriteModal'
 import { cn } from '@/lib/utils'
 import { SEVERITY_COLORS, SEVERITY_LABELS, SEVERITY_LABELS_SHORT, PRIMARY_GRADIENT, PRIMARY_GRADIENT_HOVER, FOCUS_STYLE, ICON_SIZES } from './contract-design-tokens'
-import type { LegalIssue } from '@/types/legal'
+import type { LegalIssue, LegalBasisItem } from '@/types/legal'
 
 interface AnalysisIssueCardProps {
   issue: LegalIssue
@@ -25,7 +24,6 @@ export function AnalysisIssueCard({
   onAskAboutIssue,
 }: AnalysisIssueCardProps) {
   const [isExpanded, setIsExpanded] = useState(false)
-  const [showRewriteModal, setShowRewriteModal] = useState(false)
   const { toast } = useToast()
 
   const categoryLabels: Record<string, string> = {
@@ -35,6 +33,13 @@ export function AnalysisIssueCard({
     stock_option: '스톡옵션',
     ip: 'IP/저작권',
     harassment: '직장내괴롭힘',
+    job_stability: '고용안정',
+    dismissal: '해고·해지',
+    payment: '보수·수당',
+    non_compete: '경업금지',
+    liability: '손해배상',
+    dispute: '분쟁해결',
+    nda: '비밀유지',
     other: '기타',
   }
 
@@ -74,7 +79,7 @@ export function AnalysisIssueCard({
   return (
     <div
       className={cn(
-        "relative border rounded-xl p-4 sm:p-5 mb-4 transition-all issue-card",
+        "relative w-full max-w-full box-border border rounded-xl p-4 sm:p-5 mb-4 transition-all issue-card",
         isSelected
           ? 'border-blue-500 bg-gradient-to-br from-blue-50 to-indigo-50 shadow-md scale-[1.01]'
           : 'border-slate-200 bg-white hover:border-slate-300'
@@ -213,34 +218,9 @@ export function AnalysisIssueCard({
           className="flex-1 border-slate-300 hover:bg-slate-50 hover:border-blue-300"
         >
           <FileEdit className="w-4 h-4 mr-1.5" aria-hidden="true" />
-          수정안 보기
+          수정 제안 보기
         </Button>
-        {issue.originalText && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={(e) => {
-              e.stopPropagation()
-              setShowRewriteModal(true)
-            }}
-            aria-label="AI 조항 리라이트"
-            className="flex-1 border-blue-300 hover:bg-blue-50 hover:border-blue-400"
-          >
-            <Sparkles className="w-4 h-4 mr-1.5" aria-hidden="true" />
-            AI 수정
-          </Button>
-        )}
       </div>
-      
-      {/* 리라이트 모달 */}
-      {showRewriteModal && issue.originalText && (
-        <RewriteModal
-          clauseId={issue.id}
-          originalText={issue.originalText}
-          issueId={issue.id}
-          onClose={() => setShowRewriteModal(false)}
-        />
-      )}
 
       {/* 확장된 내용 */}
       {isExpanded && (
@@ -326,11 +306,61 @@ export function AnalysisIssueCard({
             <div>
               <p className="text-xs font-medium text-slate-500 mb-1">법적 근거</p>
               <div className="space-y-1">
-                {issue.legalBasis.map((basis, idx) => (
-                  <p key={idx} className="text-xs text-slate-600 bg-blue-50 p-2 rounded">
-                    {basis}
-                  </p>
-                ))}
+                {issue.legalBasis.map((basis, idx) => {
+                  // 구조화된 형식인지 확인
+                  const isStructured = typeof basis === 'object' && basis !== null && 'title' in basis;
+                  
+                  if (isStructured) {
+                    const basisItem = basis as LegalBasisItem;
+                    return (
+                      <div key={idx} className="text-xs text-slate-600 bg-blue-50 p-2 rounded border border-blue-200">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1 mb-1">
+                              <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-blue-100 text-blue-800">
+                                {basisItem.sourceType === 'law' ? '법령' :
+                                 basisItem.sourceType === 'manual' ? '가이드' :
+                                 basisItem.sourceType === 'case' ? '판례' :
+                                 basisItem.sourceType === 'standard_contract' ? '표준계약서' : '참고'}
+                              </span>
+                            </div>
+                            <p className="font-semibold text-slate-800 mb-1">{basisItem.title}</p>
+                            <p className="text-slate-600 line-clamp-2">{basisItem.snippet}</p>
+                          </div>
+                          {basisItem.filePath && (
+                            <div className="flex flex-col gap-1 flex-shrink-0">
+                              <a
+                                href={`${process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://localhost:8000'}/api/v2/legal/file?path=${encodeURIComponent(basisItem.filePath)}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs text-blue-700 hover:text-blue-800 hover:underline"
+                                title="파일 열기"
+                              >
+                                열기
+                              </a>
+                              <a
+                                href={`${process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://localhost:8000'}/api/v2/legal/file?path=${encodeURIComponent(basisItem.filePath)}&download=true`}
+                                download
+                                className="text-xs text-blue-700 hover:text-blue-800 hover:underline"
+                                title="파일 다운로드"
+                              >
+                                다운로드
+                              </a>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  } else {
+                    // 단순 문자열 형식 (레거시 호환)
+                    const basisText = typeof basis === 'string' ? basis : JSON.stringify(basis);
+                    return (
+                      <p key={idx} className="text-xs text-slate-600 bg-blue-50 p-2 rounded">
+                        {basisText}
+                      </p>
+                    );
+                  }
+                })}
               </div>
             </div>
           )}

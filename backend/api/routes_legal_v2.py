@@ -4,6 +4,7 @@ Legal RAG API Routes v2
 """
 
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, status, Query, Header
+from fastapi.responses import StreamingResponse, RedirectResponse
 from typing import Optional, List, Dict
 import tempfile
 import os
@@ -13,6 +14,8 @@ from pathlib import Path
 from datetime import datetime
 import uuid
 import re
+from supabase import create_client
+from config import settings
 
 from models.schemas import (
     ScriptsV2,
@@ -394,8 +397,94 @@ async def analyze_contract(
                     # description 추출
                     description = getattr(issue, 'description', '') or getattr(issue, 'summary', '')
                     
-                    # legal_basis 추출
-                    legal_basis = getattr(issue, 'legal_basis', []) or []
+                    # legal_basis 추출 및 구조화
+                    legal_basis_raw = getattr(issue, 'legal_basis', []) or []
+                    
+                    # legal_basis가 이미 LegalBasisItemV2 객체 배열인지 확인
+                    from models.schemas import LegalBasisItemV2
+                    legal_basis = []
+                    
+                    if legal_basis_raw:
+                        # 첫 번째 항목이 이미 LegalBasisItemV2 객체인지 확인
+                        first_item = legal_basis_raw[0]
+                        if isinstance(first_item, LegalBasisItemV2):
+                            # 이미 구조화된 형식이면 그대로 사용
+                            legal_basis = legal_basis_raw
+                            logger.debug(f"[계약서 분석] issue-{idx+1}: legal_basis가 이미 구조화된 형식입니다 ({len(legal_basis)}개)")
+                        elif isinstance(first_item, dict):
+                            # Dict 형식이면 LegalBasisItemV2로 변환
+                            for item in legal_basis_raw:
+                                if isinstance(item, dict):
+                                    legal_basis.append(
+                                        LegalBasisItemV2(
+                                            title=item.get("title", ""),
+                                            snippet=item.get("snippet", ""),
+                                            sourceType=item.get("sourceType", item.get("source_type", "law")),
+                                            status=item.get("status"),
+                                            filePath=item.get("filePath", item.get("file_path")),
+                                            similarityScore=item.get("similarityScore", item.get("similarity_score")),
+                                            chunkIndex=item.get("chunkIndex", item.get("chunk_index")),
+                                            externalId=item.get("externalId", item.get("external_id")),
+                                            reason=item.get("reason"),
+                                        )
+                                    )
+                                else:
+                                    legal_basis.append(item)
+                            logger.debug(f"[계약서 분석] issue-{idx+1}: legal_basis를 Dict에서 구조화된 형식으로 변환 ({len(legal_basis)}개)")
+                        else:
+                            # 문자열 배열이면 retrievedContexts와 매칭하여 구조화
+                            legal_basis_structured = []
+                            if result.grounding:
+                                # legal_basis 문자열을 retrievedContexts와 매칭
+                                for basis_str in legal_basis_raw[:5]:  # 최대 5개만
+                                    if not isinstance(basis_str, str):
+                                        continue
+                                    
+                                    # retrievedContexts에서 제목이 유사한 것 찾기
+                                    matched_chunk = None
+                                    for chunk in result.grounding:
+                                        # 제목이나 스니펫에 legal_basis 문자열이 포함되어 있는지 확인
+                                        if (basis_str.lower() in chunk.title.lower() or 
+                                            basis_str.lower() in chunk.snippet.lower()[:200] or
+                                            chunk.title.lower() in basis_str.lower()):
+                                            matched_chunk = chunk
+                                            break
+                                    
+                                    if matched_chunk:
+                                        # file_path가 없으면 external_id로 생성
+                                        file_path = getattr(matched_chunk, 'file_path', None)
+                                        if not file_path and getattr(matched_chunk, 'external_id', None):
+                                            service = get_legal_service()
+                                            file_path = service._build_file_path(
+                                                matched_chunk.source_type or "law",
+                                                matched_chunk.external_id
+                                            )
+                                        
+                                        # 구조화된 형식으로 변환
+                                        legal_basis_structured.append(
+                                            LegalBasisItemV2(
+                                                title=matched_chunk.title,
+                                                snippet=matched_chunk.snippet[:500],  # 최대 500자
+                                                sourceType=matched_chunk.source_type or "law",
+                                                status=None,
+                                                filePath=file_path,  # 스토리지 키
+                                                similarityScore=getattr(matched_chunk, 'score', None),  # 벡터 유사도
+                                                chunkIndex=getattr(matched_chunk, 'chunk_index', None),  # 청크 인덱스
+                                                externalId=getattr(matched_chunk, 'external_id', None),  # external_id
+                                                reason=None,  # 나중에 LLM으로 생성 가능
+                                            )
+                                        )
+                                    else:
+                                        # 매칭되지 않으면 문자열 그대로 사용 (하위 호환성)
+                                        legal_basis_structured.append(basis_str)
+                            
+                            # 구조화된 형식이 있으면 사용, 없으면 원본 문자열 배열 사용
+                            legal_basis = legal_basis_structured if legal_basis_structured else legal_basis_raw
+                            logger.debug(f"[계약서 분석] issue-{idx+1}: legal_basis를 문자열에서 구조화된 형식으로 변환 시도 ({len(legal_basis)}개)")
+                    else:
+                        # legal_basis가 비어있으면 빈 배열
+                        legal_basis = []
+                        logger.debug(f"[계약서 분석] issue-{idx+1}: legal_basis가 비어있습니다")
                     
                     # rationale 추출
                     rationale = getattr(issue, 'rationale', None) or getattr(issue, 'reason', None) or description
@@ -452,13 +541,25 @@ async def analyze_contract(
         valid_issues = [i for i in issues if i.summary or i.description]  # 최소한 summary나 description이 있는 것만
         logger.info(f"[DEBUG] validIssues 개수: {len(valid_issues)}개 (summary/description 필터 적용)")
         
-        # retrievedContexts 변환
+        # retrievedContexts 변환 (filePath, externalId, chunkIndex 포함)
         retrieved_contexts = []
         for chunk in result.grounding:
+            # file_path가 없으면 external_id로 생성
+            file_path = getattr(chunk, 'file_path', None)
+            if not file_path and getattr(chunk, 'external_id', None):
+                service = get_legal_service()
+                file_path = service._build_file_path(
+                    chunk.source_type or "law",
+                    chunk.external_id
+                )
+            
             retrieved_contexts.append({
                 "sourceType": chunk.source_type,
                 "title": chunk.title,
                 "snippet": chunk.snippet,
+                "filePath": file_path,  # 스토리지 키
+                "externalId": getattr(chunk, 'external_id', None),  # external_id
+                "chunkIndex": getattr(chunk, 'chunk_index', None),  # chunk_index
             })
         
         # clauses에 이슈 정보 attach 및 하이라이트 생성 헬퍼 함수
@@ -1003,12 +1104,18 @@ async def rewrite_clause(
         rewrite_tool = RewriteTool()
         
         # issue 정보 가져오기 (있는 경우)
-        legal_basis = []
-        if request.issueId:
-            storage_service = get_storage_service()
-            # issue 정보 조회 (간단한 구현)
-            # 실제로는 issue를 조회해서 legalBasis를 가져와야 함
-            pass
+        legal_basis = request.legalBasis or []
+        
+        # legalBasis가 없고 issueId가 있으면 issue 정보 조회 시도
+        if not legal_basis and request.issueId:
+            try:
+                storage_service = get_storage_service()
+                # issue 정보 조회 (docId는 알 수 없으므로 legalBasis만 전달받은 것으로 사용)
+                # 실제로는 docId를 함께 받아서 issue를 조회해야 하지만, 
+                # 현재는 프론트엔드에서 legalBasis를 함께 보내도록 함
+                pass
+            except Exception as e:
+                logger.warning(f"issue 정보 조회 실패 (무시): {str(e)}")
         
         # 리라이트 실행
         result = await rewrite_tool.execute(
@@ -1061,12 +1168,14 @@ async def get_contract_history(
 @router.get("/contracts/{doc_id}", response_model=ContractAnalysisResponseV2)
 async def get_contract_analysis(
     doc_id: str,
-    x_user_id: Optional[str] = Header(None, alias="X-User-Id", description="사용자 ID"),
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id", description="사용자 ID (옵션, 필터링에 사용하지 않음)"),
 ):
     """
     계약서 분석 결과 조회
+    
+    doc_id만으로 조회하므로 자신의 히스토리가 아니어도 확인 가능합니다.
     """
-    logger.info(f"[계약서 조회] doc_id={doc_id}, user_id={x_user_id} 조회 시작")
+    logger.info(f"[계약서 조회] doc_id={doc_id}, user_id={x_user_id} 조회 시작 (user_id 필터링 없음)")
     
     # 임시 ID인 경우 메모리에서만 조회
     if doc_id.startswith("temp-"):
@@ -1083,16 +1192,17 @@ async def get_contract_analysis(
                 detail=f"임시 분석 결과를 찾을 수 없습니다. (doc_id: {doc_id})",
             )
     
-    # DB에서 조회 시도
+    # DB에서 조회 시도 (user_id 필터링 없이 doc_id만으로 조회)
     try:
         storage_service = get_storage_service()
-        result = await storage_service.get_contract_analysis(doc_id, user_id=x_user_id)
+        # user_id를 전달하지 않아도 되지만, 호환성을 위해 전달 (내부에서 필터링하지 않음)
+        result = await storage_service.get_contract_analysis(doc_id, user_id=None)
         if result:
             contract_text_length = len(result.get('contractText', '')) if result.get('contractText') else 0
-            logger.info(f"[계약서 조회] DB에서 찾음: doc_id={doc_id}, user_id={x_user_id}, contractText 길이={contract_text_length}")
+            logger.info(f"[계약서 조회] DB에서 찾음: doc_id={doc_id}, contractText 길이={contract_text_length} (user_id 필터링 없음)")
             return ContractAnalysisResponseV2(**result)
         else:
-            logger.warning(f"[계약서 조회] DB에서 찾을 수 없음: doc_id={doc_id}, user_id={x_user_id}")
+            logger.warning(f"[계약서 조회] DB에서 찾을 수 없음: doc_id={doc_id}")
     except Exception as e:
         logger.error(f"[계약서 조회] DB 조회 실패: {str(e)}", exc_info=True)
     
@@ -1103,7 +1213,7 @@ async def get_contract_analysis(
         logger.info(f"[계약서 조회] 메모리에서 찾음: doc_id={doc_id}, contractText 길이={contract_text_length}")
         return result
     
-    logger.error(f"[계약서 조회] 어디서도 찾을 수 없음: doc_id={doc_id}, user_id={x_user_id}")
+    logger.error(f"[계약서 조회] 어디서도 찾을 수 없음: doc_id={doc_id}")
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
         detail=f"분석 결과를 찾을 수 없습니다. (doc_id: {doc_id})",
@@ -1457,5 +1567,149 @@ async def chat_with_contract(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"법률 상담 챗 중 오류가 발생했습니다: {str(e)}",
+        )
+
+
+@router.get("/file")
+async def get_legal_file(
+    path: str = Query(..., description="파일 경로 (Storage 경로 또는 로컬 상대 경로)"),
+    download: bool = Query(False, description="다운로드 모드 (Content-Disposition: attachment)"),
+):
+    """
+    법령 파일 서빙 (Supabase Storage 또는 로컬 파일)
+    
+    Args:
+        path: 파일 경로
+            - Storage 경로: "laws/abcd1234.pdf" (Storage에 업로드된 경우)
+            - 로컬 경로: "data/legal/laws/파일명.pdf" (로컬 파일 사용 시)
+        download: True면 다운로드 모드, False면 브라우저에서 열기
+    
+    Returns:
+        파일 스트림 또는 Supabase Storage 직접 URL로 리다이렉트
+    """
+    try:
+        # 경로 검증 (보안: 상위 디렉토리 접근 방지)
+        if ".." in path or path.startswith("/"):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="잘못된 파일 경로입니다"
+            )
+        
+        # 로컬 파일 경로인지 확인 (data/legal/로 시작하면 로컬 파일)
+        is_local_path = path.startswith("data/legal/")
+        
+        if is_local_path:
+            # 방법 1: 로컬 파일 서빙
+            backend_dir = Path(__file__).parent.parent.parent
+            local_file_path = backend_dir / path
+            
+            if not local_file_path.exists():
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="파일을 찾을 수 없습니다"
+                )
+            
+            # 파일명 추출
+            filename = local_file_path.name
+            
+            # Content-Type 추정
+            ext = local_file_path.suffix.lower()
+            content_type_map = {
+                ".pdf": "application/pdf",
+                ".txt": "text/plain",
+                ".md": "text/markdown",
+                ".hwp": "application/x-hwp",
+                ".hwpx": "application/x-hwpx",
+            }
+            content_type = content_type_map.get(ext, "application/octet-stream")
+            
+            # 다운로드 모드 설정
+            headers = {}
+            if download:
+                headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+            else:
+                headers["Content-Disposition"] = f'inline; filename="{filename}"'
+            
+            # 파일 읽기 및 스트리밍
+            def file_generator():
+                with open(local_file_path, "rb") as f:
+                    while True:
+                        chunk = f.read(8192)  # 8KB 청크
+                        if not chunk:
+                            break
+                        yield chunk
+            
+            return StreamingResponse(
+                file_generator(),
+                media_type=content_type,
+                headers=headers,
+            )
+        else:
+            # 방법 2: Supabase Storage에서 파일 가져오기
+            supabase_url = os.getenv("SUPABASE_URL") or settings.supabase_url
+            supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or settings.supabase_service_role_key
+            
+            if not supabase_url or not supabase_key:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Supabase 설정이 없습니다"
+                )
+            
+            supabase = create_client(supabase_url, supabase_key)
+            STORAGE_BUCKET = "legal-sources"  # 지시서에 따라 "legal-sources" 사용
+            
+            # 방법 2-1: Public 버킷인 경우 직접 URL로 리다이렉트 (권장)
+            try:
+                public_url = f"{supabase_url}/storage/v1/object/public/{STORAGE_BUCKET}/{path}"
+                return RedirectResponse(url=public_url, status_code=302)
+            except:
+                pass
+            
+            # 방법 2-2: Private 버킷이거나 Public URL이 안 되는 경우 파일 다운로드
+            try:
+                response = supabase.storage.from_(STORAGE_BUCKET).download(path)
+                
+                if not response:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail="파일을 찾을 수 없습니다"
+                    )
+                
+                filename = path.split("/")[-1] if "/" in path else path
+                ext = Path(path).suffix.lower()
+                content_type_map = {
+                    ".pdf": "application/pdf",
+                    ".txt": "text/plain",
+                    ".md": "text/markdown",
+                    ".hwp": "application/x-hwp",
+                    ".hwpx": "application/x-hwpx",
+                }
+                content_type = content_type_map.get(ext, "application/octet-stream")
+                
+                headers = {}
+                if download:
+                    headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+                else:
+                    headers["Content-Disposition"] = f'inline; filename="{filename}"'
+                
+                return StreamingResponse(
+                    iter([response]),
+                    media_type=content_type,
+                    headers=headers,
+                )
+            except Exception as download_err:
+                logger.error(f"파일 다운로드 실패: {str(download_err)}")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"파일을 가져오는 중 오류가 발생했습니다: {str(download_err)}"
+                )
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"법령 파일 서빙 중 오류: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"파일 서빙 중 오류가 발생했습니다: {str(e)}"
         )
 

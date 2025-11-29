@@ -248,6 +248,7 @@ export interface LegalBasisItemV2 {
   sourceType?: string;
   // 백엔드에서 status(violation/likely 등)를 내려줄 수 있으므로 여유 있게 string 허용
   status?: string;
+  filePath?: string; // 원본 파일 경로
 }
 
 export interface SituationAnalysisV2 {
@@ -355,6 +356,7 @@ export interface ContractAnalysisResponseV2 {
   clauses?: ClauseV2[];  // 조항 목록 (자동 분류)
   highlightedTexts?: HighlightedTextV2[];  // 하이라이트된 텍스트
   createdAt: string;
+  fileUrl?: string;  // Supabase Storage에 저장된 원본 파일 URL
   // 새로운 독소조항 탐지 필드
   oneLineSummary?: string;  // 한 줄 총평
   riskTrafficLight?: string;  // 리스크 신호등: 🟢 | 🟡 | 🔴
@@ -641,7 +643,8 @@ export const compareContractsV2 = async (
 export const rewriteClauseV2 = async (
   clauseId: string,
   originalText: string,
-  issueId?: string
+  issueId?: string,
+  legalBasis?: string[]
 ): Promise<ClauseRewriteResponseV2> => {
   try {
     const url = `${LEGAL_API_BASE_V2}/rewrite-clause`
@@ -657,6 +660,7 @@ export const rewriteClauseV2 = async (
         clauseId,
         originalText,
         issueId,
+        legalBasis: legalBasis || undefined,
       }),
     })
     

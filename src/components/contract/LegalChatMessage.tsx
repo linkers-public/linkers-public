@@ -338,36 +338,39 @@ export function LegalChatMessage({ content, selectedIssue }: LegalChatMessagePro
   return (
     <div className="w-full space-y-3">
       {/* 상단 헤더: 조항 정보 + 위험도 배지 */}
-      <div className="flex items-start justify-between gap-3 p-3 bg-gradient-to-r from-slate-50 to-blue-50/30 rounded-lg border border-slate-200">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 p-3 bg-gradient-to-r from-slate-50 to-blue-50/30 rounded-lg border border-slate-200">
         <div className="flex items-start gap-2 flex-1 min-w-0">
           <div className="p-1.5 bg-blue-100 rounded-lg flex-shrink-0">
             <Scale className="w-4 h-4 text-blue-600" />
           </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-xs text-slate-500 mb-1">검토 중인 조항</div>
-            <div className="font-semibold text-sm text-slate-900 truncate">
+          <div className="flex-1 min-w-0 overflow-hidden">
+            <div className="text-xs text-slate-500 mb-1 whitespace-nowrap">검토 중인 조항</div>
+            <div 
+              className="font-semibold text-sm text-slate-900 break-words leading-relaxed whitespace-normal"
+              style={{ wordBreak: 'keep-all', overflowWrap: 'break-word' }}
+            >
               {selectedIssue?.summary || categoryLabel}
             </div>
           </div>
         </div>
         {parsed.riskLevel && (
-          <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+          <div className="flex flex-col items-start sm:items-end gap-1.5 flex-shrink-0 w-full sm:w-auto">
             <span
               className={cn(
-                'inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold border',
+                'inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold border flex-wrap',
                 getRiskBadgeColor(parsed.riskLevel)
               )}
             >
-              {parsed.riskLevel === '높음' && <AlertTriangle className="w-3 h-3" />}
-              {parsed.riskLevel === '보통' && <AlertTriangle className="w-3 h-3" />}
-              {parsed.riskLevel === '경미' && <CheckCircle2 className="w-3 h-3" />}
-              {parsed.riskLevel}
-              {parsed.riskLevel === '높음' && '(삭제/수정 권장)'}
-              {parsed.riskLevel === '보통' && '(주의/협상 권장)'}
-              {parsed.riskLevel === '경미' && '(주의 필요)'}
+              {parsed.riskLevel === '높음' && <AlertTriangle className="w-3 h-3 flex-shrink-0" />}
+              {parsed.riskLevel === '보통' && <AlertTriangle className="w-3 h-3 flex-shrink-0" />}
+              {parsed.riskLevel === '경미' && <CheckCircle2 className="w-3 h-3 flex-shrink-0" />}
+              <span className="whitespace-nowrap">{parsed.riskLevel}</span>
+              {parsed.riskLevel === '높음' && <span className="whitespace-nowrap">(삭제/수정 권장)</span>}
+              {parsed.riskLevel === '보통' && <span className="whitespace-nowrap">(주의/협상 권장)</span>}
+              {parsed.riskLevel === '경미' && <span className="whitespace-nowrap">(주의 필요)</span>}
             </span>
             {parsed.riskLevelDescription && (
-              <div className="text-xs text-slate-600 text-right max-w-[200px] leading-tight">
+              <div className="text-xs text-slate-600 text-left sm:text-right w-full sm:max-w-[200px] leading-relaxed break-words">
                 {parsed.riskLevelDescription}
               </div>
             )}

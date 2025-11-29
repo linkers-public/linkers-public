@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState, useMemo } from 'react'
 import { FileText, AlertTriangle, Clock, DollarSign, Briefcase, Scale, BookOpen, ChevronRight, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SEVERITY_COLORS, SEVERITY_LABELS_SHORT, FOCUS_STYLE } from './contract-design-tokens'
-import type { LegalIssue } from '@/types/legal'
+import type { LegalIssue, LegalBasisItem } from '@/types/legal'
 
 interface HighlightedText {
   text: string
@@ -243,6 +243,13 @@ export function ContractViewer({
       stock_option: '스톡옵션',
       ip: 'IP/저작권',
       harassment: '직장내괴롭힘',
+      job_stability: '고용안정',
+      dismissal: '해고·해지',
+      payment: '보수·수당',
+      non_compete: '경업금지',
+      liability: '손해배상',
+      dispute: '분쟁해결',
+      nda: '비밀유지',
       other: '기타',
     }
     return labels[category] || category
@@ -683,12 +690,33 @@ export function ContractViewer({
         {/* 상단 조항 네비게이션 - 마진 없이 전체 너비, 가로 스크롤만 */}
         {parsedClauses.length > 0 && (
           <div 
-            className="sticky top-0 bg-white backdrop-blur-xl z-20 pt-4 sm:pt-5 pb-3 mb-4 sm:mb-5 border-b-2 border-slate-200/80 shadow-lg shadow-slate-200/20 overflow-x-auto scrollbar-hide -mx-4 sm:-mx-6 md:-mx-8 lg:-mx-10 px-2 sm:px-3"
+            className="sticky top-0 bg-white backdrop-blur-xl z-20 pt-4 sm:pt-5 pb-3 mb-4 sm:mb-5 border-b-2 border-slate-200/80 shadow-lg shadow-slate-200/20 overflow-x-auto scrollbar-hide px-4 sm:px-6 md:px-8 lg:px-10"
             role="navigation"
             aria-label="조항 네비게이션"
           >
             <div className="flex gap-2 sm:gap-3 min-w-max">
-              {parsedClauses.map(clause => (
+              {parsedClauses.map(clause => {
+                // 위험도에 따른 배경색 결정 (하이라이팅 색상과 일치)
+                const getBackgroundColor = () => {
+                  if (selectedClauseNumber === clause.number) {
+                    return "bg-gradient-to-br from-blue-100 to-indigo-100 ring-2 ring-blue-400 ring-offset-2 scale-110 shadow-lg"
+                  }
+                  if (clause.maxSeverity === 'high') {
+                    // 하이라이팅: bg-red-50/80 + decoration-red-500
+                    return "bg-gradient-to-br from-red-50 to-red-100 hover:from-red-100 hover:to-red-200 border-2 border-red-300/60 shadow-red-200/30"
+                  }
+                  if (clause.maxSeverity === 'medium') {
+                    // 하이라이팅: bg-amber-50/70 + decoration-amber-500
+                    return "bg-gradient-to-br from-amber-50 to-amber-100 hover:from-amber-100 hover:to-amber-200 border-2 border-amber-300/60 shadow-amber-200/30"
+                  }
+                  if (clause.maxSeverity === 'low') {
+                    // 하이라이팅: bg-green-50/60 + decoration-green-500
+                    return "bg-gradient-to-br from-green-50 to-green-100 hover:from-green-100 hover:to-green-200 border-2 border-green-300/60 shadow-green-200/30"
+                  }
+                  return "bg-gradient-to-br from-slate-50 to-slate-100 hover:from-slate-100 hover:to-slate-200 border border-slate-200/60"
+                }
+
+                return (
                 <button
                   key={clause.id}
                   onClick={() => scrollToClause(clause.number)}
@@ -703,24 +731,30 @@ export function ContractViewer({
                     "flex flex-col items-center justify-center min-w-[56px] sm:min-w-[64px] px-3 sm:px-4 py-3 sm:py-3.5 rounded-xl transition-all duration-300 cursor-pointer group flex-shrink-0",
                     "text-xs sm:text-sm",
                     "hover:scale-110 hover:shadow-lg active:scale-95",
-                    selectedClauseNumber === clause.number 
-                      ? "bg-gradient-to-br from-blue-100 to-indigo-100 ring-2 ring-blue-400 ring-offset-2 scale-110 shadow-lg" 
-                      : "bg-gradient-to-br from-slate-50 to-slate-100 hover:from-slate-100 hover:to-slate-200 border border-slate-200/60",
+                    getBackgroundColor(),
                     FOCUS_STYLE
                   )}
                 >
                   <span className={cn(
                     "mb-2 text-xs sm:text-sm font-bold whitespace-nowrap transition-colors",
-                    selectedClauseNumber === clause.number ? "text-blue-700" : "text-slate-700 group-hover:text-slate-900"
+                    selectedClauseNumber === clause.number 
+                      ? "text-blue-700" 
+                      : clause.maxSeverity === 'high' 
+                        ? "text-red-700 group-hover:text-red-800"
+                        : clause.maxSeverity === 'medium'
+                          ? "text-amber-700 group-hover:text-amber-800"
+                          : clause.maxSeverity === 'low'
+                            ? "text-green-700 group-hover:text-green-800"
+                            : "text-slate-700 group-hover:text-slate-900"
                   )}>
                     제{clause.number}조
                   </span>
                   <span
                     className={cn(
                       "h-4 w-4 sm:h-5 sm:w-5 rounded-full transition-all duration-300 shadow-md ring-2 ring-white",
-                      clause.maxSeverity === 'high' && `${SEVERITY_COLORS.high.solid} group-hover:scale-125 group-hover:shadow-lg`,
-                      clause.maxSeverity === 'medium' && `${SEVERITY_COLORS.medium.solid} group-hover:scale-125 group-hover:shadow-lg`,
-                      clause.maxSeverity === 'low' && `${SEVERITY_COLORS.low.solid} group-hover:scale-125 group-hover:shadow-lg`,
+                      clause.maxSeverity === 'high' && `bg-red-500 group-hover:scale-125 group-hover:shadow-lg group-hover:bg-red-600`,
+                      clause.maxSeverity === 'medium' && `bg-amber-500 group-hover:scale-125 group-hover:shadow-lg group-hover:bg-amber-600`,
+                      clause.maxSeverity === 'low' && `bg-green-500 group-hover:scale-125 group-hover:shadow-lg group-hover:bg-green-600`,
                       !clause.maxSeverity && "bg-slate-300 group-hover:bg-slate-400"
                     )}
                     aria-hidden="true"
@@ -730,13 +764,20 @@ export function ContractViewer({
                       "mt-2 text-[10px] sm:text-[11px] font-bold px-1.5 py-0.5 rounded-full",
                       selectedClauseNumber === clause.number 
                         ? "bg-blue-200 text-blue-800" 
-                        : "bg-slate-200 text-slate-600 group-hover:bg-slate-300 group-hover:text-slate-700"
+                        : clause.maxSeverity === 'high'
+                          ? "bg-red-100 text-red-800 group-hover:bg-red-200"
+                          : clause.maxSeverity === 'medium'
+                            ? "bg-amber-100 text-amber-800 group-hover:bg-amber-200"
+                            : clause.maxSeverity === 'low'
+                              ? "bg-green-100 text-green-800 group-hover:bg-green-200"
+                              : "bg-slate-200 text-slate-600 group-hover:bg-slate-300 group-hover:text-slate-700"
                     )}>
                       {clause.issueCount}건
                     </span>
                   )}
                 </button>
-              ))}
+                )
+              })}
             </div>
           </div>
         )}
@@ -900,7 +941,7 @@ export function ContractViewer({
             </div>
 
             {/* 중앙: 계약서 텍스트 */}
-            <div className="flex-1 space-y-3 sm:space-y-4 relative overflow-visible px-4 sm:px-6 md:px-8 lg:px-10">
+            <div className="flex-1 space-y-3 sm:space-y-4 relative overflow-x-hidden px-4 sm:px-6 md:px-8 lg:px-10">
               {/* 호버 툴팁 - 호버한 위치에 표시 */}
               {(currentHoveredIssue || (pinnedTooltipIssueId && issues.find(i => i.id === pinnedTooltipIssueId))) && tooltipPosition && (
                 <div
@@ -980,11 +1021,47 @@ export function ContractViewer({
                               <span className="text-xs font-extrabold text-slate-700">관련 법령</span>
                             </div>
                             <div className="space-y-1.5">
-                              {displayIssue.legalBasis.slice(0, 2).map((basis, idx) => (
-                                <div key={idx} className="text-xs text-slate-700 line-clamp-2 bg-blue-50/50 px-2 py-1.5 rounded-lg border border-blue-100">
-                                  {basis}
-                                </div>
-                              ))}
+                              {displayIssue.legalBasis.slice(0, 2).map((basis, idx) => {
+                                // 구조화된 형식인지 확인
+                                const isStructured = typeof basis === 'object' && basis !== null && 'title' in basis;
+                                
+                                if (isStructured) {
+                                  const basisItem = basis as LegalBasisItem;
+                                  return (
+                                    <div key={idx} className="text-xs text-slate-700 bg-blue-50/50 px-2 py-1.5 rounded-lg border border-blue-100">
+                                      <div className="flex items-center gap-1 mb-1">
+                                        <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-blue-100 text-blue-800">
+                                          {basisItem.sourceType === 'law' ? '법령' :
+                                           basisItem.sourceType === 'manual' ? '가이드' :
+                                           basisItem.sourceType === 'case' ? '판례' :
+                                           basisItem.sourceType === 'standard_contract' ? '표준계약서' : '참고'}
+                                        </span>
+                                        {basisItem.filePath && (
+                                          <a
+                                            href={`${process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://localhost:8000'}/api/v2/legal/file?path=${encodeURIComponent(basisItem.filePath)}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-blue-700 hover:text-blue-800 hover:underline ml-auto"
+                                            title="파일 열기"
+                                          >
+                                            열기
+                                          </a>
+                                        )}
+                                      </div>
+                                      <p className="font-semibold text-slate-800 mb-1 line-clamp-1">{basisItem.title}</p>
+                                      <p className="text-slate-600 line-clamp-2">{basisItem.snippet}</p>
+                                    </div>
+                                  );
+                                } else {
+                                  // 단순 문자열 형식 (레거시 호환)
+                                  const basisText = typeof basis === 'string' ? basis : JSON.stringify(basis);
+                                  return (
+                                    <div key={idx} className="text-xs text-slate-700 line-clamp-2 bg-blue-50/50 px-2 py-1.5 rounded-lg border border-blue-100">
+                                      {basisText}
+                                    </div>
+                                  );
+                                }
+                              })}
                             </div>
                           </div>
                         )}
@@ -1016,7 +1093,7 @@ export function ContractViewer({
                     }
                   }}
                   className={cn(
-                    "mb-4 sm:mb-5 rounded-2xl border-2 bg-white shadow-lg transition-all duration-300 hover:shadow-xl hover:-translate-y-1",
+                    "w-full max-w-full box-border mb-4 sm:mb-5 rounded-2xl border-2 bg-white shadow-lg transition-all duration-300 hover:shadow-xl hover:-translate-y-1",
                     "focus-within:ring-4 focus-within:ring-blue-400/50 focus-within:ring-offset-4",
                     clause.maxSeverity === 'high' && `border-red-300 ${SEVERITY_COLORS.high.bg}/40 shadow-red-200/30 hover:shadow-red-300/40`,
                     clause.maxSeverity === 'medium' && `border-amber-300 ${SEVERITY_COLORS.medium.bg}/40 shadow-amber-200/30 hover:shadow-amber-300/40`,

@@ -159,6 +159,26 @@ class ContractStorageService:
                 try:
                     issues_data = []
                     for idx, issue in enumerate(issues):
+                        # legalBasis 변환: LegalBasisItemV2 객체를 dict 또는 string으로 변환
+                        legal_basis_raw = issue.get("legalBasis", [])
+                        legal_basis_converted = []
+                        for basis in legal_basis_raw:
+                            if isinstance(basis, dict):
+                                # 이미 dict인 경우 그대로 사용
+                                legal_basis_converted.append(basis)
+                            elif hasattr(basis, 'model_dump'):
+                                # Pydantic v2 모델인 경우
+                                legal_basis_converted.append(basis.model_dump())
+                            elif hasattr(basis, 'dict'):
+                                # Pydantic v1 모델인 경우
+                                legal_basis_converted.append(basis.dict())
+                            elif isinstance(basis, str):
+                                # 문자열인 경우 그대로 사용
+                                legal_basis_converted.append(basis)
+                            else:
+                                # 기타 타입은 문자열로 변환
+                                legal_basis_converted.append(str(basis))
+                        
                         issue_data = {
                             "contract_analysis_id": contract_analysis_id,
                             "issue_id": issue.get("id", f"issue-{idx+1}"),
@@ -166,7 +186,7 @@ class ContractStorageService:
                             "severity": issue.get("severity", "medium"),
                             "summary": issue.get("summary", ""),
                             "original_text": issue.get("originalText", ""),
-                            "legal_basis": issue.get("legalBasis", []),
+                            "legal_basis": legal_basis_converted,  # 변환된 legal_basis 사용
                             "explanation": issue.get("explanation", ""),
                             "suggested_revision": issue.get("suggestedRevision", ""),
                         }
@@ -326,6 +346,7 @@ class ContractStorageService:
                 "clauses": clauses_data if isinstance(clauses_data, list) else [],  # 조항 목록
                 "highlightedTexts": highlighted_texts_data if isinstance(highlighted_texts_data, list) else [],  # 하이라이트된 텍스트
                 "createdAt": created_at_value,
+                "fileUrl": analysis.get("file_url") or None,  # Supabase Storage 파일 URL
             }
             
         except Exception as e:
@@ -338,7 +359,7 @@ class ContractStorageService:
         
         Args:
             doc_id: 문서 ID
-            user_id: 사용자 ID (옵션, 필터링용)
+            user_id: 사용자 ID (옵션, 현재는 필터링에 사용하지 않음 - doc_id만으로 조회)
         
         Returns:
             계약서 분석 결과 딕셔너리 또는 None
@@ -348,11 +369,8 @@ class ContractStorageService:
         try:
             # contract_analyses 테이블에서 조회
             # doc_id로 먼저 시도, 없으면 id로 시도 (기존 데이터 호환성)
+            # user_id 필터링 제거: doc_id만으로 조회하여 모든 사용자의 계약서를 볼 수 있게 함
             query = self.sb.table("contract_analyses").select("*").eq("doc_id", doc_id)
-            
-            # user_id가 제공된 경우 필터링
-            if user_id:
-                query = query.eq("user_id", user_id)
             
             result = query.execute()
             
@@ -363,8 +381,6 @@ class ContractStorageService:
                     import uuid
                     uuid.UUID(doc_id)
                     query = self.sb.table("contract_analyses").select("*").eq("id", doc_id)
-                    if user_id:
-                        query = query.eq("user_id", user_id)
                     result = query.execute()
                 except (ValueError, AttributeError):
                     pass
@@ -423,6 +439,7 @@ class ContractStorageService:
                 "clauses": clauses_data if isinstance(clauses_data, list) else [],  # 조항 목록
                 "highlightedTexts": highlighted_texts_data if isinstance(highlighted_texts_data, list) else [],  # 하이라이트된 텍스트
                 "createdAt": analysis.get("created_at", ""),
+                "fileUrl": analysis.get("file_url") or None,  # Supabase Storage 파일 URL
             }
             
         except Exception as e:

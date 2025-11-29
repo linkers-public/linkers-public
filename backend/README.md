@@ -268,6 +268,117 @@ API 엔드포인트에 대한 상세 설명은 [API_REFERENCE.md](./API_REFERENC
 - Swagger UI: http://localhost:8000/docs
 - 헬스 체크: `curl http://localhost:8000/api/health`
 
+## 📦 법률 파일 관리 스크립트
+
+### 0. OCR 테스트 (`test_ocr.py`)
+
+이미지 기반 PDF의 OCR 처리 테스트:
+
+```bash
+cd backend
+python scripts/test_ocr.py "파일명.pdf"
+
+# 강제 OCR 모드
+python scripts/test_ocr.py "파일명.pdf" --force-ocr
+
+# 출력 파일 지정
+python scripts/test_ocr.py "파일명.pdf" -o "output.txt"
+```
+
+**기능:**
+- 텍스트 추출 결과 미리보기
+- 통계 정보 (문자 수, 숫자, 한글, 영문)
+- 추출된 텍스트를 파일로 저장
+
+### 1. 파일 인덱싱 (`index_contracts_from_data.py`)
+
+법률 파일을 `legal_chunks` 테이블에 인덱싱합니다.
+
+**기본 사용법 (모든 파일):**
+```bash
+cd backend
+python scripts/index_contracts_from_data.py
+```
+
+**특정 파일만 인덱싱:**
+```bash
+# 단일 파일
+python scripts/index_contracts_from_data.py --files "개정 표준취업규칙(2025년, 배포).pdf"
+
+# 여러 파일
+python scripts/index_contracts_from_data.py --files "파일1.pdf" "파일2.pdf"
+
+# 패턴으로 필터링
+python scripts/index_contracts_from_data.py --pattern "*표준계약서*.pdf"
+
+# 특정 폴더만
+python scripts/index_contracts_from_data.py --folder standard_contracts
+
+# Storage 업로드 포함
+python scripts/index_contracts_from_data.py --files "파일명.pdf" --upload-to-storage
+```
+
+**옵션:**
+- `--files`: 특정 파일명 지정 (여러 개 가능)
+- `--pattern`: 파일명 패턴으로 필터링 (glob 패턴)
+- `--folder`: 특정 폴더만 처리 (`standard_contracts`, `laws`, `manuals`, `cases`)
+- `--upload-to-storage`: Supabase Storage에 파일 업로드
+
+**OCR 자동 활용:**
+- 이미지 기반 PDF 자동 감지 및 OCR 전환
+  - 텍스트 추출 실패 시 자동으로 OCR로 전환
+  - 텍스트가 50자 미만이거나 의미 없는 경우 이미지 기반으로 판단하여 OCR 사용
+  - OCR 결과가 더 우수하면 자동으로 채택
+- 별도 설정 불필요: Tesseract와 Poppler이 설치되어 있으면 자동으로 활용
+- 한국어 지원: Tesseract 한국어 언어 팩 자동 감지 및 사용
+
+### 2. 파일 목록 확인 (`check_legal_files.py`)
+
+`legal_chunks` 테이블에 저장된 파일 목록을 확인합니다.
+
+```bash
+cd backend
+python scripts/check_legal_files.py
+```
+
+**확인 내용:**
+- source_type별 파일 수 및 청크 수 통계
+- external_id 패턴 분석 (MD5 해시 vs 파일명)
+- 각 파일의 file_path, metadata.filename 정보
+- external_id 없는 청크 수
+
+### 3. Storage 업로드 (`upload_legal_files_to_storage.py`)
+
+기존 `legal_chunks` 데이터의 원본 파일을 Supabase Storage에 업로드합니다.
+
+**사용 순서:**
+```bash
+# 1단계: 파일 목록 확인
+cd backend
+python scripts/check_legal_files.py
+
+# 2단계: Storage에 업로드
+python scripts/upload_legal_files_to_storage.py
+```
+
+**기능:**
+- `legal_chunks` 테이블에서 파일 정보 조회
+- `backend/data/legal/` 폴더에서 원본 파일 찾기
+- Supabase Storage `legal-sources` 버킷에 업로드
+- DB의 `file_path` 컬럼 업데이트
+- 결과를 JSON 파일로 저장 (`backend/output/legal_files_upload_result_*.json`)
+
+**파일 찾기 우선순위:**
+1. DB에 저장된 `file_path` 사용
+2. `metadata.filename` 사용
+3. `title`로 직접 찾기 + 해시 확인
+4. 모든 파일 순회하며 해시 확인
+
+**주의사항:**
+- `legal-sources` 버킷이 존재해야 합니다
+- 로컬 파일이 `backend/data/legal/` 폴더에 있어야 합니다
+- Windows 경로 구분자(`\`) 자동 처리
+
 ### 성능 테스트
 
 RAG 시스템의 성능을 측정하는 스크립트:
@@ -739,6 +850,113 @@ flowchart TD
 
 ---
 
+## 🔍 이미지 기반 PDF 처리 (OCR)
+
+### 자동 OCR 처리
+
+시스템은 이미지 기반 PDF를 자동으로 감지하고 OCR을 사용합니다:
+
+1. **자동 감지**: 텍스트 추출이 실패하거나 결과가 너무 짧으면 자동으로 OCR로 전환
+2. **한국어 지원**: Tesseract 한국어 언어 팩 자동 감지 및 사용
+3. **고품질 OCR**: 600 DPI로 변환하여 인식률 향상
+
+### OCR 설정 방법
+
+#### 1. Python 패키지 설치
+
+```bash
+pip install pytesseract pdf2image
+```
+
+#### 2. Tesseract OCR 설치
+
+**Windows:**
+1. [Tesseract OCR Windows 설치](https://github.com/tesseract-ocr/tesseract/wiki) 다운로드
+2. 설치 시 **"Additional language data"**에서 **"Korean"** 선택 필수
+3. 기본 설치 경로: `C:\Program Files\Tesseract-OCR\tesseract.exe`
+
+**Linux (Ubuntu/Debian):**
+```bash
+sudo apt-get install tesseract-ocr tesseract-ocr-kor
+```
+
+**Mac:**
+```bash
+brew install tesseract tesseract-lang
+```
+
+#### 3. Poppler 설치 (Windows, PDF → 이미지 변환용)
+
+**Windows:**
+1. [Poppler Windows 릴리스](https://github.com/oschwartz10612/poppler-windows/releases) 다운로드
+2. 압축 해제 후 `POPPLER_PATH` 환경 변수 설정:
+   ```bash
+   set POPPLER_PATH=C:\path\to\poppler\Library\bin
+   ```
+3. 또는 `Downloads` 폴더에 압축 해제하면 자동 감지
+
+**Linux/Mac:**
+```bash
+# Ubuntu/Debian
+sudo apt-get install poppler-utils
+
+# Mac
+brew install poppler
+```
+
+### OCR 사용 방법
+
+#### 자동 모드 (권장)
+
+```python
+from core.document_processor_v2 import DocumentProcessor
+
+processor = DocumentProcessor()
+text = processor.pdf_to_text("image_based.pdf")
+# 자동으로 텍스트 추출 실패 시 OCR로 전환
+```
+
+#### 강제 OCR 모드
+
+```python
+# 무조건 OCR만 사용
+text = processor.pdf_to_text("image_based.pdf", force_ocr=True)
+```
+
+#### OCR 우선 모드
+
+```python
+# 텍스트 추출 성공해도 OCR 품질이 더 좋으면 OCR 사용
+text = processor.pdf_to_text("image_based.pdf", prefer_ocr=True)
+```
+
+### 이미지 기반 PDF 판별 방법
+
+**수동 확인:**
+1. PDF 뷰어에서 텍스트 드래그 시도
+   - 드래그 안 됨 → 이미지 기반
+   - 드래그 됨 → 텍스트 기반
+
+**자동 감지:**
+- 시스템이 자동으로 감지하여 OCR로 전환
+- 텍스트 추출 결과가 50자 미만이거나 의미없으면 자동 OCR
+
+### OCR 품질 향상 팁
+
+1. **DPI 설정**: 기본값 600 DPI (이미 최적화됨)
+2. **한국어 언어 팩**: 반드시 설치 필요
+3. **이미지 전처리**: 자동으로 그레이스케일 변환 및 대비 조정
+
+### 고급 OCR 옵션 (구조화된 데이터)
+
+표나 레이아웃 구조가 필요한 경우:
+
+- **AWS Textract**: 표 인식 우수, 비용 발생
+- **Google Cloud Vision**: 문서 OCR, 레이아웃 인식
+- **Naver CLOVA OCR**: 한글 인식률 우수
+
+현재는 Tesseract OCR을 사용하며, 향후 상용 OCR API 연동 가능.
+
 ## 🚨 문제 해결
 
 문제 해결 가이드는 [TROUBLESHOOTING.md](./TROUBLESHOOTING.md)를 참고하세요.
@@ -891,6 +1109,11 @@ expected 384 dimensions, not 1024
 ### 스크립트 문서
 - [scripts/README.md](./scripts/README.md) - 배치 인입 스크립트 가이드
 - [scripts/README_PERFORMANCE_TEST.md](./scripts/README_PERFORMANCE_TEST.md) - 성능 테스트 스크립트 가이드
+
+### 법률 파일 관리 스크립트
+- `scripts/index_contracts_from_data.py` - 법률 파일 인덱싱 (특정 파일 선택 가능)
+- `scripts/check_legal_files.py` - legal_chunks 테이블 파일 목록 확인
+- `scripts/upload_legal_files_to_storage.py` - legal_chunks 파일을 Storage에 업로드
 
 ### 아키텍처 및 로직 문서
 - [BACKEND_LOGIC_EXPLANATION.md](./BACKEND_LOGIC_EXPLANATION.md) - 백엔드 로직 상세 설명 (청킹, RAG, 검색)

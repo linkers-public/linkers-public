@@ -135,57 +135,90 @@ class LLMGenerator:
             print("   관리자 PowerShell: New-ItemProperty -Path \"HKLM:\\SYSTEM\\CurrentControlSet\\Control\\FileSystem\" -Name \"LongPathsEnabled\" -Value 1 -PropertyType DWORD -Force")
             raise ImportError("sentence-transformers가 필요합니다. Windows Long Path를 활성화하고 재시작한 후 pip install sentence-transformers를 실행하세요.")
         
-        # Groq 클라이언트 초기화
-        api_key = os.environ.get("GROQ_API_KEY") or settings.groq_api_key
-        if not api_key:
-            raise RuntimeError(
-                "GROQ_API_KEY가 환경변수에 설정되지 않았습니다. "
-                ".env 파일에 GROQ_API_KEY=your_key를 추가하거나 환경변수로 설정하세요."
-            )
+        # LLM Provider에 따라 클라이언트 초기화 (Ollama 또는 Groq)
+        self.use_local_embedding = settings.use_local_embedding
         
-        try:
-            from groq import Groq
-            self.client = Groq(api_key=api_key)
-            
-            # 기본 모델: 환경변수 > settings > 하드코딩
-            self.model = (
-                model
-                or os.environ.get("GROQ_MODEL")
-                or getattr(settings, "groq_model", None)
-                or "llama-3.3-70b-versatile"
-            )
-            # 혹시 남아있는 옛 코드 호환용
+        # settings에서 use_ollama와 use_groq 확인 (config.py에서 자동 설정됨)
+        if settings.use_ollama:
+            # Ollama 사용
+            self.use_groq = False
+            self.use_ollama = True
+            self.client = None  # Ollama는 필요할 때 지연 로드
+            self.model = model or settings.ollama_model or "mistral"
             self.llm_model = self.model
+            print(f"[Ollama] LLM 설정 완료 (모델: {self.model})")
+        elif settings.use_groq:
+            # Groq 사용
+            self.use_groq = True
+            self.use_ollama = False
+            api_key = os.environ.get("GROQ_API_KEY") or settings.groq_api_key
+            if not api_key:
+                raise RuntimeError(
+                    "GROQ_API_KEY가 환경변수에 설정되지 않았습니다. "
+                    ".env 파일에 GROQ_API_KEY=your_key를 추가하거나 환경변수로 설정하세요."
+                )
             
-            print(f"[Groq] 클라이언트 초기화 완료 (모델: {self.model})")
-        except ImportError:
-            raise ImportError("groq 패키지가 설치되지 않았습니다. pip install groq 를 실행하세요.")
-        except Exception as e:
-            raise RuntimeError(f"Groq 클라이언트 초기화 실패: {str(e)}")
+            try:
+                from groq import Groq
+                self.client = Groq(api_key=api_key)
+                
+                # 기본 모델: 환경변수 > settings > 하드코딩
+                self.model = (
+                    model
+                    or os.environ.get("GROQ_MODEL")
+                    or getattr(settings, "groq_model", None)
+                    or "llama-3.3-70b-versatile"
+                )
+                # 혹시 남아있는 옛 코드 호환용
+                self.llm_model = self.model
+                
+                print(f"[Groq] 클라이언트 초기화 완료 (모델: {self.model})")
+            except ImportError:
+                raise ImportError("groq 패키지가 설치되지 않았습니다. pip install groq 를 실행하세요.")
+            except Exception as e:
+                raise RuntimeError(f"Groq 클라이언트 초기화 실패: {str(e)}")
+        else:
+            # 기본값: Groq 사용 (하위 호환성)
+            self.use_groq = True
+            self.use_ollama = False
+            api_key = os.environ.get("GROQ_API_KEY") or settings.groq_api_key
+            if not api_key:
+                raise RuntimeError(
+                    "GROQ_API_KEY가 환경변수에 설정되지 않았습니다. "
+                    ".env 파일에 GROQ_API_KEY=your_key를 추가하거나 환경변수로 설정하세요."
+                )
+            
+            try:
+                from groq import Groq
+                self.client = Groq(api_key=api_key)
+                self.model = model or settings.groq_model or "llama-3.3-70b-versatile"
+                self.llm_model = self.model
+                print(f"[Groq] 클라이언트 초기화 완료 (모델: {self.model})")
+            except ImportError:
+                raise ImportError("groq 패키지가 설치되지 않았습니다. pip install groq 를 실행하세요.")
+            except Exception as e:
+                raise RuntimeError(f"Groq 클라이언트 초기화 실패: {str(e)}")
         
         # 벡터 DB 선택: Supabase가 연결되어 있으면 우선 사용
+        llm_name = "Ollama" if self.use_ollama else "Groq"
         if settings.supabase_url:
             settings.use_chromadb = False
-            print("[시스템] Groq LLM + 무료 스택 사용")
-            print(f"   - LLM: Groq ({self.model})")
+            print(f"[시스템] {llm_name} LLM + 무료 스택 사용")
+            print(f"   - LLM: {llm_name} ({self.model})")
             print(f"   - 벡터 DB: Supabase pgvector (연결됨)")
             print(f"   - 임베딩: 로컬 (sentence-transformers)")
         elif not settings.use_chromadb:
             # Supabase도 없고 ChromaDB도 명시 안 했으면 ChromaDB 기본 사용
             settings.use_chromadb = True
-            print("[시스템] Groq LLM + 무료 스택 사용")
-            print(f"   - LLM: Groq ({self.model})")
+            print(f"[시스템] {llm_name} LLM + 무료 스택 사용")
+            print(f"   - LLM: {llm_name} ({self.model})")
             print(f"   - 벡터 DB: ChromaDB (로컬)")
             print(f"   - 임베딩: 로컬 (sentence-transformers)")
         else:
-            print("[시스템] Groq LLM + 무료 스택 사용")
-            print(f"   - LLM: Groq ({self.model})")
+            print(f"[시스템] {llm_name} LLM + 무료 스택 사용")
+            print(f"   - LLM: {llm_name} ({self.model})")
             print(f"   - 벡터 DB: ChromaDB (로컬)")
             print(f"   - 임베딩: 로컬 (sentence-transformers)")
-        
-        self.use_local_embedding = settings.use_local_embedding
-        self.use_groq = True          # Groq 사용
-        self.use_ollama = False       # Ollama 비활성화
         self.disable_llm = settings.disable_llm
         self.use_openai = False       # OpenAI 사용 안 함
         self.embedding_model = settings.local_embedding_model  # 로컬 임베딩 모델명 (호환성)

@@ -266,10 +266,12 @@ export function ContractChat({
           stock_option: '스톡옵션',
           ip: 'IP/저작권',
           harassment: '직장내괴롭힘',
-          other: '기타',
+          other: '이',
         }
-        const categoryLabel = categoryLabels[issue.category] || '이 조항'
-        const autoQuestion = `이 ${categoryLabel} 조항에 대해 자세히 설명해주세요.`
+        const categoryLabel = categoryLabels[issue.category] || '이'
+        const autoQuestion = categoryLabel === '이' 
+          ? `${categoryLabel} 조항에 대해 자세히 설명해주세요.`
+          : `이 ${categoryLabel} 조항에 대해 자세히 설명해주세요.`
         setInputMessage(autoQuestion)
       }
     }

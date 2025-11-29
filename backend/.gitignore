@@ -33,3 +33,6 @@ Thumbs.db
 *.log
 logs/
 
+# Output files (OCR results, upload results, etc.)
+output/
+

@@ -1,16 +1,18 @@
 'use client'
 
 import React, { useState, useMemo, useEffect, useRef } from 'react'
-import { Filter, AlertTriangle, CheckCircle2, FileText, BookOpen, Scale, Calendar, BarChart3, TrendingUp, Shield, MessageSquare } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { Filter, AlertTriangle, CheckCircle2, FileText, BookOpen, Scale, Calendar, BarChart3, TrendingUp, Shield, MessageSquare, ExternalLink, Download } from 'lucide-react'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '../ui/tabs'
 import { AnalysisIssueCard } from './AnalysisIssueCard'
 import { AmendmentModal } from './AmendmentModal'
 import { ClauseList } from './ClauseList'
-import { cn } from '@/lib/utils'
 import { SEVERITY_COLORS, SEVERITY_LABELS, getSeverityFromScore, FOCUS_STYLE } from './contract-design-tokens'
-import type { LegalIssue, LegalCategory, Severity } from '@/types/legal'
+import type { LegalIssue, LegalCategory, Severity, LegalBasisItem } from '../../types/legal'
 import { ChevronDown } from 'lucide-react'
+
+// 간단한 className 유틸리티
+const classNames = (...classes: (string | false | null | undefined)[]) =>
+  classes.filter(Boolean).join(' ')
 
 interface Clause {
   id: string
@@ -55,6 +57,14 @@ interface AnalysisPanelProps {
     suggestedRevisionFormal: string
   }>
   negotiationQuestions?: string[]
+  retrievedContexts?: Array<{
+    sourceType?: string
+    title?: string
+    snippet?: string
+    filePath?: string
+    externalId?: string
+    chunkIndex?: number
+  }>
 }
 
 export function AnalysisPanel({
@@ -78,6 +88,7 @@ export function AnalysisPanel({
   riskSummaryTable = [],
   toxicClauses = [],
   negotiationQuestions = [],
+  retrievedContexts = [],
 }: AnalysisPanelProps) {
   const [activeTab, setActiveTab] = useState('summary')
   const [showFilters, setShowFilters] = useState(false)
@@ -109,6 +120,13 @@ export function AnalysisPanel({
     'stock_option',
     'ip',
     'harassment',
+    'job_stability',
+    'dismissal',
+    'payment',
+    'non_compete',
+    'liability',
+    'dispute',
+    'nda',
     'other',
   ]
 
@@ -119,6 +137,13 @@ export function AnalysisPanel({
     stock_option: '스톡옵션',
     ip: 'IP/저작권',
     harassment: '직장내괴롭힘',
+    job_stability: '고용안정',
+    dismissal: '해고·해지',
+    payment: '보수·수당',
+    non_compete: '경업금지',
+    liability: '손해배상',
+    dispute: '분쟁해결',
+    nda: '비밀유지',
     other: '기타',
   }
 
@@ -131,11 +156,21 @@ export function AnalysisPanel({
       stock_option: [],
       ip: [],
       harassment: [],
+      job_stability: [],
+      dismissal: [],
+      payment: [],
+      non_compete: [],
+      liability: [],
+      dispute: [],
+      nda: [],
       other: [],
     }
     issues.forEach(issue => {
       // 카테고리가 정의된 키에 있는지 확인, 없으면 'other'에 추가
-      const validCategories: LegalCategory[] = ['working_hours', 'wage', 'probation', 'stock_option', 'ip', 'harassment', 'other']
+      const validCategories: LegalCategory[] = [
+        'working_hours', 'wage', 'probation', 'stock_option', 'ip', 'harassment',
+        'job_stability', 'dismissal', 'payment', 'non_compete', 'liability', 'dispute', 'nda', 'other'
+      ]
       const category: LegalCategory = validCategories.includes(issue.category) ? issue.category : 'other'
       grouped[category].push(issue)
     })
@@ -240,26 +275,23 @@ export function AnalysisPanel({
   const displayedCategories = mainCategories.filter(cat => categoryCounts[cat]?.total > 0)
 
   // 계약 유형 추정
-  const estimateContractType = (): string => {
+  const contractType = useMemo(() => {
     if (categoryCounts.probation?.total > 0) return '인턴/수습 근로계약'
     if (categoryCounts.stock_option?.total > 0) return '정규직 근로계약'
     if (categoryCounts.wage?.total > 0) return '근로계약'
     return '근로계약'
-  }
+  }, [categoryCounts])
 
   // 조항 수 추정
-  const estimateClauseCount = (): number => {
+  const clauseCount = useMemo(() => {
     const clauseMatches = contractText.match(/제\s*\d+\s*조/g)
     return clauseMatches ? clauseMatches.length : 0
-  }
-
-  const clauseCount = estimateClauseCount()
-  const contractType = estimateContractType()
+  }, [contractText])
 
   return (
     <div className="h-full flex flex-col bg-gradient-to-b from-slate-50 via-white to-slate-50/50" role="complementary" aria-label="분석 결과">
       {/* 헤더 - 위험도 정보 통합 (sticky) */}
-      <div className="p-3 sm:p-4 lg:p-5 bg-white/98 backdrop-blur-md border-b border-slate-200/80 shadow-sm flex-shrink-0 overflow-x-auto sticky top-0 z-20">
+      <div className="p-3 sm:p-4 lg:p-5 bg-white/98 backdrop-blur-md border-b border-slate-200/80 shadow-sm flex-shrink-0 overflow-x-hidden sticky top-0 z-20">
         {/* 상단: 위험도 정보 (간소화) */}
         <div className="flex items-center justify-between gap-3 mb-3">
           <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -282,7 +314,7 @@ export function AnalysisPanel({
               </div>
             </div>
           </div>
-          <div className={cn(
+          <div className={classNames(
             "px-3 py-2 rounded-xl border-2 text-xs sm:text-sm font-bold flex items-center gap-2 flex-shrink-0 shadow-md transition-all duration-200",
             riskInfo.bgColor,
             riskInfo.borderColor,
@@ -296,7 +328,7 @@ export function AnalysisPanel({
 
         {/* 중간: 카테고리별 요약 뱃지 */}
         {displayedCategories.length > 0 && (
-          <div className="flex flex-wrap gap-2 mb-3 overflow-x-auto pb-1">
+          <div className="flex flex-wrap gap-2 mb-3 pb-1">
             {displayedCategories.map(category => {
               const count = categoryCounts[category]
               if (!count || count.total === 0) return null
@@ -344,7 +376,7 @@ export function AnalysisPanel({
                     }
                   }}
                   aria-label={`${categoryLabels[category]} 카테고리, ${badgeConfig.label} 이슈 발견`}
-                  className={cn(
+                  className={classNames(
                     "group px-3 py-2 rounded-xl border text-xs font-bold",
                     "transition-all duration-300 hover:shadow-lg hover:scale-110 hover:-translate-y-0.5",
                     "flex items-center gap-2",
@@ -383,13 +415,12 @@ export function AnalysisPanel({
               </p>
             </div>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
+          <button
+            type="button"
             onClick={() => setShowFilters(!showFilters)}
             aria-expanded={showFilters}
             aria-controls="filter-panel"
-            className="flex-shrink-0 ai-button hover:shadow-lg hover:-translate-y-1 transition-all duration-200 border-2 hover:border-blue-400"
+            className="flex-shrink-0 ai-button hover:shadow-lg hover:-translate-y-1 transition-all duration-200 border-2 hover:border-blue-400 px-3 py-2 rounded-md bg-white text-slate-800 flex items-center"
           >
             <Filter className="w-4 h-4 sm:w-5 sm:h-5 mr-1.5" />
             <span className="hidden sm:inline text-sm font-semibold">필터</span>
@@ -398,7 +429,7 @@ export function AnalysisPanel({
                 {selectedCategories.size + selectedSeverities.size + (sortBy === 'order' ? 1 : 0)}
               </span>
             )}
-          </Button>
+          </button>
         </div>
 
         {/* 탭 네비게이션 */}
@@ -465,7 +496,7 @@ export function AnalysisPanel({
                   <button
                     key={category}
                     onClick={() => toggleCategory(category)}
-                    className={cn(
+                    className={classNames(
                       "px-2 py-1 text-xs rounded border transition-colors filter-button",
                       selectedCategories.has(category)
                         ? 'bg-blue-100 border-blue-500 text-blue-700'
@@ -486,7 +517,7 @@ export function AnalysisPanel({
                   <button
                     key={severity}
                     onClick={() => toggleSeverity(severity)}
-                    className={cn(
+                    className={classNames(
                       "px-2 py-1 text-xs rounded border transition-colors filter-button",
                       selectedSeverities.has(severity)
                         ? 'bg-blue-100 border-blue-500 text-blue-700'
@@ -507,7 +538,7 @@ export function AnalysisPanel({
               <div className="flex gap-2">
                 <button
                   onClick={() => setSortBy('severity')}
-                  className={cn(
+                  className={classNames(
                     "px-2 py-1 text-xs rounded border transition-colors filter-button",
                     sortBy === 'severity'
                       ? 'bg-blue-100 border-blue-500 text-blue-700'
@@ -518,7 +549,7 @@ export function AnalysisPanel({
                 </button>
                 <button
                   onClick={() => setSortBy('order')}
-                  className={cn(
+                  className={classNames(
                     "px-2 py-1 text-xs rounded border transition-colors filter-button",
                     sortBy === 'order'
                       ? 'bg-blue-100 border-blue-500 text-blue-700'
@@ -537,11 +568,11 @@ export function AnalysisPanel({
       <div className="flex-1 overflow-y-auto scroll-smooth">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           {/* 요약 보기 탭 */}
-          <TabsContent value="summary" className="p-4 sm:p-5 lg:p-6 mt-0">
-            <div className="space-y-4 max-w-4xl mx-auto">
+          <TabsContent value="summary" className="px-4 sm:px-6 lg:px-8 py-4 sm:py-5 lg:py-6 mt-0 overflow-x-hidden">
+            <div className="space-y-4 max-w-4xl mx-auto w-full px-2 sm:px-4">
               {/* 한 줄 총평 */}
               {oneLineSummary && (
-                <div className="bg-gradient-to-br from-amber-50 via-orange-50 to-amber-100 border-2 border-amber-400 rounded-2xl p-5 shadow-lg shadow-amber-200/50 hover:shadow-xl hover:shadow-amber-300/50 transition-all duration-300">
+                <div className="w-full max-w-full box-border bg-gradient-to-br from-amber-50 via-orange-50 to-amber-100 border-2 border-amber-400 rounded-2xl p-5 shadow-lg shadow-amber-200/50 hover:shadow-xl hover:shadow-amber-300/50 transition-all duration-300">
                   <div className="flex items-start gap-4">
                     <div className="p-3 bg-gradient-to-br from-amber-200 to-orange-200 rounded-xl flex-shrink-0 shadow-md ring-2 ring-amber-300/50">
                       <AlertTriangle className="w-6 h-6 text-amber-800" />
@@ -561,7 +592,7 @@ export function AnalysisPanel({
 
               {/* 리스크 신호등 + 지금 당장 확인해야 할 포인트 */}
               {(riskTrafficLight || top3ActionPoints.length > 0) && (
-                <div className="bg-gradient-to-br from-white via-slate-50 to-white border-2 border-slate-300 rounded-2xl p-5 shadow-lg hover:shadow-xl transition-all duration-300">
+                <div className="w-full max-w-full box-border bg-gradient-to-br from-white via-slate-50 to-white border-2 border-slate-300 rounded-2xl p-5 shadow-lg hover:shadow-xl transition-all duration-300">
                   {riskTrafficLight && (
                     <div className="flex items-center gap-3 mb-4 pb-4 border-b border-slate-200">
                       <span className="text-4xl drop-shadow-lg">{riskTrafficLight}</span>
@@ -598,7 +629,7 @@ export function AnalysisPanel({
 
               {/* 리스크 요약 테이블 */}
               {riskSummaryTable.length > 0 && (
-                <div className="bg-white border-2 border-slate-300 rounded-2xl overflow-hidden shadow-xl">
+                <div className="w-full max-w-full box-border bg-white border-2 border-slate-300 rounded-2xl overflow-hidden shadow-xl">
                   <div className="px-5 py-4 bg-gradient-to-r from-slate-100 via-slate-50 to-slate-100 border-b-2 border-slate-300">
                     <h3 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
                       <BarChart3 className="w-5 h-5 text-blue-600" />
@@ -621,7 +652,7 @@ export function AnalysisPanel({
                           <tr key={idx} className="border-b border-slate-200 hover:bg-gradient-to-r hover:from-blue-50/50 hover:to-indigo-50/50 transition-all duration-200">
                             <td className="px-4 py-3 font-bold text-slate-900">{item.item}</td>
                             <td className="px-4 py-3">
-                              <span className={cn(
+                              <span className={classNames(
                                 "px-3 py-1.5 rounded-lg text-xs font-extrabold shadow-sm border-2",
                                 item.riskLevel === 'high' ? 'bg-gradient-to-br from-red-100 to-red-200 text-red-800 border-red-400' :
                                 item.riskLevel === 'medium' ? 'bg-gradient-to-br from-amber-100 to-amber-200 text-amber-800 border-amber-400' :
@@ -649,7 +680,7 @@ export function AnalysisPanel({
 
               {/* 독소조항 상세 */}
               {toxicClauses.length > 0 && (
-                <div className="bg-gradient-to-br from-red-50 via-rose-50 to-red-100 border-4 border-red-400 rounded-2xl p-5 shadow-2xl shadow-red-200/50 hover:shadow-red-300/50 transition-all duration-300">
+                <div className="w-full max-w-full box-border bg-gradient-to-br from-red-50 via-rose-50 to-red-100 border-4 border-red-400 rounded-2xl p-5 shadow-2xl shadow-red-200/50 hover:shadow-red-300/50 transition-all duration-300">
                   <div className="flex items-center gap-3 mb-5 pb-4 border-b-2 border-red-300">
                     <div className="p-2.5 bg-gradient-to-br from-red-500 to-rose-600 rounded-xl shadow-lg ring-2 ring-red-300/50">
                       <AlertTriangle className="w-6 h-6 text-white" />
@@ -706,7 +737,7 @@ export function AnalysisPanel({
 
               {/* 협상 질문 리스트 */}
               {negotiationQuestions.length > 0 && (
-                <div className="bg-gradient-to-br from-blue-50 via-indigo-50 to-blue-100 border-2 border-blue-300 rounded-2xl p-5 shadow-lg hover:shadow-xl transition-all duration-300">
+                <div className="w-full max-w-full box-border bg-gradient-to-br from-blue-50 via-indigo-50 to-blue-100 border-2 border-blue-300 rounded-2xl p-5 shadow-lg hover:shadow-xl transition-all duration-300">
                   <div className="flex items-center gap-3 mb-4 pb-4 border-b-2 border-blue-200">
                     <div className="p-2.5 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl shadow-md ring-2 ring-blue-200/50">
                       <MessageSquare className="w-6 h-6 text-white" />
@@ -731,7 +762,7 @@ export function AnalysisPanel({
 
               {/* 조항 목록 (있는 경우) - 접을 수 있는 섹션 */}
               {clauses.length > 0 && (
-                <div className="bg-gradient-to-br from-slate-50 to-white border border-slate-200 rounded-lg overflow-hidden">
+                <div className="w-full max-w-full box-border bg-gradient-to-br from-slate-50 to-white border border-slate-200 rounded-lg overflow-hidden">
                   <details className="group">
                     <summary className="px-4 py-3 cursor-pointer hover:bg-slate-100/50 transition-colors flex items-center justify-between list-none">
                       <div className="flex items-center gap-2">
@@ -757,7 +788,7 @@ export function AnalysisPanel({
               )}
               
               {/* 전체 요약 */}
-              <div className="bg-gradient-to-br from-blue-50 via-indigo-50 to-blue-100 border-2 border-blue-300 rounded-2xl p-5 shadow-lg">
+              <div className="w-full max-w-full box-border bg-gradient-to-br from-blue-50 via-indigo-50 to-blue-100 border-2 border-blue-300 rounded-2xl p-5 shadow-lg">
                 <p className="text-base font-extrabold text-blue-900 mb-4 flex items-center gap-2">
                   <BarChart3 className="w-5 h-5" />
                   총 {totalIssues}개 조항 분석 결과
@@ -816,7 +847,7 @@ export function AnalysisPanel({
                       }
                     }}
                     aria-label={`${categoryLabels[category]} 카테고리 상세 보기, ${severityInfo.label}`}
-                    className="w-full text-left p-5 bg-white border-2 border-slate-300 rounded-2xl hover:border-blue-500 hover:shadow-xl hover:bg-gradient-to-br hover:from-blue-50/70 hover:to-indigo-50/70 transition-all duration-300 group focus:outline-none focus:ring-4 focus:ring-blue-400 focus:ring-offset-2 hover:scale-[1.02] active:scale-[0.98]"
+                    className="w-full max-w-full text-left p-5 bg-white border-2 border-slate-300 rounded-2xl hover:border-blue-500 hover:shadow-xl hover:bg-gradient-to-br hover:from-blue-50/70 hover:to-indigo-50/70 transition-all duration-300 group focus:outline-none focus:ring-4 focus:ring-blue-400 focus:ring-offset-2 hover:scale-[1.02] active:scale-[0.98] box-border"
                   >
                     <div className="flex items-center justify-between mb-3">
                       <span className="font-extrabold text-slate-900 text-base sm:text-lg group-hover:text-blue-700 transition-colors">{categoryLabels[category]}</span>
@@ -834,13 +865,13 @@ export function AnalysisPanel({
           </TabsContent>
 
           {/* 조항별 분석 탭 */}
-          <TabsContent value="issues" className="p-4 sm:p-5 lg:p-6 mt-0">
+          <TabsContent value="issues" className="px-4 sm:px-6 lg:px-8 py-4 sm:py-5 lg:py-6 mt-0 overflow-x-hidden">
             {filteredAndSortedIssues.length === 0 ? (
               <div className="text-center py-8 text-slate-500">
                 <p>필터 조건에 맞는 이슈가 없습니다.</p>
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-3 px-2 sm:px-4">
                 {filteredAndSortedIssues.map(issue => (
                   <div
                     key={issue.id}
@@ -860,62 +891,294 @@ export function AnalysisPanel({
           </TabsContent>
 
           {/* 법령·표준계약 비교 탭 */}
-          <TabsContent value="legal" className="p-4 sm:p-5 lg:p-6 mt-0">
-            <div className="space-y-4">
+          <TabsContent value="legal" className="px-4 sm:px-6 lg:px-8 py-4 sm:py-5 lg:py-6 mt-0 overflow-x-hidden">
+            <div className="space-y-6 px-2 sm:px-4">
               <p className="text-xs text-slate-500">
                 각 위험 조항과 연결된 근로기준법·표준계약서 내용을 모아 보여줍니다.
               </p>
-              {/* 법적 근거 아코디언 */}
-              {issues.map((issue, index) => {
-                if (!issue.legalBasis || issue.legalBasis.length === 0) return null
+              
+              {/* 검색된 법령/표준계약서 전체 목록 (retrievedContexts) */}
+              {retrievedContexts && retrievedContexts.length > 0 && (
+                <div className="mb-8">
+                  <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+                    <BookOpen className="w-5 h-5 text-blue-600" />
+                    검색된 법령·표준계약서 전체 ({retrievedContexts.length}개)
+                  </h3>
+                  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                    {retrievedContexts.map((ctx, idx) => {
+                      const sourceType = ctx.sourceType || 'law'
+                      const sourceTypeLabel = 
+                        sourceType === 'law' ? '법령' :
+                        sourceType === 'manual' ? '가이드라인' :
+                        sourceType === 'case' ? '판례' :
+                        sourceType === 'standard_contract' ? '표준계약서' :
+                        '참고자료'
+                      
+                      const sourceTypeColor = 
+                        sourceType === 'law' ? 'from-blue-100 to-blue-50 border-blue-300 text-blue-900' :
+                        sourceType === 'manual' ? 'from-indigo-100 to-indigo-50 border-indigo-300 text-indigo-900' :
+                        sourceType === 'case' ? 'from-purple-100 to-purple-50 border-purple-300 text-purple-900' :
+                        sourceType === 'standard_contract' ? 'from-green-100 to-green-50 border-green-300 text-green-900' :
+                        'from-slate-100 to-slate-50 border-slate-300 text-slate-900'
 
-                return (
-                  <details
-                    key={issue.id}
-                    className="bg-white border border-slate-200 rounded-lg overflow-hidden"
-                  >
-                    <summary 
-                      className="p-4 cursor-pointer hover:bg-slate-50 transition-colors flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-                      aria-label={`${issue.summary} 법적 근거 보기`}
-                    >
-                      <div>
-                        <span className="font-semibold text-slate-900">{issue.summary}</span>
-                        <span className="text-xs text-slate-500 ml-2">
-                          {categoryLabels[issue.category]}
-                        </span>
-                      </div>
-                      <BookOpen className="w-4 h-4 text-slate-400" />
-                    </summary>
-                    <div className="p-4 border-t border-slate-200 space-y-3">
-                      {issue.legalBasis.map((basis, idx) => (
-                        <div key={idx} className="bg-blue-50 border border-blue-200 rounded p-3">
-                          <p className="text-sm text-slate-800 leading-relaxed">{basis}</p>
+                      return (
+                        <div 
+                          key={idx}
+                          className={classNames(
+                            "bg-gradient-to-br border-2 rounded-xl p-4 shadow-sm hover:shadow-md transition-all",
+                            sourceTypeColor
+                          )}
+                        >
+                          <div className="flex items-start justify-between gap-2 mb-2">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className="px-2 py-1 rounded-md text-xs font-bold bg-white/80 border border-current/30">
+                                  {sourceTypeLabel}
+                                </span>
+                              </div>
+                              <h4 className="font-bold text-sm mb-2 leading-tight line-clamp-2">
+                                {ctx.title || '제목 없음'}
+                              </h4>
+                            </div>
+                            <Scale className="w-4 h-4 flex-shrink-0 opacity-50" />
+                          </div>
+                          <div className="bg-white/60 rounded-lg p-2 border border-current/20 mb-3">
+                            <p className="text-xs text-slate-800 leading-relaxed line-clamp-3">
+                              {ctx.snippet || '내용 없음'}
+                            </p>
+                          </div>
+                          {/* 파일 링크 (있는 경우) */}
+                          {ctx.filePath && (
+                            <div className="flex items-center gap-2 pt-2 border-t border-current/20">
+                              <FileText className="w-3 h-3 opacity-60" />
+                              <span className="text-xs text-slate-600 flex-1 truncate" title={ctx.title || ctx.filePath}>
+                                {ctx.title || ctx.filePath.split('/').pop() || ctx.filePath}
+                              </span>
+                              <a
+                                href={`${process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://localhost:8000'}/api/v2/legal/file?path=${encodeURIComponent(ctx.filePath)}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs text-blue-700 hover:text-blue-800 hover:underline flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-50 transition-colors"
+                                title="원본 파일 보기"
+                              >
+                                <ExternalLink className="w-3 h-3" />
+                                열기
+                              </a>
+                              <a
+                                href={`${process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://localhost:8000'}/api/v2/legal/file?path=${encodeURIComponent(ctx.filePath)}&download=true`}
+                                download
+                                className="text-xs text-blue-700 hover:text-blue-800 hover:underline flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-50 transition-colors"
+                                title="파일 다운로드"
+                              >
+                                <Download className="w-3 h-3" />
+                                다운로드
+                              </a>
+                            </div>
+                          )}
                         </div>
-                      ))}
-                      {onAskAboutIssue && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                      onClick={() => {
-                        onAskAboutIssue(issue.id)
-                        setActiveTab('issues')
-                      }}
-                      className="w-full ai-button"
-                    >
-                      이 근거로 다시 설명 듣기
-                    </Button>
-                      )}
-                    </div>
-                  </details>
-                )
-              })}
-
-              {issues.filter(i => i.legalBasis && i.legalBasis.length > 0).length === 0 && (
-                <div className="text-center py-8 text-slate-500">
-                  <BookOpen className="w-12 h-12 mx-auto mb-3 text-slate-300" />
-                  <p>법적 근거 정보가 없습니다.</p>
+                      )
+                    })}
+                  </div>
                 </div>
               )}
+              
+              {/* 이슈별 법적 근거 */}
+              <div>
+                <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5 text-amber-600" />
+                  이슈별 법적 근거
+                </h3>
+                {/* 법적 근거 아코디언 */}
+                {issues.map((issue, index) => {
+                  if (!issue.legalBasis || issue.legalBasis.length === 0) return null
+
+                // legalBasis가 구조화된 형식인지 확인 (JSON 문자열 파싱 포함)
+                const parseLegalBasis = (basis: any): any => {
+                  if (typeof basis === 'string') {
+                    // JSON 문자열인지 확인
+                    if (basis.trim().startsWith('{') && basis.trim().endsWith('}')) {
+                      try {
+                        return JSON.parse(basis);
+                      } catch (e) {
+                        return basis;
+                      }
+                    }
+                    return basis;
+                  }
+                  return basis;
+                };
+                
+                  const parsedLegalBasis = issue.legalBasis.map(parseLegalBasis);
+                  const isStructured = parsedLegalBasis.length > 0 && 
+                    typeof parsedLegalBasis[0] === 'object' && 
+                    parsedLegalBasis[0] !== null &&
+                    'title' in parsedLegalBasis[0]
+
+                  return (
+                    <details
+                      key={issue.id}
+                      className="w-full max-w-full box-border bg-white border-2 border-slate-200 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow"
+                    >
+                      <summary 
+                        className="p-4 cursor-pointer hover:bg-gradient-to-r hover:from-blue-50/50 hover:to-indigo-50/50 transition-colors flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                        aria-label={`${issue.summary} 법적 근거 보기`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-semibold text-slate-900">{issue.summary}</span>
+                            <span className={classNames(
+                              "px-2 py-0.5 rounded-full text-xs font-bold",
+                              issue.severity === 'high' ? 'bg-red-100 text-red-700 border border-red-300' :
+                              issue.severity === 'medium' ? 'bg-amber-100 text-amber-700 border border-amber-300' :
+                              'bg-blue-100 text-blue-700 border border-blue-300'
+                            )}>
+                              {issue.severity === 'high' ? '높음' : issue.severity === 'medium' ? '보통' : '낮음'}
+                            </span>
+                          </div>
+                          <span className="text-xs text-slate-500">
+                            {categoryLabels[issue.category]} · {issue.legalBasis.length}개 근거
+                          </span>
+                        </div>
+                        <BookOpen className="w-5 h-5 text-slate-400 flex-shrink-0 ml-3" />
+                      </summary>
+                      <div className="p-4 border-t-2 border-slate-200 space-y-4 bg-gradient-to-b from-slate-50/30 to-white">
+                        {isStructured ? (
+                          // 구조화된 형식 (LegalBasisItem[])
+                          (parsedLegalBasis as LegalBasisItem[]).map((basis, idx) => {
+                            const sourceType = basis.sourceType || 'law'
+                            const sourceTypeLabel = 
+                              sourceType === 'law' ? '법령' :
+                              sourceType === 'manual' ? '가이드라인' :
+                              sourceType === 'case' ? '판례' :
+                              sourceType === 'standard_contract' ? '표준계약서' :
+                              '참고자료'
+                            
+                            const sourceTypeColor = 
+                              sourceType === 'law' ? 'from-blue-100 to-blue-50 border-blue-300 text-blue-900' :
+                              sourceType === 'manual' ? 'from-indigo-100 to-indigo-50 border-indigo-300 text-indigo-900' :
+                              sourceType === 'case' ? 'from-purple-100 to-purple-50 border-purple-300 text-purple-900' :
+                              sourceType === 'standard_contract' ? 'from-green-100 to-green-50 border-green-300 text-green-900' :
+                              'from-slate-100 to-slate-50 border-slate-300 text-slate-900'
+
+                            return (
+                              <div 
+                                key={idx} 
+                                className={classNames(
+                                  "bg-gradient-to-br border-2 rounded-xl p-4 shadow-sm hover:shadow-md transition-all",
+                                  sourceTypeColor
+                                )}
+                              >
+                                <div className="flex items-start justify-between gap-3 mb-2">
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2 mb-1">
+                                      <span className="px-2 py-1 rounded-md text-xs font-bold bg-white/80 border border-current/30">
+                                        {sourceTypeLabel}
+                                      </span>
+                                      {basis.status && (
+                                        <span className="text-xs text-slate-600">
+                                          {basis.status === 'likely' ? '✓ 해당 가능성 높음' :
+                                           basis.status === 'unclear' ? '? 불명확' :
+                                           basis.status === 'unlikely' ? '✗ 해당 가능성 낮음' :
+                                           basis.status}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <h4 className="font-bold text-base mb-2 leading-tight">
+                                      {basis.title}
+                                    </h4>
+                                  </div>
+                                  <Scale className="w-5 h-5 flex-shrink-0 opacity-50" />
+                                </div>
+                                <div className="bg-white/60 rounded-lg p-3 border border-current/20">
+                                  <p className="text-sm text-slate-800 leading-relaxed whitespace-pre-wrap">
+                                    {basis.snippet}
+                                  </p>
+                                </div>
+                                {/* 파일 링크 (있는 경우) */}
+                                {basis.filePath && (
+                                  <div className="mt-3 pt-3 border-t border-current/20 flex items-center gap-2">
+                                    <FileText className="w-4 h-4 opacity-60" />
+                                    <span className="text-xs text-slate-600 flex-1 truncate" title={basis.title || basis.filePath}>
+                                      {basis.title || basis.filePath.split('/').pop() || basis.filePath}
+                                    </span>
+                                    <a
+                                      href={`${process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://localhost:8000'}/api/v2/legal/file?path=${encodeURIComponent(basis.filePath)}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-xs text-blue-700 hover:text-blue-800 hover:underline flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-50 transition-colors"
+                                      title="원본 파일 보기"
+                                    >
+                                      <ExternalLink className="w-3 h-3" />
+                                      열기
+                                    </a>
+                                    <a
+                                      href={`${process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://localhost:8000'}/api/v2/legal/file?path=${encodeURIComponent(basis.filePath)}&download=true`}
+                                      download
+                                      className="text-xs text-blue-700 hover:text-blue-800 hover:underline flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-50 transition-colors"
+                                      title="파일 다운로드"
+                                    >
+                                      <Download className="w-3 h-3" />
+                                      다운로드
+                                    </a>
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })
+                        ) : (
+                          // 단순 문자열 형식 (string[])
+                          parsedLegalBasis.map((basis, idx) => {
+                            const basisText = typeof basis === 'string' ? basis : JSON.stringify(basis);
+                            return (
+                              <div 
+                                key={idx} 
+                                className="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-all"
+                              >
+                                <div className="flex items-start gap-3 mb-2">
+                                  <BookOpen className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                                  <div className="flex-1">
+                                    <span className="px-2 py-1 rounded-md text-xs font-bold bg-blue-100 text-blue-800 border border-blue-300 mb-2 inline-block">
+                                      법적 근거
+                                    </span>
+                                    <p className="text-sm text-slate-800 leading-relaxed whitespace-pre-wrap">
+                                      {basisText}
+                                    </p>
+                                  </div>
+                                </div>
+                              </div>
+                            )
+                          })
+                        )}
+                        {onAskAboutIssue && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onAskAboutIssue(issue.id)
+                              setActiveTab('issues')
+                            }}
+                            className="w-full ai-button border-2 hover:border-blue-400 hover:bg-blue-50 transition-all px-3 py-2 rounded-md bg-white text-slate-800 flex items-center justify-center text-sm font-medium"
+                          >
+                            <MessageSquare className="w-4 h-4 mr-2" />
+                            이 근거로 다시 설명 듣기
+                          </button>
+                        )}
+                      </div>
+                    </details>
+                  )
+                })}
+
+              {issues.filter(i => i.legalBasis && i.legalBasis.length > 0).length === 0 && (
+                <div className="text-center py-12 text-slate-500">
+                  <div className="bg-slate-50 rounded-xl p-6 border-2 border-slate-200">
+                    <BookOpen className="w-16 h-16 mx-auto mb-4 text-slate-300" />
+                    <p className="text-sm font-medium text-slate-600">법적 근거 정보가 없습니다.</p>
+                    <p className="text-xs text-slate-500 mt-2">
+                      각 위험 조항에 대한 법적 근거는 분석 결과에 따라 자동으로 표시됩니다.
+                    </p>
+                  </div>
+                </div>
+              )}
+              </div>
             </div>
           </TabsContent>
         </Tabs>
