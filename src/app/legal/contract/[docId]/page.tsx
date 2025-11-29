@@ -562,86 +562,128 @@ export default function ContractDetailPage() {
       {/* 메인 컨텐츠 영역 */}
       <div className="flex-1 flex flex-col overflow-hidden min-h-0">
         {/* 상단: 2-컬럼 레이아웃 (계약서 + 분석 결과) */}
-        <div className={cn(
-          "flex flex-col lg:flex-row overflow-hidden flex-1",
-          isChatOpen ? "lg:mr-[400px]" : ""
-        )}>
-          {/* 왼쪽: 계약서 뷰어 */}
+        <div className="flex flex-col lg:flex-row overflow-hidden flex-1">
+          {/* 왼쪽: 계약서 뷰어 또는 AI 법률챗 */}
           <div className={cn(
-            "w-full flex-shrink-0 bg-white border-r border-slate-200/60 shadow-sm transition-[width] duration-300 flex flex-col",
-            isChatOpen ? "lg:w-[58%]" : "lg:w-1/2"
+            "w-full flex-shrink-0 bg-white border-r border-slate-200/60 shadow-sm transition-all duration-300 flex flex-col relative",
+            isChatOpen ? "lg:w-1/2" : "lg:w-1/2"
           )}>
-            {/* 파일 다운로드 버튼 (파일 URL이 있는 경우) */}
-            {fileUrl && (
-              <div className="px-4 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-slate-200 flex items-center justify-between">
-                <div className="flex items-center gap-2 text-sm text-slate-700">
-                  <FileText className="w-4 h-4" />
-                  <span className="font-medium">원본 파일</span>
+            {/* AI 법률챗 패널 (계약서를 가림) */}
+            {isChatOpen && (
+              <div className="absolute inset-0 bg-white z-10 flex flex-col">
+                {/* 채팅 헤더 */}
+                <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between bg-white">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg shadow-md">
+                      <MessageSquare className="w-4 h-4 text-white" />
+                    </div>
+                    <div>
+                      <h2 className="text-sm font-semibold text-slate-900">AI 법률 상담</h2>
+                      <p className="text-xs text-slate-600">계약서에 대해 질문하세요</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setIsChatOpen(false)}
+                    className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                    aria-label="채팅 닫기"
+                  >
+                    <X className="w-5 h-5 text-slate-600" />
+                  </button>
                 </div>
-                <div className="flex items-center gap-2">
-                  <a
-                    href={fileUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-3 py-1.5 text-xs font-semibold text-blue-700 bg-white border border-blue-300 rounded-lg hover:bg-blue-50 transition-colors flex items-center gap-1.5"
-                    title="새 탭에서 열기"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5" />
-                    열기
-                  </a>
-                  <a
-                    href={fileUrl}
-                    download
-                    className="px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-1.5"
-                    title="파일 다운로드"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    다운로드
-                  </a>
+                
+                {/* 채팅 컨텐츠 */}
+                <div 
+                  id="contract-chat" 
+                  className="flex-1 overflow-hidden"
+                >
+                  <ContractChat
+                    docId={docId}
+                    analysisResult={analysisResult}
+                    selectedIssueId={chatIssueId || selectedIssueId}
+                    prefilledQuestion={prefilledQuestion}
+                    onQuestionPrefilled={() => setPrefilledQuestion(undefined)}
+                    externalMessage={externalMessage}
+                    onExternalMessageSent={() => setExternalMessage('')}
+                    onLoadingChange={setChatLoading}
+                    onMessageCountChange={setMessageCount}
+                  />
                 </div>
               </div>
             )}
-            <div 
-              ref={contractViewerScrollRef}
-              className="flex-1 overflow-y-auto min-h-0"
-            >
-              {isSummaryOnly ? (
-                <div className="h-full flex items-center justify-center p-8">
-                <div className="text-center max-w-md">
-                  <div className="p-4 bg-amber-50 rounded-full w-20 h-20 mx-auto mb-4 flex items-center justify-center">
-                    <FileText className="w-10 h-10 text-amber-500" />
-                  </div>
-                  <h3 className="text-lg font-semibold text-slate-900 mb-2">계약서 전문 분석 준비 중</h3>
-                  <p className="text-sm text-slate-600 mb-4">
-                    현재는 요약 정보만 제공됩니다. 계약서 전문 텍스트 분석 기능은 곧 제공될 예정입니다.
-                  </p>
-                  {analysisResult.summary && (
-                    <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                      <p className="text-xs font-medium text-blue-900 mb-2">📋 분석 요약</p>
-                      <p className="text-sm text-blue-800 leading-relaxed">{analysisResult.summary}</p>
+            
+            {/* 계약서 뷰어 (채팅이 열리면 가려짐) */}
+            {!isChatOpen && (
+              <>
+                {/* 파일 다운로드 버튼 (파일 URL이 있는 경우) */}
+                {fileUrl && (
+                  <div className="px-4 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-slate-200 flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-sm text-slate-700">
+                      <FileText className="w-4 h-4" />
+                      <span className="font-medium">원본 파일</span>
                     </div>
+                    <div className="flex items-center gap-2">
+                      <a
+                        href={fileUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-3 py-1.5 text-xs font-semibold text-blue-700 bg-white border border-blue-300 rounded-lg hover:bg-blue-50 transition-colors flex items-center gap-1.5"
+                        title="새 탭에서 열기"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        열기
+                      </a>
+                      <a
+                        href={fileUrl}
+                        download
+                        className="px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-1.5"
+                        title="파일 다운로드"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        다운로드
+                      </a>
+                    </div>
+                  </div>
+                )}
+                <div 
+                  ref={contractViewerScrollRef}
+                  className="flex-1 overflow-y-auto min-h-0"
+                >
+                  {isSummaryOnly ? (
+                    <div className="h-full flex items-center justify-center p-8">
+                    <div className="text-center max-w-md">
+                      <div className="p-4 bg-amber-50 rounded-full w-20 h-20 mx-auto mb-4 flex items-center justify-center">
+                        <FileText className="w-10 h-10 text-amber-500" />
+                      </div>
+                      <h3 className="text-lg font-semibold text-slate-900 mb-2">계약서 전문 분석 준비 중</h3>
+                      <p className="text-sm text-slate-600 mb-4">
+                        현재는 요약 정보만 제공됩니다. 계약서 전문 텍스트 분석 기능은 곧 제공될 예정입니다.
+                      </p>
+                      {analysisResult.summary && (
+                        <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                          <p className="text-xs font-medium text-blue-900 mb-2">📋 분석 요약</p>
+                          <p className="text-sm text-blue-800 leading-relaxed">{analysisResult.summary}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  ) : (
+                    <ContractViewer
+                      contractText={analysisResult.contractText}
+                      issues={analysisResult.issues}
+                      selectedIssueId={selectedIssueId}
+                      onIssueClick={setSelectedIssueId}
+                      highlightedTexts={highlightedTexts}
+                      clauses={clauses}  // ✨ 조항 목록 전달
+                      scrollContainerRef={contractViewerScrollRef}
+                    />
                   )}
                 </div>
-              </div>
-            ) : (
-              <ContractViewer
-                contractText={analysisResult.contractText}
-                issues={analysisResult.issues}
-                selectedIssueId={selectedIssueId}
-                onIssueClick={setSelectedIssueId}
-                highlightedTexts={highlightedTexts}
-                clauses={clauses}  // ✨ 조항 목록 전달
-                scrollContainerRef={contractViewerScrollRef}
-              />
+              </>
             )}
-            </div>
           </div>
 
           {/* 오른쪽: 분석 결과 패널 */}
-          <div className={cn(
-            "w-full lg:flex-shrink-0 overflow-hidden bg-white shadow-sm flex flex-col transition-[width] duration-300",
-            isChatOpen ? "lg:w-[42%]" : "lg:w-1/2"
-          )}>
+          <div className="w-full lg:w-1/2 lg:flex-shrink-0 overflow-hidden bg-white shadow-sm flex flex-col">
             <div 
               ref={analysisPanelScrollRef}
               className="flex-1 overflow-y-auto min-h-0"
@@ -705,86 +747,7 @@ export default function ContractDetailPage() {
         </div>
       </div>
 
-      {/* 채팅 오버레이 배경 (모바일/태블릿용) */}
-      {isChatOpen && (
-        <div
-          className="fixed inset-0 z-30 bg-slate-900/30 backdrop-blur-sm lg:hidden"
-          onClick={() => setIsChatOpen(false)}
-          aria-hidden="true"
-        />
-      )}
-
-      {/* 오른쪽: 채팅 UI (토글 가능한 사이드바) */}
-      <div 
-        className={cn(
-          "fixed right-0 z-40 bg-white shadow-2xl border-l border-slate-200",
-          "transition-transform duration-300 ease-in-out",
-          "w-full sm:w-[90vw] md:w-[500px] lg:w-[400px]", // 반응형 너비
-          isChatOpen ? "translate-x-0" : "translate-x-full"
-        )}
-        style={{ top: '64px', height: 'calc(100vh - 64px)' }}
-      >
-        {/* 채팅 헤더 - 스와이프 제스처 영역 */}
-        <div 
-          className="relative overflow-hidden bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-600 border-b border-blue-400/30 touch-none lg:touch-auto"
-          onTouchStart={onTouchStart}
-          onTouchMove={onTouchMove}
-          onTouchEnd={onTouchEnd}
-        >
-          <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxwYXRoIGQ9Ik0zNiAzNGMwIDIuMjA5LTEuNzkxIDQtNCA0cy00LTEuNzkxLTQtNCAxLjc5MS00IDQtNCA0IDEuNzkxIDQgNHptMTAtMTBjMCAyLjIwOS0xLjc5MSA0LTQgNHMtNC0xLjc5MS00LTQgMS43OTEtNCA0LTQgNCAxLjc5MSA0IDR6IiBmaWxsPSJyZ2JhKDI1NSwyNTUsMjU1LDAuMSkiLz48L2c+PC9zdmc+')] opacity-20"></div>
-          <div className="relative px-4 py-4 flex items-center justify-between">
-            <div className="flex items-center gap-3 flex-1 min-w-0">
-              <div className="p-2 bg-white/20 backdrop-blur-sm rounded-xl shadow-lg flex-shrink-0">
-                <MessageSquare className="w-5 h-5 text-white" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <h2 className="text-lg font-bold text-white">AI 법률 상담</h2>
-                <p className="text-xs text-blue-100 mt-0.5">
-                  위험 조항에 대해 질문하세요
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              {messageCount > 0 && (
-                <span className="px-2 py-0.5 bg-white/30 rounded-full text-[10px] font-medium text-white">
-                  {messageCount}개 대화
-                </span>
-              )}
-              <button
-                onClick={() => setIsChatOpen(false)}
-                className="p-2 min-w-[44px] min-h-[44px] rounded-lg hover:bg-white/20 transition-colors text-white flex items-center justify-center"
-                aria-label="채팅 닫기 (ESC 키로도 닫을 수 있습니다)"
-                title="채팅 닫기 (ESC)"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* 채팅 컨텐츠 */}
-        <div 
-          id="contract-chat" 
-          role="region"
-          aria-label="AI 법률 상담 채팅"
-          aria-live="polite"
-          className="h-[calc(100%-80px)] overflow-hidden flex flex-col"
-        >
-          <ContractChat
-            docId={docId}
-            analysisResult={analysisResult}
-            selectedIssueId={chatIssueId || selectedIssueId}
-            prefilledQuestion={prefilledQuestion}
-            onQuestionPrefilled={() => setPrefilledQuestion(undefined)}
-            externalMessage={externalMessage}
-            onExternalMessageSent={() => setExternalMessage('')}
-            onLoadingChange={setChatLoading}
-            onMessageCountChange={setMessageCount}
-          />
-        </div>
-      </div>
-
-      {/* 채팅 열기 버튼 (오른쪽 하단 고정) */}
+      {/* 채팅 열기 버튼 (왼쪽 하단 고정, 원모양) */}
       {!isChatOpen && (
         <button
           onClick={() => setIsChatOpen(true)}
@@ -792,21 +755,20 @@ export default function ContractDetailPage() {
           aria-busy={chatLoading}
           data-unread={messageCount > 0 ? 'true' : 'false'}
           className={cn(
-            "fixed bottom-6 right-6 z-30",
-            "bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-600",
+            "fixed bottom-6 left-6 z-30",
+            "bg-gradient-to-br from-blue-600 via-blue-500 to-indigo-600",
             "hover:from-blue-700 hover:via-blue-600 hover:to-indigo-700",
-            "text-white rounded-full p-4 shadow-lg",
-            "transition-all duration-200 hover:scale-110",
-            "flex items-center gap-2",
+            "text-white rounded-full w-14 h-14 shadow-xl shadow-blue-500/30",
+            "transition-all duration-200 hover:scale-110 hover:shadow-2xl hover:shadow-blue-500/40",
+            "flex items-center justify-center",
             "focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2",
-            "disabled:opacity-50 disabled:cursor-not-allowed",
-            "chat-floating-button"
+            "disabled:opacity-50 disabled:cursor-not-allowed"
           )}
           aria-label="AI 법률 상담 열기"
         >
           <MessageSquare className="w-6 h-6" />
           {messageCount > 0 && (
-            <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+            <span className="absolute -top-1 -right-1 bg-gradient-to-br from-red-500 to-rose-600 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center shadow-md">
               {messageCount}
             </span>
           )}
