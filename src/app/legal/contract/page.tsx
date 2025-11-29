@@ -48,6 +48,7 @@ export default function ContractAnalysisPage() {
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [analysisError, setAnalysisError] = useState<string | null>(null)
   const [analysisStep, setAnalysisStep] = useState<number>(0)
+  const [isQuickSample, setIsQuickSample] = useState(false) // 시연용 바이패스 플래그
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0]
@@ -399,6 +400,20 @@ export default function ContractAnalysisPage() {
     }
   }
 
+  // 시연용 바이패스: 미리 분석된 docId로 바로 이동
+  const handleQuickSample = (docId: string, title: string) => {
+    setIsAnalyzing(true)
+    setIsQuickSample(true) // 시연용 바이패스 플래그 설정
+    setAnalysisStep(-1) // 특별한 값으로 설정하여 간단한 로딩 메시지 표시
+    setAnalysisError(null)
+    
+    // 짧은 로딩 시뮬레이션 (30초~1분 대신 1~2초)
+    // "계약 조항 읽는 중" 같은 간단한 메시지만 보여줌
+    setTimeout(() => {
+      router.push(`/legal/contract/${docId}`)
+    }, 1500)
+  }
+
   const handleSampleContract = async (sampleType: 'intern' | 'freelancer') => {
     try {
       setIsAnalyzing(true)
@@ -723,46 +738,62 @@ export default function ContractAnalysisPage() {
                 {/* 분석 중 로딩 */}
                 {isAnalyzing && (
                   <div className="mt-6 space-y-4">
-                    {/* Step Progress Indicator */}
-                    <div className="flex items-center justify-between mb-6">
-                      {[
-                        { step: 1, label: '텍스트 추출' },
-                        { step: 2, label: '조항 분류' },
-                        { step: 3, label: '위험도 분석' },
-                      ].map((item) => (
-                        <div key={item.step} className="flex-1 flex flex-col items-center">
-                          <div className={cn(
-                            "w-12 h-12 rounded-full flex items-center justify-center font-bold text-sm mb-2 transition-all",
-                            analysisStep >= item.step
-                              ? "bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-lg scale-110"
-                              : "bg-slate-200 text-slate-400"
-                          )}>
-                            {analysisStep > item.step ? (
-                              <CheckCircle2 className="w-6 h-6" />
-                            ) : (
-                              item.step
-                            )}
+                    {/* 시연용 바이패스: 간단한 로딩 메시지 */}
+                    {isQuickSample ? (
+                      <div className="text-center py-12">
+                        <div className="relative inline-block mb-4">
+                          <div className="absolute inset-0 w-16 h-16 border-4 border-blue-100 rounded-full animate-pulse"></div>
+                          <Loader2 className="w-16 h-16 animate-spin text-blue-600 relative" />
+                        </div>
+                        <p className="text-lg font-bold text-slate-900 mb-2">계약 조항 읽는 중...</p>
+                        <p className="text-sm text-slate-600">
+                          분석 결과를 불러오고 있습니다.
+                        </p>
+                      </div>
+                    ) : (
+                      <>
+                        {/* Step Progress Indicator */}
+                        <div className="flex items-center justify-between mb-6">
+                          {[
+                            { step: 1, label: '텍스트 추출' },
+                            { step: 2, label: '조항 분류' },
+                            { step: 3, label: '위험도 분석' },
+                          ].map((item) => (
+                            <div key={item.step} className="flex-1 flex flex-col items-center">
+                              <div className={cn(
+                                "w-12 h-12 rounded-full flex items-center justify-center font-bold text-sm mb-2 transition-all",
+                                analysisStep >= item.step
+                                  ? "bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-lg scale-110"
+                                  : "bg-slate-200 text-slate-400"
+                              )}>
+                                {analysisStep > item.step ? (
+                                  <CheckCircle2 className="w-6 h-6" />
+                                ) : (
+                                  item.step
+                                )}
+                              </div>
+                              <p className={cn(
+                                "text-xs font-medium text-center",
+                                analysisStep >= item.step ? "text-blue-600" : "text-slate-400"
+                              )}>
+                                {item.label}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="text-center py-8">
+                          <div className="relative inline-block mb-4">
+                            <div className="absolute inset-0 w-16 h-16 border-4 border-blue-100 rounded-full animate-pulse"></div>
+                            <Loader2 className="w-16 h-16 animate-spin text-blue-600 relative" />
                           </div>
-                          <p className={cn(
-                            "text-xs font-medium text-center",
-                            analysisStep >= item.step ? "text-blue-600" : "text-slate-400"
-                          )}>
-                            {item.label}
+                          <p className="text-lg font-bold text-slate-900 mb-2">분석 중...</p>
+                          <p className="text-sm text-slate-600">
+                            법령·표준계약서와 비교하여 위험 신호를 찾고 있습니다.
                           </p>
                         </div>
-                      ))}
-                    </div>
-
-                    <div className="text-center py-8">
-                      <div className="relative inline-block mb-4">
-                        <div className="absolute inset-0 w-16 h-16 border-4 border-blue-100 rounded-full animate-pulse"></div>
-                        <Loader2 className="w-16 h-16 animate-spin text-blue-600 relative" />
-                      </div>
-                      <p className="text-lg font-bold text-slate-900 mb-2">분석 중...</p>
-                      <p className="text-sm text-slate-600">
-                        법령·표준계약서와 비교하여 위험 신호를 찾고 있습니다.
-                      </p>
-                    </div>
+                      </>
+                    )}
                   </div>
                 )}
 
@@ -813,7 +844,7 @@ export default function ContractAnalysisPage() {
                   <p className="text-sm text-slate-600 mb-4 text-center">
                     계약서가 없나요? 샘플로 먼저 구경해보세요.
                   </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                     <Button
                       variant="outline"
                       onClick={() => handleSampleContract('intern')}
@@ -832,6 +863,16 @@ export default function ContractAnalysisPage() {
                       <div className="text-left w-full">
                         <p className="font-semibold text-slate-900 mb-1">프리랜서 용역 계약</p>
                         <p className="text-xs text-slate-600">샘플로 분석하기</p>
+                      </div>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => handleQuickSample('062ce081-c218-424c-8102-45b9089fcea3', '시연용 계약서')}
+                      className="h-auto py-4 border-2 border-blue-300 hover:border-blue-500 hover:bg-blue-50 bg-blue-50/50"
+                    >
+                      <div className="text-left w-full">
+                        <p className="font-semibold text-slate-900 mb-1">시연용 계약서</p>
+                        <p className="text-xs text-blue-600">즉시 결과 보기</p>
                       </div>
                     </Button>
                   </div>
