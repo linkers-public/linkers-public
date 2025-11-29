@@ -556,7 +556,7 @@ export function ContractViewer({
     ].sort((a, b) => a.startIndex - b.startIndex)
 
     if (clauseHighlights.length === 0) {
-      return <p className="text-sm sm:text-base leading-relaxed whitespace-pre-wrap text-slate-800 font-medium">{content}</p>
+      return <p className="text-xs sm:text-sm leading-relaxed whitespace-pre-wrap text-slate-800">{content}</p>
     }
 
     let lastIndex = 0
@@ -631,7 +631,7 @@ export function ContractViewer({
       )
     }
 
-    return <p className="text-sm sm:text-base leading-relaxed whitespace-pre-wrap text-slate-800 font-medium">{elements}</p>
+    return <p className="text-xs sm:text-sm leading-relaxed whitespace-pre-wrap text-slate-800">{elements}</p>
   }
 
   // 요약 통계 계산
@@ -783,41 +783,41 @@ export function ContractViewer({
         )}
 
         {/* 상단 요약 헤더 - 개선된 레이아웃 */}
-        <div className="sticky top-0 bg-white backdrop-blur-xl z-20 pt-4 sm:pt-5 pb-4 sm:pb-5 px-4 sm:px-6 md:px-8 lg:px-10 mb-6 sm:mb-8 border-b-2 border-slate-200/80 shadow-lg shadow-slate-200/20">
+        <div className="sticky top-0 bg-white backdrop-blur-xl z-20 pt-3 pb-3 px-3 sm:px-4 md:px-5 mb-4 border-b border-slate-200 shadow-sm">
           {/* 요약 통계 - 간소화된 레이아웃 */}
-          <div className="space-y-3 sm:space-y-4">
-            <div className="flex items-center gap-3 sm:gap-4">
-              <div className="p-2.5 bg-gradient-to-br from-blue-500 via-blue-600 to-indigo-600 rounded-xl shadow-lg ring-2 ring-blue-200/50 flex-shrink-0" aria-hidden="true">
-                <FileText className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <div className="p-1.5 bg-gradient-to-br from-blue-500 via-blue-600 to-indigo-600 rounded-lg shadow-md flex-shrink-0" aria-hidden="true">
+                <FileText className="w-4 h-4 text-white" />
               </div>
               <div className="min-w-0 flex-1">
-                <h2 className="text-lg sm:text-xl lg:text-2xl font-extrabold text-slate-900 bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent">
+                <h2 className="text-base sm:text-lg font-bold text-slate-900">
                   계약서 전문
                 </h2>
-                <p className="text-xs sm:text-sm text-slate-600 mt-1.5 leading-relaxed">
-                  위험 조항은 <span className="font-semibold text-slate-700">색상으로 표시</span>됩니다. 하이라이트된 텍스트를 <span className="font-semibold text-blue-600">클릭</span>하면 상세 정보를 확인할 수 있습니다.
+                <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">
+                  위험 조항은 <span className="font-medium text-slate-700">색상으로 표시</span>됩니다. 하이라이트된 텍스트를 <span className="font-medium text-blue-600">클릭</span>하면 상세 정보를 확인할 수 있습니다.
                 </p>
               </div>
             </div>
 
             {/* 카테고리별 위험도 바 - 컴팩트 버전 */}
             {Object.keys(summaryStats).length > 0 && (
-              <div className="flex flex-wrap gap-2.5 sm:gap-3" role="region" aria-label="카테고리별 위험도 통계">
+              <div className="flex flex-wrap gap-1.5" role="region" aria-label="카테고리별 위험도 통계">
                 {Object.entries(summaryStats).map(([category, stats]) => {
                   return (
                     <div 
                       key={category} 
                       className={cn(
-                        "flex items-center gap-2 px-3 py-1.5 rounded-xl border-2 transition-all duration-200 hover:scale-105 hover:shadow-md",
-                        stats.maxSeverity === 'high' && "bg-gradient-to-br from-red-50 to-rose-50 border-red-300 shadow-sm shadow-red-200/50",
-                        stats.maxSeverity === 'medium' && "bg-gradient-to-br from-amber-50 to-orange-50 border-amber-300 shadow-sm shadow-amber-200/50",
-                        stats.maxSeverity === 'low' && "bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-300 shadow-sm shadow-blue-200/50",
+                        "flex items-center gap-1.5 px-2 py-1 rounded-lg border transition-all duration-200 hover:scale-105",
+                        stats.maxSeverity === 'high' && "bg-gradient-to-br from-red-50 to-rose-50 border-red-300 shadow-sm",
+                        stats.maxSeverity === 'medium' && "bg-gradient-to-br from-amber-50 to-orange-50 border-amber-300 shadow-sm",
+                        stats.maxSeverity === 'low' && "bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-300 shadow-sm",
                         !stats.maxSeverity && "bg-slate-50 border-slate-200"
                       )}
                     >
-                      <span className="text-xs sm:text-sm text-slate-700 font-semibold whitespace-nowrap">{getCategoryLabel(category)}</span>
+                      <span className="text-xs text-slate-700 font-medium whitespace-nowrap">{getCategoryLabel(category)}</span>
                       <span className={cn(
-                        "text-xs sm:text-sm font-extrabold px-2 py-0.5 rounded-lg shadow-sm",
+                        "text-xs font-semibold px-1.5 py-0.5 rounded shadow-sm",
                         stats.maxSeverity === 'high' && "bg-red-200 text-red-800 border border-red-300",
                         stats.maxSeverity === 'medium' && "bg-amber-200 text-amber-800 border border-amber-300",
                         stats.maxSeverity === 'low' && "bg-blue-200 text-blue-800 border border-blue-300",
@@ -834,11 +834,11 @@ export function ContractViewer({
             {/* TOP 3 위험 조항 - 접을 수 있는 섹션으로 변경 */}
             {topRiskyClauses.length > 0 && (
               <details className="group" open={false}>
-                <summary className="cursor-pointer text-xs font-semibold text-slate-700 hover:text-slate-900 transition-colors flex items-center gap-1.5 list-none">
+                <summary className="cursor-pointer text-xs font-medium text-slate-600 hover:text-slate-800 transition-colors flex items-center gap-1 list-none">
                   <span>가장 위험한 조항 TOP 3</span>
                   <ChevronRight className="w-3 h-3 text-slate-400 group-open:rotate-90 transition-transform" />
                 </summary>
-                <div className="mt-2 space-y-1.5" role="region" aria-label="가장 위험한 조항 TOP 3">
+                <div className="mt-1.5 space-y-1" role="region" aria-label="가장 위험한 조항 TOP 3">
                   {topRiskyClauses.map((clause, idx) => (
                     <button
                       key={clause.id}
@@ -850,13 +850,13 @@ export function ContractViewer({
                         }
                       }}
                       aria-label={`${idx + 1}위: 제${clause.number}조 ${clause.title}로 이동`}
-                      className={cn("w-full flex items-center gap-2 text-xs text-slate-600 hover:text-slate-900 cursor-pointer transition-colors rounded px-2 py-1.5 hover:bg-slate-50", FOCUS_STYLE)}
+                      className={cn("w-full flex items-center gap-1.5 text-xs text-slate-600 hover:text-slate-800 cursor-pointer transition-colors rounded px-1.5 py-1 hover:bg-slate-50", FOCUS_STYLE)}
                     >
-                      <span className="font-bold text-blue-600">{idx + 1}.</span>
+                      <span className="font-semibold text-blue-600">{idx + 1}.</span>
                       <span className="flex-1 text-left truncate">제{clause.number}조 {clause.title}</span>
                       {clause.maxSeverity && (
                         <span className={cn(
-                          "px-1.5 py-0.5 rounded text-[10px] font-medium flex-shrink-0",
+                          "px-1 py-0.5 rounded text-[10px] font-medium flex-shrink-0",
                           clause.maxSeverity === 'high' && SEVERITY_COLORS.high.badge,
                           clause.maxSeverity === 'medium' && SEVERITY_COLORS.medium.badge,
                           clause.maxSeverity === 'low' && SEVERITY_COLORS.low.badge
@@ -876,13 +876,13 @@ export function ContractViewer({
         {parsedClauses.length === 0 ? (
           // parsedClauses가 없어도 contractText가 있으면 직접 표시
           contractText && contractText.trim().length > 0 ? (
-            <div className="relative flex gap-3 lg:gap-4 px-4 sm:px-6 md:px-8 lg:px-10">
+            <div className="relative flex gap-2 px-3 sm:px-4 md:px-5">
               {/* 중앙: 계약서 텍스트 (파싱 실패 시 원문 그대로 표시) */}
-              <div className="flex-1 space-y-4 relative overflow-visible">
-                <div className="bg-white rounded-lg border border-slate-200 p-6 shadow-sm">
-                  <h3 className="text-lg font-semibold text-slate-900 mb-4">계약서 전문</h3>
+              <div className="flex-1 space-y-3 relative overflow-visible">
+                <div className="bg-white rounded-lg border border-slate-200 p-4 shadow-sm">
+                  <h3 className="text-sm font-semibold text-slate-900 mb-3">계약서 전문</h3>
                   <div className="prose prose-sm max-w-none">
-                    <p className="text-sm leading-relaxed whitespace-pre-wrap text-slate-800">
+                    <p className="text-xs sm:text-sm leading-relaxed whitespace-pre-wrap text-slate-800">
                       {contractText}
                     </p>
                   </div>
@@ -890,21 +890,21 @@ export function ContractViewer({
               </div>
             </div>
           ) : (
-          <div className="text-center py-20">
-            <div className="p-4 bg-slate-100 rounded-full w-20 h-20 mx-auto mb-4 flex items-center justify-center">
-              <FileText className="w-10 h-10 text-slate-400" />
+          <div className="text-center py-12">
+            <div className="p-3 bg-slate-100 rounded-full w-16 h-16 mx-auto mb-3 flex items-center justify-center">
+              <FileText className="w-8 h-8 text-slate-400" />
             </div>
-            <p className="text-lg font-medium text-slate-600 mb-2">계약서 내용이 없습니다.</p>
-            <p className="text-sm text-slate-500">
+            <p className="text-sm font-medium text-slate-600 mb-1">계약서 내용이 없습니다.</p>
+            <p className="text-xs text-slate-500">
                 계약서 텍스트를 불러올 수 없습니다.
             </p>
           </div>
           )
         ) : (
-          <div className="relative flex gap-3 lg:gap-4 px-4 sm:px-6 md:px-8 lg:px-10">
+          <div className="relative flex gap-2 px-3 sm:px-4 md:px-5">
             {/* 왼쪽: 리스크 minimap */}
             <div 
-              className="w-1 lg:w-1.5 flex-shrink-0 flex flex-col rounded-full overflow-hidden bg-slate-100"
+              className="w-1 flex-shrink-0 flex flex-col rounded-full overflow-hidden bg-slate-100"
               role="navigation"
               aria-label="위험도 미니맵"
             >
@@ -941,12 +941,12 @@ export function ContractViewer({
             </div>
 
             {/* 중앙: 계약서 텍스트 */}
-            <div className="flex-1 space-y-3 sm:space-y-4 relative overflow-x-hidden px-4 sm:px-6 md:px-8 lg:px-10">
+            <div className="flex-1 space-y-2 relative overflow-x-hidden">
               {/* 호버 툴팁 - 호버한 위치에 표시 */}
               {(currentHoveredIssue || (pinnedTooltipIssueId && issues.find(i => i.id === pinnedTooltipIssueId))) && tooltipPosition && (
                 <div
                   ref={tooltipRef}
-                  className="absolute z-50 w-[280px] pointer-events-auto"
+                  className="absolute z-50 w-[240px] pointer-events-auto"
                   style={{
                     left: `${tooltipPosition.x}px`,
                     top: `${tooltipPosition.y}px`,
@@ -963,11 +963,11 @@ export function ContractViewer({
                     const isPinned = pinnedTooltipIssueId === displayIssue.id
                     
                     return (
-                      <div className="bg-gradient-to-br from-white to-slate-50 rounded-xl border-2 shadow-2xl p-4 animate-in fade-in zoom-in-95 duration-200 backdrop-blur-sm">
+                      <div className="bg-gradient-to-br from-white to-slate-50 rounded-lg border shadow-lg p-3 animate-in fade-in zoom-in-95 duration-200 backdrop-blur-sm">
                         {/* 툴팁 헤더 */}
-                        <div className="flex items-center gap-3 mb-3 pb-3 border-b-2 border-slate-200/60">
+                        <div className="flex items-center gap-2 mb-2 pb-2 border-b border-slate-200/60">
                           <div className={cn(
-                            "p-2 rounded-xl shadow-sm ring-2 ring-white/50",
+                            "p-1.5 rounded-lg shadow-sm",
                             displayIssue.severity === 'high' && "bg-gradient-to-br from-red-100 to-red-200",
                             displayIssue.severity === 'medium' && "bg-gradient-to-br from-amber-100 to-amber-200",
                             displayIssue.severity === 'low' && "bg-gradient-to-br from-blue-100 to-blue-200"
@@ -975,10 +975,10 @@ export function ContractViewer({
                             {getCategoryIcon(displayIssue.category)}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <div className="text-sm font-extrabold text-slate-900 truncate">
+                            <div className="text-xs font-semibold text-slate-900 truncate">
                               {getCategoryLabel(displayIssue.category)}
                             </div>
-                            <div className="text-xs text-slate-600 mt-0.5 font-medium">
+                            <div className="text-[10px] text-slate-600 mt-0.5">
                               {getSeverityLabel(displayIssue.severity)} 위험도
                             </div>
                           </div>
@@ -986,10 +986,10 @@ export function ContractViewer({
                           <button
                             onClick={handleTooltipTogglePin}
                             className={cn(
-                              "p-2 rounded-lg transition-all duration-200 shadow-sm border-2",
+                              "p-1.5 rounded-md transition-all duration-200 shadow-sm border",
                               isPinned 
-                                ? "bg-gradient-to-br from-blue-100 to-blue-200 text-blue-700 border-blue-300 hover:from-blue-200 hover:to-blue-300 scale-110" 
-                                : "bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200 hover:scale-105"
+                                ? "bg-gradient-to-br from-blue-100 to-blue-200 text-blue-700 border-blue-300 hover:from-blue-200 hover:to-blue-300" 
+                                : "bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200"
                             )}
                             aria-label={isPinned ? "툴팁 고정 해제" : "툴팁 고정"}
                             title={isPinned ? "고정 해제" : "고정"}
@@ -1007,20 +1007,20 @@ export function ContractViewer({
                         </div>
                     
                         {/* 요약 */}
-                        <div className="mb-3">
-                          <p className="text-sm text-slate-800 line-clamp-3 leading-relaxed font-medium">
+                        <div className="mb-2">
+                          <p className="text-xs text-slate-800 line-clamp-3 leading-relaxed">
                             {displayIssue.summary}
                           </p>
                         </div>
                         
                         {/* 법적 근거 (있는 경우) */}
                         {displayIssue.legalBasis && displayIssue.legalBasis.length > 0 && (
-                          <div className="mt-3 pt-3 border-t-2 border-slate-200/60">
-                            <div className="flex items-center gap-2 mb-2">
-                              <BookOpen className="w-4 h-4 text-blue-600" aria-hidden="true" />
-                              <span className="text-xs font-extrabold text-slate-700">관련 법령</span>
+                          <div className="mt-2 pt-2 border-t border-slate-200/60">
+                            <div className="flex items-center gap-1.5 mb-1.5">
+                              <BookOpen className="w-3 h-3 text-blue-600" aria-hidden="true" />
+                              <span className="text-[10px] font-semibold text-slate-700">관련 법령</span>
                             </div>
-                            <div className="space-y-1.5">
+                            <div className="space-y-1">
                               {displayIssue.legalBasis.slice(0, 2).map((basis, idx) => {
                                 // 구조화된 형식인지 확인
                                 const isStructured = typeof basis === 'object' && basis !== null && 'title' in basis;
@@ -1028,9 +1028,9 @@ export function ContractViewer({
                                 if (isStructured) {
                                   const basisItem = basis as LegalBasisItem;
                                   return (
-                                    <div key={idx} className="text-xs text-slate-700 bg-blue-50/50 px-2 py-1.5 rounded-lg border border-blue-100">
-                                      <div className="flex items-center gap-1 mb-1">
-                                        <span className="px-1.5 py-0.5 rounded text-xs font-bold bg-blue-100 text-blue-800">
+                                    <div key={idx} className="text-[10px] text-slate-700 bg-blue-50/50 px-1.5 py-1 rounded border border-blue-100">
+                                      <div className="flex items-center gap-1 mb-0.5">
+                                        <span className="px-1 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-800">
                                           {basisItem.sourceType === 'law' ? '법령' :
                                            basisItem.sourceType === 'manual' ? '가이드' :
                                            basisItem.sourceType === 'case' ? '판례' :
@@ -1041,22 +1041,22 @@ export function ContractViewer({
                                             href={`${process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://localhost:8000'}/api/v2/legal/file?path=${encodeURIComponent(basisItem.filePath)}`}
                                             target="_blank"
                                             rel="noopener noreferrer"
-                                            className="text-blue-700 hover:text-blue-800 hover:underline ml-auto"
+                                            className="text-blue-700 hover:text-blue-800 hover:underline ml-auto text-[10px]"
                                             title="파일 열기"
                                           >
                                             열기
                                           </a>
                                         )}
                                       </div>
-                                      <p className="font-semibold text-slate-800 mb-1 line-clamp-1">{basisItem.title}</p>
-                                      <p className="text-slate-600 line-clamp-2">{basisItem.snippet}</p>
+                                      <p className="font-medium text-slate-800 mb-0.5 line-clamp-1 text-[10px]">{basisItem.title}</p>
+                                      <p className="text-slate-600 line-clamp-2 text-[10px]">{basisItem.snippet}</p>
                                     </div>
                                   );
                                 } else {
                                   // 단순 문자열 형식 (레거시 호환)
                                   const basisText = typeof basis === 'string' ? basis : JSON.stringify(basis);
                                   return (
-                                    <div key={idx} className="text-xs text-slate-700 line-clamp-2 bg-blue-50/50 px-2 py-1.5 rounded-lg border border-blue-100">
+                                    <div key={idx} className="text-[10px] text-slate-700 line-clamp-2 bg-blue-50/50 px-1.5 py-1 rounded border border-blue-100">
                                       {basisText}
                                     </div>
                                   );
@@ -1067,10 +1067,10 @@ export function ContractViewer({
                         )}
                         
                         {/* 클릭 안내 */}
-                        <div className="mt-3 pt-3 border-t-2 border-slate-200/60">
+                        <div className="mt-2 pt-2 border-t border-slate-200/60">
                           <button
                             onClick={() => onIssueClick?.(displayIssue.id)}
-                            className="w-full text-xs font-bold text-blue-700 hover:text-blue-800 hover:underline text-center bg-blue-50/50 px-3 py-2 rounded-lg border border-blue-200 hover:bg-blue-100 transition-colors duration-200"
+                            className="w-full text-[10px] font-semibold text-blue-700 hover:text-blue-800 hover:underline text-center bg-blue-50/50 px-2 py-1.5 rounded border border-blue-200 hover:bg-blue-100 transition-colors duration-200"
                           >
                             클릭하여 상세 정보 보기 →
                           </button>
@@ -1093,13 +1093,13 @@ export function ContractViewer({
                     }
                   }}
                   className={cn(
-                    "w-full max-w-full box-border mb-4 sm:mb-5 rounded-2xl border-2 bg-white shadow-lg transition-all duration-300 hover:shadow-xl hover:-translate-y-1",
-                    "focus-within:ring-4 focus-within:ring-blue-400/50 focus-within:ring-offset-4",
-                    clause.maxSeverity === 'high' && `border-red-300 ${SEVERITY_COLORS.high.bg}/40 shadow-red-200/30 hover:shadow-red-300/40`,
-                    clause.maxSeverity === 'medium' && `border-amber-300 ${SEVERITY_COLORS.medium.bg}/40 shadow-amber-200/30 hover:shadow-amber-300/40`,
-                    clause.maxSeverity === 'low' && `border-blue-300 ${SEVERITY_COLORS.low.bg}/30 shadow-blue-200/20 hover:shadow-blue-300/30`,
-                    !clause.maxSeverity && "border-slate-200 shadow-slate-200/20",
-                    selectedClauseNumber === clause.number && "ring-4 ring-blue-400 ring-offset-4 shadow-2xl scale-[1.02]"
+                    "w-full max-w-full box-border mb-3 rounded-lg border bg-white shadow-sm transition-all duration-200 hover:shadow-md",
+                    "focus-within:ring-2 focus-within:ring-blue-400/50 focus-within:ring-offset-2",
+                    clause.maxSeverity === 'high' && `border-red-300 ${SEVERITY_COLORS.high.bg}/40 shadow-red-200/20`,
+                    clause.maxSeverity === 'medium' && `border-amber-300 ${SEVERITY_COLORS.medium.bg}/40 shadow-amber-200/20`,
+                    clause.maxSeverity === 'low' && `border-blue-300 ${SEVERITY_COLORS.low.bg}/30 shadow-blue-200/20`,
+                    !clause.maxSeverity && "border-slate-200 shadow-slate-200/10",
+                    selectedClauseNumber === clause.number && "ring-2 ring-blue-400 ring-offset-2 shadow-md"
                   )}
                   aria-labelledby={`clause-${clause.number}-header`}
                 >
@@ -1108,16 +1108,16 @@ export function ContractViewer({
                     id={`clause-${clause.number}-header`}
                     onClick={() => scrollToClause(clause.number)}
                     className={cn(
-                      "flex items-center justify-between px-5 sm:px-6 py-4 sm:py-5 border-b-2 transition-all duration-200 cursor-pointer hover:bg-opacity-90",
+                      "flex items-center justify-between px-3 py-2.5 border-b transition-all duration-200 cursor-pointer hover:bg-opacity-90",
                       clause.maxSeverity === 'high' && `bg-gradient-to-r ${SEVERITY_COLORS.high.bg}/90 to-red-50/80 border-red-300/60`,
                       clause.maxSeverity === 'medium' && `bg-gradient-to-r ${SEVERITY_COLORS.medium.bg}/90 to-amber-50/80 border-amber-300/60`,
                       clause.maxSeverity === 'low' && `bg-gradient-to-r ${SEVERITY_COLORS.low.bg}/90 to-blue-50/80 border-blue-300/60`,
                       !clause.maxSeverity && "bg-gradient-to-r from-slate-50/90 to-slate-100/80 border-slate-200"
                     )}
                   >
-                    <div className="flex items-center gap-4 min-w-0">
+                    <div className="flex items-center gap-2.5 min-w-0">
                       <div className={cn(
-                        "text-lg sm:text-xl font-extrabold flex-shrink-0 clause-number clause-number-clickable px-3 py-1.5 rounded-lg",
+                        "text-sm sm:text-base font-bold flex-shrink-0 clause-number clause-number-clickable px-2 py-1 rounded-md",
                         clause.maxSeverity === 'high' && `${SEVERITY_COLORS.high.text} bg-red-100/50`,
                         clause.maxSeverity === 'medium' && `${SEVERITY_COLORS.medium.text} bg-amber-100/50`,
                         clause.maxSeverity === 'low' && `${SEVERITY_COLORS.low.text} bg-blue-100/50`,
@@ -1125,13 +1125,13 @@ export function ContractViewer({
                       )}>
                         제{clause.number}조
                       </div>
-                      <div className="text-base sm:text-lg font-bold text-slate-900 truncate">{clause.title}</div>
+                      <div className="text-sm sm:text-base font-semibold text-slate-900 truncate">{clause.title}</div>
                     </div>
-                    <div className="flex items-center gap-2.5 text-xs sm:text-sm flex-shrink-0">
+                    <div className="flex items-center gap-2 text-xs flex-shrink-0">
                       {clause.maxSeverity && (
                         <span 
                           className={cn(
-                            "px-3 py-1.5 rounded-full font-extrabold shadow-sm border-2",
+                            "px-2 py-1 rounded-full font-semibold shadow-sm border",
                             clause.maxSeverity === 'high' && `${SEVERITY_COLORS.high.badge} border-red-400`,
                             clause.maxSeverity === 'medium' && `${SEVERITY_COLORS.medium.badge} border-amber-400`,
                             clause.maxSeverity === 'low' && `${SEVERITY_COLORS.low.badge} border-blue-400`
@@ -1143,7 +1143,7 @@ export function ContractViewer({
                       )}
                       {clause.issueCount > 0 && (
                         <span 
-                          className="rounded-full bg-gradient-to-br from-slate-100 to-slate-200 px-3 py-1.5 text-slate-700 font-bold border border-slate-300 shadow-sm"
+                          className="rounded-full bg-gradient-to-br from-slate-100 to-slate-200 px-2 py-1 text-slate-700 font-semibold border border-slate-300 shadow-sm"
                           aria-label={`이슈 ${clause.issueCount}건`}
                         >
                           이슈 {clause.issueCount}건
@@ -1153,7 +1153,7 @@ export function ContractViewer({
                   </header>
 
                   {/* 조항 내용 */}
-                  <div className="px-5 sm:px-6 py-5 sm:py-6 bg-gradient-to-b from-white to-slate-50/30">
+                  <div className="px-3 py-3 bg-gradient-to-b from-white to-slate-50/30">
                     {renderClauseContent(clause)}
                   </div>
                 </section>

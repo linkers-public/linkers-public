@@ -188,7 +188,6 @@ export function AnalysisIssueCard({
           aria-label="계약서에서 해당 조항 위치 보기"
           className="flex-1 border-slate-300 hover:bg-slate-50 hover:border-blue-300"
         >
-          <Eye className="w-4 h-4 mr-1.5" aria-hidden="true" />
           해당 조항 보기
         </Button>
         {onAskAboutIssue && (
@@ -203,7 +202,6 @@ export function AnalysisIssueCard({
           aria-label={`${issue.summary}에 대해 AI에게 질문하기`}
           className={cn(PRIMARY_GRADIENT, PRIMARY_GRADIENT_HOVER, "text-white shadow-md hover:shadow-lg transition-all ai-button")}
         >
-          <MessageSquare className="w-4 h-4 mr-1.5" aria-hidden="true" />
           이 부분 질문하기
         </Button>
         )}
@@ -217,7 +215,6 @@ export function AnalysisIssueCard({
           aria-label="이 조항의 수정 제안 보기"
           className="flex-1 border-slate-300 hover:bg-slate-50 hover:border-blue-300"
         >
-          <FileEdit className="w-4 h-4 mr-1.5" aria-hidden="true" />
           수정 제안 보기
         </Button>
       </div>
@@ -278,7 +275,6 @@ export function AnalysisIssueCard({
                     }}
                     className="flex-1 text-xs h-8 border-emerald-300 hover:bg-emerald-100 ai-button"
                   >
-                    <Copy className="w-3.5 h-3.5 mr-1.5" />
                     제안 문구 복사
                   </Button>
                   {onAskAboutIssue && (
@@ -292,7 +288,6 @@ export function AnalysisIssueCard({
                       }}
                       className={cn("flex-1 text-xs h-8", PRIMARY_GRADIENT, PRIMARY_GRADIENT_HOVER, "text-white shadow-md ai-button")}
                     >
-                      <MessageSquare className="w-3.5 h-3.5 mr-1.5" />
                       이 문장으로 질문하기
                     </Button>
                   )}

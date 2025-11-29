@@ -291,28 +291,28 @@ export function AnalysisPanel({
   return (
     <div className="h-full flex flex-col bg-white" role="complementary" aria-label="분석 결과">
       {/* 헤더 - 위험도 정보 통합 (sticky) */}
-      <div className="p-4 sm:p-5 bg-white border-b border-slate-200 flex-shrink-0 overflow-x-hidden sticky top-0 z-20">
+      <div className="p-3 bg-white border-b border-slate-200 flex-shrink-0 overflow-x-hidden sticky top-0 z-20">
         {/* 상단: 위험도 정보 */}
-        <div className="flex items-start justify-between gap-4 mb-4">
-          <div className="flex items-start gap-3 min-w-0 flex-1">
-            <div className="p-2 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg shadow-md flex-shrink-0">
-              <FileText className="w-4 h-4 text-white" />
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div className="flex items-start gap-2 min-w-0 flex-1">
+            <div className="p-1.5 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg shadow-md flex-shrink-0">
+              <FileText className="w-3.5 h-3.5 text-white" />
             </div>
             <div className="min-w-0 flex-1">
-              <h1 className="text-base sm:text-lg font-bold text-slate-900 truncate mb-2">{contractType}</h1>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="flex items-center gap-1.5 px-2.5 py-1 bg-gradient-to-br from-slate-100 to-slate-200 rounded-md flex-shrink-0 border border-slate-300 shadow-sm">
-                  <BarChart3 className="w-3.5 h-3.5 text-slate-700" />
-                  <span className="font-semibold text-slate-900 text-sm">{riskScore}</span>
-                  <span className="text-slate-500 text-xs">/100</span>
+              <h1 className="text-sm sm:text-base font-bold text-slate-900 truncate mb-1.5">{contractType}</h1>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="flex items-center gap-1 px-2 py-0.5 bg-gradient-to-br from-slate-100 to-slate-200 rounded-md flex-shrink-0 border border-slate-300 shadow-sm">
+                  <BarChart3 className="w-3 h-3 text-slate-700" />
+                  <span className="font-semibold text-slate-900 text-xs">{riskScore}</span>
+                  <span className="text-slate-500 text-[10px]">/100</span>
                 </span>
                 {clauseCount > 0 && (
-                  <span className="px-2.5 py-1 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-md whitespace-nowrap flex-shrink-0 border border-blue-300 text-blue-700 font-medium text-xs shadow-sm">
+                  <span className="px-2 py-0.5 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-md whitespace-nowrap flex-shrink-0 border border-blue-300 text-blue-700 font-medium text-[10px] shadow-sm">
                     {clauseCount}개 조항
                   </span>
                 )}
                 {totalIssues > 0 && (
-                  <span className="px-2.5 py-1 bg-gradient-to-br from-amber-50 to-orange-50 rounded-md whitespace-nowrap flex-shrink-0 border border-amber-300 text-amber-700 font-medium text-xs shadow-sm">
+                  <span className="px-2 py-0.5 bg-gradient-to-br from-amber-50 to-orange-50 rounded-md whitespace-nowrap flex-shrink-0 border border-amber-300 text-amber-700 font-medium text-[10px] shadow-sm">
                     {totalIssues}개 이슈
                   </span>
                 )}
@@ -320,19 +320,19 @@ export function AnalysisPanel({
             </div>
           </div>
           <div className={classNames(
-            "px-3 py-2 rounded-lg border-2 text-sm font-semibold flex items-center gap-2 flex-shrink-0 shadow-md transition-all duration-200 hover:scale-105",
+            "px-2.5 py-1.5 rounded-lg border-2 text-xs font-semibold flex items-center gap-1.5 flex-shrink-0 shadow-md transition-all duration-200 hover:scale-105",
             riskInfo.bgColor,
             riskInfo.borderColor,
             riskInfo.textColor
           )}>
-            <RiskIcon className="w-4 h-4" />
+            <RiskIcon className="w-3.5 h-3.5" />
             <span className="whitespace-nowrap">{riskInfo.label}</span>
           </div>
         </div>
 
         {/* 중간: 카테고리별 요약 뱃지 */}
         {displayedCategories.length > 0 && (
-          <div className="flex flex-wrap gap-2 mb-4">
+          <div className="flex flex-wrap gap-1.5 mb-3">
             {displayedCategories.map(category => {
               const count = categoryCounts[category]
               if (!count || count.total === 0) return null
@@ -381,9 +381,9 @@ export function AnalysisPanel({
                   }}
                   aria-label={`${categoryLabels[category]} 카테고리, ${badgeConfig.label} 이슈 발견`}
                   className={classNames(
-                    "px-3 py-1.5 rounded-lg border text-xs font-semibold",
+                    "px-2 py-1 rounded-md border text-[10px] font-semibold",
                     "transition-all duration-200 hover:scale-105 hover:shadow-lg",
-                    "flex items-center gap-2",
+                    "flex items-center gap-1.5",
                     FOCUS_STYLE,
                     "cursor-pointer",
                     badgeConfig.bg,
@@ -392,8 +392,8 @@ export function AnalysisPanel({
                     badgeConfig.shadow
                   )}
                 >
-                  <BadgeIcon className="w-4 h-4 flex-shrink-0" />
-                  <div className="flex items-center gap-1.5">
+                  <BadgeIcon className="w-3.5 h-3.5 flex-shrink-0" />
+                  <div className="flex items-center gap-1">
                     <span className="font-semibold">{categoryLabels[category]}</span>
                     <span className="opacity-50">·</span>
                     <span>{badgeConfig.label}</span>
@@ -405,16 +405,16 @@ export function AnalysisPanel({
         )}
 
         {/* 하단: 타이틀 + 필터 버튼 */}
-        <div className="flex items-center justify-between gap-4 pt-3 border-t border-slate-200">
-          <div className="flex items-center gap-3 min-w-0 flex-1">
-            <div className="p-2 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg shadow-md flex-shrink-0">
-              <AlertTriangle className="w-4 h-4 text-white" />
+        <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-200">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <div className="p-1.5 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg shadow-md flex-shrink-0">
+              <AlertTriangle className="w-3.5 h-3.5 text-white" />
             </div>
             <div className="min-w-0 flex-1">
-              <h2 className="text-base sm:text-lg font-bold text-slate-900 truncate">
+              <h2 className="text-sm sm:text-base font-bold text-slate-900 truncate">
                 계약 건강 진단표
               </h2>
-              <p className="text-xs text-slate-600 truncate mt-0.5">
+              <p className="text-[10px] text-slate-600 truncate mt-0.5">
                 위험 조항을 한눈에 보고, 우선 수정해야 할 순서를 정리해 드립니다.
               </p>
             </div>
@@ -425,14 +425,14 @@ export function AnalysisPanel({
             aria-expanded={showFilters}
             aria-controls="filter-panel"
             className={classNames(
-              "flex-shrink-0 transition-all duration-200 border-2 px-3 py-2 rounded-lg bg-white text-slate-800 flex items-center gap-2 shadow-sm hover:shadow-md hover:scale-105",
+              "flex-shrink-0 transition-all duration-200 border-2 px-2.5 py-1.5 rounded-lg bg-white text-slate-800 flex items-center gap-1.5 shadow-sm hover:shadow-md hover:scale-105",
               showFilters ? "border-blue-500 bg-gradient-to-br from-blue-50 to-indigo-50" : "border-slate-300 hover:border-blue-400"
             )}
           >
-            <Filter className="w-4 h-4" />
-            <span className="hidden sm:inline text-sm font-semibold">필터</span>
+            <Filter className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline text-xs font-semibold">필터</span>
             {(selectedCategories.size > 0 || selectedSeverities.size > 0 || sortBy === 'order') && (
-              <span className="inline-flex items-center justify-center min-w-[20px] h-5 rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 text-xs font-semibold text-white px-1.5 shadow-md">
+              <span className="inline-flex items-center justify-center min-w-[18px] h-4.5 rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 text-[10px] font-semibold text-white px-1 shadow-md">
                 {selectedCategories.size + selectedSeverities.size + (sortBy === 'order' ? 1 : 0)}
               </span>
             )}
@@ -441,30 +441,30 @@ export function AnalysisPanel({
 
         {/* 탭 네비게이션 */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="w-full grid grid-cols-3 bg-slate-100/90 p-1.5 rounded-xl border-2 border-slate-200 shadow-inner" role="tablist" aria-label="분석 결과 탭">
+          <TabsList className="w-full grid grid-cols-3 bg-slate-100/90 p-1 rounded-lg border-2 border-slate-200 shadow-inner" role="tablist" aria-label="분석 결과 탭">
             <TabsTrigger 
               value="summary" 
-              className="flex items-center justify-center gap-2 font-semibold text-sm transition-all duration-200 data-[state=active]:bg-white data-[state=active]:text-blue-700 data-[state=active]:shadow-md data-[state=active]:scale-105 rounded-lg py-2"
+              className="flex items-center justify-center font-semibold text-xs transition-all duration-200 data-[state=active]:bg-white data-[state=active]:text-blue-700 data-[state=active]:shadow-md data-[state=active]:scale-105 rounded-md py-1.5"
               aria-label="분석 요약 보기"
             >
-              <FileText className="w-4 h-4" aria-hidden="true" />
               <span className="hidden sm:inline">요약</span>
+              <span className="sm:hidden">요약</span>
             </TabsTrigger>
             <TabsTrigger 
               value="issues" 
-              className="flex items-center justify-center gap-2 font-semibold text-sm transition-all duration-200 data-[state=active]:bg-white data-[state=active]:text-amber-700 data-[state=active]:shadow-md data-[state=active]:scale-105 rounded-lg py-2"
+              className="flex items-center justify-center font-semibold text-xs transition-all duration-200 data-[state=active]:bg-white data-[state=active]:text-amber-700 data-[state=active]:shadow-md data-[state=active]:scale-105 rounded-md py-1.5"
               aria-label="조항별 분석 보기"
             >
-              <AlertTriangle className="w-4 h-4" aria-hidden="true" />
               <span className="hidden sm:inline">조항별</span>
+              <span className="sm:hidden">조항별</span>
             </TabsTrigger>
             <TabsTrigger 
               value="legal" 
-              className="flex items-center justify-center gap-2 font-semibold text-sm transition-all duration-200 data-[state=active]:bg-white data-[state=active]:text-indigo-700 data-[state=active]:shadow-md data-[state=active]:scale-105 rounded-lg py-2"
+              className="flex items-center justify-center font-semibold text-xs transition-all duration-200 data-[state=active]:bg-white data-[state=active]:text-indigo-700 data-[state=active]:shadow-md data-[state=active]:scale-105 rounded-md py-1.5"
               aria-label="법령 및 표준계약서 비교 보기"
             >
-              <Scale className="w-4 h-4" aria-hidden="true" />
               <span className="hidden sm:inline">법령·표준</span>
+              <span className="sm:hidden">법령·표준</span>
             </TabsTrigger>
           </TabsList>
         </Tabs>
@@ -494,20 +494,20 @@ export function AnalysisPanel({
 
         {/* 필터 바 */}
         {showFilters && (
-          <div id="filter-panel" className="border-2 border-blue-200 rounded-xl p-4 bg-gradient-to-br from-blue-50/50 to-indigo-50/50 mt-3 shadow-lg">
+          <div id="filter-panel" className="border-2 border-blue-200 rounded-lg p-3 bg-gradient-to-br from-blue-50/50 to-indigo-50/50 mt-2 shadow-md">
             {/* 카테고리 필터 */}
-            <div className="mb-4">
-              <p className="text-xs font-semibold text-slate-700 mb-2 flex items-center gap-2">
+            <div className="mb-3">
+              <p className="text-[10px] font-semibold text-slate-700 mb-1.5 flex items-center gap-1.5">
                 <Filter className="w-3 h-3" />
                 카테고리
               </p>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-1.5">
                 {categories.map(category => (
                   <button
                     key={category}
                     onClick={() => toggleCategory(category)}
                     className={classNames(
-                      "px-3 py-1.5 text-xs rounded-lg border-2 transition-all duration-200 font-semibold shadow-sm hover:scale-105",
+                      "px-2 py-1 text-[10px] rounded-md border-2 transition-all duration-200 font-semibold shadow-sm hover:scale-105",
                       selectedCategories.has(category)
                         ? 'bg-gradient-to-br from-blue-500 to-indigo-600 border-blue-600 text-white shadow-md'
                         : 'bg-white border-slate-300 text-slate-700 hover:bg-blue-50 hover:border-blue-300'
@@ -520,12 +520,12 @@ export function AnalysisPanel({
             </div>
 
             {/* 위험도 필터 */}
-            <div className="mb-4">
-              <p className="text-xs font-semibold text-slate-700 mb-2 flex items-center gap-2">
+            <div className="mb-3">
+              <p className="text-[10px] font-semibold text-slate-700 mb-1.5 flex items-center gap-1.5">
                 <AlertTriangle className="w-3 h-3" />
                 위험도
               </p>
-              <div className="flex gap-2">
+              <div className="flex gap-1.5">
                 {(['high', 'medium', 'low'] as Severity[]).map(severity => {
                   const severityConfig = severity === 'high' 
                     ? { bg: 'from-red-500 to-rose-600', border: 'border-red-600', text: 'text-white' }
@@ -538,7 +538,7 @@ export function AnalysisPanel({
                       key={severity}
                       onClick={() => toggleSeverity(severity)}
                       className={classNames(
-                        "px-3 py-1.5 text-xs rounded-lg border-2 transition-all duration-200 font-semibold shadow-sm hover:scale-105",
+                        "px-2 py-1 text-[10px] rounded-md border-2 transition-all duration-200 font-semibold shadow-sm hover:scale-105",
                         selectedSeverities.has(severity)
                           ? `bg-gradient-to-br ${severityConfig.bg} ${severityConfig.border} ${severityConfig.text} shadow-md`
                           : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'
@@ -555,15 +555,15 @@ export function AnalysisPanel({
 
             {/* 정렬 옵션 */}
             <div>
-              <p className="text-xs font-semibold text-slate-700 mb-2 flex items-center gap-2">
+              <p className="text-[10px] font-semibold text-slate-700 mb-1.5 flex items-center gap-1.5">
                 <BarChart3 className="w-3 h-3" />
                 정렬
               </p>
-              <div className="flex gap-2">
+              <div className="flex gap-1.5">
                 <button
                   onClick={() => setSortBy('severity')}
                   className={classNames(
-                    "px-3 py-1.5 text-xs rounded-lg border-2 transition-all duration-200 font-semibold shadow-sm hover:scale-105",
+                    "px-2 py-1 text-[10px] rounded-md border-2 transition-all duration-200 font-semibold shadow-sm hover:scale-105",
                     sortBy === 'severity'
                       ? 'bg-gradient-to-br from-blue-500 to-indigo-600 border-blue-600 text-white shadow-md'
                       : 'bg-white border-slate-300 text-slate-700 hover:bg-blue-50 hover:border-blue-300'
@@ -574,7 +574,7 @@ export function AnalysisPanel({
                 <button
                   onClick={() => setSortBy('order')}
                   className={classNames(
-                    "px-3 py-1.5 text-xs rounded-lg border-2 transition-all duration-200 font-semibold shadow-sm hover:scale-105",
+                    "px-2 py-1 text-[10px] rounded-md border-2 transition-all duration-200 font-semibold shadow-sm hover:scale-105",
                     sortBy === 'order'
                       ? 'bg-gradient-to-br from-blue-500 to-indigo-600 border-blue-600 text-white shadow-md'
                       : 'bg-white border-slate-300 text-slate-700 hover:bg-blue-50 hover:border-blue-300'
@@ -592,18 +592,18 @@ export function AnalysisPanel({
       <div className="flex-1 overflow-y-auto scroll-smooth">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           {/* 요약 보기 탭 */}
-          <TabsContent value="summary" className="px-4 sm:px-6 lg:px-8 py-5 sm:py-6 lg:py-7 mt-0 overflow-x-hidden">
-            <div className="space-y-5 max-w-4xl mx-auto w-full px-2 sm:px-4">
+          <TabsContent value="summary" className="px-3 sm:px-4 py-3 sm:py-4 mt-0 overflow-x-hidden">
+            <div className="space-y-3 max-w-4xl mx-auto w-full px-2">
               {/* 한 줄 총평 */}
               {oneLineSummary && (
-                <div className="w-full bg-amber-50 border border-amber-300 rounded-lg p-4">
-                  <div className="flex items-start gap-3">
-                    <div className="p-2 bg-amber-600 rounded-lg flex-shrink-0">
-                      <AlertTriangle className="w-4 h-4 text-white" />
+                <div className="w-full bg-amber-50 border border-amber-300 rounded-lg p-3">
+                  <div className="flex items-start gap-2">
+                    <div className="p-1.5 bg-amber-600 rounded-lg flex-shrink-0">
+                      <AlertTriangle className="w-3.5 h-3.5 text-white" />
                     </div>
                     <div className="flex-1">
-                      <h3 className="text-sm font-semibold text-amber-900 mb-2">한 줄 총평</h3>
-                      <p className="text-sm text-amber-900 leading-relaxed">{oneLineSummary}</p>
+                      <h3 className="text-xs font-semibold text-amber-900 mb-1.5">한 줄 총평</h3>
+                      <p className="text-xs text-amber-900 leading-relaxed">{oneLineSummary}</p>
                     </div>
                   </div>
                 </div>
@@ -611,13 +611,13 @@ export function AnalysisPanel({
 
               {/* 리스크 신호등 + 지금 당장 확인해야 할 포인트 */}
               {(riskTrafficLight || top3ActionPoints.length > 0) && (
-                <div className="w-full bg-white border border-slate-200 rounded-lg p-4">
+                <div className="w-full bg-white border border-slate-200 rounded-lg p-3">
                   {riskTrafficLight && (
-                    <div className="flex items-center gap-3 mb-4 pb-4 border-b border-slate-200">
-                      <span className="text-2xl">{riskTrafficLight}</span>
+                    <div className="flex items-center gap-2 mb-3 pb-3 border-b border-slate-200">
+                      <span className="text-xl">{riskTrafficLight}</span>
                       <div>
-                        <span className="text-sm font-semibold text-slate-900 block">리스크 수준</span>
-                        <span className="text-xs text-slate-600 mt-0.5">
+                        <span className="text-xs font-semibold text-slate-900 block">리스크 수준</span>
+                        <span className="text-[10px] text-slate-600 mt-0.5">
                           {riskTrafficLight === '🔴' ? '높음 - 즉시 검토 필요' :
                            riskTrafficLight === '🟡' ? '보통 - 주의 깊게 확인' :
                            '낮음 - 일반적인 수준'}
@@ -627,11 +627,11 @@ export function AnalysisPanel({
                   )}
                   {top3ActionPoints.length > 0 && (
                     <div>
-                      <h3 className="text-sm font-semibold text-slate-900 mb-3">지금 당장 확인하거나 물어봐야 할 포인트</h3>
-                      <ul className="space-y-2">
+                      <h3 className="text-xs font-semibold text-slate-900 mb-2">지금 당장 확인하거나 물어봐야 할 포인트</h3>
+                      <ul className="space-y-1.5">
                         {top3ActionPoints.map((point, idx) => (
-                          <li key={idx} className="flex items-start gap-3 text-sm text-slate-800 bg-blue-50 p-3 rounded-lg border border-blue-200">
-                            <span className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-semibold">
+                          <li key={idx} className="flex items-start gap-2 text-xs text-slate-800 bg-blue-50 p-2 rounded-lg border border-blue-200">
+                            <span className="flex-shrink-0 w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-semibold">
                               {idx + 1}
                             </span>
                             <span className="flex-1 pt-0.5 leading-relaxed">{point}</span>
@@ -646,30 +646,30 @@ export function AnalysisPanel({
               {/* 리스크 요약 테이블 */}
               {riskSummaryTable.length > 0 && (
                 <div className="w-full bg-white border border-slate-200 rounded-lg overflow-hidden">
-                  <div className="px-4 py-3 bg-slate-50 border-b border-slate-200">
-                    <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
-                      <BarChart3 className="w-4 h-4 text-blue-600" />
+                  <div className="px-3 py-2 bg-slate-50 border-b border-slate-200">
+                    <h3 className="text-xs font-semibold text-slate-900 flex items-center gap-1.5">
+                      <BarChart3 className="w-3.5 h-3.5 text-blue-600" />
                       리스크 요약
                     </h3>
                   </div>
                   <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
+                    <table className="w-full text-xs">
                       <thead className="bg-gradient-to-r from-slate-100 to-slate-50">
                         <tr>
-                          <th className="px-4 py-3 text-left text-xs font-extrabold text-slate-800 border-b-2 border-slate-300 uppercase tracking-wide">항목</th>
-                          <th className="px-4 py-3 text-left text-xs font-extrabold text-slate-800 border-b-2 border-slate-300 uppercase tracking-wide">리스크 수준</th>
-                          <th className="px-4 py-3 text-left text-xs font-extrabold text-slate-800 border-b-2 border-slate-300 uppercase tracking-wide">문제 포인트</th>
-                          <th className="px-4 py-3 text-left text-xs font-extrabold text-slate-800 border-b-2 border-slate-300 uppercase tracking-wide">간단 설명</th>
-                          <th className="px-4 py-3 text-left text-xs font-extrabold text-slate-800 border-b-2 border-slate-300 uppercase tracking-wide">수정 제안</th>
+                          <th className="px-3 py-2 text-left text-[10px] font-extrabold text-slate-800 border-b-2 border-slate-300 uppercase tracking-wide">항목</th>
+                          <th className="px-3 py-2 text-left text-[10px] font-extrabold text-slate-800 border-b-2 border-slate-300 uppercase tracking-wide">리스크 수준</th>
+                          <th className="px-3 py-2 text-left text-[10px] font-extrabold text-slate-800 border-b-2 border-slate-300 uppercase tracking-wide">문제 포인트</th>
+                          <th className="px-3 py-2 text-left text-[10px] font-extrabold text-slate-800 border-b-2 border-slate-300 uppercase tracking-wide">간단 설명</th>
+                          <th className="px-3 py-2 text-left text-[10px] font-extrabold text-slate-800 border-b-2 border-slate-300 uppercase tracking-wide">수정 제안</th>
                         </tr>
                       </thead>
                       <tbody>
                         {riskSummaryTable.map((item, idx) => (
                           <tr key={idx} className="border-b border-slate-200 hover:bg-gradient-to-r hover:from-blue-50/50 hover:to-indigo-50/50 transition-all duration-200">
-                            <td className="px-4 py-3 font-bold text-slate-900">{item.item}</td>
-                            <td className="px-4 py-3">
+                            <td className="px-3 py-2 font-semibold text-slate-900">{item.item}</td>
+                            <td className="px-3 py-2">
                               <span className={classNames(
-                                "px-3 py-1.5 rounded-lg text-xs font-extrabold shadow-sm border-2",
+                                "px-2 py-1 rounded-md text-[10px] font-semibold shadow-sm border",
                                 item.riskLevel === 'high' ? 'bg-gradient-to-br from-red-100 to-red-200 text-red-800 border-red-400' :
                                 item.riskLevel === 'medium' ? 'bg-gradient-to-br from-amber-100 to-amber-200 text-amber-800 border-amber-400' :
                                 'bg-gradient-to-br from-green-100 to-green-200 text-green-800 border-green-400'
@@ -679,10 +679,10 @@ export function AnalysisPanel({
                                  '🟢 낮음'}
                               </span>
                             </td>
-                            <td className="px-4 py-3 text-slate-800 font-medium">{item.problemPoint}</td>
-                            <td className="px-4 py-3 text-slate-700">{item.simpleExplanation}</td>
-                            <td className="px-4 py-3">
-                              <span className="text-blue-700 font-bold bg-blue-50 px-2 py-1 rounded-md border border-blue-200">
+                            <td className="px-3 py-2 text-slate-800 font-medium text-xs">{item.problemPoint}</td>
+                            <td className="px-3 py-2 text-slate-700 text-xs">{item.simpleExplanation}</td>
+                            <td className="px-3 py-2">
+                              <span className="text-blue-700 font-semibold bg-blue-50 px-1.5 py-0.5 rounded border border-blue-200 text-[10px]">
                                 {item.revisionKeyword}
                               </span>
                             </td>
@@ -696,50 +696,50 @@ export function AnalysisPanel({
 
               {/* 독소조항 상세 */}
               {toxicClauses.length > 0 && (
-                <div className="w-full bg-red-50 border border-red-300 rounded-lg p-4">
-                  <div className="flex items-center gap-3 mb-4 pb-3 border-b border-red-200">
-                    <div className="p-2 bg-red-600 rounded-lg">
-                      <AlertTriangle className="w-4 h-4 text-white" />
+                <div className="w-full bg-red-50 border border-red-300 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-3 pb-2 border-b border-red-200">
+                    <div className="p-1.5 bg-red-600 rounded-lg">
+                      <AlertTriangle className="w-3.5 h-3.5 text-white" />
                     </div>
                     <div className="flex-1">
-                      <h3 className="text-sm font-semibold text-red-900">독소조항 상세</h3>
-                      <p className="text-xs text-red-700 mt-0.5">즉시 수정이 필요한 위험한 조항들</p>
+                      <h3 className="text-xs font-semibold text-red-900">독소조항 상세</h3>
+                      <p className="text-[10px] text-red-700 mt-0.5">즉시 수정이 필요한 위험한 조항들</p>
                     </div>
-                    <span className="text-xs font-semibold bg-red-600 text-white px-2 py-1 rounded">
+                    <span className="text-[10px] font-semibold bg-red-600 text-white px-1.5 py-0.5 rounded">
                       {toxicClauses.length}개
                     </span>
                   </div>
-                  <div className="space-y-5">
+                  <div className="space-y-3">
                     {toxicClauses.map((toxic, idx) => (
-                      <div key={idx} className="bg-white rounded-xl p-5 border-2 border-red-300 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-[1.01]">
-                        <div className="mb-4 pb-4 border-b-2 border-red-200">
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className="w-6 h-6 rounded-full bg-gradient-to-br from-red-500 to-rose-600 text-white flex items-center justify-center text-xs font-extrabold shadow-md">
+                      <div key={idx} className="bg-white rounded-lg p-3 border-2 border-red-300 shadow-md hover:shadow-lg transition-all duration-300 hover:scale-[1.01]">
+                        <div className="mb-3 pb-3 border-b-2 border-red-200">
+                          <div className="flex items-center gap-2 mb-1.5">
+                            <span className="w-5 h-5 rounded-full bg-gradient-to-br from-red-500 to-rose-600 text-white flex items-center justify-center text-[10px] font-semibold shadow-md">
                               {idx + 1}
                             </span>
-                            <h4 className="text-base font-extrabold text-red-900">{toxic.clauseLocation}</h4>
+                            <h4 className="text-sm font-bold text-red-900">{toxic.clauseLocation}</h4>
                           </div>
-                          <p className="text-sm text-red-800 font-medium bg-red-50/50 p-2 rounded-lg border border-red-200">{toxic.contentSummary}</p>
+                          <p className="text-xs text-red-800 bg-red-50/50 p-2 rounded-lg border border-red-200">{toxic.contentSummary}</p>
                         </div>
-                        <div className="space-y-3 text-sm">
-                          <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
-                            <span className="font-extrabold text-slate-900 block mb-1">⚠️ 왜 위험한지</span>
+                        <div className="space-y-2 text-xs">
+                          <div className="bg-slate-50 p-2 rounded-lg border border-slate-200">
+                            <span className="font-semibold text-slate-900 block mb-1">왜 위험한지</span>
                             <span className="text-slate-800 leading-relaxed">{toxic.whyRisky}</span>
                           </div>
-                          <div className="bg-amber-50 p-3 rounded-lg border border-amber-200">
-                            <span className="font-extrabold text-slate-900 block mb-1">💥 현실에서 생길 수 있는 문제</span>
+                          <div className="bg-amber-50 p-2 rounded-lg border border-amber-200">
+                            <span className="font-semibold text-slate-900 block mb-1">현실에서 생길 수 있는 문제</span>
                             <span className="text-slate-800 leading-relaxed">{toxic.realWorldProblems}</span>
                           </div>
-                          <div className="mt-3 pt-3 border-t border-slate-200 space-y-2">
+                          <div className="mt-2 pt-2 border-t border-slate-200 space-y-1.5">
                             <div>
-                              <p className="text-xs font-medium text-blue-700 mb-1">수정 제안 (라이트 버전)</p>
-                              <p className="text-sm text-slate-800 bg-blue-50 p-3 rounded border border-blue-200 leading-relaxed">
+                              <p className="text-[10px] font-medium text-blue-700 mb-0.5">수정 제안 (라이트 버전)</p>
+                              <p className="text-xs text-slate-800 bg-blue-50 p-2 rounded border border-blue-200 leading-relaxed">
                                 {toxic.suggestedRevisionLight}
                               </p>
                             </div>
                             <div>
-                              <p className="text-xs font-medium text-slate-700 mb-1">수정 제안 (포멀 버전)</p>
-                              <p className="text-sm text-slate-800 bg-slate-50 p-3 rounded border border-slate-200 leading-relaxed">
+                              <p className="text-[10px] font-medium text-slate-700 mb-0.5">수정 제안 (포멀 버전)</p>
+                              <p className="text-xs text-slate-800 bg-slate-50 p-2 rounded border border-slate-200 leading-relaxed">
                                 {toxic.suggestedRevisionFormal}
                               </p>
                             </div>
@@ -753,20 +753,20 @@ export function AnalysisPanel({
 
               {/* 협상 질문 리스트 */}
               {negotiationQuestions.length > 0 && (
-                <div className="w-full bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <div className="flex items-center gap-3 mb-4 pb-3 border-b border-blue-200">
-                    <div className="p-2 bg-blue-600 rounded-lg">
-                      <MessageSquare className="w-4 h-4 text-white" />
+                <div className="w-full bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2 mb-3 pb-2 border-b border-blue-200">
+                    <div className="p-1.5 bg-blue-600 rounded-lg">
+                      <MessageSquare className="w-3.5 h-3.5 text-white" />
                     </div>
                     <div className="flex-1">
-                      <h3 className="text-sm font-semibold text-blue-900">협상 시 질문 리스트</h3>
-                      <p className="text-xs text-blue-700 mt-0.5">계약서 검토 시 활용하세요</p>
+                      <h3 className="text-xs font-semibold text-blue-900">협상 시 질문 리스트</h3>
+                      <p className="text-[10px] text-blue-700 mt-0.5">계약서 검토 시 활용하세요</p>
                     </div>
                   </div>
-                  <ul className="space-y-2">
+                  <ul className="space-y-1.5">
                     {negotiationQuestions.map((question, idx) => (
-                      <li key={idx} className="flex items-start gap-3 text-sm text-blue-900 bg-white p-3 rounded-lg border border-blue-200">
-                        <span className="flex-shrink-0 w-6 h-6 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-semibold mt-0.5">
+                      <li key={idx} className="flex items-start gap-2 text-xs text-blue-900 bg-white p-2 rounded-lg border border-blue-200">
+                        <span className="flex-shrink-0 w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-[10px] font-semibold mt-0.5">
                           Q{idx + 1}
                         </span>
                         <span className="flex-1 pt-0.5 leading-relaxed">{question}</span>
@@ -863,16 +863,16 @@ export function AnalysisPanel({
                       }
                     }}
                     aria-label={`${categoryLabels[category]} 카테고리 상세 보기, ${severityInfo.label}`}
-                    className="w-full max-w-full text-left p-5 bg-white border-2 border-slate-300 rounded-2xl hover:border-blue-500 hover:shadow-xl hover:bg-gradient-to-br hover:from-blue-50/70 hover:to-indigo-50/70 transition-all duration-300 group focus:outline-none focus:ring-4 focus:ring-blue-400 focus:ring-offset-2 hover:scale-[1.02] active:scale-[0.98] box-border"
+                    className="w-full max-w-full text-left p-3 bg-white border-2 border-slate-300 rounded-lg hover:border-blue-500 hover:shadow-lg hover:bg-gradient-to-br hover:from-blue-50/70 hover:to-indigo-50/70 transition-all duration-300 group focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 hover:scale-[1.01] active:scale-[0.99] box-border"
                   >
-                    <div className="flex items-center justify-between mb-3">
-                      <span className="font-extrabold text-slate-900 text-base sm:text-lg group-hover:text-blue-700 transition-colors">{categoryLabels[category]}</span>
-                      <span className={`px-4 py-2 text-xs font-extrabold rounded-xl border-2 shadow-md ${severityInfo.color} group-hover:scale-110 transition-transform`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-bold text-slate-900 text-sm sm:text-base group-hover:text-blue-700 transition-colors">{categoryLabels[category]}</span>
+                      <span className={`px-2.5 py-1 text-[10px] font-semibold rounded-lg border-2 shadow-sm ${severityInfo.color} group-hover:scale-105 transition-transform`}>
                         {severityInfo.label}
                       </span>
                     </div>
                     {topIssue && (
-                      <p className="text-sm sm:text-base text-slate-700 line-clamp-2 leading-relaxed font-medium group-hover:text-slate-900 transition-colors">{topIssue.summary}</p>
+                      <p className="text-xs sm:text-sm text-slate-700 line-clamp-2 leading-relaxed group-hover:text-slate-900 transition-colors">{topIssue.summary}</p>
                     )}
                   </button>
                 )
@@ -881,13 +881,13 @@ export function AnalysisPanel({
           </TabsContent>
 
           {/* 조항별 분석 탭 */}
-          <TabsContent value="issues" className="px-4 sm:px-6 lg:px-8 py-5 sm:py-6 lg:py-7 mt-0 overflow-x-hidden">
+          <TabsContent value="issues" className="px-3 sm:px-4 py-3 sm:py-4 mt-0 overflow-x-hidden">
             {filteredAndSortedIssues.length === 0 ? (
-              <div className="text-center py-8 text-slate-500">
-                <p>필터 조건에 맞는 이슈가 없습니다.</p>
+              <div className="text-center py-6 text-slate-500">
+                <p className="text-xs">필터 조건에 맞는 이슈가 없습니다.</p>
               </div>
             ) : (
-              <div className="space-y-3 px-2 sm:px-4">
+              <div className="space-y-2 px-2">
                 {filteredAndSortedIssues.map(issue => (
                   <div
                     key={issue.id}
@@ -907,7 +907,7 @@ export function AnalysisPanel({
           </TabsContent>
 
           {/* 법령·표준계약 비교 탭 */}
-          <TabsContent value="legal" className="px-4 sm:px-6 lg:px-8 py-5 sm:py-6 lg:py-7 mt-0 overflow-x-hidden">
+          <TabsContent value="legal" className="px-3 sm:px-4 py-3 sm:py-4 mt-0 overflow-x-hidden">
             <div className="space-y-6 px-2 sm:px-4">
               <p className="text-xs text-slate-500">
                 각 위험 조항과 연결된 근로기준법·표준계약서 내용을 모아 보여줍니다.
@@ -941,52 +941,52 @@ export function AnalysisPanel({
                         <div 
                           key={idx}
                           className={classNames(
-                            "bg-gradient-to-br border-2 rounded-xl p-4 shadow-sm hover:shadow-md transition-all",
+                            "bg-gradient-to-br border-2 rounded-lg p-3 shadow-sm hover:shadow-md transition-all",
                             sourceTypeColor
                           )}
                         >
-                          <div className="flex items-start justify-between gap-2 mb-2">
+                          <div className="flex items-start justify-between gap-1.5 mb-1.5">
                             <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-2">
-                                <span className="px-2 py-1 rounded-md text-xs font-bold bg-white/80 border border-current/30">
+                              <div className="flex items-center gap-1.5 mb-1.5">
+                                <span className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-white/80 border border-current/30">
                                   {sourceTypeLabel}
                                 </span>
                               </div>
-                              <h4 className="font-bold text-sm mb-2 leading-tight line-clamp-2">
+                              <h4 className="font-semibold text-xs mb-1.5 leading-tight line-clamp-2">
                                 {ctx.title || '제목 없음'}
                               </h4>
                             </div>
-                            <Scale className="w-4 h-4 flex-shrink-0 opacity-50" />
+                            <Scale className="w-3.5 h-3.5 flex-shrink-0 opacity-50" />
                           </div>
-                          <div className="bg-white/60 rounded-lg p-2 border border-current/20 mb-3">
-                            <p className="text-xs text-slate-800 leading-relaxed line-clamp-3">
+                          <div className="bg-white/60 rounded-lg p-1.5 border border-current/20 mb-2">
+                            <p className="text-[10px] text-slate-800 leading-relaxed line-clamp-3">
                               {ctx.snippet || '내용 없음'}
                             </p>
                           </div>
                           {/* 파일 링크 (있는 경우) */}
                           {ctx.filePath && (
-                            <div className="flex items-center gap-2 pt-2 border-t border-current/20">
-                              <FileText className="w-3 h-3 opacity-60" />
-                              <span className="text-xs text-slate-600 flex-1 truncate" title={ctx.title || ctx.filePath}>
+                            <div className="flex items-center gap-1.5 pt-1.5 border-t border-current/20">
+                              <FileText className="w-2.5 h-2.5 opacity-60" />
+                              <span className="text-[10px] text-slate-600 flex-1 truncate" title={ctx.title || ctx.filePath}>
                                 {ctx.title || ctx.filePath.split('/').pop() || ctx.filePath}
                               </span>
                               <a
                                 href={`${process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://localhost:8000'}/api/v2/legal/file?path=${encodeURIComponent(ctx.filePath)}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="text-xs text-blue-700 hover:text-blue-800 hover:underline flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-50 transition-colors"
+                                className="text-[10px] text-blue-700 hover:text-blue-800 hover:underline flex items-center gap-0.5 px-1.5 py-0.5 rounded hover:bg-blue-50 transition-colors"
                                 title="원본 파일 보기"
                               >
-                                <ExternalLink className="w-3 h-3" />
+                                <ExternalLink className="w-2.5 h-2.5" />
                                 열기
                               </a>
                               <a
                                 href={`${process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://localhost:8000'}/api/v2/legal/file?path=${encodeURIComponent(ctx.filePath)}&download=true`}
                                 download
-                                className="text-xs text-blue-700 hover:text-blue-800 hover:underline flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-50 transition-colors"
+                                className="text-[10px] text-blue-700 hover:text-blue-800 hover:underline flex items-center gap-0.5 px-1.5 py-0.5 rounded hover:bg-blue-50 transition-colors"
                                 title="파일 다운로드"
                               >
-                                <Download className="w-3 h-3" />
+                                <Download className="w-2.5 h-2.5" />
                                 다운로드
                               </a>
                             </div>
@@ -1000,8 +1000,8 @@ export function AnalysisPanel({
               
               {/* 이슈별 법적 근거 */}
               <div>
-                <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
-                  <AlertTriangle className="w-5 h-5 text-amber-600" />
+                <h3 className="text-sm font-bold text-slate-900 mb-3 flex items-center gap-1.5">
+                  <AlertTriangle className="w-4 h-4 text-amber-600" />
                   이슈별 법적 근거
                 </h3>
                 {/* 법적 근거 아코디언 */}
@@ -1033,17 +1033,17 @@ export function AnalysisPanel({
                   return (
                     <details
                       key={issue.id}
-                      className="w-full max-w-full box-border bg-white border-2 border-slate-200 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow"
+                      className="w-full max-w-full box-border bg-white border-2 border-slate-200 rounded-lg overflow-hidden shadow-sm hover:shadow-md transition-shadow"
                     >
                       <summary 
-                        className="p-4 cursor-pointer hover:bg-gradient-to-r hover:from-blue-50/50 hover:to-indigo-50/50 transition-colors flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                        className="p-3 cursor-pointer hover:bg-gradient-to-r hover:from-blue-50/50 hover:to-indigo-50/50 transition-colors flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
                         aria-label={`${issue.summary} 법적 근거 보기`}
                       >
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="font-semibold text-slate-900">{issue.summary}</span>
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <span className="font-semibold text-slate-900 text-xs">{issue.summary}</span>
                             <span className={classNames(
-                              "px-2 py-0.5 rounded-full text-xs font-bold",
+                              "px-1.5 py-0.5 rounded-full text-[10px] font-semibold",
                               issue.severity === 'high' ? 'bg-red-100 text-red-700 border border-red-300' :
                               issue.severity === 'medium' ? 'bg-amber-100 text-amber-700 border border-amber-300' :
                               'bg-blue-100 text-blue-700 border border-blue-300'
@@ -1051,13 +1051,13 @@ export function AnalysisPanel({
                               {issue.severity === 'high' ? '높음' : issue.severity === 'medium' ? '보통' : '낮음'}
                             </span>
                           </div>
-                          <span className="text-xs text-slate-500">
+                          <span className="text-[10px] text-slate-500">
                             {categoryLabels[issue.category]} · {issue.legalBasis.length}개 근거
                           </span>
                         </div>
-                        <BookOpen className="w-5 h-5 text-slate-400 flex-shrink-0 ml-3" />
+                        <BookOpen className="w-4 h-4 text-slate-400 flex-shrink-0 ml-2" />
                       </summary>
-                      <div className="p-4 border-t-2 border-slate-200 space-y-4 bg-gradient-to-b from-slate-50/30 to-white">
+                      <div className="p-3 border-t-2 border-slate-200 space-y-3 bg-gradient-to-b from-slate-50/30 to-white">
                         {isStructured ? (
                           // 구조화된 형식 (LegalBasisItem[])
                           (parsedLegalBasis as LegalBasisItem[]).map((basis, idx) => {
@@ -1080,18 +1080,18 @@ export function AnalysisPanel({
                               <div 
                                 key={idx} 
                                 className={classNames(
-                                  "bg-gradient-to-br border-2 rounded-xl p-4 shadow-sm hover:shadow-md transition-all",
+                                  "bg-gradient-to-br border-2 rounded-lg p-3 shadow-sm hover:shadow-md transition-all",
                                   sourceTypeColor
                                 )}
                               >
-                                <div className="flex items-start justify-between gap-3 mb-2">
+                                <div className="flex items-start justify-between gap-2 mb-1.5">
                                   <div className="flex-1">
-                                    <div className="flex items-center gap-2 mb-1">
-                                      <span className="px-2 py-1 rounded-md text-xs font-bold bg-white/80 border border-current/30">
+                                    <div className="flex items-center gap-1.5 mb-1">
+                                      <span className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-white/80 border border-current/30">
                                         {sourceTypeLabel}
                                       </span>
                                       {basis.status && (
-                                        <span className="text-xs text-slate-600">
+                                        <span className="text-[10px] text-slate-600">
                                           {basis.status === 'likely' ? '✓ 해당 가능성 높음' :
                                            basis.status === 'unclear' ? '? 불명확' :
                                            basis.status === 'unlikely' ? '✗ 해당 가능성 낮음' :
@@ -1099,41 +1099,41 @@ export function AnalysisPanel({
                                         </span>
                                       )}
                                     </div>
-                                    <h4 className="font-bold text-base mb-2 leading-tight">
+                                    <h4 className="font-semibold text-xs mb-1.5 leading-tight">
                                       {basis.title}
                                     </h4>
                                   </div>
-                                  <Scale className="w-5 h-5 flex-shrink-0 opacity-50" />
+                                  <Scale className="w-3.5 h-3.5 flex-shrink-0 opacity-50" />
                                 </div>
-                                <div className="bg-white/60 rounded-lg p-3 border border-current/20">
-                                  <p className="text-sm text-slate-800 leading-relaxed whitespace-pre-wrap">
+                                <div className="bg-white/60 rounded-lg p-2 border border-current/20">
+                                  <p className="text-xs text-slate-800 leading-relaxed whitespace-pre-wrap">
                                     {basis.snippet}
                                   </p>
                                 </div>
                                 {/* 파일 링크 (있는 경우) */}
                                 {basis.filePath && (
-                                  <div className="mt-3 pt-3 border-t border-current/20 flex items-center gap-2">
-                                    <FileText className="w-4 h-4 opacity-60" />
-                                    <span className="text-xs text-slate-600 flex-1 truncate" title={basis.title || basis.filePath}>
+                                  <div className="mt-2 pt-2 border-t border-current/20 flex items-center gap-1.5">
+                                    <FileText className="w-3 h-3 opacity-60" />
+                                    <span className="text-[10px] text-slate-600 flex-1 truncate" title={basis.title || basis.filePath}>
                                       {basis.title || basis.filePath.split('/').pop() || basis.filePath}
                                     </span>
                                     <a
                                       href={`${process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://localhost:8000'}/api/v2/legal/file?path=${encodeURIComponent(basis.filePath)}`}
                                       target="_blank"
                                       rel="noopener noreferrer"
-                                      className="text-xs text-blue-700 hover:text-blue-800 hover:underline flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-50 transition-colors"
+                                      className="text-[10px] text-blue-700 hover:text-blue-800 hover:underline flex items-center gap-0.5 px-1.5 py-0.5 rounded hover:bg-blue-50 transition-colors"
                                       title="원본 파일 보기"
                                     >
-                                      <ExternalLink className="w-3 h-3" />
+                                      <ExternalLink className="w-2.5 h-2.5" />
                                       열기
                                     </a>
                                     <a
                                       href={`${process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://localhost:8000'}/api/v2/legal/file?path=${encodeURIComponent(basis.filePath)}&download=true`}
                                       download
-                                      className="text-xs text-blue-700 hover:text-blue-800 hover:underline flex items-center gap-1 px-2 py-1 rounded hover:bg-blue-50 transition-colors"
+                                      className="text-[10px] text-blue-700 hover:text-blue-800 hover:underline flex items-center gap-0.5 px-1.5 py-0.5 rounded hover:bg-blue-50 transition-colors"
                                       title="파일 다운로드"
                                     >
-                                      <Download className="w-3 h-3" />
+                                      <Download className="w-2.5 h-2.5" />
                                       다운로드
                                     </a>
                                   </div>
@@ -1148,15 +1148,15 @@ export function AnalysisPanel({
                             return (
                               <div 
                                 key={idx} 
-                                className="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-all"
+                                className="bg-gradient-to-br from-blue-50 to-indigo-50 border-2 border-blue-200 rounded-lg p-3 shadow-sm hover:shadow-md transition-all"
                               >
-                                <div className="flex items-start gap-3 mb-2">
-                                  <BookOpen className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                                <div className="flex items-start gap-2 mb-1.5">
+                                  <BookOpen className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
                                   <div className="flex-1">
-                                    <span className="px-2 py-1 rounded-md text-xs font-bold bg-blue-100 text-blue-800 border border-blue-300 mb-2 inline-block">
+                                    <span className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-blue-100 text-blue-800 border border-blue-300 mb-1.5 inline-block">
                                       법적 근거
                                     </span>
-                                    <p className="text-sm text-slate-800 leading-relaxed whitespace-pre-wrap">
+                                    <p className="text-xs text-slate-800 leading-relaxed whitespace-pre-wrap">
                                       {basisText}
                                     </p>
                                   </div>
@@ -1172,9 +1172,8 @@ export function AnalysisPanel({
                               onAskAboutIssue(issue.id)
                               setActiveTab('issues')
                             }}
-                            className="w-full ai-button border-2 hover:border-blue-400 hover:bg-blue-50 transition-all px-3 py-2 rounded-md bg-white text-slate-800 flex items-center justify-center text-sm font-medium"
+                            className="w-full ai-button border-2 hover:border-blue-400 hover:bg-blue-50 transition-all px-2.5 py-1.5 rounded-md bg-white text-slate-800 flex items-center justify-center text-xs font-medium"
                           >
-                            <MessageSquare className="w-4 h-4 mr-2" />
                             이 근거로 다시 설명 듣기
                           </button>
                         )}
@@ -1184,11 +1183,11 @@ export function AnalysisPanel({
                 })}
 
               {issues.filter(i => i.legalBasis && i.legalBasis.length > 0).length === 0 && (
-                <div className="text-center py-12 text-slate-500">
-                  <div className="bg-slate-50 rounded-xl p-6 border-2 border-slate-200">
-                    <BookOpen className="w-16 h-16 mx-auto mb-4 text-slate-300" />
-                    <p className="text-sm font-medium text-slate-600">법적 근거 정보가 없습니다.</p>
-                    <p className="text-xs text-slate-500 mt-2">
+                <div className="text-center py-8 text-slate-500">
+                  <div className="bg-slate-50 rounded-lg p-4 border-2 border-slate-200">
+                    <BookOpen className="w-12 h-12 mx-auto mb-3 text-slate-300" />
+                    <p className="text-xs font-medium text-slate-600">법적 근거 정보가 없습니다.</p>
+                    <p className="text-[10px] text-slate-500 mt-1.5">
                       각 위험 조항에 대한 법적 근거는 분석 결과에 따라 자동으로 표시됩니다.
                     </p>
                   </div>
