@@ -752,46 +752,46 @@ export default function ContractAnalysisPage() {
                       </div>
                     ) : (
                       <>
-                        {/* Step Progress Indicator */}
-                        <div className="flex items-center justify-between mb-6">
-                          {[
-                            { step: 1, label: '텍스트 추출' },
-                            { step: 2, label: '조항 분류' },
-                            { step: 3, label: '위험도 분석' },
-                          ].map((item) => (
-                            <div key={item.step} className="flex-1 flex flex-col items-center">
-                              <div className={cn(
-                                "w-12 h-12 rounded-full flex items-center justify-center font-bold text-sm mb-2 transition-all",
-                                analysisStep >= item.step
-                                  ? "bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-lg scale-110"
-                                  : "bg-slate-200 text-slate-400"
-                              )}>
-                                {analysisStep > item.step ? (
-                                  <CheckCircle2 className="w-6 h-6" />
-                                ) : (
-                                  item.step
-                                )}
-                              </div>
-                              <p className={cn(
-                                "text-xs font-medium text-center",
-                                analysisStep >= item.step ? "text-blue-600" : "text-slate-400"
-                              )}>
-                                {item.label}
-                              </p>
-                            </div>
-                          ))}
-                        </div>
-
-                        <div className="text-center py-8">
-                          <div className="relative inline-block mb-4">
-                            <div className="absolute inset-0 w-16 h-16 border-4 border-blue-100 rounded-full animate-pulse"></div>
-                            <Loader2 className="w-16 h-16 animate-spin text-blue-600 relative" />
+                    {/* Step Progress Indicator */}
+                    <div className="flex items-center justify-between mb-6">
+                      {[
+                        { step: 1, label: '텍스트 추출' },
+                        { step: 2, label: '조항 분류' },
+                        { step: 3, label: '위험도 분석' },
+                      ].map((item) => (
+                        <div key={item.step} className="flex-1 flex flex-col items-center">
+                          <div className={cn(
+                            "w-12 h-12 rounded-full flex items-center justify-center font-bold text-sm mb-2 transition-all",
+                            analysisStep >= item.step
+                              ? "bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-lg scale-110"
+                              : "bg-slate-200 text-slate-400"
+                          )}>
+                            {analysisStep > item.step ? (
+                              <CheckCircle2 className="w-6 h-6" />
+                            ) : (
+                              item.step
+                            )}
                           </div>
-                          <p className="text-lg font-bold text-slate-900 mb-2">분석 중...</p>
-                          <p className="text-sm text-slate-600">
-                            법령·표준계약서와 비교하여 위험 신호를 찾고 있습니다.
+                          <p className={cn(
+                            "text-xs font-medium text-center",
+                            analysisStep >= item.step ? "text-blue-600" : "text-slate-400"
+                          )}>
+                            {item.label}
                           </p>
                         </div>
+                      ))}
+                    </div>
+
+                    <div className="text-center py-8">
+                      <div className="relative inline-block mb-4">
+                        <div className="absolute inset-0 w-16 h-16 border-4 border-blue-100 rounded-full animate-pulse"></div>
+                        <Loader2 className="w-16 h-16 animate-spin text-blue-600 relative" />
+                      </div>
+                      <p className="text-lg font-bold text-slate-900 mb-2">분석 중...</p>
+                      <p className="text-sm text-slate-600">
+                        법령·표준계약서와 비교하여 위험 신호를 찾고 있습니다.
+                      </p>
+                    </div>
                       </>
                     )}
                   </div>

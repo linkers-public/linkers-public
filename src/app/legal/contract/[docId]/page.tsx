@@ -614,70 +614,70 @@ export default function ContractDetailPage() {
             {/* 계약서 뷰어 (채팅이 열리면 가려짐) */}
             {!isChatOpen && (
               <>
-                {/* 파일 다운로드 버튼 (파일 URL이 있는 경우) */}
-                {fileUrl && (
-                  <div className="px-4 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-slate-200 flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-sm text-slate-700">
-                      <FileText className="w-4 h-4" />
-                      <span className="font-medium">원본 파일</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <a
-                        href={fileUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="px-3 py-1.5 text-xs font-semibold text-blue-700 bg-white border border-blue-300 rounded-lg hover:bg-blue-50 transition-colors flex items-center gap-1.5"
-                        title="새 탭에서 열기"
-                      >
-                        <ExternalLink className="w-3.5 h-3.5" />
-                        열기
-                      </a>
-                      <a
-                        href={fileUrl}
-                        download
-                        className="px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-1.5"
-                        title="파일 다운로드"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                        다운로드
-                      </a>
-                    </div>
+            {/* 파일 다운로드 버튼 (파일 URL이 있는 경우) */}
+            {fileUrl && (
+              <div className="px-4 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-slate-200 flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm text-slate-700">
+                  <FileText className="w-4 h-4" />
+                  <span className="font-medium">원본 파일</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <a
+                    href={fileUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-1.5 text-xs font-semibold text-blue-700 bg-white border border-blue-300 rounded-lg hover:bg-blue-50 transition-colors flex items-center gap-1.5"
+                    title="새 탭에서 열기"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    열기
+                  </a>
+                  <a
+                    href={fileUrl}
+                    download
+                    className="px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-1.5"
+                    title="파일 다운로드"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    다운로드
+                  </a>
+                </div>
+              </div>
+            )}
+            <div 
+              ref={contractViewerScrollRef}
+              className="flex-1 overflow-y-auto min-h-0"
+            >
+              {isSummaryOnly ? (
+                <div className="h-full flex items-center justify-center p-8">
+                <div className="text-center max-w-md">
+                  <div className="p-4 bg-amber-50 rounded-full w-20 h-20 mx-auto mb-4 flex items-center justify-center">
+                    <FileText className="w-10 h-10 text-amber-500" />
                   </div>
-                )}
-                <div 
-                  ref={contractViewerScrollRef}
-                  className="flex-1 overflow-y-auto min-h-0"
-                >
-                  {isSummaryOnly ? (
-                    <div className="h-full flex items-center justify-center p-8">
-                    <div className="text-center max-w-md">
-                      <div className="p-4 bg-amber-50 rounded-full w-20 h-20 mx-auto mb-4 flex items-center justify-center">
-                        <FileText className="w-10 h-10 text-amber-500" />
-                      </div>
-                      <h3 className="text-lg font-semibold text-slate-900 mb-2">계약서 전문 분석 준비 중</h3>
-                      <p className="text-sm text-slate-600 mb-4">
-                        현재는 요약 정보만 제공됩니다. 계약서 전문 텍스트 분석 기능은 곧 제공될 예정입니다.
-                      </p>
-                      {analysisResult.summary && (
-                        <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                          <p className="text-xs font-medium text-blue-900 mb-2">📋 분석 요약</p>
-                          <p className="text-sm text-blue-800 leading-relaxed">{analysisResult.summary}</p>
-                        </div>
-                      )}
+                  <h3 className="text-lg font-semibold text-slate-900 mb-2">계약서 전문 분석 준비 중</h3>
+                  <p className="text-sm text-slate-600 mb-4">
+                    현재는 요약 정보만 제공됩니다. 계약서 전문 텍스트 분석 기능은 곧 제공될 예정입니다.
+                  </p>
+                  {analysisResult.summary && (
+                    <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                      <p className="text-xs font-medium text-blue-900 mb-2">📋 분석 요약</p>
+                      <p className="text-sm text-blue-800 leading-relaxed">{analysisResult.summary}</p>
                     </div>
-                  </div>
-                  ) : (
-                    <ContractViewer
-                      contractText={analysisResult.contractText}
-                      issues={analysisResult.issues}
-                      selectedIssueId={selectedIssueId}
-                      onIssueClick={setSelectedIssueId}
-                      highlightedTexts={highlightedTexts}
-                      clauses={clauses}  // ✨ 조항 목록 전달
-                      scrollContainerRef={contractViewerScrollRef}
-                    />
                   )}
                 </div>
+              </div>
+            ) : (
+              <ContractViewer
+                contractText={analysisResult.contractText}
+                issues={analysisResult.issues}
+                selectedIssueId={selectedIssueId}
+                onIssueClick={setSelectedIssueId}
+                highlightedTexts={highlightedTexts}
+                clauses={clauses}  // ✨ 조항 목록 전달
+                scrollContainerRef={contractViewerScrollRef}
+              />
+            )}
+            </div>
               </>
             )}
           </div>

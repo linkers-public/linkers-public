@@ -289,48 +289,60 @@ export function AnalysisPanel({
   }, [contractText])
 
   return (
-    <div className="h-full flex flex-col bg-white" role="complementary" aria-label="분석 결과">
-      {/* 헤더 - 위험도 정보 통합 (sticky) */}
-      <div className="p-3 bg-white border-b border-slate-200 flex-shrink-0 overflow-x-hidden sticky top-0 z-20">
-        {/* 상단: 위험도 정보 */}
+    <Tabs value={activeTab} onValueChange={setActiveTab}>
+      <div className="h-full flex flex-col bg-white" role="complementary" aria-label="분석 결과">
+        {/* 통합 헤더 - 계약 요약 카드 (sticky) */}
+        <div className="p-3 bg-white border-b border-slate-200 flex-shrink-0 overflow-x-hidden sticky top-0 z-20">
+        {/* 상단: 계약명 + 점수/주의 배지 */}
         <div className="flex items-start justify-between gap-3 mb-3">
-          <div className="flex items-start gap-2 min-w-0 flex-1">
-            <div className="p-1.5 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg shadow-md flex-shrink-0">
-              <FileText className="w-3.5 h-3.5 text-white" />
+          <h1 className="text-sm sm:text-base font-bold text-slate-900 truncate flex-1">{contractType}</h1>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <span className="flex items-center gap-1 px-2 py-0.5 bg-gradient-to-br from-slate-100 to-slate-200 rounded-md border border-slate-300 shadow-sm">
+              <BarChart3 className="w-3 h-3 text-slate-700" />
+              <span className="font-semibold text-slate-900 text-xs">{riskScore}</span>
+              <span className="text-slate-500 text-[10px]">/100</span>
+            </span>
+            <div className={classNames(
+              "px-2.5 py-1.5 rounded-lg border-2 text-xs font-semibold flex items-center gap-1.5 shadow-md transition-all duration-200 hover:scale-105",
+              riskInfo.bgColor,
+              riskInfo.borderColor,
+              riskInfo.textColor
+            )}>
+              <RiskIcon className="w-3.5 h-3.5" />
+              <span className="whitespace-nowrap">{riskInfo.label}</span>
             </div>
-            <div className="min-w-0 flex-1">
-              <h1 className="text-sm sm:text-base font-bold text-slate-900 truncate mb-1.5">{contractType}</h1>
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="flex items-center gap-1 px-2 py-0.5 bg-gradient-to-br from-slate-100 to-slate-200 rounded-md flex-shrink-0 border border-slate-300 shadow-sm">
-                  <BarChart3 className="w-3 h-3 text-slate-700" />
-                  <span className="font-semibold text-slate-900 text-xs">{riskScore}</span>
-                  <span className="text-slate-500 text-[10px]">/100</span>
-                </span>
-                {clauseCount > 0 && (
-                  <span className="px-2 py-0.5 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-md whitespace-nowrap flex-shrink-0 border border-blue-300 text-blue-700 font-medium text-[10px] shadow-sm">
-                    {clauseCount}개 조항
-                  </span>
-                )}
-                {totalIssues > 0 && (
-                  <span className="px-2 py-0.5 bg-gradient-to-br from-amber-50 to-orange-50 rounded-md whitespace-nowrap flex-shrink-0 border border-amber-300 text-amber-700 font-medium text-[10px] shadow-sm">
-                    {totalIssues}개 이슈
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-          <div className={classNames(
-            "px-2.5 py-1.5 rounded-lg border-2 text-xs font-semibold flex items-center gap-1.5 flex-shrink-0 shadow-md transition-all duration-200 hover:scale-105",
-            riskInfo.bgColor,
-            riskInfo.borderColor,
-            riskInfo.textColor
-          )}>
-            <RiskIcon className="w-3.5 h-3.5" />
-            <span className="whitespace-nowrap">{riskInfo.label}</span>
           </div>
         </div>
 
-        {/* 중간: 카테고리별 요약 뱃지 */}
+        {/* 중간: 총 조항 분석 결과 + High/Med/Safe 통계 */}
+        <div className="mb-3">
+          <p className="text-xs font-semibold text-slate-700 mb-2">총 {totalIssues}개 조항 분석 결과</p>
+          <div className="grid grid-cols-3 gap-2">
+            <div className="flex items-center gap-1.5 bg-white p-2 rounded-lg border-2 border-red-300 shadow-sm">
+              <AlertTriangle className="w-4 h-4 text-red-600 flex-shrink-0" />
+              <div className="min-w-0">
+                <p className="text-[10px] text-slate-600 font-medium truncate">법적 위험 HIGH</p>
+                <p className="text-sm font-bold text-red-700">{highRiskCount}개</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5 bg-white p-2 rounded-lg border-2 border-amber-300 shadow-sm">
+              <TrendingUp className="w-4 h-4 text-amber-600 flex-shrink-0" />
+              <div className="min-w-0">
+                <p className="text-[10px] text-slate-600 font-medium truncate">조정 권장 MED 이상</p>
+                <p className="text-sm font-bold text-amber-700">{mediumRiskCount + highRiskCount}개</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5 bg-white p-2 rounded-lg border-2 border-green-300 shadow-sm">
+              <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0" />
+              <div className="min-w-0">
+                <p className="text-[10px] text-slate-600 font-medium truncate">상대적으로 안전</p>
+                <p className="text-sm font-bold text-green-700">{lowRiskCount}개</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 카테고리별 요약 뱃지 */}
         {displayedCategories.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mb-3">
             {displayedCategories.map(category => {
@@ -404,44 +416,9 @@ export function AnalysisPanel({
           </div>
         )}
 
-        {/* 하단: 타이틀 + 필터 버튼 */}
-        <div className="flex items-center justify-between gap-3 pt-2 border-t border-slate-200">
-          <div className="flex items-center gap-2 min-w-0 flex-1">
-            <div className="p-1.5 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg shadow-md flex-shrink-0">
-              <AlertTriangle className="w-3.5 h-3.5 text-white" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <h2 className="text-sm sm:text-base font-bold text-slate-900 truncate">
-                계약 건강 진단표
-              </h2>
-              <p className="text-[10px] text-slate-600 truncate mt-0.5">
-                위험 조항을 한눈에 보고, 우선 수정해야 할 순서를 정리해 드립니다.
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowFilters(!showFilters)}
-            aria-expanded={showFilters}
-            aria-controls="filter-panel"
-            className={classNames(
-              "flex-shrink-0 transition-all duration-200 border-2 px-2.5 py-1.5 rounded-lg bg-white text-slate-800 flex items-center gap-1.5 shadow-sm hover:shadow-md hover:scale-105",
-              showFilters ? "border-blue-500 bg-gradient-to-br from-blue-50 to-indigo-50" : "border-slate-300 hover:border-blue-400"
-            )}
-          >
-            <Filter className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline text-xs font-semibold">필터</span>
-            {(selectedCategories.size > 0 || selectedSeverities.size > 0 || sortBy === 'order') && (
-              <span className="inline-flex items-center justify-center min-w-[18px] h-4.5 rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 text-[10px] font-semibold text-white px-1 shadow-md">
-                {selectedCategories.size + selectedSeverities.size + (sortBy === 'order' ? 1 : 0)}
-              </span>
-            )}
-          </button>
-        </div>
-
-        {/* 탭 네비게이션 */}
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="w-full grid grid-cols-3 bg-slate-100/90 p-1 rounded-lg border-2 border-slate-200 shadow-inner" role="tablist" aria-label="분석 결과 탭">
+        {/* 하단: 탭 네비게이션 + 필터 버튼 */}
+        <div className="flex items-center justify-between gap-2">
+          <TabsList className="flex-1 grid grid-cols-3 bg-slate-100/90 p-1 rounded-lg border-2 border-slate-200 shadow-inner" role="tablist" aria-label="분석 결과 탭">
             <TabsTrigger 
               value="summary" 
               className="flex items-center justify-center font-semibold text-xs transition-all duration-200 data-[state=active]:bg-white data-[state=active]:text-blue-700 data-[state=active]:shadow-md data-[state=active]:scale-105 rounded-md py-1.5"
@@ -467,130 +444,148 @@ export function AnalysisPanel({
               <span className="sm:hidden">법령·표준</span>
             </TabsTrigger>
           </TabsList>
-        </Tabs>
-
-        {/* 필터 적용 중 미니 뱃지 */}
-        {!showFilters && (selectedCategories.size > 0 || selectedSeverities.size > 0) && (
-          <div className="mt-3 px-3 py-2 rounded-lg bg-gradient-to-r from-blue-50 to-indigo-50 border-2 border-blue-200 text-xs text-slate-700 flex items-center gap-2 shadow-sm">
-            <span className="font-semibold text-blue-800">필터 적용 중</span>
-            {selectedCategories.size > 0 && (
-              <span className="px-2 py-0.5 bg-white rounded border border-blue-200 shadow-sm">카테고리 {selectedCategories.size}개</span>
+          <button
+            type="button"
+            onClick={() => setShowFilters(!showFilters)}
+            aria-expanded={showFilters}
+            aria-controls="filter-panel"
+            className={classNames(
+              "flex-shrink-0 transition-all duration-200 border-2 px-2.5 py-1.5 rounded-lg bg-white text-slate-800 flex items-center gap-1.5 shadow-sm hover:shadow-md hover:scale-105",
+              showFilters ? "border-blue-500 bg-gradient-to-br from-blue-50 to-indigo-50" : "border-slate-300 hover:border-blue-400"
             )}
-            {selectedSeverities.size > 0 && (
-              <span className="px-2 py-0.5 bg-white rounded border border-blue-200 shadow-sm">위험도 {Array.from(selectedSeverities).map(s => s === 'high' ? 'High' : s === 'medium' ? 'Medium' : 'Low').join(', ')}</span>
+          >
+            <Filter className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline text-xs font-semibold">필터</span>
+            {(selectedCategories.size > 0 || selectedSeverities.size > 0 || sortBy === 'order') && (
+              <span className="inline-flex items-center justify-center min-w-[18px] h-4.5 rounded-full bg-gradient-to-br from-blue-600 to-indigo-600 text-[10px] font-semibold text-white px-1 shadow-md">
+                {selectedCategories.size + selectedSeverities.size + (sortBy === 'order' ? 1 : 0)}
+              </span>
             )}
-            <button
-              onClick={() => {
-                setSelectedCategories(new Set())
-                setSelectedSeverities(new Set())
-                setSortBy('severity')
-              }}
-              className="ml-auto px-2 py-1 text-xs font-semibold text-blue-700 hover:text-blue-800 hover:bg-white rounded transition-colors cursor-pointer"
-            >
-              초기화
-            </button>
-          </div>
-        )}
+          </button>
+        </div>
 
-        {/* 필터 바 */}
-        {showFilters && (
-          <div id="filter-panel" className="border-2 border-blue-200 rounded-lg p-3 bg-gradient-to-br from-blue-50/50 to-indigo-50/50 mt-2 shadow-md">
-            {/* 카테고리 필터 */}
-            <div className="mb-3">
-              <p className="text-[10px] font-semibold text-slate-700 mb-1.5 flex items-center gap-1.5">
-                <Filter className="w-3 h-3" />
-                카테고리
-              </p>
-              <div className="flex flex-wrap gap-1.5">
-                {categories.map(category => (
-                  <button
-                    key={category}
-                    onClick={() => toggleCategory(category)}
-                    className={classNames(
-                      "px-2 py-1 text-[10px] rounded-md border-2 transition-all duration-200 font-semibold shadow-sm hover:scale-105",
-                      selectedCategories.has(category)
-                        ? 'bg-gradient-to-br from-blue-500 to-indigo-600 border-blue-600 text-white shadow-md'
-                        : 'bg-white border-slate-300 text-slate-700 hover:bg-blue-50 hover:border-blue-300'
-                    )}
-                  >
-                    {categoryLabels[category]}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* 위험도 필터 */}
-            <div className="mb-3">
-              <p className="text-[10px] font-semibold text-slate-700 mb-1.5 flex items-center gap-1.5">
-                <AlertTriangle className="w-3 h-3" />
-                위험도
-              </p>
-              <div className="flex gap-1.5">
-                {(['high', 'medium', 'low'] as Severity[]).map(severity => {
-                  const severityConfig = severity === 'high' 
-                    ? { bg: 'from-red-500 to-rose-600', border: 'border-red-600', text: 'text-white' }
-                    : severity === 'medium'
-                    ? { bg: 'from-amber-500 to-orange-600', border: 'border-amber-600', text: 'text-white' }
-                    : { bg: 'from-green-500 to-emerald-600', border: 'border-green-600', text: 'text-white' }
-                  
-                  return (
-                    <button
-                      key={severity}
-                      onClick={() => toggleSeverity(severity)}
-                      className={classNames(
-                        "px-2 py-1 text-[10px] rounded-md border-2 transition-all duration-200 font-semibold shadow-sm hover:scale-105",
-                        selectedSeverities.has(severity)
-                          ? `bg-gradient-to-br ${severityConfig.bg} ${severityConfig.border} ${severityConfig.text} shadow-md`
-                          : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'
-                      )}
-                    >
-                      {severity === 'high' ? 'High만' :
-                       severity === 'medium' ? 'Medium만' :
-                       'Low만'}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-
-            {/* 정렬 옵션 */}
-            <div>
-              <p className="text-[10px] font-semibold text-slate-700 mb-1.5 flex items-center gap-1.5">
-                <BarChart3 className="w-3 h-3" />
-                정렬
-              </p>
-              <div className="flex gap-1.5">
-                <button
-                  onClick={() => setSortBy('severity')}
-                  className={classNames(
-                    "px-2 py-1 text-[10px] rounded-md border-2 transition-all duration-200 font-semibold shadow-sm hover:scale-105",
-                    sortBy === 'severity'
-                      ? 'bg-gradient-to-br from-blue-500 to-indigo-600 border-blue-600 text-white shadow-md'
-                      : 'bg-white border-slate-300 text-slate-700 hover:bg-blue-50 hover:border-blue-300'
-                  )}
-                >
-                  위험도 높은 순
-                </button>
-                <button
-                  onClick={() => setSortBy('order')}
-                  className={classNames(
-                    "px-2 py-1 text-[10px] rounded-md border-2 transition-all duration-200 font-semibold shadow-sm hover:scale-105",
-                    sortBy === 'order'
-                      ? 'bg-gradient-to-br from-blue-500 to-indigo-600 border-blue-600 text-white shadow-md'
-                      : 'bg-white border-slate-300 text-slate-700 hover:bg-blue-50 hover:border-blue-300'
-                  )}
-                >
-                  계약서 순서대로
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
-      {/* 탭 컨텐츠 */}
-      <div className="flex-1 overflow-y-auto scroll-smooth">
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
+      {/* 필터 적용 중 미니 뱃지 */}
+      {!showFilters && (selectedCategories.size > 0 || selectedSeverities.size > 0) && (
+        <div className="px-3 py-2 bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-200 text-xs text-slate-700 flex items-center gap-2 shadow-sm">
+          <span className="font-semibold text-blue-800">필터 적용 중</span>
+          {selectedCategories.size > 0 && (
+            <span className="px-2 py-0.5 bg-white rounded border border-blue-200 shadow-sm">카테고리 {selectedCategories.size}개</span>
+          )}
+          {selectedSeverities.size > 0 && (
+            <span className="px-2 py-0.5 bg-white rounded border border-blue-200 shadow-sm">위험도 {Array.from(selectedSeverities).map(s => s === 'high' ? 'High' : s === 'medium' ? 'Medium' : 'Low').join(', ')}</span>
+          )}
+          <button
+            onClick={() => {
+              setSelectedCategories(new Set())
+              setSelectedSeverities(new Set())
+              setSortBy('severity')
+            }}
+            className="ml-auto px-2 py-1 text-xs font-semibold text-blue-700 hover:text-blue-800 hover:bg-white rounded transition-colors cursor-pointer"
+          >
+            초기화
+          </button>
+        </div>
+      )}
+
+      {/* 필터 바 */}
+      {showFilters && (
+        <div id="filter-panel" className="border-b border-blue-200 p-3 bg-gradient-to-br from-blue-50/50 to-indigo-50/50 shadow-sm">
+          {/* 카테고리 필터 */}
+          <div className="mb-3">
+            <p className="text-[10px] font-semibold text-slate-700 mb-1.5 flex items-center gap-1.5">
+              <Filter className="w-3 h-3" />
+              카테고리
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {categories.map(category => (
+                <button
+                  key={category}
+                  onClick={() => toggleCategory(category)}
+                  className={classNames(
+                    "px-2 py-1 text-[10px] rounded-md border-2 transition-all duration-200 font-semibold shadow-sm hover:scale-105",
+                    selectedCategories.has(category)
+                      ? 'bg-gradient-to-br from-blue-500 to-indigo-600 border-blue-600 text-white shadow-md'
+                      : 'bg-white border-slate-300 text-slate-700 hover:bg-blue-50 hover:border-blue-300'
+                  )}
+                >
+                  {categoryLabels[category]}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 위험도 필터 */}
+          <div className="mb-3">
+            <p className="text-[10px] font-semibold text-slate-700 mb-1.5 flex items-center gap-1.5">
+              <AlertTriangle className="w-3 h-3" />
+              위험도
+            </p>
+            <div className="flex gap-1.5">
+              {(['high', 'medium', 'low'] as Severity[]).map(severity => {
+                const severityConfig = severity === 'high' 
+                  ? { bg: 'from-red-500 to-rose-600', border: 'border-red-600', text: 'text-white' }
+                  : severity === 'medium'
+                  ? { bg: 'from-amber-500 to-orange-600', border: 'border-amber-600', text: 'text-white' }
+                  : { bg: 'from-green-500 to-emerald-600', border: 'border-green-600', text: 'text-white' }
+                
+                return (
+                  <button
+                    key={severity}
+                    onClick={() => toggleSeverity(severity)}
+                    className={classNames(
+                      "px-2 py-1 text-[10px] rounded-md border-2 transition-all duration-200 font-semibold shadow-sm hover:scale-105",
+                      selectedSeverities.has(severity)
+                        ? `bg-gradient-to-br ${severityConfig.bg} ${severityConfig.border} ${severityConfig.text} shadow-md`
+                        : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'
+                    )}
+                  >
+                    {severity === 'high' ? 'High만' :
+                     severity === 'medium' ? 'Medium만' :
+                     'Low만'}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* 정렬 옵션 */}
+          <div>
+            <p className="text-[10px] font-semibold text-slate-700 mb-1.5 flex items-center gap-1.5">
+              <BarChart3 className="w-3 h-3" />
+              정렬
+            </p>
+            <div className="flex gap-1.5">
+              <button
+                onClick={() => setSortBy('severity')}
+                className={classNames(
+                  "px-2 py-1 text-[10px] rounded-md border-2 transition-all duration-200 font-semibold shadow-sm hover:scale-105",
+                  sortBy === 'severity'
+                    ? 'bg-gradient-to-br from-blue-500 to-indigo-600 border-blue-600 text-white shadow-md'
+                    : 'bg-white border-slate-300 text-slate-700 hover:bg-blue-50 hover:border-blue-300'
+                )}
+              >
+                위험도 높은 순
+              </button>
+              <button
+                onClick={() => setSortBy('order')}
+                className={classNames(
+                  "px-2 py-1 text-[10px] rounded-md border-2 transition-all duration-200 font-semibold shadow-sm hover:scale-105",
+                  sortBy === 'order'
+                    ? 'bg-gradient-to-br from-blue-500 to-indigo-600 border-blue-600 text-white shadow-md'
+                    : 'bg-white border-slate-300 text-slate-700 hover:bg-blue-50 hover:border-blue-300'
+                )}
+              >
+                계약서 순서대로
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+        {/* 탭 컨텐츠 */}
+        <div className="flex-1 overflow-y-auto scroll-smooth">
           {/* 요약 보기 탭 */}
           <TabsContent value="summary" className="px-3 sm:px-4 py-3 sm:py-4 mt-0 overflow-x-hidden">
             <div className="space-y-3 max-w-4xl mx-auto w-full px-2">
@@ -803,36 +798,6 @@ export function AnalysisPanel({
                 </div>
               )}
               
-              {/* 전체 요약 */}
-              <div className="w-full max-w-full box-border bg-gradient-to-br from-blue-50 via-indigo-50 to-blue-100 border-2 border-blue-300 rounded-2xl p-5 shadow-lg">
-                <p className="text-base font-extrabold text-blue-900 mb-4 flex items-center gap-2">
-                  <BarChart3 className="w-5 h-5" />
-                  총 {totalIssues}개 조항 분석 결과
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div className="flex items-center gap-2 bg-white p-3 rounded-xl border-2 border-red-300 shadow-md">
-                    <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0" />
-                    <div>
-                      <p className="text-xs text-slate-600 font-medium">법적 위험 HIGH</p>
-                      <p className="text-lg font-extrabold text-red-700">{highRiskCount}개</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 bg-white p-3 rounded-xl border-2 border-amber-300 shadow-md">
-                    <TrendingUp className="w-5 h-5 text-amber-600 flex-shrink-0" />
-                    <div>
-                      <p className="text-xs text-slate-600 font-medium">조정 권장 MED 이상</p>
-                      <p className="text-lg font-extrabold text-amber-700">{mediumRiskCount + highRiskCount}개</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 bg-white p-3 rounded-xl border-2 border-green-300 shadow-md">
-                    <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0" />
-                    <div>
-                      <p className="text-xs text-slate-600 font-medium">상대적으로 안전</p>
-                      <p className="text-lg font-extrabold text-green-700">{lowRiskCount}개</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
 
               {/* 카테고리별 카드 */}
               {categories.map(category => {
@@ -1196,17 +1161,17 @@ export function AnalysisPanel({
               </div>
             </div>
           </TabsContent>
-        </Tabs>
-      </div>
+        </div>
 
-      {/* 수정안 모달 */}
-      {selectedIssue && (
-        <AmendmentModal
-          issue={selectedIssue}
-          isOpen={amendmentIssueId !== null}
-          onClose={() => setAmendmentIssueId(null)}
-        />
-      )}
-    </div>
+        {/* 수정안 모달 */}
+        {selectedIssue && (
+          <AmendmentModal
+            issue={selectedIssue}
+            isOpen={amendmentIssueId !== null}
+            onClose={() => setAmendmentIssueId(null)}
+          />
+        )}
+      </div>
+    </Tabs>
   )
 }
