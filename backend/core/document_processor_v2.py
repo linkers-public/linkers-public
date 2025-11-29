@@ -507,20 +507,45 @@ class DocumentProcessor:
             ):
                 text = extractor(pdf_path, error_messages)
                 if text and text.strip():
-                    # 너무 짧거나 숫자가 전혀 없는 경우는 '품질 낮음'으로 보고 패스 가능
-                    if len(text.strip()) < 50:
-                        self._log("[PDF 처리] 텍스트 추출 결과가 너무 짧아서 다음 방법 시도")
+                    # 이미지 기반 PDF 감지: 텍스트가 너무 짧거나 의미있는 내용이 없는 경우
+                    text_stripped = text.strip()
+                    
+                    # 감지 조건:
+                    # 1. 텍스트가 50자 미만
+                    # 2. 숫자가 전혀 없음
+                    # 3. 한글이 전혀 없고 영어도 거의 없음 (이미지 기반일 가능성)
+                    has_digits = self._has_digits(text_stripped, min_count=1)
+                    has_korean = any('가' <= ch <= '힣' for ch in text_stripped)
+                    has_english = sum(1 for ch in text_stripped if ch.isalpha() and ord(ch) < 128) > 10
+                    
+                    is_likely_image_based = (
+                        len(text_stripped) < 50 or 
+                        (not has_digits and not has_korean and not has_english)
+                    )
+                    
+                    if is_likely_image_based:
+                        self._log("[PDF 처리] 이미지 기반 PDF로 감지됨 (텍스트 추출 결과가 너무 짧거나 의미없음) → OCR로 전환")
                         text = ""
                         continue
                     break
             
             # 3) prefer_ocr=True 이거나, 위 방법들로 실패한 경우 OCR 시도
             if prefer_ocr or not text:
-                self._log("[PDF 처리] prefer_ocr 또는 텍스트 추출 실패 → OCR 시도")
+                if not text:
+                    self._log("[PDF 처리] 텍스트 추출 실패 → OCR로 자동 전환")
+                else:
+                    self._log("[PDF 처리] prefer_ocr=True → OCR 품질 우선 사용")
+                
                 ocr_text = self._extract_with_ocr(pdf_path, error_messages)
                 # OCR이 훨씬 길거나 숫자가 풍부하면 그쪽을 채택
-                if ocr_text and len(ocr_text) > len(text):
-                    text = ocr_text
+                if ocr_text:
+                    if not text or len(ocr_text) > len(text) * 1.2:  # OCR이 20% 이상 길면
+                        self._log("[PDF 처리] OCR 결과가 더 우수하여 OCR 텍스트 채택")
+                        text = ocr_text
+                    elif self._has_digits(ocr_text, min_count=5) and not self._has_digits(text, min_count=5):
+                        # OCR에 숫자가 더 많으면 OCR 채택
+                        self._log("[PDF 처리] OCR 결과에 숫자가 더 많아 OCR 텍스트 채택")
+                        text = ocr_text
         
         # 정제
         if text:
@@ -845,11 +870,23 @@ class DocumentProcessor:
                 
                 if not page_text:
                     # 모든 모드 실패 시 기본 모드로 재시도
-                    page_text = pytesseract.image_to_string(
-                        img,
-                        lang="kor+eng",
-                        config="--psm 6"
-                    )
+                    try:
+                        page_text = pytesseract.image_to_string(
+                            img,
+                            lang="kor+eng",
+                            config="--psm 6"
+                        )
+                    except Exception as e:
+                        # 기본 모드도 실패한 경우
+                        error_str = str(e)
+                        if "tesseract" in error_str.lower() or "TesseractNotFoundError" in str(type(e)):
+                            msg = f"OCR: Tesseract OCR이 설치되지 않았거나 PATH에 없습니다. 설치: https://github.com/tesseract-ocr/tesseract"
+                            self._log(f"[PDF 처리] {msg}")
+                            error_messages.append(msg)
+                            return ""
+                        else:
+                            self._log(f"[PDF 처리] OCR 페이지 {i + 1} 기본 모드 실패: {error_str}")
+                            page_text = None  # None으로 설정하여 continue로 넘어가도록
             except Exception as e:
                 error_str = str(e)
                 if "tesseract" in error_str.lower() or "TesseractNotFoundError" in str(type(e)):
