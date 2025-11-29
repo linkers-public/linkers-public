@@ -162,3 +162,124 @@ export interface SituationAnalysisResponse {
   sources?: SourceItem[] // RAG 검색 출처
 }
 
+// ========== 상황 분석 결과 페이지용 타입 정의 ==========
+
+/**
+ * 법적 판단 기준 항목 (체크리스트)
+ */
+export interface LegalCriteria {
+  id: string
+  name: string
+  status: 'fulfilled' | 'unclear' | 'not_fulfilled'
+  description?: string
+}
+
+/**
+ * RAG 근거 자료 (Paper UI용 - 논문 각주 스타일)
+ */
+export interface RAGReference {
+  chunk_id: string
+  title: string
+  summary: string
+  source_agency?: string // 예: "고용노동부"
+  download_info?: {
+    external_id: string
+    source_type: 'law' | 'manual' | 'case'
+  }
+}
+
+/**
+ * 증거 아카이빙 항목 (파일 업로드 UI용)
+ */
+export interface EvidenceItem {
+  key: string
+  label: string
+  status: 'missing' | 'secured' | 'pending'
+  required: boolean
+  file_url?: string // 업로드된 파일 URL
+  file_name?: string // 파일명
+  uploaded_at?: string // 업로드 일시
+}
+
+/**
+ * 행동 가이드 항목
+ */
+export interface ActionGuide {
+  id: string
+  title: string
+  description: string
+  priority: 'high' | 'medium' | 'low'
+  completed?: boolean
+}
+
+/**
+ * 관할 기관 정보
+ */
+export interface AgencyInfo {
+  name: string
+  address: string
+  tel: string
+  coordinates?: {
+    lat: number
+    lng: number
+  }
+  map_image_url?: string // 정적 지도 이미지 URL
+}
+
+/**
+ * 실전 대응 대시보드 데이터
+ */
+export interface DashboardData {
+  action_guides?: ActionGuide[] // 행동 가이드 체크리스트
+  evidence_map: EvidenceItem[]
+  agency_info: AgencyInfo
+}
+
+/**
+ * 상황 분석 요약 정보
+ */
+export interface SituationSummary {
+  category: string // 예: "직장 내 괴롭힘"
+  summary_text: string // 요약 멘트
+  risk_level: 'high' | 'medium' | 'low'
+}
+
+/**
+ * situation_analyses.analysis JSONB 컬럼 구조
+ * DB에 저장되는 전체 분석 결과 데이터
+ */
+export interface AnalysisJSON {
+  // 기본 정보
+  summary: string
+  risk_score: number
+  situation_summary?: SituationSummary
+  
+  // 좌측: 상황 분석
+  legal_criteria?: LegalCriteria[] // 법적 판단 기준 체크리스트
+  
+  // 우측/하단: 근거 자료
+  rag_references?: RAGReference[] // RAG Sources (논문 각주 스타일)
+  
+  // 실전 대응 대시보드
+  dashboard_data?: DashboardData
+  
+  // 메타데이터
+  analysis_date?: string
+  report_id?: string
+}
+
+/**
+ * 상황 분석 결과 전체 데이터 (DB에서 조회한 전체 레코드)
+ */
+export interface SituationAnalysisResult {
+  id: string
+  user_id?: string
+  situation?: string
+  category?: string
+  risk_score?: number
+  risk_level?: string
+  analysis: AnalysisJSON
+  created_at: string
+  updated_at?: string
+}
+

@@ -1342,6 +1342,18 @@ async def analyze_situation(
         try:
             storage_service = get_storage_service()
             analysis_summary = result.get("summary", "")
+            
+            # 프론트엔드가 기대하는 AnalysisJSON 구조로 변환
+            analysis_json = {
+                "summary": analysis_summary,
+                "sources": sources,  # RAG 검색 출처
+                "criteria": result.get("criteria", []),  # 법적 판단 기준
+                "actionPlan": result.get("action_plan", {}),  # 행동 계획
+                "scripts": result.get("scripts", {}),  # 말하기 템플릿
+                "classifiedType": result.get("classified_type", "unknown"),  # 분류 유형
+                "riskScore": float(result.get("risk_score", 0)),  # 위험도 점수
+            }
+            
             situation_analysis_id = await storage_service.save_situation_analysis(
                 situation=payload.situation,
                 category=payload.category,
@@ -1352,11 +1364,7 @@ async def analyze_situation(
                 social_insurance=payload.socialInsurance,
                 risk_score=float(result["risk_score"]),
                 risk_level=risk_level,
-                analysis={
-                    "summary": analysis_summary,
-                    "legalBasis": legal_basis,
-                    "recommendations": recommendations,
-                },
+                analysis=analysis_json,  # 전체 분석 결과를 JSONB로 저장
                 checklist=checklist,
                 related_cases=related_cases,
                 user_id=x_user_id,
@@ -1378,21 +1386,31 @@ async def analyze_situation(
             _logger.warning(f"상황 분석 결과 DB 저장 실패 (응답은 정상 반환): {str(save_error)}")
         
         # v2 응답 생성 (DB 저장 후 ID 포함)
-        response = SituationResponseV2(
-            id=situation_analysis_id,  # DB 저장 후 ID 포함
-            riskScore=float(result["risk_score"]),
-            riskLevel=risk_level,
-            tags=tags,
-            analysis={
+        # Pydantic 모델에 없는 필드는 dict로 변환 후 추가
+        response_dict = {
+            "id": situation_analysis_id,  # DB 저장 후 ID 포함
+            "riskScore": float(result["risk_score"]),
+            "riskLevel": risk_level,
+            "tags": tags,
+            "analysis": {
                 "summary": result.get("summary", ""),
                 "legalBasis": legal_basis,
                 "recommendations": recommendations[:5],  # 최대 5개
             },
-            checklist=checklist,
-            scripts=scripts,
-            relatedCases=related_cases,
-            sources=sources,  # RAG 검색 출처
-        )
+            "checklist": checklist,
+            "scripts": scripts,
+            "relatedCases": related_cases,
+            "sources": sources,  # RAG 검색 출처
+            # 프론트엔드가 기대하는 추가 필드들
+            "criteria": result.get("criteria", []),  # 법적 판단 기준
+            "actionPlan": result.get("action_plan", {}),  # 행동 계획
+        }
+        response = SituationResponseV2(**{k: v for k, v in response_dict.items() if k in SituationResponseV2.model_fields})
+        # Pydantic 모델에 없는 필드는 직접 추가
+        response_dict_final = response.model_dump()
+        response_dict_final["criteria"] = result.get("criteria", [])
+        response_dict_final["actionPlan"] = result.get("action_plan", {})
+        return response_dict_final
         
         return response
     except Exception as e:

@@ -1278,3 +1278,75 @@ export const deleteSituationReport = async (reportId: string): Promise<void> => 
   }
 };
 
+// ============================================================================
+// 상황 분석 결과 조회 (Supabase - situation_analyses 테이블)
+// ============================================================================
+
+/**
+ * 상황 분석 결과 조회 (situation_analyses 테이블에서)
+ * @param analysisId situation_analyses.id
+ * @returns 상황 분석 결과 전체 데이터
+ */
+export const getAnalysisResult = async (
+  analysisId: string
+): Promise<import('@/types/legal').SituationAnalysisResult | null> => {
+  try {
+    const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client');
+    const supabase = createSupabaseBrowserClient();
+
+    const { data, error } = await supabase
+      .from('situation_analyses')
+      .select('*')
+      .eq('id', analysisId)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        // 레코드를 찾을 수 없음
+        return null;
+      }
+      console.error('분석 결과 조회 실패:', error);
+      throw new Error(`분석 결과 조회 실패: ${error.message}`);
+    }
+
+    if (!data) {
+      return null;
+    }
+
+    // analysis JSONB 필드 파싱 (이미 객체일 수도 있음)
+    let analysis: import('@/types/legal').AnalysisJSON;
+    if (typeof data.analysis === 'string') {
+      try {
+        analysis = JSON.parse(data.analysis);
+      } catch (parseError) {
+        console.error('analysis JSON 파싱 실패:', parseError);
+        // 기본값으로 fallback
+        analysis = {
+          summary: data.answer || data.situation || '',
+          risk_score: data.risk_score || 0,
+        };
+      }
+    } else {
+      analysis = data.analysis || {
+        summary: data.answer || data.situation || '',
+        risk_score: data.risk_score || 0,
+      };
+    }
+
+    return {
+      id: data.id,
+      user_id: data.user_id,
+      situation: data.situation,
+      category: data.category || data.category_hint,
+      risk_score: data.risk_score,
+      risk_level: data.risk_level,
+      analysis,
+      created_at: data.created_at,
+      updated_at: data.updated_at,
+    };
+  } catch (error) {
+    console.error('분석 결과 조회 오류:', error);
+    throw error;
+  }
+};
+
