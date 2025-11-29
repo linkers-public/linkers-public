@@ -1,7 +1,16 @@
 # backend/config.py
 
+import os
+import logging
+from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
+
+logger = logging.getLogger(__name__)
+
+# backend 디렉토리 경로 찾기 (이 파일이 backend/config.py에 있으므로)
+BACKEND_DIR = Path(__file__).resolve().parent
+ENV_FILE_PATH = BACKEND_DIR / ".env"
 
 
 class Settings(BaseSettings):
@@ -56,7 +65,7 @@ class Settings(BaseSettings):
     port: int = 8000
     
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(ENV_FILE_PATH),  # 절대 경로 사용
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore"  # 정의되지 않은 필드 무시
@@ -88,4 +97,38 @@ else:
     settings.use_groq = True
     settings.use_ollama = False
     print(f"[설정] LLM Provider: Groq (기본값, 모델: {settings.groq_model})")
+
+# 디버깅: .env 파일 로드 확인 (print로 즉시 출력)
+if settings.groq_api_key:
+    masked_key = settings.groq_api_key[:8] + "..." + settings.groq_api_key[-8:] if len(settings.groq_api_key) > 16 else "***"
+    print(f"[config] GROQ_API_KEY 로드됨: {masked_key} (길이: {len(settings.groq_api_key)})")
+    print(f"[config] .env 파일 경로: {ENV_FILE_PATH}")
+    print(f"[config] .env 파일 존재 여부: {ENV_FILE_PATH.exists()}")
+    logger.info(f"[config] GROQ_API_KEY 로드됨: {masked_key} (길이: {len(settings.groq_api_key)})")
+else:
+    print("[config] ⚠️ GROQ_API_KEY가 설정되지 않았습니다!")
+    print(f"[config] .env 파일 경로: {ENV_FILE_PATH}")
+    print(f"[config] .env 파일 존재 여부: {ENV_FILE_PATH.exists()}")
+    logger.warning("[config] GROQ_API_KEY가 설정되지 않았습니다!")
+    logger.info(f"[config] .env 파일 경로: {ENV_FILE_PATH}")
+    logger.info(f"[config] .env 파일 존재 여부: {ENV_FILE_PATH.exists()}")
+    if ENV_FILE_PATH.exists():
+        print("[config] .env 파일 내용 (GROQ 관련):")
+        logger.info(f"[config] .env 파일 내용 (GROQ 관련):")
+        try:
+            with open(ENV_FILE_PATH, 'r', encoding='utf-8') as f:
+                for line in f:
+                    if 'GROQ' in line.upper():
+                        # 키 값은 마스킹
+                        if '=' in line:
+                            key, value = line.split('=', 1)
+                            masked_value = value.strip()[:8] + "..." + value.strip()[-8:] if len(value.strip()) > 16 else "***"
+                            print(f"[config]   {key}={masked_value}")
+                            logger.info(f"[config]   {key}={masked_value}")
+                        else:
+                            print(f"[config]   {line.strip()}")
+                            logger.info(f"[config]   {line.strip()}")
+        except Exception as e:
+            print(f"[config] .env 파일 읽기 실패: {e}")
+            logger.error(f"[config] .env 파일 읽기 실패: {e}")
 

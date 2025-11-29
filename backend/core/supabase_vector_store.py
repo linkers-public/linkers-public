@@ -736,6 +736,61 @@ class SupabaseVectorStore:
                 print(f"[경고] legal 벡터 검색 실패: {error_msg}")
             return []
     
+    def get_storage_file_url(
+        self,
+        external_id: str,
+        source_type: str,
+        expires_in: int = 3600  # 1시간
+    ) -> Optional[str]:
+        """
+        스토리지에서 파일 다운로드 Signed URL 생성
+        
+        Args:
+            external_id: 파일 ID (legal_chunks.external_id)
+            source_type: 소스 타입 ('law' | 'manual' | 'case' | 'standard_contract')
+            expires_in: URL 만료 시간 (초, 기본값: 3600 = 1시간)
+        
+        Returns:
+            Signed URL 또는 None (파일이 없거나 오류 발생 시)
+        """
+        self._ensure_initialized()
+        
+        if not external_id:
+            return None
+        
+        # source_type에 따른 버킷 경로 매핑
+        bucket_map = {
+            'law': 'laws',
+            'manual': 'manuals',
+            'case': 'cases',
+            'standard_contract': 'standard_contracts',
+        }
+        
+        bucket_folder = bucket_map.get(source_type, 'laws')
+        file_path = f"{bucket_folder}/{external_id}.pdf"
+        
+        try:
+            # Supabase Storage에서 Signed URL 생성
+            response = self.sb.storage.from_('legal-sources')\
+                .create_signed_url(file_path, expires_in)
+            
+            if response and 'signedURL' in response:
+                return response['signedURL']
+            elif response and isinstance(response, dict) and 'data' in response:
+                # 응답 형식이 다른 경우
+                data = response.get('data', {})
+                if isinstance(data, dict) and 'signedURL' in data:
+                    return data['signedURL']
+                elif isinstance(data, str):
+                    return data
+            
+            return None
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"스토리지 URL 생성 실패 (external_id={external_id}, source_type={source_type}): {str(e)}")
+            return None
+    
     def search_similar_contract_chunks(
         self,
         contract_id: str,

@@ -501,6 +501,114 @@ export type Database = {
           },
         ]
       }
+      estimate_embeddings: {
+        Row: {
+          estimate_id: number
+          estimate_version_id: number
+          embedding: number[]
+          content_text: string
+          content_type: string
+          metadata: Json
+          created_at?: string
+        }
+        Insert: {
+          estimate_id: number
+          estimate_version_id: number
+          embedding: number[]
+          content_text: string
+          content_type: string
+          metadata?: Json
+          created_at?: string
+        }
+        Update: {
+          estimate_id?: number
+          estimate_version_id?: number
+          embedding?: number[]
+          content_text?: string
+          content_type?: string
+          metadata?: Json
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "estimate_embeddings_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "estimate"
+            referencedColumns: ["estimate_id"]
+          },
+          {
+            foreignKeyName: "estimate_embeddings_estimate_version_id_fkey"
+            columns: ["estimate_version_id"]
+            isOneToOne: false
+            referencedRelation: "estimate_version"
+            referencedColumns: ["estimate_version_id"]
+          },
+        ]
+      }
+      situation_reports: {
+        Row: {
+          id: string
+          user_id: string | null
+          question: string
+          answer: string
+          summary: string | null
+          details: string | null
+          category_hint: string | null
+          employment_type: string | null
+          work_period: string | null
+          social_insurance: string | null
+          risk_score: number | null
+          classified_type: string | null
+          legal_basis: string[] | null
+          recommendations: string[] | null
+          tags: string[] | null
+          analysis_result: Json | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id?: string | null
+          question: string
+          answer: string
+          summary?: string | null
+          details?: string | null
+          category_hint?: string | null
+          employment_type?: string | null
+          work_period?: string | null
+          social_insurance?: string | null
+          risk_score?: number | null
+          classified_type?: string | null
+          legal_basis?: string[] | null
+          recommendations?: string[] | null
+          tags?: string[] | null
+          analysis_result?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string | null
+          question?: string
+          answer?: string
+          summary?: string | null
+          details?: string | null
+          category_hint?: string | null
+          employment_type?: string | null
+          work_period?: string | null
+          social_insurance?: string | null
+          risk_score?: number | null
+          classified_type?: string | null
+          legal_basis?: string[] | null
+          recommendations?: string[] | null
+          tags?: string[] | null
+          analysis_result?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       magazine: {
         Row: {
           body: string | null
@@ -887,7 +995,22 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      match_estimate_embeddings: {
+        Args: {
+          query_embedding: number[]
+          match_threshold?: number
+          match_count?: number
+          filter_estimate_ids?: number[] | null
+        }
+        Returns: Array<{
+          estimate_id: number
+          estimate_version_id: number
+          content_text: string
+          content_type: string
+          similarity: number
+          metadata: Json
+        }>
+      }
     }
     Enums: {
       business_process_management:

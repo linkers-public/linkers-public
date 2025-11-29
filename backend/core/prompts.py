@@ -3,7 +3,7 @@
 """
 
 import logging
-from typing import Optional
+from typing import Optional, List, Dict, Any
 
 logger = logging.getLogger(__name__)
 
@@ -439,11 +439,18 @@ def build_legal_chat_prompt(
 """
     
     # -----------------------------
-    # 5) 전체 분석 요약
+    # 5) 전체 분석 요약 (상황 분석 결과 컨텍스트)
     # -----------------------------
     analysis_context = ""
     if analysis_summary:
-        analysis_context = f"\n**전체 분석 요약:** {analysis_summary}"
+        # 상황 분석 결과가 포함된 경우 더 명확하게 표시
+        analysis_context = f"""
+**상황 분석 결과 (현재 화면에 표시된 분석 결과):**
+
+{analysis_summary}
+
+**중요:** 위 분석 결과를 바탕으로 사용자의 질문에 답변하세요. 사용자는 이미 이 분석 결과를 보고 있으며, 이 컨텍스트를 이해하고 있는 상태입니다.
+"""
     if risk_score is not None:
         analysis_context += f"\n**전체 위험도:** {risk_score}점"
     if total_issues is not None:
@@ -458,9 +465,21 @@ def build_legal_chat_prompt(
     # -----------------------------
     # 7) 최종 프롬프트
     # -----------------------------
+    # 상황 분석 결과가 있는 경우 추가 지시사항
+    situation_analysis_note = ""
+    if analysis_summary:
+        situation_analysis_note = """
+**⚠️ 중요: 상황 분석 결과 컨텍스트**
+- 사용자는 이미 상황 분석 결과를 받았으며, 그 결과를 화면에서 보고 있습니다.
+- 분석 결과에 포함된 법적 근거, 위험도, 권장 조치 등을 참고하여 답변하세요.
+- 사용자의 질문에 대해 구체적이고 실용적인 조언을 제공하세요.
+- 분석 결과에서 언급된 내용과 일관성 있게 답변하세요.
+
+"""
+    
     prompt = f"""{LEGAL_CHAT_SYSTEM_PROMPT}
 {category_rules}
-
+{situation_analysis_note}
 **사용자 질문:**
 {query}
 
@@ -865,6 +884,291 @@ SITUATION_ANALYSIS_SYSTEM_PROMPT = """당신은 한국 노동법 전문가입니
 """
 
 
+# ============================================================================
+# 상황 분석 단계별 프롬프트 (LangGraph 워크플로우용)
+# ============================================================================
+
+def build_situation_classify_prompt(
+    situation_text: str,
+    category_hint: Optional[str] = None,
+    employment_type: Optional[str] = None,
+    work_period: Optional[str] = None,
+    weekly_hours: Optional[int] = None,
+    is_probation: Optional[bool] = None,
+    social_insurance: Optional[str] = None,
+) -> str:
+    """
+    상황 분류용 프롬프트 (1단계: 분류)
+    
+    Returns:
+        분류 결과 JSON: {classified_type, risk_score, categories}
+    """
+    user_info = []
+    if employment_type:
+        user_info.append(f"고용 형태: {employment_type}")
+    if work_period:
+        user_info.append(f"근무 기간: {work_period}")
+    if weekly_hours:
+        user_info.append(f"주당 근로시간: {weekly_hours}시간")
+    if is_probation is not None:
+        user_info.append(f"수습 여부: {'수습 중' if is_probation else '수습 아님'}")
+    if social_insurance:
+        user_info.append(f"4대보험: {social_insurance}")
+    user_info_text = "\n".join(user_info) if user_info else "정보 없음"
+    
+    category_labels = {
+        "harassment": "직장 내 괴롭힘 / 모욕",
+        "unpaid_wage": "임금체불 / 수당 미지급",
+        "unfair_dismissal": "부당해고 / 계약해지",
+        "overtime": "근로시간 / 야근 / 휴게시간 문제",
+        "probation": "수습·인턴 관련 문제",
+        "unknown": "기타 / 잘 모르겠음",
+    }
+    category_label = category_labels.get(category_hint, category_hint) if category_hint else ""
+    
+    prompt = f"""당신은 한국 노동법 전문가입니다. 사용자의 상황을 분석하여 카테고리와 위험도를 분류하세요.
+
+**사용자 정보:**
+{user_info_text}
+
+**상황 카테고리 힌트:** {category_label}
+
+**상황 설명:**
+{situation_text}
+
+다음 JSON 형식으로 분류 결과를 반환하세요:
+{{
+    "classified_type": "harassment",
+    "risk_score": 0~100 사이의 숫자,
+    "categories": ["관련 법령 카테고리 키워드 목록", "예: 임금체불", "최저임금", "연장근로수당"]
+}}
+
+**분류 기준:**
+- classified_type: 상황의 주요 유형을 **반드시 하나만** 선택 (harassment, unpaid_wage, unfair_dismissal, overtime, probation, unknown 중 하나)
+- risk_score: 법적 위험도 (0-100, 높을수록 위험)
+- categories: 검색에 사용할 법령 카테고리 키워드 목록 (3-5개)
+
+JSON 형식만 반환하세요.
+"""
+    return prompt
+
+
+def build_situation_rule_filter_prompt(
+    classified_type: str,
+    categories: List[str],
+    situation_text: str,
+) -> str:
+    """
+    규정 필터링용 프롬프트 (2단계: 규정 필터링)
+    
+    Returns:
+        필터링된 카테고리 목록
+    """
+    # 현재는 간단한 매핑만 사용하므로 프롬프트는 선택사항
+    # 필요시 LLM으로 더 정교한 필터링 가능
+    prompt = f"""다음 분류 결과를 바탕으로 검색할 법령 카테고리를 필터링하세요.
+
+**분류 유형:** {classified_type}
+**제안된 카테고리:** {', '.join(categories)}
+
+**상황 설명:**
+{situation_text}
+
+다음 JSON 형식으로 필터링된 카테고리 목록을 반환하세요:
+{{
+    "filtered_categories": ["최종 검색에 사용할 카테고리 키워드 목록"]
+}}
+
+JSON 형식만 반환하세요.
+"""
+    return prompt
+
+
+def build_situation_action_guide_prompt(
+    situation_text: str,
+    classification: Dict[str, Any],
+    grounding_chunks: List[Any],
+    legal_basis: List[Dict[str, Any]] = None,
+    employment_type: Optional[str] = None,
+    work_period: Optional[str] = None,
+    weekly_hours: Optional[int] = None,
+    is_probation: Optional[bool] = None,
+    social_insurance: Optional[str] = None,
+) -> str:
+    """
+    행동 가이드 생성용 프롬프트 (5단계: 액션 가이드)
+    
+    Returns:
+        액션 가이드 JSON: {summary, criteria, action_plan, scripts}
+        - summary: 4개 섹션 마크다운 리포트
+        - criteria: 법적 판단 기준 (legal_basis 기반)
+        - action_plan: steps 구조
+        - scripts: to_company, to_advisor
+    """
+    # 관련 법령 컨텍스트
+    legal_context = ""
+    if grounding_chunks:
+        legal_context = "\n**참고 법령/가이드라인:**\n"
+        for chunk in grounding_chunks[:8]:
+            source_type = getattr(chunk, 'source_type', 'law')
+            title = getattr(chunk, 'title', '')
+            snippet = getattr(chunk, 'snippet', getattr(chunk, 'content', ''))[:300]
+            legal_context += f"- [{source_type}] {title}: {snippet}\n"
+    
+    # legal_basis 정보
+    legal_basis_text = ""
+    if legal_basis:
+        legal_basis_text = "\n**법적 근거 (criteria 생성용):**\n"
+        for basis in legal_basis[:5]:
+            title = basis.get('title', '')
+            snippet = basis.get('snippet', '')
+            source_type = basis.get('source_type', 'law')
+            legal_basis_text += f"- {title} ({source_type}): {snippet[:200]}\n"
+    
+    user_info = []
+    if employment_type:
+        user_info.append(f"고용 형태: {employment_type}")
+    if work_period:
+        user_info.append(f"근무 기간: {work_period}")
+    if weekly_hours:
+        user_info.append(f"주당 근로시간: {weekly_hours}시간")
+    if is_probation is not None:
+        user_info.append(f"수습 여부: {'수습 중' if is_probation else '수습 아님'}")
+    if social_insurance:
+        user_info.append(f"4대보험: {social_insurance}")
+    user_info_text = "\n".join(user_info) if user_info else "정보 없음"
+    
+    prompt = f"""당신은 한국 노동법 전문가입니다. 사용자의 상황을 바탕으로 구체적인 행동 가이드를 생성하세요.
+
+**사용자 정보:**
+{user_info_text}
+
+**분류 결과:**
+- 유형: {classification.get('classified_type', 'unknown')}
+- 위험도: {classification.get('risk_score', 50)}점
+
+**상황 설명:**
+{situation_text}
+{legal_context}
+{legal_basis_text}
+
+다음 JSON 형식으로 행동 가이드를 반환하세요:
+{{
+    "summary": "마크다운 형식 리포트 (아래 4개 섹션 필수 포함)",
+    "criteria": [
+        {{
+            "name": "판단 기준명",
+            "status": "likely|unclear|unlikely",
+            "reason": "판단 이유 및 설명"
+        }}
+    ],
+    "action_plan": {{
+        "steps": [
+            {{
+                "title": "증거 수집",
+                "items": ["구체적인 증거 수집 방법 1", "구체적인 증거 수집 방법 2"]
+            }},
+            {{
+                "title": "1차 대응",
+                "items": ["초기 대응 방법 1", "초기 대응 방법 2"]
+            }},
+            {{
+                "title": "상담/신고 루트",
+                "items": ["고용노동부 1350 상담센터", "청년노동센터", "노무사 상담"]
+            }}
+        ]
+    }},
+    "scripts": {{
+        "to_company": "회사에 보낼 정중한 문제 제기 문구 템플릿 (실제 사용 가능한 문장)",
+        "to_advisor": "노무사/기관에 상담할 때 쓸 설명 템플릿 (실제 사용 가능한 문장)"
+    }}
+}}
+
+**⚠️ 매우 중요한 지시사항:**
+
+**RAG 검색 결과 활용 필수:**
+- 위의 "참고 법령/가이드라인" 섹션에 제공된 법령/가이드라인은 실제로 검색된 문서입니다.
+- **반드시 이 검색 결과를 기반으로** 리포트를 작성해야 하며, 일반적인 법령 지식만으로 작성하지 마세요.
+- "법적 관점에서 본 현재상황" 섹션에서는 제공된 법령의 제목과 핵심 내용을 명시적으로 인용하세요.
+
+**⚠️ 매우 중요: 사용자 친화적인 설명 변환 필수:**
+- RAG로 검색된 원문(snippet)을 그대로 나열하지 마세요.
+- 검색된 내용을 바탕으로 **"사용자에게 건네는 말"**로 변환하여 설명하세요.
+- **법 조항을 그대로 읊지 말고, '~해야 합니다' 체의 핵심 요약 한 문장으로 바꿔주세요.**
+- 예시:
+  - ❌ 나쁜 예: "회사는 근로계약 체결 시 제1항의 일부 내용을 대신하기 위한 것임을 명확히 밝히면서... 제7조(수습기간)..."
+  - ✅ 좋은 예: "표준 취업규칙에 따르면, 수습기간은 근로계약서에 명확히 기재되어야 효력이 있습니다. 구두로만 합의된 수습기간은 인정받기 어렵습니다."
+- 법조문 번호(제1항, 제7조 등)나 문서 형식적인 설명을 나열하지 말고, **"해야 할 행동"이나 "권리" 중심으로 쉽게 풀어서** 작성하세요.
+- 문장이 딱딱하거나 중간에 조사나 띄어쓰기가 어색한 경우, 자연스러운 한국어로 재작성하세요.
+- 사용자가 바로 이해하고 행동에 옮길 수 있도록 구체적이고 실용적인 설명을 제공하세요.
+
+1. **summary 필드 (필수):**
+   **반드시 다음 4개 섹션을 정확한 형식으로 순서대로 포함해야 합니다. 섹션 헤더는 반드시 아래와 동일하게 작성하세요:**
+   
+   ```markdown
+   ## 📊 상황 분석의 결과
+   [제공된 상황을 바탕으로 핵심 문제점과 위험도를 요약하여 2-3문장으로 설명]
+   
+   ## ⚖️ 법적 관점에서 본 현재상황
+   [**반드시 위의 "참고 법령/가이드라인" 섹션에서 제공된 법령을 구체적으로 인용하여** 현재 상황이 법적으로 어떻게 평가되는지 설명. 
+   - 제공된 법령의 제목, 조항 번호, 핵심 내용을 명시적으로 언급하세요
+   - 일반적인 법령 지식이 아닌, 실제로 검색된 법령/가이드라인을 기반으로 작성하세요
+   - 구체적인 법적 근거와 판단 기준을 포함하여 3-5문장으로 작성]
+   
+   ## 🎯 지금 당장 할 수 있는 행동
+   [즉시 실행 가능한 구체적인 행동 방안을 3-5개 항목으로 나열. 각 항목은 "- " 형식으로 작성]
+   
+   ## 💬 이렇게 말해보세요
+   [회사나 상담 기관에 실제로 사용할 수 있는 구체적인 문구 템플릿을 제공. 실제 대화에서 바로 사용할 수 있는 문장으로 작성]
+   ```
+   
+   **⚠️ 매우 중요:**
+   - 각 섹션 헤더는 반드시 `## 📊 상황 분석의 결과` 형식으로 작성해야 합니다.
+   - 이모지(📊, ⚖️, 🎯, 💬)와 마크다운 헤더(`##`)를 반드시 포함하세요.
+   - 섹션 헤더를 생략하거나 다른 형식으로 작성하지 마세요.
+   - **반드시 한글로만 작성하세요. 한자(漢字), 일본어(ひらがな, カタカナ), 중국어를 절대 사용하지 마세요.**
+   - 예: "最近" ❌ → "최근" ✅, "典型" ❌ → "전형" ✅, "ドラ" ❌ → "하고 싶습니다" ✅
+   - 모든 텍스트는 순수 한글과 영문, 숫자, 기본 구두점만 사용하세요.
+
+2. **criteria 필드 (필수):**
+   - 위의 "법적 근거" 정보를 바탕으로 생성하세요.
+   - 각 기준은 legal_basis의 항목을 참고하여 {{"name": "기준명", "status": "likely|unclear|unlikely", "reason": "판단 이유"}} 형태로 구성하세요.
+   - **reason 필드에는 반드시 위의 "참고 법령/가이드라인" 섹션에서 제공된 법령/가이드라인의 제목을 명시적으로 인용하세요.**
+   - 예: "『표준 근로계약서(7종)(19.6월).pdf』에 따르면..." 또는 "「직장 내 괴롭힘 판단 및 예방 대응 매뉴얼★.pdf」에 명시된 바와 같이..."
+   - 문서 제목은 『...』 또는 「...」 형식으로 감싸서 작성하세요.
+   - status는 "likely" (충족), "unclear" (부분 충족), "unlikely" (불충족) 중 하나입니다.
+   - 3~5개 정도로 구성하세요.
+
+3. **action_plan 필드 (필수):**
+   - **반드시 위의 "참고 법령/가이드라인" 섹션에서 제공된 법령/가이드라인을 참고하여** 구체적인 행동 방안을 제시하세요.
+   - 예: "근로기준법 제XX조에 따라..." 또는 "표준 근로계약서 가이드에 따르면..." 등 실제 검색된 문서를 인용하세요.
+   - 반드시 steps 배열 구조를 사용하세요.
+   - 각 step은 {{"title": "제목", "items": ["항목1", "항목2"]}} 형태입니다.
+   - items는 반드시 문자열 배열이어야 하며, 각 항목이 체크리스트로 표시됩니다.
+   - steps는 3단계 정도로 구성하세요 (예: 증거 수집, 1차 대응, 법적 조치 준비).
+   - **⚠️ 중요: 신고/상담 기관 관련 행동은 action_plan에 포함하지 마세요.**
+     - ❌ 포함하지 말 것: "노무사에 상담을 요청합니다", "고용노동부 1350에 신고합니다", "노동관련기관에 상담을 요청합니다" 등
+     - ✅ 포함할 것: "증거 자료를 수집합니다", "근로계약서를 확인합니다", "회사에 이의를 제기합니다", "법적 근거를 정리합니다" 등
+     - 신고/상담 기관 안내는 별도의 "추천 신고/상담 조치" 섹션에서 다루므로, action_plan에는 증거 수집, 문서 확인, 회사 대응 등 즉시 실행 가능한 구체적인 행동만 포함하세요.
+
+4. **scripts 필드 (필수):**
+   - **반드시 위의 "참고 법령/가이드라인" 섹션에서 제공된 법령/가이드라인을 참고하여** 구체적인 문구를 작성하세요.
+   - to_company: 회사에 보낼 정중한 문제 제기 문구 (실제 메시지/대화에서 바로 사용 가능)
+     - 제공된 법령의 조항 번호나 가이드라인 내용을 언급하여 더욱 설득력 있게 작성하세요.
+   - to_advisor: 노무사/기관에 상담할 때 쓸 설명 템플릿 (실제 상담 시 바로 사용 가능)
+     - 제공된 법령/가이드라인을 참고하여 구체적인 법적 근거를 포함하여 작성하세요.
+   - 구체적이고 실용적인 문장으로 작성하세요.
+
+**기타 사항:**
+- 모든 응답은 한국어로 작성하세요.
+- summary는 마크다운 형식으로 작성하되, 각 섹션을 명확하게 구분하세요.
+- **JSON 형식만 반환하세요.**
+- **중요: summary 필드의 개행 문자는 반드시 `\\n`으로 이스케이프해야 합니다.**
+  예: `"summary": "## 제목\\n내용\\n\\n## 다음 제목"` (개행을 `\\n`으로 변환)
+"""
+    return prompt
+
+
 def build_situation_analysis_prompt(
     situation_text: str,
     category_hint: str = None,
@@ -901,6 +1205,8 @@ def build_situation_analysis_prompt(
             title = getattr(chunk, 'title', '')
             snippet = getattr(chunk, 'snippet', getattr(chunk, 'content', ''))[:300]
             legal_context += f"- [{source_type}] {title}: {snippet}\n"
+        
+        legal_context += "\n**⚠️ 중요: 위의 참고 법령/가이드라인 내용을 참고하되, 원문을 그대로 나열하지 말고 사용자에게 건네는 말로 변환하여 작성하세요.**\n"
     
     # 사용자 정보 요약
     user_info = []
@@ -940,7 +1246,7 @@ def build_situation_analysis_prompt(
 
 다음 JSON 형식으로 진단 결과를 반환하세요:
 {{
-    "classified_type": "harassment|unpaid_wage|unfair_dismissal|overtime|probation|unknown",
+    "classified_type": "harassment",
     "risk_score": 0~100 사이의 숫자,
     "summary": "구조화된 마크다운 텍스트 (아래 지시사항 참고)",
     "criteria": [
@@ -983,6 +1289,13 @@ summary 필드는 반드시 다음 4개 섹션을 순서대로 포함한 마크�
    - 관련 법령을 근거로 현재 상황이 법적으로 어떻게 평가되는지 설명
    - 구체적인 법적 근거와 판단 기준을 포함하여 3-5문장으로 작성
    - 위의 "참고 법령/가이드라인" 섹션의 내용을 참고하여 작성
+   - **⚠️ 매우 중요: RAG로 검색된 원문(snippet)을 그대로 나열하지 마세요.**
+   - **검색된 내용을 바탕으로 "사용자에게 건네는 말"로 변환하여 설명하세요.**
+   - **법 조항을 그대로 읊지 말고, '~해야 합니다' 체의 핵심 요약 한 문장으로 바꿔주세요.**
+   - 예시:
+     - ❌ 나쁜 예: "회사는 근로계약 체결 시 제1항의 일부 내용을 대신하기 위한 것임을 명확히 밝히면서... 제7조(수습기간)..."
+     - ✅ 좋은 예: "표준 취업규칙에 따르면, 수습기간은 근로계약서에 명확히 기재되어야 효력이 있습니다. 구두로만 합의된 수습기간은 인정받기 어렵습니다."
+   - 법조문 번호(제1항, 제7조 등)나 문서 형식적인 설명을 나열하지 말고, **"해야 할 행동"이나 "권리" 중심으로 쉽게 풀어서** 작성하세요.
 
 3. ## 🎯 지금 당장 할 수 있는 행동
    - 즉시 실행 가능한 구체적인 행동 방안을 3-5개 항목으로 나열

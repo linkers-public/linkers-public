@@ -627,7 +627,7 @@ async def analyze_contract(
             # 매칭되지 않는 clause_id 확인
             unmatched_clause_ids = set(issues_by_clause.keys()) - available_clause_ids
             if unmatched_clause_ids:
-                logger.warning(f"[하이라이트 생성] ⚠️ 매칭되지 않는 clause_id: {unmatched_clause_ids}")
+                logger.warning(f"[하이라이트 생성] [경고] 매칭되지 않는 clause_id: {unmatched_clause_ids}")
                 # 가장 가까운 clause_id로 매핑 시도
                 for unmatched_id in unmatched_clause_ids:
                     import re
@@ -782,7 +782,7 @@ async def analyze_contract(
             
             # 검증: clauses가 비어있으면 경고
             if not clauses:
-                logger.warning(f"[계약서 분석] ⚠️ 조항이 추출되지 않았습니다.")
+                logger.warning(f"[계약서 분석] [경고] 조항이 추출되지 않았습니다.")
         except Exception as e:
             logger.warning(f"[계약서 분석] clause 기반 처리 실패: {str(e)}", exc_info=True)
             # 실패해도 계속 진행
@@ -965,7 +965,7 @@ async def analyze_contract(
         
         # contractText가 없으면 경고
         if not response_dict.get('contractText') or contract_text_length == 0:
-            logger.warning(f"[계약서 분석] ⚠️ contractText가 응답에 없습니다! extracted_text 길이: {len(extracted_text) if extracted_text else 0}")
+            logger.warning(f"[계약서 분석] [경고] contractText가 응답에 없습니다! extracted_text 길이: {len(extracted_text) if extracted_text else 0}")
         
         # v2 형식 검증: 필수 필드 확인
         required_fields = ['docId', 'title', 'riskScore', 'riskLevel', 'sections', 'issues', 'summary', 'retrievedContexts', 'contractText', 'createdAt']
@@ -1235,7 +1235,7 @@ async def analyze_situation(
     try:
         service = get_legal_service()
         
-        # 기존 analyze_situation_detailed 사용
+        # LangGraph 워크플로우 사용 (RAG 검색 결과를 더 정확하게 활용)
         result = await service.analyze_situation_detailed(
             category_hint=payload.category or "unknown",
             situation_text=payload.situation,
@@ -1246,6 +1246,7 @@ async def analyze_situation(
             weekly_hours=None,
             is_probation=None,
             social_insurance=", ".join(payload.socialInsurance) if payload.socialInsurance else None,
+            use_workflow=True,  # 워크플로우 활성화: 분류 → 필터링 → RAG 검색 → 리포트 생성
         )
         
         # v2 스펙에 맞춰 변환
@@ -1322,6 +1323,20 @@ async def analyze_situation(
         # tags 추출 (classified_type 기반)
         tags = [result.get("classified_type", "unknown")]
         
+        # sources 변환 (RAG 검색 출처)
+        sources = []
+        grounding_chunks = result.get("grounding_chunks", [])
+        for chunk in grounding_chunks:
+            sources.append({
+                "sourceId": chunk.get("source_id", ""),
+                "sourceType": chunk.get("source_type", "law"),
+                "title": chunk.get("title", ""),
+                "snippet": chunk.get("snippet", ""),
+                "score": float(chunk.get("score", 0.0)),
+                "externalId": chunk.get("external_id"),  # 파일 ID 추가
+                "fileUrl": chunk.get("file_url"),  # 스토리지 Signed URL 추가
+            })
+        
         # DB에 저장 (비동기, 실패해도 응답은 반환)
         situation_analysis_id = None
         try:
@@ -1376,6 +1391,7 @@ async def analyze_situation(
             checklist=checklist,
             scripts=scripts,
             relatedCases=related_cases,
+            sources=sources,  # RAG 검색 출처
         )
         
         return response

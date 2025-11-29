@@ -27,11 +27,44 @@ def _get_local_embedding_model():
             
             print(f"[로딩] 로컬 임베딩 모델: {settings.local_embedding_model}")
             
+            # Windows 경로 문제 해결: Hugging Face 캐시 경로를 짧은 경로로 설정
+            import platform
+            cache_dir = None
+            if platform.system() == "Windows":
+                # Windows에서 경로 길이 제한 문제 해결
+                # 가능한 한 짧은 경로 사용 (C:\hf_cache)
+                # 환경변수로 지정된 경로가 있으면 우선 사용
+                cache_dir = os.getenv("HF_HOME") or os.getenv("TRANSFORMERS_CACHE")
+                
+                if not cache_dir:
+                    # 짧은 경로 우선 시도: C:\hf_cache
+                    short_cache = r"C:\hf_cache"
+                    try:
+                        os.makedirs(short_cache, exist_ok=True)
+                        # 경로 접근 가능한지 테스트
+                        test_file = os.path.join(short_cache, ".test")
+                        with open(test_file, 'w') as f:
+                            f.write("test")
+                        os.remove(test_file)
+                        cache_dir = short_cache
+                        print(f"[Windows] 짧은 캐시 경로 사용: {cache_dir}")
+                    except (OSError, PermissionError) as e:
+                        # C:\hf_cache 접근 불가 시 사용자 홈 디렉토리 사용
+                        cache_dir = os.path.join(os.path.expanduser("~"), ".cache", "hf")
+                        print(f"[Windows] C:\\hf_cache 접근 불가, 대체 경로 사용: {cache_dir}")
+                        print(f"[Windows] 경고: {str(e)}")
+                
+                # 환경변수 설정
+                os.makedirs(cache_dir, exist_ok=True)
+                os.environ["HF_HOME"] = cache_dir
+                os.environ["TRANSFORMERS_CACHE"] = cache_dir
+                os.environ["HF_DATASETS_CACHE"] = cache_dir
+                print(f"[Windows] Hugging Face 캐시 경로 설정: {cache_dir}")
+            
             # meta tensor 문제 해결: CPU로 직접 로드 (GPU 이동 시도 안 함)
             # bge-m3 모델은 meta tensor 상태로 초기화되므로 .to() 호출 시 에러 발생
             # 따라서 처음부터 CPU로 로드하고 GPU 이동은 하지 않음
             # config.py의 embedding_device 또는 환경변수 EMBEDDING_DEVICE 사용, 없으면 "cpu" 기본값
-            import os
             device = settings.embedding_device or os.getenv("EMBEDDING_DEVICE", "cpu")
             if device != "cpu":
                 print(f"[경고] meta tensor 문제 방지를 위해 device를 cpu로 강제 변경: {device} -> cpu")
@@ -46,17 +79,74 @@ def _get_local_embedding_model():
             try:
                 # 첫 번째 시도: CPU로 직접 로드 (trust_remote_code=True로 안전하게)
                 print(f"[로딩] CPU로 모델 직접 로드 중 (trust_remote_code=True)...")
+                
+                # 모델 로드 파라미터 준비
+                model_kwargs = {
+                    "device": device,  # 처음부터 CPU로 로드
+                    "trust_remote_code": True  # bge-m3 모델에 필요할 수 있음
+                }
+                
+                # Windows에서 캐시 경로 명시적으로 지정
+                if platform.system() == "Windows" and cache_dir:
+                    model_kwargs["cache_folder"] = cache_dir
+                    print(f"[Windows] 모델 캐시 폴더 지정: {cache_dir}")
+                
                 _local_embedding_model = SentenceTransformer(
                     settings.local_embedding_model,
-                    device=device,  # 처음부터 CPU로 로드
-                    trust_remote_code=True  # bge-m3 모델에 필요할 수 있음
+                    **model_kwargs
                 )
                 print(f"[완료] 로컬 임베딩 모델 로드 완료 (device: {device})")
                 # ⚠️ 주의: .to(device) 호출 절대 금지 - meta tensor 에러 발생
                     
             except Exception as e:
-                # 에러 발생 시 재시도
-                if "meta tensor" in str(e).lower() or "to_empty" in str(e).lower():
+                error_msg = str(e)
+                error_type = type(e).__name__
+                print(f"[에러] 모델 로딩 실패: {error_type}: {error_msg}")
+                
+                # Windows 경로 오류인 경우 특별 처리
+                if platform.system() == "Windows" and ("Invalid argument" in error_msg or "Errno 22" in error_msg):
+                    print(f"[Windows 경로 오류] 재시도 중...")
+                    try:
+                        # 캐시 폴더를 명시적으로 지정하여 재시도
+                        retry_kwargs = {
+                            "device": "cpu",
+                            "trust_remote_code": True
+                        }
+                        if cache_dir:
+                            retry_kwargs["cache_folder"] = cache_dir
+                        
+                        print(f"[재시도] CPU로 모델 재로드 중 (cache_folder 지정)...")
+                        _local_embedding_model = SentenceTransformer(
+                            settings.local_embedding_model,
+                            **retry_kwargs
+                        )
+                        print(f"[완료] 로컬 임베딩 모델 재로드 완료 (device: cpu)")
+                        # ⚠️ 주의: .to(device) 호출 절대 금지
+                    except Exception as retry_e:
+                        # 최종 시도: 캐시 없이 로드 시도
+                        print(f"[최종 시도] 캐시 없이 로드 시도 중...: {str(retry_e)}")
+                        try:
+                            _local_embedding_model = SentenceTransformer(
+                                settings.local_embedding_model,
+                                device="cpu",
+                                trust_remote_code=True,
+                                cache_folder=None  # 캐시 사용 안 함
+                            )
+                            print(f"[완료] 로컬 임베딩 모델 최종 로드 완료 (캐시 없음)")
+                        except Exception as final_e:
+                            # 모든 시도 실패
+                            raise Exception(
+                                f"모델 로딩 실패 (모든 시도 실패):\n"
+                                f"원본 오류: {error_msg}\n"
+                                f"재시도 오류: {str(retry_e)}\n"
+                                f"최종 오류: {str(final_e)}\n\n"
+                                f"[해결 방법]\n"
+                                f"1. Hugging Face 캐시 삭제: rmdir /s /q \"%USERPROFILE%\\.cache\\huggingface\"\n"
+                                f"2. 짧은 캐시 경로 사용: set HF_HOME=C:\\hf_cache\n"
+                                f"3. 서버 재시작 후 재시도"
+                            )
+                # 에러 발생 시 재시도 (meta tensor 오류)
+                elif "meta tensor" in error_msg.lower() or "to_empty" in error_msg.lower():
                     print(f"[경고] 모델 로딩 에러 발생 (meta tensor), 재시도 중...: {str(e)}")
                     try:
                         # trust_remote_code와 함께 CPU로 재로드 시도
@@ -152,6 +242,16 @@ class LLMGenerator:
             self.use_groq = True
             self.use_ollama = False
             api_key = os.environ.get("GROQ_API_KEY") or settings.groq_api_key
+            
+            # 디버깅: 어떤 키가 사용되는지 확인
+            if api_key:
+                masked_key = api_key[:8] + "..." + api_key[-8:] if len(api_key) > 16 else "***"
+                print(f"[generator_v2] GROQ_API_KEY 로드됨: {masked_key} (길이: {len(api_key)})")
+                print(f"[generator_v2] os.environ.get('GROQ_API_KEY'): {os.environ.get('GROQ_API_KEY')[:8] + '...' if os.environ.get('GROQ_API_KEY') and len(os.environ.get('GROQ_API_KEY')) > 8 else 'None'}")
+                print(f"[generator_v2] settings.groq_api_key: {settings.groq_api_key[:8] + '...' if settings.groq_api_key and len(settings.groq_api_key) > 8 else 'None'}")
+            else:
+                print("[generator_v2] ⚠️ GROQ_API_KEY가 설정되지 않았습니다!")
+            
             if not api_key:
                 raise RuntimeError(
                     "GROQ_API_KEY가 환경변수에 설정되지 않았습니다. "
@@ -246,16 +346,49 @@ class LLMGenerator:
             try:
                 model = _get_local_embedding_model()
                 batch_size = min(64, len(texts))  # 최대 64개씩 배치 처리
+                # Windows에서 tqdm 진행 표시줄이 sys.stderr.flush() 오류를 발생시킬 수 있으므로 항상 비활성화
+                # 진행 표시줄은 성능에 영향을 주지 않으므로 안정성을 위해 비활성화
                 embeddings = model.encode(
                     texts,
                     convert_to_numpy=True,
-                    show_progress_bar=True,
+                    show_progress_bar=False,  # Windows 오류 방지를 위해 항상 False
                     batch_size=batch_size,
                     normalize_embeddings=True,
                 )
                 return embeddings.tolist()
             except Exception as e:
-                raise Exception(f"로컬 임베딩 생성 실패: {str(e)}")
+                error_msg = str(e)
+                error_type = type(e).__name__
+                import platform
+                
+                # Windows 경로 오류인 경우 상세 정보 추가
+                if platform.system() == "Windows" and ("Invalid argument" in error_msg or "Errno 22" in error_msg):
+                    import traceback
+                    full_traceback = traceback.format_exc()
+                    
+                    # 현재 캐시 경로 확인
+                    current_cache = os.getenv("HF_HOME") or os.getenv("TRANSFORMERS_CACHE") or "기본값 사용 중"
+                    
+                    raise Exception(
+                        f"로컬 임베딩 생성 실패 (Windows 경로 오류): {error_msg}\n"
+                        f"오류 타입: {error_type}\n"
+                        f"현재 캐시 경로: {current_cache}\n"
+                        f"가능한 원인:\n"
+                        f"  1. Hugging Face 캐시 경로가 너무 깁니다 (260자 제한)\n"
+                        f"  2. 모델 파일 손상\n"
+                        f"  3. 파일 시스템 권한 문제\n"
+                        f"해결 방법:\n"
+                        f"  1. Hugging Face 캐시 삭제:\n"
+                        f"     rmdir /s /q \"%USERPROFILE%\\.cache\\huggingface\"\n"
+                        f"     rmdir /s /q \"C:\\hf_cache\" (있는 경우)\n"
+                        f"  2. 짧은 캐시 경로 설정 (환경변수):\n"
+                        f"     set HF_HOME=C:\\hf_cache\n"
+                        f"     set TRANSFORMERS_CACHE=C:\\hf_cache\n"
+                        f"  3. 서버 재시작 후 재시도\n"
+                        f"상세 오류:\n{full_traceback}"
+                    )
+                else:
+                    raise Exception(f"로컬 임베딩 생성 실패: {error_msg} (타입: {error_type})")
         
         # 그 외(원격 임베딩)는 현재 지원하지 않음
         raise RuntimeError(

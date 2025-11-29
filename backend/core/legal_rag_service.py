@@ -204,9 +204,13 @@ class LegalRAGService:
         weekly_hours: Optional[int] = None,
         is_probation: Optional[bool] = None,
         social_insurance: Optional[str] = None,
+        use_workflow: bool = False,  # LangGraph 워크플로우 사용 여부
     ) -> dict:
         """
         상황 기반 상세 진단
+        
+        Args:
+            use_workflow: True면 LangGraph 워크플로우 사용, False면 기존 단일 스텝 방식
         
         Returns:
             {
@@ -219,6 +223,33 @@ class LegalRAGService:
                 "related_cases": List[RelatedCase]
             }
         """
+        # LangGraph 워크플로우 사용
+        if use_workflow:
+            try:
+                from core.situation_workflow import SituationWorkflow
+                workflow = SituationWorkflow()
+                initial_state = {
+                    "situation_text": situation_text,
+                    "category_hint": category_hint,
+                    "summary": summary,
+                    "details": details,
+                    "employment_type": employment_type,
+                    "work_period": work_period,
+                    "weekly_hours": weekly_hours,
+                    "is_probation": is_probation,
+                    "social_insurance": social_insurance,
+                }
+                result = await workflow.run(initial_state)
+                logger.info("[상황분석] LangGraph 워크플로우로 분석 완료")
+                return result
+            except ImportError as e:
+                logger.warning(f"[상황분석] LangGraph 워크플로우 사용 불가, 기존 방식으로 전환: {str(e)}")
+                # 기존 방식으로 fallback
+            except Exception as e:
+                logger.error(f"[상황분석] LangGraph 워크플로우 실행 실패, 기존 방식으로 전환: {str(e)}", exc_info=True)
+                # 기존 방식으로 fallback
+        
+        # 기존 단일 스텝 방식 (레거시)
         # 1. 쿼리 텍스트 구성
         # summary와 details가 있으면 우선 사용, 없으면 situation_text 사용
         query_text = situation_text
@@ -303,6 +334,20 @@ class LegalRAGService:
                 "summary": case.situation[:200] if len(case.situation) > 200 else case.situation,
             }
             for case in related_cases
+        ]
+        
+        # 5. grounding_chunks 추가 (LLM 실패 시에도 RAG 결과는 포함)
+        result["grounding_chunks"] = [
+            {
+                "source_id": chunk.source_id,
+                "source_type": chunk.source_type,
+                "title": chunk.title,
+                "snippet": chunk.snippet,
+                "score": chunk.score,
+                "external_id": getattr(chunk, 'external_id', None),
+                "file_url": getattr(chunk, 'file_url', None),
+            }
+            for chunk in grounding_chunks
         ]
         
         return result
@@ -918,6 +963,18 @@ class LegalRAGService:
             if not file_path and external_id:
                 file_path = self._build_file_path(source_type, external_id)
             
+            # 스토리지 파일 URL 생성
+            file_url = None
+            if external_id:
+                try:
+                    file_url = self.vector_store.get_storage_file_url(
+                        external_id=external_id,
+                        source_type=source_type,
+                        expires_in=3600  # 1시간
+                    )
+                except Exception as e:
+                    logger.warning(f"스토리지 URL 생성 실패 (external_id={external_id}): {str(e)}")
+            
             results.append(
                 LegalGroundingChunk(
                     source_id=r.get("id", ""),
@@ -928,6 +985,7 @@ class LegalRAGService:
                     file_path=file_path,
                     external_id=external_id,
                     chunk_index=chunk_index,
+                    file_url=file_url,  # 파일 URL 추가
                 )
             )
         
@@ -1803,7 +1861,7 @@ class LegalRAGService:
         _logger = logging.getLogger(__name__)
         
         if self.generator.disable_llm:
-            # LLM 비활성화 시 기본 응답
+            # LLM 비활성화 시 기본 응답 (grounding_chunks 포함)
             return {
                 "classified_type": category_hint,
                 "risk_score": 50,
@@ -1812,6 +1870,7 @@ class LegalRAGService:
                 "action_plan": {"steps": []},
                 "scripts": {},
                 "related_cases": [],
+                "grounding_chunks": grounding_chunks,  # RAG 검색 결과는 포함
             }
         
         # 프롬프트 템플릿 사용
@@ -2031,6 +2090,43 @@ class LegalRAGService:
                     # ```markdown ... ``` 제거
                     summary = re.sub(r'```markdown\s*', '', summary, flags=re.IGNORECASE)
                     summary = re.sub(r'```\s*$', '', summary, flags=re.MULTILINE)
+                    
+                    # 한자/일본어 문자를 한글로 변환 또는 제거
+                    def remove_cjk_japanese(text: str) -> str:
+                        """한자, 일본어 문자를 제거하거나 한글로 변환"""
+                        import unicodedata
+                        
+                        # 일반적인 한자-한글 매핑
+                        hanja_to_hangul = {
+                            '最近': '최근',
+                            '典型': '전형',
+                            '典型적인': '전형적인',
+                        }
+                        
+                        # 매핑된 한자 변환
+                        for hanja, hangul in hanja_to_hangul.items():
+                            text = text.replace(hanja, hangul)
+                        
+                        # 한자 범위 (CJK 통합 한자: U+4E00–U+9FFF, 한자 보충: U+3400–U+4DBF)
+                        # 일본어 히라가나: U+3040–U+309F, 가타카나: U+30A0–U+30FF
+                        result = []
+                        for char in text:
+                            code = ord(char)
+                            # 한자 범위 체크
+                            is_hanja = (0x4E00 <= code <= 0x9FFF) or (0x3400 <= code <= 0x4DBF)
+                            # 일본어 범위 체크
+                            is_japanese = (0x3040 <= code <= 0x309F) or (0x30A0 <= code <= 0x30FF)
+                            
+                            if is_hanja or is_japanese:
+                                # 한자/일본어 문자는 제거
+                                _logger.debug(f"[LegalRAG] 한자/일본어 문자 제거: {char} (U+{code:04X})")
+                                continue
+                            result.append(char)
+                        
+                        return ''.join(result)
+                    
+                    summary = remove_cjk_japanese(summary)
+                    
                     summary = summary.strip()
                 
                 # 응답 형식 변환
@@ -2057,7 +2153,7 @@ class LegalRAGService:
             _logger.error(f"LLM 진단 응답 생성 실패: {str(e)}", exc_info=True)
             _logger.error(f"에러 타입: {type(e).__name__}, 에러 메시지: {str(e)}")
         
-        # LLM 호출 실패 시 기본 응답
+        # LLM 호출 실패 시 기본 응답 (grounding_chunks 포함)
         return {
             "classified_type": category_hint,
             "risk_score": 50,
@@ -2066,5 +2162,6 @@ class LegalRAGService:
             "action_plan": {"steps": []},
             "scripts": {},
             "related_cases": [],
+            "grounding_chunks": grounding_chunks,  # RAG 검색 결과는 포함
         }
 
