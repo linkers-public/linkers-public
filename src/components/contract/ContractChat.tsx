@@ -83,30 +83,53 @@ export function ContractChat({
   const generateSuggestedQuestions = (): string[] => {
     const questions: string[] = []
     const { issues, riskScore, summary } = analysisResult
+    const currentIssue = selectedIssueId
+      ? analysisResult.issues.find(i => i.id === selectedIssueId)
+      : undefined
 
-    // 해커톤용 추천 질문 (법률용으로 튜닝)
-    questions.push('이 계약서에서 가장 먼저 수정해야 할 조항은 무엇인가요?')
+    // 선택된 조항이 있는 경우 해당 조항 관련 질문 우선
+    if (currentIssue) {
+      const clauseNumber = currentIssue.location?.clauseNumber
+      const clauseText = clauseNumber ? `제${clauseNumber}조` : '이 조항'
+      
+      questions.push(`가장 위험한 조항은?`)
+      questions.push(`${clauseText} 어떻게 수정하면 좋을까?`)
+      questions.push(`법적 근거 설명해줘`)
+      
+      // 카테고리별 맞춤 질문
+      if (currentIssue.category === 'wage' || currentIssue.category === 'payment') {
+        questions.push('임금 지급 조건은 적절한가요?')
+      } else if (currentIssue.category === 'working_hours') {
+        questions.push('근로시간 관련 법적 위험은?')
+      } else if (currentIssue.category === 'probation' || currentIssue.category === 'dismissal') {
+        questions.push('해지 조건은 공정한가요?')
+      }
+      
+      return questions.slice(0, 4) // 최대 4개
+    }
+
+    // 전체 계약서 관련 질문
+    questions.push('가장 위험한 조항은?')
     
+    const highRiskIssues = issues.filter(i => i.severity === 'high')
+    if (highRiskIssues.length > 0) {
+      questions.push('이 계약서에서 가장 먼저 수정해야 할 조항은 무엇인가요?')
+    }
+
     const workingHoursIssues = issues.filter(i => i.category === 'working_hours')
     if (workingHoursIssues.length > 0) {
       questions.push('근로시간/수당 관련해서 법적으로 위험한 부분을 정리해 주세요.')
     }
 
-    const probationIssues = issues.filter(i => i.category === 'probation')
-    if (probationIssues.length > 0) {
-      questions.push('수습 기간과 해지 조항을 어떻게 협상하면 좋을까요?')
-    }
-
-    // 프리랜서 vs 근로자 판단 질문
-    const wageIssues = issues.filter(i => i.category === 'wage')
-    if (wageIssues.length > 0 || issues.some(i => i.category === 'other')) {
-      questions.push('이 계약서가 프리랜서인지 사실상 근로자인지 애매한데, 어떻게 봐야 하나요?')
+    const wageIssues = issues.filter(i => i.category === 'wage' || i.category === 'payment')
+    if (wageIssues.length > 0) {
+      questions.push('임금 지급 조건은 적절한가요?')
     }
 
     // 기본 질문 (질문이 부족할 경우)
     if (questions.length < 3) {
       questions.push('이 계약서의 주요 위험 요소는 무엇인가요?')
-      questions.push('임금 지급 조건은 적절한가요?')
+      questions.push('법적 근거 설명해줘')
     }
 
     return questions.slice(0, 4) // 최대 4개
@@ -370,9 +393,32 @@ export function ContractChat({
         const issue = analysisResult.issues.find(i => i.id === selectedIssueId)
         if (!issue) return null
         
+        const clauseNumber = issue.location?.clauseNumber
+        const categoryLabel = issue.category
+          ? {
+              pay: '보수·수당',
+              wage: '보수·수당',
+              working_hours: '근로시간',
+              leave: '연차·휴가',
+              termination: '해지·해고',
+              non_compete: '경업금지',
+              nda: '비밀유지',
+              ip: '저작권',
+              job_stability: '고용안정',
+              dismissal: '해고·해지',
+              payment: '보수·수당',
+              liability: '손해배상',
+              dispute: '분쟁해결',
+            }[issue.category] || issue.category
+          : '계약 조항'
+        
+        const clauseTitle = clauseNumber 
+          ? `제${clauseNumber}조 ${categoryLabel}`
+          : categoryLabel
+        
         const severityLabel =
           issue.severity === 'high' ? '위험 HIGH' :
-          issue.severity === 'medium' ? '주의 MED' : 'LOW'
+          issue.severity === 'medium' ? '주의 MED' : '안전 LOW'
         const severityClass =
           issue.severity === 'high'
             ? 'bg-red-100 text-red-700 border-red-200'
@@ -386,13 +432,18 @@ export function ContractChat({
               <div className="p-1 bg-blue-100 rounded-md flex-shrink-0">
                 <FileText className="w-3 h-3 text-blue-600" />
               </div>
-              <span className="text-xs font-medium text-blue-700 truncate">
-                대상 조항: {issue.location.clauseNumber 
-                  ? `제 ${issue.location.clauseNumber}조`
-                  : issue.summary}
-              </span>
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-semibold text-blue-700 truncate">
+                  {clauseTitle}
+                </div>
+                {issue.summary && (
+                  <div className="text-[10px] text-slate-500 truncate">
+                    {issue.summary}
+                  </div>
+                )}
+              </div>
             </div>
-            <span className={cn("text-[10px] px-2 py-0.5 rounded-full border flex-shrink-0", severityClass)}>
+            <span className={cn("text-[10px] px-2 py-0.5 rounded-full border flex-shrink-0 font-semibold", severityClass)}>
               {severityLabel}
             </span>
           </div>
@@ -486,7 +537,12 @@ export function ContractChat({
                             <LegalChatMessage
                               content={message.content}
                               selectedIssue={selectedIssueId 
-                                ? analysisResult.issues.find(i => i.id === selectedIssueId)
+                                ? {
+                                    id: analysisResult.issues.find(i => i.id === selectedIssueId)?.id,
+                                    category: analysisResult.issues.find(i => i.id === selectedIssueId)?.category,
+                                    summary: analysisResult.issues.find(i => i.id === selectedIssueId)?.summary,
+                                    location: analysisResult.issues.find(i => i.id === selectedIssueId)?.location,
+                                  }
                                 : undefined}
                             />
                           )}
@@ -572,19 +628,13 @@ export function ContractChat({
                       ? analysisResult.issues.find(i => i.id === selectedIssueId)
                       : undefined
                     
-                    const categoryLabelForPlaceholder = currentIssue ? ({
-                      working_hours: '근로시간/연장근로',
-                      wage: '보수·수당',
-                      probation: '수습/해지',
-                      stock_option: '스톡옵션',
-                      ip: 'IP/저작권',
-                      harassment: '직장 내 괴롭힘',
-                      other: '이 조항',
-                    }[currentIssue.category] ?? '이 조항') : null
+                    if (currentIssue) {
+                      const clauseNumber = currentIssue.location?.clauseNumber
+                      const clauseText = clauseNumber ? `제${clauseNumber}조` : '이 조항'
+                      return `예) ${clauseText} 이대로 서명해도 괜찮나요? / 회사에 이렇게 수정 요청해도 될까요?`
+                    }
                     
-                    return categoryLabelForPlaceholder
-                      ? `${categoryLabelForPlaceholder}에 대해 궁금한 점을 적어주세요. (예: "이 조항을 어떻게 수정해야 하나요?")`
-                      : "질문을 입력하세요..."
+                    return "예) 이 조항 이대로 서명해도 괜찮나요? / 회사에 이렇게 수정 요청해도 될까요?"
                   })()
                 }
                 disabled={chatLoading}

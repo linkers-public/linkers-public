@@ -26,8 +26,12 @@ interface ParsedLegalResponse {
 interface LegalChatMessageProps {
   content: string
   selectedIssue?: {
+    id?: string
     category?: string
     summary?: string
+    location?: {
+      clauseNumber?: string
+    }
   }
 }
 
@@ -36,8 +40,11 @@ interface LegalChatMessageProps {
  * 마크다운을 파싱하여 탭/아코디언 형태로 표시
  */
 export function LegalChatMessage({ content, selectedIssue }: LegalChatMessageProps) {
-  const [activeTab, setActiveTab] = useState('summary')
+  const [activeTab, setActiveTab] = useState('risk') // 기본 탭을 리스크로 변경
   const [copiedText, setCopiedText] = useState<string | null>(null)
+  const [showAllLegalRefs, setShowAllLegalRefs] = useState(false)
+  const [checkedItems, setCheckedItems] = useState<Record<number, boolean>>({})
+  const [expandedLegalRefs, setExpandedLegalRefs] = useState<Record<number, boolean>>({})
 
   // JSON 파싱 및 검증 함수
   const safeParseLegalResponse = (raw: string): ParsedLegalResponse => {
@@ -332,8 +339,20 @@ export function LegalChatMessage({ content, selectedIssue }: LegalChatMessagePro
         non_compete: '경업금지',
         nda: '비밀유지',
         ip: '저작권',
+        job_stability: '고용안정',
+        dismissal: '해고·해지',
+        payment: '보수·수당',
+        liability: '손해배상',
+        dispute: '분쟁해결',
       }[selectedIssue.category] || selectedIssue.category
     : '계약 조항'
+
+  // 조항 번호 및 제목 구성
+  const clauseNumber = selectedIssue?.location?.clauseNumber || ''
+  const clauseTitle = clauseNumber 
+    ? `제${clauseNumber}조 ${categoryLabel}`
+    : categoryLabel
+  const clauseSubtitle = selectedIssue?.summary || `${categoryLabel} 관련 조항`
 
   return (
     <div className="w-full space-y-3">
@@ -344,12 +363,11 @@ export function LegalChatMessage({ content, selectedIssue }: LegalChatMessagePro
             <Scale className="w-4 h-4 text-blue-600" />
           </div>
           <div className="flex-1 min-w-0 overflow-hidden">
-            <div className="text-xs text-slate-500 mb-1 whitespace-nowrap">검토 중인 조항</div>
-            <div 
-              className="font-semibold text-sm text-slate-900 break-words leading-relaxed whitespace-normal"
-              style={{ wordBreak: 'keep-all', overflowWrap: 'break-word' }}
-            >
-              {selectedIssue?.summary || categoryLabel}
+            <div className="font-semibold text-sm text-slate-900 mb-0.5 break-words leading-relaxed whitespace-normal">
+              {clauseTitle}
+            </div>
+            <div className="text-xs text-slate-500 leading-relaxed">
+              {clauseSubtitle}
             </div>
           </div>
         </div>
@@ -380,18 +398,50 @@ export function LegalChatMessage({ content, selectedIssue }: LegalChatMessagePro
 
       {/* 탭 영역 */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-4 h-auto p-1 bg-slate-100">
-          <TabsTrigger value="summary" className="text-xs py-2">
+        <TabsList className="grid w-full grid-cols-4 h-auto p-1 bg-slate-100 gap-1">
+          <TabsTrigger 
+            value="summary" 
+            className={cn(
+              "text-xs py-2 font-medium transition-all duration-200 rounded-md",
+              activeTab === 'summary'
+                ? "bg-white text-blue-700 border-2 border-blue-500 shadow-sm font-bold"
+                : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+            )}
+          >
             요약
           </TabsTrigger>
-          <TabsTrigger value="risk" className="text-xs py-2">
-            리스크
+          <TabsTrigger 
+            value="risk" 
+            className={cn(
+              "text-xs py-2 font-medium transition-all duration-200 rounded-md",
+              activeTab === 'risk'
+                ? "bg-white text-amber-700 border-2 border-amber-500 shadow-sm font-bold"
+                : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+            )}
+          >
+            위험 포인트
           </TabsTrigger>
-          <TabsTrigger value="deal" className="text-xs py-2">
-            협상
+          <TabsTrigger 
+            value="deal" 
+            className={cn(
+              "text-xs py-2 font-medium transition-all duration-200 rounded-md",
+              activeTab === 'deal'
+                ? "bg-white text-indigo-700 border-2 border-indigo-500 shadow-sm font-bold"
+                : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+            )}
+          >
+            협상 전략
           </TabsTrigger>
-          <TabsTrigger value="check" className="text-xs py-2">
-            체크
+          <TabsTrigger 
+            value="check" 
+            className={cn(
+              "text-xs py-2 font-medium transition-all duration-200 rounded-md",
+              activeTab === 'check'
+                ? "bg-white text-emerald-700 border-2 border-emerald-500 shadow-sm font-bold"
+                : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+            )}
+          >
+            체크리스트
           </TabsTrigger>
         </TabsList>
 
@@ -411,53 +461,132 @@ export function LegalChatMessage({ content, selectedIssue }: LegalChatMessagePro
           )}
         </TabsContent>
 
-        {/* 리스크 탭 */}
+        {/* 위험 포인트 탭 */}
         <TabsContent value="risk" className="mt-3 space-y-3">
-          {parsed.riskLevel && (
-            <div className="inline-flex items-center gap-2 rounded-full px-2.5 py-1 bg-slate-100 text-xs text-slate-700">
-              <span className="font-semibold">위험도: {parsed.riskLevel}</span>
-              {parsed.riskLevelDescription && (
-                <span className="text-[11px] text-slate-500">· {parsed.riskLevelDescription}</span>
-              )}
-            </div>
-          )}
-          {parsed.riskContent ? (
-            <div className="text-sm text-slate-700 leading-relaxed">
-              <MarkdownRenderer content={parsed.riskContent} />
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <div className="text-sm text-slate-600 leading-relaxed">
-                해당 조항은 법적 분쟁 가능성은 크지 않지만, 다음 사항은 체크해 보세요.
+          {/* 위험도 배지 + 한 줄 요약 */}
+          <div className="space-y-2">
+            {parsed.riskLevel && (
+              <div className="inline-flex items-center gap-2 rounded-full px-2.5 py-1 bg-slate-100 text-xs text-slate-700">
+                <span className="font-semibold">위험도: {parsed.riskLevel}</span>
+                {parsed.riskLevelDescription && (
+                  <span className="text-[11px] text-slate-500">· {parsed.riskLevelDescription}</span>
+                )}
               </div>
-              {parsed.checklist.length > 0 && (
-                <div className="mt-3 space-y-2">
-                  <div className="text-xs font-semibold text-slate-700 mb-2">확인 사항:</div>
-                  <ul className="space-y-1.5">
-                    {parsed.checklist.slice(0, 3).map((item, index) => (
-                      <li key={index} className="flex items-start gap-2 text-sm text-slate-600">
-                        <CheckSquare className="w-4 h-4 mt-0.5 text-blue-600 flex-shrink-0" />
-                        <span>{item}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+            )}
+            {parsed.summary && (
+              <div className="text-sm text-slate-700 leading-relaxed">
+                {parsed.summary.split('\n')[0]} {/* 첫 줄만 표시 */}
+              </div>
+            )}
+          </div>
+
+          {/* 왜 위험한지 3줄 bullet */}
+          <div className="space-y-2">
+            <div className="text-xs font-semibold text-slate-700">왜 위험한지</div>
+            {parsed.riskContent ? (
+              <div className="text-sm text-slate-700 leading-relaxed">
+                {/* 마크다운에서 bullet point 추출 (최대 3개) */}
+                {(() => {
+                  // bullet point 찾기
+                  const lines = parsed.riskContent.split('\n').filter(line => {
+                    const trimmed = line.trim()
+                    return trimmed.startsWith('-') || 
+                           trimmed.startsWith('*') || 
+                           trimmed.startsWith('•') ||
+                           trimmed.match(/^[0-9]+\./)
+                  })
+                  
+                  if (lines.length > 0) {
+                    const bullets = lines.slice(0, 3).map(line => {
+                      const cleaned = line
+                        .replace(/^[-*•]\s+/, '')
+                        .replace(/^\d+\.\s+/, '')
+                        .trim()
+                      return cleaned.length > 0 ? cleaned : null
+                    }).filter(Boolean) as string[]
+                    
+                    if (bullets.length > 0) {
+                      return (
+                        <ul className="space-y-1.5">
+                          {bullets.map((bullet, idx) => (
+                            <li key={idx} className="flex items-start gap-2">
+                              <span className="text-amber-600 mt-1 flex-shrink-0">•</span>
+                              <span>{bullet}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )
+                    }
+                  }
+                  
+                  // bullet이 없으면 문장을 3개로 나누어 표시
+                  const sentences = parsed.riskContent
+                    .replace(/\n/g, ' ')
+                    .split(/[.!?。]/)
+                    .filter(s => s.trim().length > 10)
+                    .slice(0, 3)
+                    .map(s => s.trim())
+                  
+                  if (sentences.length > 0) {
+                    return (
+                      <ul className="space-y-1.5">
+                        {sentences.map((sentence, idx) => (
+                          <li key={idx} className="flex items-start gap-2">
+                            <span className="text-amber-600 mt-1 flex-shrink-0">•</span>
+                            <span>{sentence}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )
+                  }
+                  
+                  // fallback: 원본의 첫 3줄
+                  const contentLines = parsed.riskContent.split('\n').slice(0, 3).filter(l => l.trim().length > 0)
+                  return (
+                    <ul className="space-y-1.5">
+                      {contentLines.map((line, idx) => (
+                        <li key={idx} className="flex items-start gap-2">
+                          <span className="text-amber-600 mt-1 flex-shrink-0">•</span>
+                          <span>{line.trim()}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )
+                })()}
+              </div>
+            ) : (
+              <div className="text-sm text-slate-600 leading-relaxed">
+                해당 조항은 법적 분쟁 가능성은 크지 않지만, 세부 사항을 확인해 보세요.
+              </div>
+            )}
+          </div>
+
+          {/* 다음 단계 버튼 */}
+          {parsed.negotiationPoints.conversationExamples.length > 0 || parsed.negotiationPoints.clauseModification && (
+            <div className="pt-2 border-t border-slate-200">
+              <button
+                onClick={() => setActiveTab('deal')}
+                className="w-full px-3 py-2 bg-gradient-to-r from-indigo-50 to-blue-50 hover:from-indigo-100 hover:to-blue-100 border border-indigo-200 rounded-lg text-xs font-medium text-indigo-700 transition-all duration-200 flex items-center justify-center gap-2"
+              >
+                <MessageSquare className="w-3.5 h-3.5" />
+                다음 단계: 협상 멘트 보기
+              </button>
             </div>
           )}
         </TabsContent>
 
-        {/* 협상 포인트 탭 */}
-        <TabsContent value="deal" className="mt-3 space-y-4">
+        {/* 협상 전략 탭 */}
+        <TabsContent value="deal" className="mt-3 space-y-3">
           {/* 조항 수정 예시 */}
           {parsed.negotiationPoints.clauseModification && (
             <div className="space-y-2">
-              <div className="flex items-center gap-2 text-xs font-semibold text-slate-700">
-                <FileText className="w-4 h-4" />
-                조항 수정 제안
-              </div>
-              <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-sm text-slate-700">
-                {parsed.negotiationPoints.clauseModification}
+              <div className="text-xs font-semibold text-slate-700 mb-1">조항 수정 제안</div>
+              <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 text-sm text-slate-700 leading-relaxed whitespace-pre-line">
+                {parsed.negotiationPoints.clauseModification.split(/\n/).map((line, idx) => (
+                  <div key={idx} className={idx > 0 ? 'mt-2' : ''}>
+                    {line}
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -465,17 +594,22 @@ export function LegalChatMessage({ content, selectedIssue }: LegalChatMessagePro
           {/* 협상 문장 예시 */}
           {parsed.negotiationPoints.conversationExamples.length > 0 && (
             <div className="space-y-2">
-              <div className="flex items-center gap-2 text-xs font-semibold text-slate-700">
-                <MessageSquare className="w-4 h-4" />
-                이렇게 말해볼 수 있어요
+              <div className="flex items-center gap-2 text-xs font-semibold text-slate-700 mb-1">
+                <MessageSquare className="w-3.5 h-3.5 text-indigo-600" />
+                <span>사업주에게 이렇게 말해보세요</span>
               </div>
               <div className="space-y-2">
-                {parsed.negotiationPoints.conversationExamples.map((example, index) => (
+                {parsed.negotiationPoints.conversationExamples.slice(0, 3).map((example, index) => (
                   <div
                     key={index}
                     className="relative group p-3 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border border-blue-100 text-sm text-slate-700 leading-relaxed"
                   >
-                    <div className="pr-8">{example}</div>
+                    <div className="pr-8">
+                      {parsed.negotiationPoints.conversationExamples.length > 1 && (
+                        <span className="text-xs font-semibold text-indigo-600 mr-2">{index + 1})</span>
+                      )}
+                      {example}
+                    </div>
                     <Button
                       variant="ghost"
                       size="sm"
@@ -497,49 +631,83 @@ export function LegalChatMessage({ content, selectedIssue }: LegalChatMessagePro
           )}
 
           {parsed.negotiationPoints.conversationExamples.length === 0 && !parsed.negotiationPoints.clauseModification && (
-            <div className="text-sm text-slate-500">협상 포인트 정보가 없습니다.</div>
+            <div className="text-sm text-slate-500">협상 전략 정보가 없습니다.</div>
           )}
         </TabsContent>
 
         {/* 체크리스트 탭 */}
-        <TabsContent value="check" className="mt-3 space-y-2">
+        <TabsContent value="check" className="mt-3 space-y-3">
           {parsed.checklist.length > 0 ? (
-            <ul className="space-y-2">
-              {parsed.checklist.map((item, index) => (
-                <li key={index} className="flex items-start gap-2 text-sm text-slate-700">
-                  <CheckSquare className="w-4 h-4 mt-0.5 text-blue-600 flex-shrink-0" />
-                  <span className="flex-1 leading-relaxed">{item}</span>
-                </li>
-              ))}
-            </ul>
+            <>
+              <div className="text-xs font-semibold text-slate-700 mb-2">내 계약서 점검하기</div>
+              <div className="space-y-3">
+                {parsed.checklist.slice(0, 5).map((item, index) => {
+                  const isChecked = checkedItems[index] || false
+                  return (
+                    <div key={index} className="flex items-start gap-3 p-2.5 bg-slate-50 rounded-lg border border-slate-200">
+                      <button
+                        onClick={() => setCheckedItems(prev => ({ ...prev, [index]: !prev[index] }))}
+                        className={cn(
+                          "flex-shrink-0 w-5 h-5 rounded border-2 transition-all duration-200 flex items-center justify-center",
+                          isChecked
+                            ? "bg-blue-600 border-blue-600"
+                            : "bg-white border-slate-300 hover:border-blue-400"
+                        )}
+                        aria-label={`${item} 체크`}
+                      >
+                        {isChecked && <CheckSquare className="w-3.5 h-3.5 text-white" />}
+                      </button>
+                      <span className={cn(
+                        "flex-1 text-sm leading-relaxed",
+                        isChecked ? "text-slate-500 line-through" : "text-slate-700"
+                      )}>
+                        {item}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+              
+              {/* 피드백 */}
+              {(() => {
+                const checkedCount = Object.values(checkedItems).filter(Boolean).length
+                const totalCount = parsed.checklist.slice(0, 5).length
+                const uncheckedCount = totalCount - checkedCount
+                
+                if (checkedCount > 0) {
+                  return (
+                    <div className={cn(
+                      "mt-4 p-3 rounded-lg border",
+                      uncheckedCount >= totalCount * 0.5
+                        ? "bg-amber-50 border-amber-200"
+                        : "bg-emerald-50 border-emerald-200"
+                    )}>
+                      <div className="text-xs font-semibold text-slate-700 mb-1">
+                        점검 결과
+                      </div>
+                      <div className="text-sm text-slate-700">
+                        {uncheckedCount >= totalCount * 0.5 ? (
+                          <span>
+                            {totalCount}개 중 {uncheckedCount}개 미충족 → 이 조항은 실제로 위험할 수 있어요.
+                          </span>
+                        ) : (
+                          <span>
+                            {totalCount}개 중 {checkedCount}개 충족 → 대부분의 조건을 만족하고 있어요.
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )
+                }
+                return null
+              })()}
+            </>
           ) : (
             <div className="text-sm text-slate-500">체크리스트 항목이 없습니다.</div>
           )}
         </TabsContent>
       </Tabs>
 
-      {/* 참고 법령 (하단 고정) */}
-      <div className="mt-4 pt-4 border-t border-slate-200 space-y-2">
-        <div className="text-xs font-semibold text-slate-700 mb-2">참고 법령/표준 계약</div>
-        {parsed.legalReferences.length > 0 ? (
-          <div className="space-y-2">
-            {parsed.legalReferences.map((ref, index) => (
-              <div key={index} className="p-2.5 bg-slate-50 rounded-lg border border-slate-200">
-                <div className="font-semibold text-sm text-slate-900 mb-1">{ref.name}</div>
-                <div className="text-xs text-slate-600 leading-relaxed">{ref.description}</div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200">
-            <div className="text-xs text-slate-600 leading-relaxed">
-              {selectedIssue?.category === 'pay' || selectedIssue?.category === 'wage' 
-                ? '이 조항은 주로 근로기준법 제17조(근로조건의 명시), 제43조(임금 지급 원칙), 제56조(연장·야간·휴일근로 가산수당)와 관련됩니다.'
-                : '이 조항은 일반적인 근로계약 관련 법령과 관련됩니다. 구체적인 법령 정보는 위 리스크 섹션을 참고하세요.'}
-            </div>
-          </div>
-        )}
-      </div>
 
       {/* 파싱 실패 시 fallback: 기존 마크다운 렌더링 */}
       {!parsed.summary && !parsed.riskContent && (
@@ -547,6 +715,66 @@ export function LegalChatMessage({ content, selectedIssue }: LegalChatMessagePro
           <MarkdownRenderer content={content} />
         </div>
       )}
+
+      {/* 참고 법령 (탭 공통 하단) */}
+      <div className="mt-4 pt-4 border-t border-slate-200 space-y-2">
+        <div className="flex items-center justify-between mb-2">
+          <div className="text-xs font-semibold text-slate-700">참고 법령/표준 계약</div>
+          {parsed.legalReferences.length > 2 && (
+            <button
+              onClick={() => setShowAllLegalRefs(!showAllLegalRefs)}
+              className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+            >
+              {showAllLegalRefs ? '접기' : `관련 법령 더 보기 (${parsed.legalReferences.length - 2})`}
+            </button>
+          )}
+        </div>
+        {parsed.legalReferences.length > 0 ? (
+          <div className="space-y-2">
+            {(showAllLegalRefs ? parsed.legalReferences : parsed.legalReferences.slice(0, 2)).map((ref, index) => {
+              const isExpanded = expandedLegalRefs[index] || false
+              return (
+                <div key={index} className="p-2.5 bg-slate-50 rounded-lg border border-slate-200">
+                  <div className="font-semibold text-sm text-slate-900 mb-1">{ref.name}</div>
+                  {isExpanded ? (
+                    <div className="space-y-2">
+                      <div className="text-xs text-slate-600 leading-relaxed">{ref.description}</div>
+                      <button
+                        onClick={() => setExpandedLegalRefs(prev => ({ ...prev, [index]: false }))}
+                        className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                      >
+                        간략히 보기
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      <div className="text-xs text-slate-600 leading-relaxed line-clamp-1">
+                        {ref.description.split('\n')[0]}
+                      </div>
+                      {ref.description.length > 50 && (
+                        <button
+                          onClick={() => setExpandedLegalRefs(prev => ({ ...prev, [index]: true }))}
+                          className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                        >
+                          자세히 보기
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        ) : (
+          <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200">
+            <div className="text-xs text-slate-600 leading-relaxed">
+              {selectedIssue?.category === 'pay' || selectedIssue?.category === 'wage' 
+                ? '이 조항은 주로 근로기준법 제17조(근로조건의 명시), 제43조(임금 지급 원칙), 제56조(연장·야간·휴일근로 가산수당)와 관련됩니다.'
+                : '이 조항은 일반적인 근로계약 관련 법령과 관련됩니다. 구체적인 법령 정보는 위 위험 포인트 섹션을 참고하세요.'}
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
