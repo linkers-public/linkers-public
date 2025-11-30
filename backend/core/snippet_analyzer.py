@@ -108,8 +108,19 @@ async def _call_llm_for_snippet(messages: list, temperature: float = 0.3) -> str
                     elif role == "user":
                         prompt += f"{content}\n"
                 
+                # 대략적인 입력 토큰 추정
+                estimated_input_tokens = len(prompt) // 2.5
+                logger.info(f"[토큰 사용량] 입력 추정: 약 {int(estimated_input_tokens)}토큰 (프롬프트 길이: {len(prompt)}자)")
+                
                 # Ollama 호출을 비동기로 처리
                 response_text = await asyncio.to_thread(llm.invoke, prompt)
+                
+                # 대략적인 출력 토큰 추정
+                if response_text:
+                    estimated_output_tokens = len(response_text) // 2.5
+                    estimated_total_tokens = int(estimated_input_tokens) + int(estimated_output_tokens)
+                    logger.info(f"[토큰 사용량] 출력 추정: 약 {int(estimated_output_tokens)}토큰, 총 추정: 약 {estimated_total_tokens}토큰 (모델: {settings.ollama_model})")
+                
                 return response_text
             else:
                 # Groq와 Ollama 모두 사용 불가
@@ -151,8 +162,19 @@ async def _call_llm_for_snippet(messages: list, temperature: float = 0.3) -> str
             elif role == "user":
                 prompt += f"{content}\n"
         
+        # 대략적인 입력 토큰 추정
+        estimated_input_tokens = len(prompt) // 2.5
+        logger.info(f"[토큰 사용량] 입력 추정: 약 {int(estimated_input_tokens)}토큰 (프롬프트 길이: {len(prompt)}자)")
+        
         # Ollama 호출을 비동기로 처리
         response_text = await asyncio.to_thread(llm.invoke, prompt)
+        
+        # 대략적인 출력 토큰 추정
+        if response_text:
+            estimated_output_tokens = len(response_text) // 2.5
+            estimated_total_tokens = int(estimated_input_tokens) + int(estimated_output_tokens)
+            logger.info(f"[토큰 사용량] 출력 추정: 약 {int(estimated_output_tokens)}토큰, 총 추정: 약 {estimated_total_tokens}토큰 (모델: {settings.ollama_model})")
+        
         return response_text
     else:
         # Groq와 Ollama 모두 사용 안 함

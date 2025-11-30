@@ -116,6 +116,17 @@ def ask_groq_with_messages(messages: list, temperature: float = 0.5, model: str 
         response_content = completion.choices[0].message.content
         if not response_content:
             raise ValueError("Groq API가 빈 응답을 반환했습니다.")
+        
+        # 토큰 사용량 로깅
+        if hasattr(completion, 'usage') and completion.usage:
+            usage = completion.usage
+            prompt_tokens = getattr(usage, 'prompt_tokens', 0)
+            completion_tokens = getattr(usage, 'completion_tokens', 0)
+            total_tokens = getattr(usage, 'total_tokens', 0)
+            logger.info(f"[토큰 사용량] 입력: {prompt_tokens}토큰, 출력: {completion_tokens}토큰, 총: {total_tokens}토큰 (모델: {model})")
+        else:
+            logger.warning("[토큰 사용량] Groq API 응답에 토큰 사용량 정보가 없습니다.")
+        
         return response_content
         
     except Exception as e:

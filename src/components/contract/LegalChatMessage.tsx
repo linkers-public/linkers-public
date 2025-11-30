@@ -9,7 +9,7 @@ import { MarkdownRenderer } from '@/components/rag/MarkdownRenderer'
 
 interface ParsedLegalResponse {
   summary: string
-  riskLevel: '경미' | '보통' | '높음' | null
+  riskLevel: '경미' | '보통' | '높음' | '매우 높음' | null
   riskLevelDescription: string // 위험도 설명 (예: "법적 분쟁 가능성은 크지 않지만...")
   riskContent: string
   checklist: string[]
@@ -83,7 +83,7 @@ export function LegalChatMessage({ content, selectedIssue }: LegalChatMessagePro
       // 안전하게 파싱된 데이터 반환
       return {
         summary: typeof parsed.summary === 'string' ? parsed.summary : defaultResult.summary,
-        riskLevel: parsed.riskLevel === '경미' || parsed.riskLevel === '보통' || parsed.riskLevel === '높음' 
+        riskLevel: parsed.riskLevel === '경미' || parsed.riskLevel === '보통' || parsed.riskLevel === '높음' || parsed.riskLevel === '매우 높음'
           ? parsed.riskLevel 
           : parsed.riskLevel === null 
             ? null 
@@ -149,16 +149,16 @@ export function LegalChatMessage({ content, selectedIssue }: LegalChatMessagePro
 
     // 위험도 레벨 및 설명 추출 (다양한 패턴 지원)
     const riskLevelPatterns = [
-      /위험도:\s*(경미|보통|높음)/i,
-      /\[(경미|보통|높음)\]:\s*([^\n]+)/,  // [경미]: 설명
-      /\[(경미|보통|높음)\]\s*([^\n]+)/,  // [경미] 설명
-      /위험도:\s*(경미|보통|높음)\([^)]+\)/i,
+      /위험도:\s*(경미|보통|높음|매우 높음)/i,
+      /\[(경미|보통|높음|매우 높음)\]:\s*([^\n]+)/,  // [경미]: 설명
+      /\[(경미|보통|높음|매우 높음)\]\s*([^\n]+)/,  // [경미] 설명
+      /위험도:\s*(경미|보통|높음|매우 높음)\([^)]+\)/i,
     ]
     
     for (const pattern of riskLevelPatterns) {
       const match = content.match(pattern)
       if (match) {
-        const level = match[1] as '경미' | '보통' | '높음'
+        const level = match[1] as '경미' | '보통' | '높음' | '매우 높음'
         result.riskLevel = level
         // 설명 추출 (있는 경우)
         if (match[2]) {
@@ -178,7 +178,7 @@ export function LegalChatMessage({ content, selectedIssue }: LegalChatMessagePro
         if (summaryMatch) {
           let summaryText = summaryMatch[1]
             .replace(/위험도:.*/i, '')
-            .replace(/\[(경미|보통|높음)\]:\s*/g, '')
+            .replace(/\[(경미|보통|높음|매우 높음)\]:\s*/g, '')
             .replace(/요약|리스크|협상|체크/g, '') // 탭 라벨 제거
             .trim()
           result.summary = summaryText
@@ -379,10 +379,12 @@ export function LegalChatMessage({ content, selectedIssue }: LegalChatMessagePro
                 getRiskBadgeColor(parsed.riskLevel)
               )}
             >
+              {parsed.riskLevel === '매우 높음' && <AlertTriangle className="w-3 h-3 flex-shrink-0" />}
               {parsed.riskLevel === '높음' && <AlertTriangle className="w-3 h-3 flex-shrink-0" />}
               {parsed.riskLevel === '보통' && <AlertTriangle className="w-3 h-3 flex-shrink-0" />}
               {parsed.riskLevel === '경미' && <CheckCircle2 className="w-3 h-3 flex-shrink-0" />}
               <span className="whitespace-nowrap">{parsed.riskLevel}</span>
+              {parsed.riskLevel === '매우 높음' && <span className="whitespace-nowrap">(즉시 조치 필요)</span>}
               {parsed.riskLevel === '높음' && <span className="whitespace-nowrap">(삭제/수정 권장)</span>}
               {parsed.riskLevel === '보통' && <span className="whitespace-nowrap">(주의/협상 권장)</span>}
               {parsed.riskLevel === '경미' && <span className="whitespace-nowrap">(주의 필요)</span>}

@@ -736,7 +736,18 @@ class LegalRAGService:
                     base_url=settings.ollama_base_url,
                     model=settings.ollama_model
                 )
+                # 대략적인 입력 토큰 추정
+                estimated_input_tokens = len(prompt) // 2.5
+                logger.info(f"[토큰 사용량] 입력 추정: 약 {int(estimated_input_tokens)}토큰 (프롬프트 길이: {len(prompt)}자)")
+                
                 response_text = llm.invoke(prompt)
+                
+                # 대략적인 출력 토큰 추정
+                if response_text:
+                    estimated_output_tokens = len(response_text) // 2.5
+                    estimated_total_tokens = int(estimated_input_tokens) + int(estimated_output_tokens)
+                    logger.info(f"[토큰 사용량] 출력 추정: 약 {int(estimated_output_tokens)}토큰, 총 추정: 약 {estimated_total_tokens}토큰 (모델: {settings.ollama_model})")
+                
                 return response_text.strip() if response_text else None
             else:
                 return None
@@ -1207,7 +1218,16 @@ class LegalRAGService:
                 
                 logger.info(f"[LLM 호출] 프롬프트 길이: {len(prompt)}자, invoke 호출 중...")
                 logger.debug(f"[LLM 호출] 프롬프트 미리보기 (처음 500자): {prompt[:500]}")
+                # 대략적인 입력 토큰 추정 (한국어 기준: 1토큰 ≈ 2-3자)
+                estimated_input_tokens = len(prompt) // 2.5
+                logger.info(f"[토큰 사용량] 입력 추정: 약 {int(estimated_input_tokens)}토큰 (프롬프트 길이: {len(prompt)}자)")
+                
                 response_text = llm.invoke(prompt)
+                
+                # 대략적인 출력 토큰 추정
+                estimated_output_tokens = len(response_text) // 2.5 if response_text else 0
+                estimated_total_tokens = int(estimated_input_tokens) + int(estimated_output_tokens)
+                logger.info(f"[토큰 사용량] 출력 추정: 약 {int(estimated_output_tokens)}토큰, 총 추정: 약 {estimated_total_tokens}토큰 (모델: {settings.ollama_model})")
             else:
                 # Groq와 Ollama 모두 사용 안 함
                 raise ValueError("LLM이 설정되지 않았습니다. use_groq 또는 use_ollama를 True로 설정하세요.")
@@ -1944,6 +1964,39 @@ class LegalRAGService:
                         parsed_json = json.loads(response_clean)
                         logger.info(f"[JSON 추출 성공] 추출된 JSON 길이: {len(response_clean)} characters")
                         logger.info(f"[JSON 추출 성공] summary: {parsed_json.get('summary', 'N/A')[:50]}...")
+                        
+                        # riskLevel 값 정규화 (잘못된 값 수정)
+                        if "riskLevel" in parsed_json:
+                            original_risk_level = parsed_json["riskLevel"]
+                            valid_risk_levels = ["경미", "보통", "높음", "매우 높음", None]
+                            
+                            # 잘못된 값 매핑
+                            risk_level_mapping = {
+                                "중등": "보통",
+                                "중간": "보통",
+                                "낮음": "경미",
+                                "보통 이상": "보통",
+                                "보통 이상 높음": "높음",
+                                "medium": "보통",
+                                "low": "경미",
+                                "high": "높음",
+                                "very high": "매우 높음",
+                            }
+                            
+                            if original_risk_level not in valid_risk_levels:
+                                # 매핑 테이블에서 찾기
+                                normalized = risk_level_mapping.get(original_risk_level)
+                                if normalized:
+                                    logger.warning(f"[riskLevel 정규화] '{original_risk_level}' -> '{normalized}'로 변경")
+                                    parsed_json["riskLevel"] = normalized
+                                else:
+                                    # 매핑 테이블에 없으면 null로 설정
+                                    logger.warning(f"[riskLevel 정규화] 알 수 없는 값 '{original_risk_level}' -> null로 변경")
+                                    parsed_json["riskLevel"] = None
+                            
+                            # 정규화된 JSON을 다시 문자열로 변환
+                            response_clean = json.dumps(parsed_json, ensure_ascii=False, indent=2)
+                        
                         # 참고 문구는 프론트엔드에서 추가하므로 여기서는 JSON만 반환
                         return response_clean
                     except json.JSONDecodeError as e:
@@ -1974,7 +2027,17 @@ class LegalRAGService:
                         model=settings.ollama_model
                     )
                 
+                # 대략적인 입력 토큰 추정
+                estimated_input_tokens = len(prompt) // 2.5
+                logger.info(f"[토큰 사용량] 입력 추정: 약 {int(estimated_input_tokens)}토큰 (프롬프트 길이: {len(prompt)}자)")
+                
                 response_text = llm.invoke(prompt)
+                
+                # 대략적인 출력 토큰 추정
+                if response_text:
+                    estimated_output_tokens = len(response_text) // 2.5
+                    estimated_total_tokens = int(estimated_input_tokens) + int(estimated_output_tokens)
+                    logger.info(f"[토큰 사용량] 출력 추정: 약 {int(estimated_output_tokens)}토큰, 총 추정: 약 {estimated_total_tokens}토큰 (모델: {settings.ollama_model})")
                 
                 # LLM 출력 로깅
                 logger.info("=" * 80)
@@ -2062,6 +2125,39 @@ class LegalRAGService:
                         parsed_json = json.loads(response_clean)
                         logger.info(f"[JSON 추출 성공] 추출된 JSON 길이: {len(response_clean)} characters")
                         logger.info(f"[JSON 추출 성공] summary: {parsed_json.get('summary', 'N/A')[:50]}...")
+                        
+                        # riskLevel 값 정규화 (잘못된 값 수정)
+                        if "riskLevel" in parsed_json:
+                            original_risk_level = parsed_json["riskLevel"]
+                            valid_risk_levels = ["경미", "보통", "높음", "매우 높음", None]
+                            
+                            # 잘못된 값 매핑
+                            risk_level_mapping = {
+                                "중등": "보통",
+                                "중간": "보통",
+                                "낮음": "경미",
+                                "보통 이상": "보통",
+                                "보통 이상 높음": "높음",
+                                "medium": "보통",
+                                "low": "경미",
+                                "high": "높음",
+                                "very high": "매우 높음",
+                            }
+                            
+                            if original_risk_level not in valid_risk_levels:
+                                # 매핑 테이블에서 찾기
+                                normalized = risk_level_mapping.get(original_risk_level)
+                                if normalized:
+                                    logger.warning(f"[riskLevel 정규화] '{original_risk_level}' -> '{normalized}'로 변경")
+                                    parsed_json["riskLevel"] = normalized
+                                else:
+                                    # 매핑 테이블에 없으면 null로 설정
+                                    logger.warning(f"[riskLevel 정규화] 알 수 없는 값 '{original_risk_level}' -> null로 변경")
+                                    parsed_json["riskLevel"] = None
+                            
+                            # 정규화된 JSON을 다시 문자열로 변환
+                            response_clean = json.dumps(parsed_json, ensure_ascii=False, indent=2)
+                        
                         # 참고 문구는 프론트엔드에서 추가하므로 여기서는 JSON만 반환
                         return response_clean
                     except json.JSONDecodeError as e:
@@ -2221,7 +2317,17 @@ class LegalRAGService:
                         model=settings.ollama_model
                     )
                 
+                # 대략적인 입력 토큰 추정
+                estimated_input_tokens = len(prompt) // 2.5
+                _logger.info(f"[토큰 사용량] 입력 추정: 약 {int(estimated_input_tokens)}토큰 (프롬프트 길이: {len(prompt)}자)")
+                
                 response_text = llm.invoke(prompt)
+                
+                # 대략적인 출력 토큰 추정
+                if response_text:
+                    estimated_output_tokens = len(response_text) // 2.5
+                    estimated_total_tokens = int(estimated_input_tokens) + int(estimated_output_tokens)
+                    _logger.info(f"[토큰 사용량] 출력 추정: 약 {int(estimated_output_tokens)}토큰, 총 추정: 약 {estimated_total_tokens}토큰 (모델: {settings.ollama_model})")
             else:
                 # Groq와 Ollama 모두 사용 안 함
                 raise ValueError("LLM이 설정되지 않았습니다. use_groq 또는 use_ollama를 True로 설정하세요.")

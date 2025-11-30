@@ -1658,12 +1658,21 @@ class SituationWorkflow:
             try:
                 # Ollama 호출을 비동기로 처리하고 타임아웃 설정 (10분)
                 logger.info("[워크플로우] Ollama LLM 호출 시작...")
+                # 대략적인 입력 토큰 추정 (한국어 기준: 1토큰 ≈ 2-3자)
+                estimated_input_tokens = len(prompt) // 2.5
+                logger.info(f"[토큰 사용량] 입력 추정: 약 {int(estimated_input_tokens)}토큰 (프롬프트 길이: {len(prompt)}자)")
+                
                 response_text = await asyncio.wait_for(
                     asyncio.to_thread(llm.invoke, prompt),
                     timeout=600.0  # 10분 타임아웃
                 )
                 progress_task.cancel()  # 성공 시 진행 로깅 중지
+                
+                # 대략적인 출력 토큰 추정
+                estimated_output_tokens = len(response_text) // 2.5
+                estimated_total_tokens = int(estimated_input_tokens) + int(estimated_output_tokens)
                 logger.info(f"[워크플로우] Ollama 응답 완료 - 응답 길이: {len(response_text)}자")
+                logger.info(f"[토큰 사용량] 출력 추정: 약 {int(estimated_output_tokens)}토큰, 총 추정: 약 {estimated_total_tokens}토큰 (모델: {settings.ollama_model})")
                 return response_text
             except asyncio.TimeoutError:
                 progress_task.cancel()

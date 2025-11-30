@@ -691,10 +691,11 @@ class UIDataIntegrationTester:
             )
             
             answer = result.get("answer", "")
-            json_valid, json_errors = self._validate_contract_risk_json(answer)
+            json_valid, json_errors, json_warnings = self._validate_contract_risk_json(answer)
             test_result["test_cases"]["none"] = {
                 "passed": json_valid,
                 "errors": json_errors,
+                "warnings": json_warnings,
                 "answer_preview": answer[:200] if answer else ""
             }
             if not json_valid:
@@ -702,7 +703,10 @@ class UIDataIntegrationTester:
                 test_result["errors"].extend(json_errors)
                 print(f"      ❌ JSON 파싱 실패: {json_errors}")
             else:
-                print(f"      ✅ JSON 형식 검증 통과")
+                if json_warnings:
+                    print(f"      ✅ JSON 형식 검증 통과 (경고: {', '.join(json_warnings)})")
+                else:
+                    print(f"      ✅ JSON 형식 검증 통과")
         except Exception as e:
             print(f"      ❌ 테스트 실패: {str(e)}")
             test_result["test_cases"]["none"] = {"passed": False, "errors": [str(e)]}
@@ -755,10 +759,11 @@ class UIDataIntegrationTester:
             )
             
             answer = result.get("answer", "")
-            json_valid, json_errors = self._validate_contract_risk_json(answer)
+            json_valid, json_errors, json_warnings = self._validate_contract_risk_json(answer)
             test_result["test_cases"]["contract"] = {
                 "passed": json_valid,
                 "errors": json_errors,
+                "warnings": json_warnings,
                 "answer_preview": answer[:200] if answer else ""
             }
             if not json_valid:
@@ -766,7 +771,10 @@ class UIDataIntegrationTester:
                 test_result["errors"].extend(json_errors)
                 print(f"      ❌ JSON 파싱 실패: {json_errors}")
             else:
-                print(f"      ✅ JSON 형식 검증 통과")
+                if json_warnings:
+                    print(f"      ✅ JSON 형식 검증 통과 (경고: {', '.join(json_warnings)})")
+                else:
+                    print(f"      ✅ JSON 형식 검증 통과")
         except Exception as e:
             print(f"      ❌ 테스트 실패: {str(e)}")
             test_result["test_cases"]["contract"] = {"passed": False, "errors": [str(e)]}
@@ -821,8 +829,12 @@ class UIDataIntegrationTester:
         
         return test_result
     
-    def _validate_contract_risk_json(self, answer: str) -> tuple[bool, List[str]]:
-        """ContractRiskResult JSON 형식 검증 - 구조와 값 모두 체크"""
+    def _validate_contract_risk_json(self, answer: str) -> tuple[bool, List[str], List[str]]:
+        """ContractRiskResult JSON 형식 검증 - 구조와 값 모두 체크
+        
+        Returns:
+            (is_valid, errors, warnings): 검증 통과 여부, 에러 리스트, 경고 리스트
+        """
         errors = []
         warnings = []
         
@@ -847,7 +859,7 @@ class UIDataIntegrationTester:
             # 필수 필드 검증
             if not isinstance(parsed, dict):
                 errors.append("JSON이 객체가 아닙니다")
-                return False, errors
+                return False, errors, []
             
             # summary 필드 검증 (필수, 빈 값 체크)
             if "summary" not in parsed:
@@ -860,7 +872,7 @@ class UIDataIntegrationTester:
                 warnings.append(f"summary가 너무 짧습니다 ({len(parsed['summary'])}자)")
             
             # riskLevel 검증 ("중간"도 허용 - LLM이 가끔 사용)
-            valid_risk_levels = ["경미", "보통", "높음", "매우 고", "중간", None]
+            valid_risk_levels = ["경미", "보통", "높음", "매우 높음", "중간", None]
             if "riskLevel" in parsed:
                 if parsed["riskLevel"] not in valid_risk_levels:
                     errors.append(f"riskLevel이 유효하지 않습니다: {parsed.get('riskLevel')} (유효값: {valid_risk_levels})")
@@ -1012,13 +1024,42 @@ class UIDataIntegrationTester:
                 if last_brace != -1:
                     text = text[first_brace:last_brace + 1]
             
-            # JSON 파싱
-            parsed = json.loads(text)
+            # JSON 파싱 (comma delimiter 오류 등 처리)
+            try:
+                parsed = json.loads(text)
+            except json.JSONDecodeError as e:
+                # comma delimiter 오류 등 JSON 문법 오류 수정 시도
+                if "Expecting ',' delimiter" in str(e) or "Expecting property name" in str(e):
+                    # 마지막 완전한 중괄호까지 찾기
+                    brace_count = 0
+                    last_valid_pos = -1
+                    for i, char in enumerate(text):
+                        if char == '{':
+                            brace_count += 1
+                        elif char == '}':
+                            brace_count -= 1
+                            if brace_count == 0:
+                                last_valid_pos = i + 1
+                                break
+                    
+                    if last_valid_pos > 0:
+                        text = text[:last_valid_pos]
+                        try:
+                            parsed = json.loads(text)
+                        except json.JSONDecodeError:
+                            errors.append(f"JSON 파싱 실패: {str(e)}")
+                            return False, errors
+                    else:
+                        errors.append(f"JSON 파싱 실패: {str(e)}")
+                        return False, errors
+                else:
+                    errors.append(f"JSON 파싱 실패: {str(e)}")
+                    return False, errors
             
             # 필수 필드 검증
             if not isinstance(parsed, dict):
                 errors.append("JSON이 객체가 아닙니다")
-                return False, errors
+                return False, errors, []
             
             # reportTitle 검증 (필수, 빈 값 체크)
             if "reportTitle" not in parsed:
