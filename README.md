@@ -933,6 +933,77 @@ API 사용 가이드는 [API_GUIDE.md](./API_GUIDE.md)를 참고하세요.
 
 **API 문서:** http://localhost:8000/docs
 
+## 🧪 테스트 스크립트
+
+시스템의 성능과 UI 데이터 출력을 검증하는 테스트 스크립트가 제공됩니다.
+
+### 성능 테스트
+
+RAG 시스템의 각 컴포넌트별 성능을 측정합니다.
+
+```bash
+cd backend
+venv\Scripts\activate  # Windows
+# 또는
+source venv/bin/activate  # Linux/Mac
+
+python scripts/performance_test.py
+```
+
+**테스트 항목:**
+- 단일/배치 임베딩 생성 성능
+- 임베딩 캐시 효과
+- 벡터 검색 성능
+- LLM 응답 생성 성능
+- Dual RAG 검색 성능
+- 전체 계약서 분석 파이프라인
+- 상황분석 파이프라인
+- 비동기 병렬 처리 효과
+
+**결과 저장 위치:**
+- `backend/data/indexed/reports/performance/performance_test_{timestamp}.json`
+
+### UI 데이터 통합 테스트
+
+각 페이지(상황분석/즉시상담/계약서분석)에서 UI에 필요한 데이터가 제대로 출력되는지 검증합니다.
+
+```bash
+cd backend
+venv\Scripts\activate  # Windows
+# 또는
+source venv/bin/activate  # Linux/Mac
+
+python scripts/ui_data_integration_test.py
+```
+
+**테스트 항목:**
+- 계약서 분석 페이지: 필수 필드(`docId`, `title`, `riskScore`, `issues`, `contractText` 등) 검증
+- 상황분석 페이지: 필수 필드(`risk_score`, `summary`, `criteria`, `action_plan`, `scripts` 등) 검증
+- 즉시상담 페이지: 필수 필드(`answer`, `query`, `used_chunks` 등) 검증
+
+**결과 저장 위치:**
+- `backend/data/indexed/reports/ui_integration_test.json`
+
+### Ollama 설정 확인 테스트
+
+Ollama 서버와 모델이 제대로 설정되었는지 확인합니다.
+
+```bash
+cd backend
+venv\Scripts\activate  # Windows
+# 또는
+source venv/bin/activate  # Linux/Mac
+
+python scripts/test_ollama_setup.py
+```
+
+**확인 항목:**
+- `langchain-ollama` 패키지 설치 여부
+- Ollama 서버 연결 상태
+- 설치된 모델 목록
+- 설정된 모델 존재 여부
+- 실제 LLM 호출 테스트
+
 ## 🚨 문제 해결
 
 ### 서버가 시작되지 않는 경우
