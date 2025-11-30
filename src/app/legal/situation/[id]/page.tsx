@@ -13,6 +13,7 @@ import { RAGHighlightedMarkdown, RAGHighlightedText } from '../../../../componen
 import { SituationChat } from '../../../../components/legal/SituationChat'
 import { LegalReportCard } from '../../../../components/legal/LegalReportCard'
 import { ActionDashboard } from '../../../../components/legal/ActionDashboard'
+import { parseSummary, findSectionByEmoji, removeEmojiFromTitle } from '../../../../utils/parseSummary'
 import type { 
   SituationCategory, 
   SituationAnalysisResponse,
@@ -187,6 +188,16 @@ export default function SituationDetailPage() {
     )
   }
 
+  // summary를 섹션별로 파싱
+  const sections = parseSummary(analysisResult.summary || '')
+  const summarySection = findSectionByEmoji(sections, '📊')
+  const legalViewSection = findSectionByEmoji(sections, '⚖️')
+  const actionSection = findSectionByEmoji(sections, '🎯')
+  const speakSection = findSectionByEmoji(sections, '💬')
+
+  // 요약 텍스트 추출 (첫 줄만)
+  const summaryText = summarySection?.content?.split('\n')[0] || summarySection?.content || ''
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 py-12">
       <div className="container mx-auto px-4 max-w-7xl">
@@ -201,54 +212,137 @@ export default function SituationDetailPage() {
         </Button>
 
         {/* 분석 결과 */}
-        <div id="analysis-result" className="space-y-4">
-          {/* 상황 분류 카드 */}
-          <div className="mb-4">
-            <div className="text-center mb-3">
-              <h2 className="text-lg md:text-xl font-bold text-slate-900 mb-3">
+        <div id="analysis-result" className="space-y-6">
+          {/* 1. 상단 헤더 영역 */}
+          <Card className="border-2 border-blue-200 shadow-xl bg-gradient-to-br from-white to-blue-50/30">
+            <CardHeader>
+              <CardTitle className="text-2xl font-bold text-slate-900 text-center mb-4">
                 사용자님의 상황 분석 결과입니다.
-              </h2>
-            </div>
-            
-            {/* 상황 분류 태그 (Badge 형태) */}
-            <div className="flex flex-wrap gap-1.5 justify-center mb-4">
-              {/* 메인 카테고리 태그 */}
-              <div className="px-2.5 py-1.5 bg-gradient-to-r from-red-500 to-rose-600 text-white rounded-lg shadow-md font-semibold text-xs flex items-center gap-1.5">
-                <span className="text-xs">🚨</span>
-                <span>{getCategoryLabel(analysisResult.classifiedType as SituationCategory)}</span>
-              </div>
+              </CardTitle>
               
-              {/* 위험도 태그 */}
-              <div className={`px-2.5 py-1.5 rounded-lg shadow-md font-semibold text-xs flex items-center gap-1.5 text-white ${getRiskColor(analysisResult.riskScore)}`}>
-                <span className="text-xs">{analysisResult.riskScore <= 30 ? '✅' : analysisResult.riskScore <= 70 ? '⚠️' : '🚨'}</span>
-                <span>위험도 {analysisResult.riskScore}</span>
+              {/* 배지 영역 */}
+              <div className="flex flex-wrap gap-2 justify-center mb-4">
+                {/* 메인 카테고리 배지 */}
+                <div className="px-3 py-1.5 bg-gradient-to-r from-red-500 to-rose-600 text-white rounded-lg shadow-md font-semibold text-sm flex items-center gap-2">
+                  <span>🚨</span>
+                  <span>{getCategoryLabel(analysisResult.classifiedType as SituationCategory)}</span>
+                </div>
+                
+                {/* 위험도 배지 */}
+                <div className={`px-3 py-1.5 rounded-lg shadow-md font-semibold text-sm flex items-center gap-2 text-white ${getRiskColor(analysisResult.riskScore)}`}>
+                  <span>{analysisResult.riskScore <= 30 ? '✅' : analysisResult.riskScore <= 70 ? '⚠️' : '🚨'}</span>
+                  <span>위험도 {analysisResult.riskScore}</span>
+                </div>
+                
+                {/* criteria 첫 번째 항목 배지 */}
+                {analysisResult.criteria && analysisResult.criteria.length > 0 && (
+                  <div className="px-3 py-1.5 bg-gradient-to-r from-amber-500 to-orange-600 text-white rounded-lg shadow-md font-semibold text-sm flex items-center gap-2">
+                    <span>{analysisResult.criteria[0].status === 'likely' ? '🌙' : analysisResult.criteria[0].status === 'unclear' ? '📉' : '⚠️'}</span>
+                    <span className="max-w-[200px] truncate">{analysisResult.criteria[0].name}</span>
+                  </div>
+                )}
               </div>
-              
-              {/* 추가 태그들 */}
-              {analysisResult.criteria && analysisResult.criteria.length > 0 && (
-                <>
-                  {analysisResult.criteria.slice(0, 3).map((criterion, idx) => {
-                    const tagEmoji = criterion.status === 'likely' ? '🌙' : criterion.status === 'unclear' ? '📉' : '⚠️'
-                    const tagText = criterion.name.length > 20 ? criterion.name.substring(0, 20) + '...' : criterion.name
-                    return (
-                      <div key={idx} className="px-2.5 py-1.5 bg-gradient-to-r from-amber-500 to-orange-600 text-white rounded-lg shadow-md font-semibold text-xs flex items-center gap-1.5">
-                        <span className="text-xs">{tagEmoji}</span>
-                        <span>{tagText}</span>
-                      </div>
-                    )
-                  })}
-                </>
-              )}
-            </div>
-          </div>
 
-          {/* 리포트 카드 */}
+              {/* 요약 설명 */}
+              {summaryText && (
+                <CardDescription className="text-center text-base text-slate-700">
+                  {summaryText}
+                </CardDescription>
+              )}
+            </CardHeader>
+          </Card>
+
+          {/* 2. AI 법률 진단 리포트 블록 (기존 LegalReportCard 스타일 반영) */}
           <LegalReportCard 
             analysisResult={analysisResult}
             onCopy={handleCopy}
           />
 
-          {/* 실전 대응 대시보드 */}
+          {/* 3. 참고 문헌 카드 (relatedCases + sources) */}
+          {((analysisResult.relatedCases && analysisResult.relatedCases.length > 0) || (analysisResult.sources && analysisResult.sources.length > 0)) && (
+            <Card className="border-2 border-purple-200 shadow-xl bg-white">
+              <CardHeader>
+                <CardTitle className="text-xl flex items-center gap-3">
+                  <div className="p-2 bg-gradient-to-br from-purple-500 to-pink-600 rounded-lg shadow-md">
+                    <BookOpen className="w-5 h-5 text-white" />
+                  </div>
+                  <span>참고 문헌 및 관련 사례</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* 대표 근거 케이스 (relatedCases[0]) */}
+                {analysisResult.relatedCases && analysisResult.relatedCases.length > 0 && (
+                  <div className="bg-gradient-to-br from-purple-50 to-pink-50 border-2 border-purple-200 rounded-lg p-5">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="px-2 py-1 bg-purple-600 text-white text-xs font-semibold rounded">
+                        대표 근거 케이스
+                      </span>
+                    </div>
+                    <h4 className="font-semibold text-slate-900 mb-2">{analysisResult.relatedCases[0].title}</h4>
+                    <p className="text-sm text-slate-700 mb-3">{analysisResult.relatedCases[0].summary}</p>
+                    {analysisResult.relatedCases[0].fileUrl && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => window.open(analysisResult.relatedCases[0].fileUrl, '_blank')}
+                      >
+                        <ExternalLink className="w-4 h-4 mr-2" />
+                        문서 보기
+                      </Button>
+                    )}
+                  </div>
+                )}
+
+                {/* sources 리스트 */}
+                {analysisResult.sources && analysisResult.sources.length > 0 && (
+                  <div className="space-y-3">
+                    <h4 className="font-semibold text-slate-900">관련 법령 및 가이드라인</h4>
+                    {analysisResult.sources.map((source, idx) => {
+                      const sourceTypeLabels = {
+                        law: '법령',
+                        manual: '매뉴얼',
+                        standard_contract: '표준계약서',
+                        case: '사례',
+                      }
+                      const sourceTypeColors = {
+                        law: 'bg-blue-100 text-blue-800 border-blue-300',
+                        manual: 'bg-green-100 text-green-800 border-green-300',
+                        standard_contract: 'bg-orange-100 text-orange-800 border-orange-300',
+                        case: 'bg-purple-100 text-purple-800 border-purple-300',
+                      }
+                      
+                      return (
+                        <div key={idx} className="bg-white border border-slate-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                          <div className="flex items-start gap-3">
+                            <span className={`px-2 py-1 rounded text-xs font-semibold border ${sourceTypeColors[source.sourceType] || sourceTypeColors.law}`}>
+                              {sourceTypeLabels[source.sourceType] || '법령'}
+                            </span>
+                            <div className="flex-1">
+                              <h5 className="font-semibold text-slate-900 mb-1">{source.title}</h5>
+                              <p className="text-sm text-slate-600 line-clamp-2 mb-2">{source.snippet}</p>
+                              {source.fileUrl && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => window.open(source.fileUrl, '_blank')}
+                                  className="h-7 text-xs"
+                                >
+                                  <ExternalLink className="w-3 h-3 mr-1" />
+                                  문서 보기
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* 4. 실전 대응 대시보드 */}
           <ActionDashboard 
             classifiedType={analysisResult.classifiedType as SituationCategory}
             analysisId={analysisId}
@@ -256,7 +350,29 @@ export default function SituationDetailPage() {
             organizations={analysisResult.organizations}
           />
 
-          {/* AI 전담 노무사 채팅 */}
+          {/* 5. 행동 카드 (🎯 지금 당장 할 수 있는 행동) */}
+          {actionSection && (
+            <Card className="border-2 border-green-200 shadow-xl bg-gradient-to-br from-white to-green-50/30">
+              <CardHeader>
+                <CardTitle className="text-xl flex items-center gap-3">
+                  <div className="p-2 bg-gradient-to-br from-green-500 to-emerald-600 rounded-lg shadow-md">
+                    <Zap className="w-5 h-5 text-white" />
+                  </div>
+                  <span>{removeEmojiFromTitle(actionSection.title)}</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="prose prose-slate max-w-none">
+                  <RAGHighlightedMarkdown 
+                    content={actionSection.content}
+                    sources={analysisResult.sources || []}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* 6. AI 전담 노무사 채팅 (말하기 스크립트 포함) */}
           <Card className="border-2 border-purple-300 shadow-xl bg-gradient-to-br from-white to-purple-50/30">
             <CardHeader className="pb-4">
               <CardTitle className="text-xl flex items-center gap-3">
@@ -269,7 +385,41 @@ export default function SituationDetailPage() {
                 상황 분석 결과를 바탕으로 AI 노무사와 실시간 상담할 수 있습니다.
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
+              {/* 말하기 팁 카드 */}
+              {(speakSection || analysisResult.scripts?.toCompany || analysisResult.scripts?.toAdvisor) && (
+                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 space-y-3">
+                  <h4 className="font-semibold text-slate-900 flex items-center gap-2">
+                    <span>💬</span>
+                    <span>이렇게 말해보세요</span>
+                  </h4>
+                  
+                  {speakSection?.content && (
+                    <div className="prose prose-slate max-w-none text-sm">
+                      <RAGHighlightedMarkdown 
+                        content={speakSection.content}
+                        sources={analysisResult.sources || []}
+                      />
+                    </div>
+                  )}
+                  
+                  {analysisResult.scripts?.toCompany && (
+                    <div className="bg-white border border-purple-200 rounded p-3">
+                      <p className="text-xs font-semibold text-purple-700 mb-1">회사에 이렇게 말해보세요:</p>
+                      <p className="text-sm text-slate-700">{analysisResult.scripts.toCompany}</p>
+                    </div>
+                  )}
+                  
+                  {analysisResult.scripts?.toAdvisor && (
+                    <div className="bg-white border border-purple-200 rounded p-3">
+                      <p className="text-xs font-semibold text-purple-700 mb-1">노무사/기관에 이렇게 말해보세요:</p>
+                      <p className="text-sm text-slate-700">{analysisResult.scripts.toAdvisor}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 챗 컴포넌트 */}
               <SituationChat 
                 analysisId={analysisId}
                 analysisResult={analysisResult}

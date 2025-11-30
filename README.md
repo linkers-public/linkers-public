@@ -862,6 +862,36 @@ curl -X POST "http://localhost:8000/api/v2/legal/analyze-contract" \
 - ✅ **대화 내역 개선**: 첫 메시지 내용을 대화 내역에 표시
 - ✅ **백엔드 API 개선**: 세션 생성 API를 body로 받도록 수정, 상황 분석 워크플로우 오류 수정
 
+## 🗄️ 데이터베이스 스키마
+
+### 채팅 시스템 테이블
+
+#### `legal_chat_sessions` - 챗 세션 테이블
+- `id`: UUID (Primary Key)
+- `user_id`: UUID (사용자 ID)
+- `initial_context_type`: TEXT ('none' | 'situation' | 'contract')
+- `initial_context_id`: UUID (상황 분석 ID 또는 계약서 분석 ID)
+- `title`: TEXT (세션 제목)
+- `created_at`: TIMESTAMPTZ
+- `updated_at`: TIMESTAMPTZ
+
+#### `legal_chat_messages` - 챗 메시지 테이블
+- `id`: UUID (Primary Key)
+- `session_id`: UUID (챗 세션 ID, Foreign Key)
+- `user_id`: UUID (사용자 ID)
+- `sender_type`: TEXT ('user' | 'assistant')
+- `message`: TEXT (메시지 내용)
+- `sequence_number`: INT (메시지 순서)
+- `context_type`: TEXT ('none' | 'situation' | 'contract')
+- `context_id`: UUID (컨텍스트 ID)
+- `metadata`: JSONB (추가 메타데이터)
+- `created_at`: TIMESTAMPTZ
+
+**특징:**
+- 각 메시지는 생성 시점의 컨텍스트 정보를 저장
+- 같은 세션 내에서도 컨텍스트 전환 가능
+- `situation_analyses`와 `contract_analyses` 테이블을 참조만 함 (FK 없음)
+
 ## 📝 데이터 폴더 설명
 
 ### `backend/data/legal/`

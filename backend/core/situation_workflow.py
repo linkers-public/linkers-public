@@ -251,7 +251,17 @@ class SituationWorkflow:
         )
         
         # 결과 검증 및 정규화
-        normalized_result = self._reformat_action_result(action_result)
+        logger.info(f"[워크플로우] _reformat_action_result 호출 전 action_result: summary 길이={len(action_result.get('summary', ''))}, criteria 개수={len(action_result.get('criteria', []))}")
+        normalized_result = self._reformat_action_result(action_result, legal_basis)
+        
+        # action_plan 안전하게 처리
+        action_plan_safe = normalized_result.get('action_plan', {})
+        if isinstance(action_plan_safe, dict):
+            action_plan_steps_count = len(action_plan_safe.get('steps', []))
+        else:
+            action_plan_steps_count = 0
+        
+        logger.info(f"[워크플로우] _reformat_action_result 호출 후 normalized_result: summary 길이={len(normalized_result.get('summary', ''))}, criteria 개수={len(normalized_result.get('criteria', []))}, action_plan steps={action_plan_steps_count}")
         
         return {
             **state,
@@ -300,26 +310,68 @@ class SituationWorkflow:
                 "source_type": case_source_type,  # source_type 정보 추가
             })
         
+        # grounding_chunks를 sources 형식으로 변환
+        formatted_sources = [
+            {
+                "source_id": chunk.source_id,
+                "source_type": chunk.source_type,
+                "title": chunk.title,
+                "snippet": chunk.snippet,
+                "score": chunk.score,
+                "external_id": getattr(chunk, 'external_id', None),
+                "file_url": getattr(chunk, 'file_url', None),
+            }
+            for chunk in grounding_chunks[:8]  # 최대 8개
+        ]
+        
+        # criteria에 legalBasis 추가
+        # 각 criterion에 대해 관련된 legalBasis를 매핑
+        # 현재는 모든 sources를 각 criterion에 할당 (나중에 LLM이 criterion별로 관련 sources를 명시하도록 개선 가능)
+        criteria_with_legal_basis = []
+        for criterion in criteria:
+            criterion_dict = criterion.copy() if isinstance(criterion, dict) else {
+                "name": getattr(criterion, "name", ""),
+                "status": getattr(criterion, "status", "unclear"),
+                "reason": getattr(criterion, "reason", ""),
+            }
+            
+            # 각 criterion에 legalBasis 배열 추가
+            # TODO: 나중에 LLM이 criterion별로 관련 sources를 명시하도록 프롬프트 개선
+            # 현재는 모든 sources를 할당 (또는 criterion의 name/reason과 유사한 sources만 필터링)
+            legal_basis_list = []
+            for source in formatted_sources:
+                legal_basis_item = {
+                    "docId": source.get("source_id", ""),
+                    "docTitle": source.get("title", ""),
+                    "docType": source.get("source_type", "law"),
+                    "snippet": source.get("snippet", ""),
+                    "similarityScore": source.get("score", 0.0),
+                    "externalId": source.get("external_id"),
+                    "fileUrl": source.get("file_url"),
+                }
+                # chunk_index가 있으면 추가
+                chunk_idx = None
+                for chunk in grounding_chunks:
+                    if chunk.source_id == source.get("source_id"):
+                        chunk_idx = getattr(chunk, 'chunk_index', None)
+                        break
+                if chunk_idx is not None:
+                    legal_basis_item["chunkIndex"] = chunk_idx
+                
+                legal_basis_list.append(legal_basis_item)
+            
+            criterion_dict["legalBasis"] = legal_basis_list
+            criteria_with_legal_basis.append(criterion_dict)
+        
         final_output = {
             "classified_type": classification.get("classified_type", "unknown"),
             "risk_score": classification.get("risk_score", 50),
             "summary": summary_report,  # generate_action_guide에서 생성된 4개 섹션 마크다운
-            "criteria": criteria,  # generate_action_guide에서 legal_basis 기반으로 생성
+            "criteria": criteria_with_legal_basis,  # legalBasis 포함
             "action_plan": action_plan,  # steps 구조
             "scripts": scripts,  # toCompany, toAdvisor
             "related_cases": formatted_related_cases,
-            "grounding_chunks": [
-                {
-                    "source_id": chunk.source_id,
-                    "source_type": chunk.source_type,
-                    "title": chunk.title,
-                    "snippet": chunk.snippet,
-                    "score": chunk.score,
-                    "external_id": getattr(chunk, 'external_id', None),
-                    "file_url": getattr(chunk, 'file_url', None),
-                }
-                for chunk in grounding_chunks[:8]  # 최대 8개
-            ],
+            "grounding_chunks": formatted_sources,  # sources 형식으로 변환
         }
         
         return {
@@ -535,13 +587,11 @@ class SituationWorkflow:
         import json
         import re
         
-        # 응답 로깅 (디버깅용)
-        logger.debug(f"[워크플로우] LLM 응답 길이: {len(response)}자")
-        if len(response) > 2000:
-            logger.debug(f"[워크플로우] LLM 응답 (처음 500자): {response[:500]}")
-            logger.debug(f"[워크플로우] LLM 응답 (마지막 500자): {response[-500:]}")
-        else:
-            logger.debug(f"[워크플로우] LLM 응답 전체: {response}")
+        # 응답 로깅 (디버깅용) - 강화
+        logger.info(f"[워크플로우] LLM raw 응답 길이: {len(response)}자")
+        logger.info(f"[워크플로우] LLM raw 응답 (처음 1500자): {response[:1500]}")
+        if len(response) > 1500:
+            logger.info(f"[워크플로우] LLM raw 응답 (마지막 500자): {response[-500:]}")
         
         # 코드 블록 제거
         response_clean = response.strip()
@@ -736,6 +786,15 @@ class SituationWorkflow:
                     result["summary"] = summary.strip()
                 
                 logger.info("[워크플로우] JSON 파싱 성공")
+                
+                # action_plan 안전하게 처리
+                action_plan_safe = result.get('action_plan', {})
+                if isinstance(action_plan_safe, dict):
+                    action_plan_steps_count = len(action_plan_safe.get('steps', []))
+                else:
+                    action_plan_steps_count = 0
+                
+                logger.info(f"[워크플로우] 파싱된 action_result: summary 길이={len(result.get('summary', ''))}, criteria 개수={len(result.get('criteria', []))}, action_plan steps={action_plan_steps_count}")
                 return result
             except json.JSONDecodeError as e:
                 logger.error(f"[워크플로우] JSON 파싱 실패: {str(e)}")
@@ -853,7 +912,7 @@ class SituationWorkflow:
             "criteria": [],
         }
     
-    def _reconstruct_summary_sections(self, summary: str, section_patterns: List[Dict[str, Any]]) -> Optional[str]:
+    def _reconstruct_summary_sections(self, summary: str, section_patterns: List[Dict[str, Any]], classified_type: str = "unknown") -> Optional[str]:
         """LLM이 생성한 summary를 파싱하여 올바른 섹션 형식으로 재구성"""
         try:
             # summary를 줄 단위로 분할
@@ -909,10 +968,47 @@ class SituationWorkflow:
                     reconstructed_parts.extend(section_contents[title])
                     reconstructed_parts.append("")
                 else:
-                    # 섹션이 없으면 기본 메시지 추가
+                    # 섹션이 없으면 카테고리별 기본 메시지 추가
+                    emoji = section_info.get("emoji", "")
+                    
+                    default_content_by_type = {
+                        "unpaid_wage": {
+                            "⚖️": "임금체불은 근로기준법 제43조(임금지급), 제36조(임금의 지급)와 관련된 사안입니다. 사용자는 근로자에게 임금을 정기적으로 지급할 의무가 있으며, 이를 위반할 경우 형사처벌과 민사상 손해배상 책임을 질 수 있습니다.",
+                            "🎯": "- 근로계약서와 급여명세서를 확인하세요\n- 출퇴근 기록과 근무시간을 정리하세요\n- 임금 지급 내역을 문서로 보관하세요",
+                            "💬": "회사에 정중하게 임금 지급을 요청하는 문구를 작성하세요."
+                        },
+                        "harassment": {
+                            "⚖️": "직장 내 괴롭힘은 직장 내 괴롭힘 방지 및 근로자 보호 등에 관한 법률에 따라 금지되어 있습니다. 업무상 지위나 관계를 이용하여 근로자에게 신체적·정신적 고통을 주는 행위는 법적 처벌 대상이 될 수 있습니다.",
+                            "🎯": "- 괴롭힘 관련 증거 자료를 수집하세요\n- 대화 내용과 일시를 기록하세요\n- 상황을 객관적으로 정리하세요",
+                            "💬": "회사에 괴롭힘 상황을 정중하게 알리는 문구를 작성하세요."
+                        },
+                        "unfair_dismissal": {
+                            "⚖️": "부당해고는 근로기준법 제23조(해고의 제한)에 따라 제한되어 있습니다. 정당한 사유 없이 해고하는 경우 복직 청구나 손해배상 청구가 가능합니다.",
+                            "🎯": "- 해고 통지서와 관련 문서를 보관하세요\n- 근무 기간과 성과를 정리하세요\n- 회사와의 대화 내용을 기록하세요",
+                            "💬": "회사에 해고 사유에 대한 설명을 요청하는 문구를 작성하세요."
+                        },
+                        "overtime": {
+                            "⚖️": "근로시간은 근로기준법 제50조(근로시간), 제53조(연장근로)에 따라 규제됩니다. 법정 근로시간을 초과하는 연장근로에 대해서는 가산임금을 지급해야 합니다.",
+                            "🎯": "- 근무시간 기록을 확인하세요\n- 연장근로 시간을 계산하세요\n- 휴게시간 준수 여부를 확인하세요",
+                            "💬": "회사에 근로시간과 가산임금에 대해 문의하는 문구를 작성하세요."
+                        },
+                        "probation": {
+                            "⚖️": "수습기간은 근로기준법에 따라 합리적인 범위 내에서만 인정됩니다. 수습기간 중에도 근로기준법상 보호를 받으며, 부당한 해고는 제한됩니다.",
+                            "🎯": "- 수습 기간과 조건을 확인하세요\n- 근로계약서의 수습 조항을 검토하세요\n- 수습 기간 중 평가 내용을 정리하세요",
+                            "💬": "회사에 수습기간과 평가 기준에 대해 문의하는 문구를 작성하세요."
+                        },
+                    }
+                    
+                    default_content = default_content_by_type.get(classified_type, {
+                        "⚖️": "관련 법령을 확인하여 현재 상황을 법적으로 평가해야 합니다.",
+                        "🎯": "- 상황을 객관적으로 정리하세요\n- 관련 문서를 보관하세요\n- 증거 자료를 수집하세요",
+                        "💬": "회사나 상담 기관에 상황을 설명할 수 있는 문구를 작성하세요."
+                    })
+                    
+                    default_text = default_content.get(emoji, "해당 섹션 내용을 확인하는 중입니다.")
                     reconstructed_parts.append(title)
                     reconstructed_parts.append("")
-                    reconstructed_parts.append("해당 섹션 내용을 확인하는 중입니다.")
+                    reconstructed_parts.append(default_text)
                     reconstructed_parts.append("")
             
             return '\n'.join(reconstructed_parts).strip()
@@ -954,7 +1050,7 @@ class SituationWorkflow:
         
         return ''.join(result)
     
-    def _reformat_action_result(self, action_result: Dict[str, Any]) -> Dict[str, Any]:
+    def _reformat_action_result(self, action_result: Dict[str, Any], legal_basis: List[Dict[str, Any]] = None) -> Dict[str, Any]:
         """액션 결과 정규화 및 검증"""
         import json
         import re
@@ -964,23 +1060,61 @@ class SituationWorkflow:
         # 1. criteria 검증 및 fallback
         criteria = result.get("criteria", [])
         if not criteria or len(criteria) == 0:
-            logger.warning("[워크플로우] criteria가 비어있습니다. 기본 criteria 생성")
-            criteria = [{
+            logger.warning("[워크플로우] criteria가 비어있습니다. legal_basis 기반 fallback 시도")
+            # legal_basis 기반 fallback
+            if legal_basis and len(legal_basis) > 0:
+                criteria = []
+                for basis in legal_basis[:3]:
+                    criteria.append({
+                        "name": basis.get("title", "법적 근거"),
+                        "status": "unclear",
+                        "reason": basis.get("snippet", "")[:300] if basis.get("snippet") else "관련 법령 정보를 확인하는 중입니다.",
+                    })
+                logger.info(f"[워크플로우] legal_basis 기반 criteria 생성: {len(criteria)}개")
+            else:
+                criteria = [{
+                    "name": "법적 근거 확인 필요",
+                    "status": "unclear",
+                    "reason": "관련 법령 정보를 확인하는 중입니다."
+                }]
+        else:
+            # criteria 구조 검증 및 필터링
+            validated_criteria = []
+            for item in criteria:
+                if not isinstance(item, dict):
+                    continue
+                
+                name = item.get("name", "").strip()
+                status = item.get("status", "unclear")
+                reason = item.get("reason", "").strip()
+                
+                # 완전히 비어있는 항목은 제외
+                if not name and not reason:
+                    logger.debug(f"[워크플로우] 비어있는 criteria 항목 제외: {item}")
+                    continue
+                
+                # name이나 reason이 비어있으면 기본값으로 채우기
+                validated_criteria.append({
+                    "name": name or "법적 근거 확인 필요",
+                    "status": status or "unclear",
+                    "reason": reason or "관련 법령 정보를 확인하는 중입니다.",
+                })
+            
+            # validated_criteria가 비어있으면 legal_basis 기반 fallback
+            if not validated_criteria and legal_basis and len(legal_basis) > 0:
+                logger.warning("[워크플로우] 모든 criteria가 비어있습니다. legal_basis 기반 fallback 시도")
+                for basis in legal_basis[:3]:
+                    validated_criteria.append({
+                        "name": basis.get("title", "법적 근거"),
+                        "status": "unclear",
+                        "reason": basis.get("snippet", "")[:300] if basis.get("snippet") else "관련 법령 정보를 확인하는 중입니다.",
+                    })
+            
+            criteria = validated_criteria if validated_criteria else [{
                 "name": "법적 근거 확인 필요",
                 "status": "unclear",
                 "reason": "관련 법령 정보를 확인하는 중입니다."
             }]
-        else:
-            # criteria 구조 검증
-            validated_criteria = []
-            for item in criteria:
-                if isinstance(item, dict):
-                    validated_criteria.append({
-                        "name": item.get("name", "알 수 없음"),
-                        "status": item.get("status", "unclear"),
-                        "reason": item.get("reason", ""),
-                    })
-            criteria = validated_criteria
         
         # 2. action_plan 검증 및 정규화
         action_plan = result.get("action_plan", {})
@@ -1012,43 +1146,60 @@ class SituationWorkflow:
                     items = []
             
             # items에서 마크다운 조각 제거 (예: "- " 제거) 및 중복 필터링
-            cleaned_items = []
-            # 신고/상담 기관 관련 키워드 (제외할 항목) - 더 포괄적으로
-            exclude_keywords = [
-                r'노무사',
-                r'노동조합.*노무사',
-                r'노동관련기관',
-                r'고용노동부',
-                r'\d+.*상담센터',
-                r'상담센터',
-                r'노동청',
-                r'기관.*상담',
-                r'상담.*요청',
-                r'신고.*합니다',
+            # 신고/상담 관련 항목을 전부 삭제하지 않고, 하드 제외만 적용하고 나머지는 분리
+            # 하드 제외: 전화번호 + 상담센터 같이 노골적인 것만
+            hard_exclude_keywords = [
+                r'\d+.*상담센터',  # 전화번호 + 상담센터
                 r'청년노동센터',
-                r'상담.*요청합니다',
-                r'신고합니다',
-                r'상담.*신고',
-                r'신고.*상담',
-                r'상담.*검토',
-                r'법적.*조치.*검토',
             ]
+            
+            # 상담/신고 관련 키워드 (별도 분류용)
+            consult_keywords = [
+                r'노무사',
+                r'노동청',
+                r'고용노동부',
+                r'상담',
+                r'신고',
+            ]
+            
+            normal_items = []
+            consult_items = []
             
             for item in items:
                 if isinstance(item, str):
                     # "- " 또는 "* " 제거
                     cleaned = re.sub(r'^[-*]\s+', '', item.strip())
-                    if cleaned:
-                        # 신고/상담 기관 관련 항목 필터링
-                        should_exclude = False
-                        for keyword in exclude_keywords:
-                            if re.search(keyword, cleaned, re.IGNORECASE):
-                                should_exclude = True
-                                logger.debug(f"[워크플로우] 신고/상담 관련 항목 제외: {cleaned}")
-                                break
-                        
-                        if not should_exclude:
-                            cleaned_items.append(cleaned)
+                    if not cleaned:
+                        continue
+                    
+                    # 하드 제외: 너무 노골적인 "기관 홍보/전화번호" 류만 완전 제외
+                    should_hard_exclude = any(
+                        re.search(pattern, cleaned, re.IGNORECASE)
+                        for pattern in hard_exclude_keywords
+                    )
+                    if should_hard_exclude:
+                        logger.debug(f"[워크플로우] 하드 제외: {cleaned}")
+                        continue
+                    
+                    # 상담/신고 관련이면 따로 모아두기
+                    is_consult = any(
+                        re.search(pattern, cleaned, re.IGNORECASE)
+                        for pattern in consult_keywords
+                    )
+                    
+                    if is_consult:
+                        consult_items.append(cleaned)
+                    else:
+                        normal_items.append(cleaned)
+            
+            # 우선 normal_items에서 최대 3개
+            cleaned_items = normal_items[:3]
+            
+            # normal이 너무 적으면 상담 계열에서 1~2개까지 보충
+            if len(cleaned_items) < 2 and consult_items:
+                additional_count = min(2 - len(cleaned_items), len(consult_items))
+                cleaned_items.extend(consult_items[:additional_count])
+                logger.debug(f"[워크플로우] 상담 관련 항목 {additional_count}개 보충 (step: {title})")
             
             # 최대 3개 항목으로 제한 (각 step별)
             if len(cleaned_items) > 3:
@@ -1063,12 +1214,49 @@ class SituationWorkflow:
                         "items": cleaned_items,
                     })
         
-        # steps가 비어있으면 기본값
-        if not validated_steps:
+        # steps가 비어있거나 모든 step의 items가 비어있으면 기본값
+        has_any_items = any(step.get("items", []) for step in validated_steps)
+        if not validated_steps or not has_any_items:
+            # classified_type에 따른 기본 action items
+            classified_type = result.get("classified_type", "unknown")
+            default_items_by_type = {
+                "unpaid_wage": [
+                    "근로계약서와 급여명세서를 확인하세요",
+                    "출퇴근 기록과 근무시간을 정리하세요",
+                    "임금 지급 내역을 문서로 보관하세요"
+                ],
+                "harassment": [
+                    "괴롭힘 관련 증거 자료를 수집하세요",
+                    "대화 내용과 일시를 기록하세요",
+                    "상황을 객관적으로 정리하세요"
+                ],
+                "unfair_dismissal": [
+                    "해고 통지서와 관련 문서를 보관하세요",
+                    "근무 기간과 성과를 정리하세요",
+                    "회사와의 대화 내용을 기록하세요"
+                ],
+                "overtime": [
+                    "근무시간 기록을 확인하세요",
+                    "연장근로 시간을 계산하세요",
+                    "휴게시간 준수 여부를 확인하세요"
+                ],
+                "probation": [
+                    "수습 기간과 조건을 확인하세요",
+                    "근로계약서의 수습 조항을 검토하세요",
+                    "수습 기간 중 평가 내용을 정리하세요"
+                ],
+            }
+            default_items = default_items_by_type.get(classified_type, [
+                "상황을 객관적으로 정리하세요",
+                "관련 문서를 보관하세요",
+                "증거 자료를 수집하세요"
+            ])
+            
             validated_steps = [{
                 "title": "즉시 조치",
-                "items": ["상황을 다시 확인해 주세요"]
+                "items": default_items[:3]
             }]
+            logger.info(f"[워크플로우] 기본 action_plan 생성 (classified_type: {classified_type})")
         
         action_plan = {"steps": validated_steps}
         
@@ -1234,14 +1422,53 @@ class SituationWorkflow:
             logger.warning(f"[워크플로우] summary에 누락된 섹션: {[s['title'] for s in missing_sections]}")
             
             # LLM이 생성한 내용을 파싱하여 섹션 재구성 시도
-            summary_reconstructed = self._reconstruct_summary_sections(summary, section_patterns)
+            classified_type = result.get("classified_type", "unknown")
+            summary_reconstructed = self._reconstruct_summary_sections(summary, section_patterns, classified_type)
             if summary_reconstructed:
                 summary = summary_reconstructed
                 logger.info("[워크플로우] summary 섹션 재구성 완료")
             else:
-                # 재구성 실패 시 누락된 섹션 추가
+                # 재구성 실패 시 누락된 섹션 추가 (카테고리별 기본값 제공)
+                classified_type = result.get("classified_type", "unknown")
+                default_content_by_type = {
+                    "unpaid_wage": {
+                        "⚖️": "임금체불은 근로기준법 제43조(임금지급), 제36조(임금의 지급)와 관련된 사안입니다. 사용자는 근로자에게 임금을 정기적으로 지급할 의무가 있으며, 이를 위반할 경우 형사처벌과 민사상 손해배상 책임을 질 수 있습니다.",
+                        "🎯": "- 근로계약서와 급여명세서를 확인하세요\n- 출퇴근 기록과 근무시간을 정리하세요\n- 임금 지급 내역을 문서로 보관하세요",
+                        "💬": "회사에 정중하게 임금 지급을 요청하는 문구를 작성하세요."
+                    },
+                    "harassment": {
+                        "⚖️": "직장 내 괴롭힘은 직장 내 괴롭힘 방지 및 근로자 보호 등에 관한 법률에 따라 금지되어 있습니다. 업무상 지위나 관계를 이용하여 근로자에게 신체적·정신적 고통을 주는 행위는 법적 처벌 대상이 될 수 있습니다.",
+                        "🎯": "- 괴롭힘 관련 증거 자료를 수집하세요\n- 대화 내용과 일시를 기록하세요\n- 상황을 객관적으로 정리하세요",
+                        "💬": "회사에 괴롭힘 상황을 정중하게 알리는 문구를 작성하세요."
+                    },
+                    "unfair_dismissal": {
+                        "⚖️": "부당해고는 근로기준법 제23조(해고의 제한)에 따라 제한되어 있습니다. 정당한 사유 없이 해고하는 경우 복직 청구나 손해배상 청구가 가능합니다.",
+                        "🎯": "- 해고 통지서와 관련 문서를 보관하세요\n- 근무 기간과 성과를 정리하세요\n- 회사와의 대화 내용을 기록하세요",
+                        "💬": "회사에 해고 사유에 대한 설명을 요청하는 문구를 작성하세요."
+                    },
+                    "overtime": {
+                        "⚖️": "근로시간은 근로기준법 제50조(근로시간), 제53조(연장근로)에 따라 규제됩니다. 법정 근로시간을 초과하는 연장근로에 대해서는 가산임금을 지급해야 합니다.",
+                        "🎯": "- 근무시간 기록을 확인하세요\n- 연장근로 시간을 계산하세요\n- 휴게시간 준수 여부를 확인하세요",
+                        "💬": "회사에 근로시간과 가산임금에 대해 문의하는 문구를 작성하세요."
+                    },
+                    "probation": {
+                        "⚖️": "수습기간은 근로기준법에 따라 합리적인 범위 내에서만 인정됩니다. 수습기간 중에도 근로기준법상 보호를 받으며, 부당한 해고는 제한됩니다.",
+                        "🎯": "- 수습 기간과 조건을 확인하세요\n- 근로계약서의 수습 조항을 검토하세요\n- 수습 기간 중 평가 내용을 정리하세요",
+                        "💬": "회사에 수습기간과 평가 기준에 대해 문의하는 문구를 작성하세요."
+                    },
+                }
+                
+                default_content = default_content_by_type.get(classified_type, {
+                    "⚖️": "관련 법령을 확인하여 현재 상황을 법적으로 평가해야 합니다.",
+                    "🎯": "- 상황을 객관적으로 정리하세요\n- 관련 문서를 보관하세요\n- 증거 자료를 수집하세요",
+                    "💬": "회사나 상담 기관에 상황을 설명할 수 있는 문구를 작성하세요."
+                })
+                
+                # 누락된 섹션 추가
                 for section_info in missing_sections:
-                    summary += f"\n\n{section_info['title']}\n\n해당 섹션 내용을 확인하는 중입니다."
+                    emoji = section_info.get("emoji", "")
+                    default_text = default_content.get(emoji, "해당 섹션 내용을 확인하는 중입니다.")
+                    summary += f"\n\n{section_info['title']}\n\n{default_text}"
         
         return {
             "summary": summary,

@@ -283,6 +283,7 @@ export default function SituationAnalysisPage() {
   const [summary, setSummary] = useState('') // 한 줄 요약
   const [details, setDetails] = useState('') // 자세한 설명
   const [showAdvanced, setShowAdvanced] = useState(false) // 고급 정보 표시 여부
+  const [showDetailsGuide, setShowDetailsGuide] = useState(false) // 자세한 설명 안내 문구 표시 여부
   const [employmentType, setEmploymentType] = useState<EmploymentType | undefined>(undefined)
   const [workPeriod, setWorkPeriod] = useState<WorkPeriod | undefined>(undefined)
   const [weeklyHours, setWeeklyHours] = useState<number>(40)
@@ -506,7 +507,7 @@ export default function SituationAnalysisPage() {
     }
   }, [searchParams, loadAnalysisById])
 
-  // 템플릿 선택 핸들러
+  // 템플릿 선택 핸들러 - 스크롤 및 하이라이트 효과 추가
   const handleTemplateSelect = (template: typeof SITUATION_TEMPLATES[0]) => {
     setCategoryHint(template.category)
     setSummary(template.summary)
@@ -521,6 +522,32 @@ export default function SituationAnalysisPage() {
     if (template.category === 'probation' || template.employmentType === 'intern') {
       setIsProbation(true)
     }
+    
+    // 입력 폼 영역으로 부드럽게 스크롤
+    setTimeout(() => {
+      const formSection = document.getElementById('situation-input-form')
+      if (formSection) {
+        formSection.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        
+        // 하이라이트 효과를 위한 클래스 추가
+        const summaryInput = document.getElementById('summary')
+        const detailsTextarea = document.getElementById('details')
+        
+        if (summaryInput) {
+          summaryInput.classList.add('ring-4', 'ring-blue-300', 'ring-offset-2')
+          setTimeout(() => {
+            summaryInput.classList.remove('ring-4', 'ring-blue-300', 'ring-offset-2')
+          }, 2000)
+        }
+        
+        if (detailsTextarea) {
+          detailsTextarea.classList.add('ring-4', 'ring-blue-300', 'ring-offset-2')
+          setTimeout(() => {
+            detailsTextarea.classList.remove('ring-4', 'ring-blue-300', 'ring-offset-2')
+          }, 2000)
+        }
+      }
+    }, 100)
   }
 
   // 예시 텍스트 불러오기
@@ -842,41 +869,33 @@ export default function SituationAnalysisPage() {
       <div className="container mx-auto px-4 sm:px-6 py-8 sm:py-12 max-w-5xl">
         {/* Header */}
         <div className="mb-10">
-          {/* Hero Section */}
-          <div className="text-center mb-10 relative">
+          {/* Hero Section - 높이 최적화 */}
+          <div className="text-center mb-6 sm:mb-8 relative">
             {/* 배경 장식 요소 */}
             <div className="absolute inset-0 -z-10 overflow-hidden">
               <div className="absolute top-0 left-1/2 -translate-x-1/2 w-96 h-96 bg-blue-200/20 rounded-full blur-3xl"></div>
               <div className="absolute top-10 right-1/4 w-64 h-64 bg-indigo-200/20 rounded-full blur-2xl"></div>
             </div>
             
-            {/* 아이콘 배지 */}
-            <div className="inline-flex items-center justify-center mb-6 animate-in fade-in slide-in-from-top-4 duration-700">
-              <div className="relative">
-                <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-2xl blur-lg opacity-50 animate-pulse"></div>
-                <div className="relative p-4 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl shadow-xl">
-                  <MessageSquare className="w-8 h-8 text-white" />
-                </div>
-              </div>
-            </div>
             
-            {/* 메인 타이틀 */}
-            <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold mb-6 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 bg-clip-text text-transparent leading-tight animate-in fade-in slide-in-from-bottom-4 duration-700">
+            
+            {/* 메인 타이틀 - 행간 조정 */}
+            <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold mb-4 sm:mb-5 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 bg-clip-text text-transparent leading-tight animate-in fade-in slide-in-from-bottom-4 duration-700">
               지금 겪는 상황,<br className="sm:hidden" /> 먼저 말로 설명해 주세요
             </h1>
             
-            {/* 서브 타이틀 */}
-            <p className="text-lg sm:text-xl md:text-2xl text-slate-700 max-w-3xl mx-auto leading-relaxed font-medium animate-in fade-in slide-in-from-bottom-6 duration-700 delay-150">
+            {/* 서브 타이틀 - 행간 조정 */}
+            <p className="text-base sm:text-lg md:text-xl text-slate-700 max-w-3xl mx-auto leading-snug font-medium animate-in fade-in slide-in-from-bottom-6 duration-700 delay-150">
               <span className="inline-block bg-gradient-to-r from-blue-50 to-indigo-50 px-4 py-1.5 rounded-full border border-blue-200/50 shadow-sm">
                 3가지 정보만 적으면
               </span>
               <br className="hidden sm:block" />
-              <span className="mt-2 inline-block">법적 관점 + 행동 가이드를 한 번에 정리해 드려요</span>
+              <span className="mt-1.5 inline-block">법적 관점 + 행동 가이드를 한 번에 정리해 드려요</span>
             </p>
           </div>
           
           {/* 3단계 인디케이터 - 개선된 디자인 */}
-          <div className="flex flex-wrap items-center justify-center gap-4 mb-10 animate-in fade-in slide-in-from-bottom-8 duration-700 delay-300">
+          <div className="flex flex-wrap items-center justify-center gap-4 mb-6 sm:mb-8 animate-in fade-in slide-in-from-bottom-8 duration-700 delay-300">
             {/* 단계 1 */}
             <div className="group relative">
               <div className="absolute -inset-1 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full blur opacity-30 group-hover:opacity-50 transition-opacity"></div>
@@ -919,7 +938,7 @@ export default function SituationAnalysisPage() {
           </div>
           
           {/* 안내 문구 - 개선된 디자인 */}
-          <div className="relative bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 border-2 border-amber-200/80 rounded-2xl p-6 mb-8 shadow-lg hover:shadow-xl transition-all animate-in fade-in slide-in-from-bottom-10 duration-700 delay-500">
+          <div className="relative bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 border-2 border-amber-200/80 rounded-2xl p-4 sm:p-5 mb-6 sm:mb-8 shadow-lg hover:shadow-xl transition-all animate-in fade-in slide-in-from-bottom-10 duration-700 delay-500">
             {/* 배경 패턴 */}
             <div className="absolute inset-0 rounded-2xl opacity-5">
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_1px_1px,_rgba(0,0,0,0.15)_1px,_transparent_0)] bg-[length:20px_20px]"></div>
@@ -954,7 +973,9 @@ export default function SituationAnalysisPage() {
                   </div>
                   <div>
                     <CardTitle className="text-xl font-bold">자주 있는 상황을 골라서 시작해볼 수도 있어요</CardTitle>
-                    <CardDescription className="mt-1">클릭하면 자동으로 입력됩니다</CardDescription>
+                    <CardDescription className="mt-1">
+                      대표 시나리오 프리셋 · 클릭하면 아래 입력 폼에 자동으로 채워집니다
+                    </CardDescription>
                   </div>
                 </div>
               </CardHeader>
@@ -1005,7 +1026,7 @@ export default function SituationAnalysisPage() {
               </CardContent>
             </Card>
 
-            <Card className="border-2 border-slate-200 shadow-lg bg-white/80 backdrop-blur-sm">
+            <Card id="situation-input-form" className="border-2 border-slate-200 shadow-lg bg-white/80 backdrop-blur-sm">
               <CardHeader className="pb-4">
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg shadow-md">
@@ -1013,16 +1034,26 @@ export default function SituationAnalysisPage() {
                   </div>
                   <div>
                     <CardTitle className="text-xl font-bold">상황 정보 입력</CardTitle>
-                    <CardDescription className="mt-1">3개만 하면 끝나는 간단한 폼입니다</CardDescription>
+                    <CardDescription className="mt-1">
+                      3개만 하면 끝나는 간단한 폼입니다
+                      {summary && (
+                        <span className="ml-2 text-blue-600 font-medium">
+                          · 자주 있는 상황을 선택하셨다면, 아래 내용이 자동으로 채워져요
+                        </span>
+                      )}
+                    </CardDescription>
                   </div>
                 </div>
               </CardHeader>
               <CardContent className="space-y-8">
                 {/* 1. 상황 유형 선택 (칩 버튼) */}
                 <div>
-                  <Label className="text-base font-bold mb-4 block text-slate-900">
-                    Q. 어떤 상황에 가까워 보이나요?
-                  </Label>
+                  <div className="mb-2">
+                    <Label className="text-base font-bold mb-1 block text-slate-900">
+                      Q. 어떤 상황에 가까워 보이나요?
+                    </Label>
+                    <p className="text-xs text-slate-500">세부 카테고리 필터 · 위 프리셋과 별도로 선택 가능해요</p>
+                  </div>
                   <div className="flex flex-wrap gap-2">
                     {SITUATION_CATEGORIES.map((category) => (
                       <button
@@ -1100,28 +1131,49 @@ export default function SituationAnalysisPage() {
                       예시 불러오기
                     </Button>
                   </div>
-                  <div className="bg-blue-50/50 border border-blue-200 rounded-lg p-4 mb-4">
-                    <p className="text-sm font-semibold text-blue-900 mb-2">
-                      가능하면 아래 사항을 포함해 주세요:
-                    </p>
-                    <ul className="text-xs text-blue-800 space-y-1.5 list-none">
-                      <li className="flex items-start gap-2">
-                        <span className="text-blue-600 mt-0.5">•</span>
-                        <span>언제부터 이런 일이 발생했는지</span>
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <span className="text-blue-600 mt-0.5">•</span>
-                        <span>상대방(회사, 팀장, 클라이언트 등)이 누구인지</span>
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <span className="text-blue-600 mt-0.5">•</span>
-                        <span>지금까지 어떤 대화를 나눴는지</span>
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <span className="text-blue-600 mt-0.5">•</span>
-                        <span>가지고 있는 증거(카톡, 메일, 녹취 등)가 있는지</span>
-                      </li>
-                    </ul>
+                  {/* 안내 문구 - 접기/펼치기 기능 */}
+                  <div className="mb-4">
+                    <button
+                      type="button"
+                      onClick={() => setShowDetailsGuide(!showDetailsGuide)}
+                      className="w-full text-left bg-blue-50/50 border border-blue-200 rounded-lg p-3 hover:bg-blue-50 transition-colors"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Info className="w-4 h-4 text-blue-600" />
+                          <p className="text-sm font-semibold text-blue-900">
+                            가능하면 아래 사항을 포함해 주세요:
+                          </p>
+                        </div>
+                        {showDetailsGuide ? (
+                          <ChevronUp className="w-4 h-4 text-blue-600" />
+                        ) : (
+                          <ChevronDown className="w-4 h-4 text-blue-600" />
+                        )}
+                      </div>
+                    </button>
+                    {showDetailsGuide && (
+                      <div className="mt-2 bg-blue-50/30 border border-blue-200 rounded-lg p-4">
+                        <ul className="text-xs text-blue-800 space-y-1.5 list-none">
+                          <li className="flex items-start gap-2">
+                            <span className="text-blue-600 mt-0.5">•</span>
+                            <span>언제부터 이런 일이 발생했는지</span>
+                          </li>
+                          <li className="flex items-start gap-2">
+                            <span className="text-blue-600 mt-0.5">•</span>
+                            <span>상대방(회사, 팀장, 클라이언트 등)이 누구인지</span>
+                          </li>
+                          <li className="flex items-start gap-2">
+                            <span className="text-blue-600 mt-0.5">•</span>
+                            <span>지금까지 어떤 대화를 나눴는지</span>
+                          </li>
+                          <li className="flex items-start gap-2">
+                            <span className="text-blue-600 mt-0.5">•</span>
+                            <span>가지고 있는 증거(카톡, 메일, 녹취 등)가 있는지</span>
+                          </li>
+                        </ul>
+                      </div>
+                    )}
                   </div>
                   <Textarea
                     id="details"
@@ -1136,16 +1188,16 @@ export default function SituationAnalysisPage() {
                   />
                 </div>
 
-                {/* 4. 고급 정보 (아코디언) */}
-                <div className="border-2 border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm">
+                {/* 4. 고급 정보 (아코디언) - 부담 낮추기 */}
+                <div className="border-2 border-dashed border-slate-300 rounded-xl overflow-hidden bg-slate-50/50 shadow-sm">
                   <button
                     onClick={() => setShowAdvanced(!showAdvanced)}
-                    className="w-full px-5 py-4 flex items-center justify-between hover:bg-gradient-to-r hover:from-blue-50/50 hover:to-indigo-50/50 transition-all"
+                    className="w-full px-5 py-4 flex items-center justify-between hover:bg-gradient-to-r hover:from-blue-50/30 hover:to-indigo-50/30 transition-all"
                   >
                     <div className="flex items-center gap-3">
                       <div className={cn(
                         "p-2 rounded-lg transition-colors",
-                        showAdvanced ? "bg-blue-100" : "bg-slate-100"
+                        showAdvanced ? "bg-blue-100" : "bg-slate-200"
                       )}>
                         {showAdvanced ? (
                           <ChevronUp className="w-5 h-5 text-blue-600" />
@@ -1154,8 +1206,8 @@ export default function SituationAnalysisPage() {
                         )}
                       </div>
                       <div className="text-left">
-                        <span className="font-bold text-slate-900 block">선택 입력 (근로조건까지 알려주면 더 정확하게 판단해 드릴게요)</span>
-                        <span className="text-xs text-slate-500 mt-0.5">근로형태, 주당 근로시간, 수습 여부 정도만 적어도 충분해요.</span>
+                        <span className="font-bold text-slate-900 block">선택 입력 · 안 적어도 분석 가능해요</span>
+                        <span className="text-xs text-slate-600 mt-0.5">근로조건까지 알려주시면 더 정확하게 판단해 드려요 (근로형태, 주당 근로시간, 수습 여부 정도만)</span>
                       </div>
                     </div>
                   </button>
@@ -1300,14 +1352,17 @@ export default function SituationAnalysisPage() {
           </div>
         )}
 
-        {/* 하단 고정 CTA 바 */}
+        {/* 하단 고정 CTA 바 - 개선된 디자인 */}
         {!analysisResult && (
-          <div className="sticky bottom-0 left-0 right-0 bg-white/95 backdrop-blur-xl border-t-2 border-slate-200 shadow-2xl z-40 -mx-4 sm:-mx-6 px-4 sm:px-6 py-5">
+          <div className="sticky bottom-0 left-0 right-0 bg-white/95 backdrop-blur-xl border-t-2 border-slate-200 shadow-2xl z-40 -mx-4 sm:-mx-6 px-4 sm:px-6 py-4 sm:py-5">
             <div className="container mx-auto max-w-5xl">
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-slate-700">
-                    입력된 내용으로 상황을 분석하고, 법적 관점 + 대응 가이드를 생성합니다.
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4">
+                <div className="flex-1 min-w-0 text-center sm:text-left">
+                  <p className="text-sm font-semibold text-slate-800 mb-0.5">
+                    입력한 내용으로 상황을 분석하고,
+                  </p>
+                  <p className="text-sm text-slate-600">
+                    법적 관점 + 대응 가이드를 생성합니다.
                   </p>
                 </div>
                 <Button

@@ -200,6 +200,7 @@ class CriteriaItem(BaseModel):
     name: str = Field(..., description="기준명")
     status: str = Field(..., description="충족 여부 (likely, unclear, unlikely)")
     reason: str = Field(..., description="판단 이유")
+    legalBasis: Optional[List[Dict[str, Any]]] = Field(default=None, description="법적 근거 배열 (선택적)")
 
 
 class ActionStep(BaseModel):

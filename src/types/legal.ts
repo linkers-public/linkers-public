@@ -115,10 +115,26 @@ export interface SituationAnalysisRequest {
   situationText: string // summary + details를 합친 전체 텍스트 (백엔드 호환성)
 }
 
+export interface LegalBasisItem {
+  docId: string
+  docTitle: string
+  docType: 'law' | 'manual' | 'case' | 'standard_contract'
+  chunkIndex?: number
+  article?: string // 조항 제목 (예: "제7조(임금지급시기)")
+  snippet: string
+  snippetHighlight?: string
+  reason?: string
+  explanation?: string
+  similarityScore?: number
+  fileUrl?: string
+  externalId?: string
+}
+
 export interface CriteriaItem {
   name: string
   status: 'likely' | 'unclear' | 'unlikely'
   reason: string
+  legalBasis?: LegalBasisItem[] // 법적 근거 배열 (선택적)
 }
 
 export interface ActionStep {

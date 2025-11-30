@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { FileText, Scale, ChevronRight } from 'lucide-react'
 import { RAGHighlightedMarkdown } from '@/components/legal/RAGHighlightedText'
 import { LegalEvidenceSection, EvidenceDrawer } from '@/components/legal/LegalEvidenceSection'
+import { LegalBasisModal, type LegalBasisDetail } from '@/components/legal/LegalBasisModal'
 import type { SituationAnalysisResponse } from '@/types/legal'
 
 interface LegalReportCardProps {
@@ -20,6 +21,7 @@ export function LegalReportCard({ analysisResult, onCopy }: LegalReportCardProps
   console.log('🔍 [LegalReportCard] criteria 길이:', analysisResult.criteria?.length || 0)
   
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
+  const [selectedCriterionIndex, setSelectedCriterionIndex] = useState<number | null>(null)
   
   // summary에서 "## 상황 분석의 결과" 섹션만 추출
   const summaryText = analysisResult.summary || ''
@@ -39,6 +41,53 @@ export function LegalReportCard({ analysisResult, onCopy }: LegalReportCardProps
     sourceType: (source.sourceType || 'law') as 'law' | 'standard_contract' | 'manual' | 'case',
     externalId: source.externalId || null,
   })) || []
+
+  /**
+   * SourceItem을 LegalBasisDetail로 변환
+   */
+  const convertSourcesToLegalBasis = (sources: typeof evidenceSources): LegalBasisDetail[] => {
+    return sources.map((source) => ({
+      docId: source.sourceId,
+      docTitle: source.title,
+      docType: source.sourceType,
+      snippet: source.snippet,
+      similarityScore: source.score,
+      fileUrl: source.fileUrl || undefined,
+      externalId: source.externalId || undefined,
+    }))
+  }
+
+  /**
+   * 각 criterion에 대한 legalBasis 가져오기
+   * criterion에 legalBasis가 있으면 사용, 없으면 fallback으로 모든 sources 사용
+   */
+  const getLegalBasisForCriterion = (criterionIndex: number): LegalBasisDetail[] => {
+    const criterion = analysisResult.criteria?.[criterionIndex]
+    if (!criterion) {
+      return []
+    }
+    
+    // criterion에 legalBasis가 있으면 사용
+    if (criterion.legalBasis && criterion.legalBasis.length > 0) {
+      return criterion.legalBasis.map((basis) => ({
+        docId: basis.docId,
+        docTitle: basis.docTitle,
+        docType: basis.docType,
+        chunkIndex: basis.chunkIndex,
+        article: basis.article,
+        snippet: basis.snippet,
+        snippetHighlight: basis.snippetHighlight,
+        reason: basis.reason,
+        explanation: basis.explanation,
+        similarityScore: basis.similarityScore,
+        fileUrl: basis.fileUrl,
+        externalId: basis.externalId,
+      }))
+    }
+    
+    // fallback: 모든 sources를 반환
+    return convertSourcesToLegalBasis(evidenceSources)
+  }
 
   return (
     <Card className="border border-gray-100 shadow-lg bg-white">
@@ -81,7 +130,35 @@ export function LegalReportCard({ analysisResult, onCopy }: LegalReportCardProps
           </div>
         )}
 
-        {/* 섹션 2: 법적 판단 */}
+        {/* 섹션 2: 법적 관점 (summary의 ⚖️ 섹션) */}
+        {(() => {
+          // summary에서 "## ⚖️ 법적 관점에서 본 현재상황" 섹션 추출
+          const legalSectionMatch = summaryText.match(/##\s*⚖️\s*법적\s*관점에서\s*본\s*현재상황\s*\n([\s\S]*?)(?=##|$)/i) ||
+                                   summaryText.match(/##\s*⚖️\s*법적\s*관점\s*\n([\s\S]*?)(?=##|$)/i) ||
+                                   summaryText.match(/##\s*법적\s*관점에서\s*본\s*현재상황\s*\n([\s\S]*?)(?=##|$)/i)
+          const legalViewContent = legalSectionMatch ? legalSectionMatch[1].trim() : null
+          
+          if (legalViewContent && legalViewContent !== '해당 섹션 내용을 확인하는 중입니다.') {
+            return (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <Scale className="w-5 h-5 text-amber-600" />
+                  <h3 className="text-lg font-bold text-slate-900">법적 관점에서 본 현재 상황</h3>
+                </div>
+                <div className="prose prose-slate max-w-none text-sm leading-relaxed">
+                  <RAGHighlightedMarkdown 
+                    content={legalViewContent}
+                    sources={analysisResult.sources || []}
+                  />
+                </div>
+                <hr className="border-gray-200" />
+              </div>
+            )
+          }
+          return null
+        })()}
+
+        {/* 섹션 3: 법적 관점에서 본 현재 상황 (심플 카드 버전) */}
         {analysisResult.criteria && analysisResult.criteria.length > 0 && (
           <div className="space-y-4">
             <div className="flex items-center gap-2 mb-2">
@@ -91,32 +168,52 @@ export function LegalReportCard({ analysisResult, onCopy }: LegalReportCardProps
             <div className="space-y-3">
               {analysisResult.criteria.map((criterion, idx) => {
                 const statusEmoji = criterion.status === 'likely' ? '✅' : criterion.status === 'unclear' ? '⚠️' : '❌'
-                const statusLabel = criterion.status === 'likely' ? '충족' : criterion.status === 'unclear' ? '불명확' : '불충분'
+                const statusLabel = criterion.status === 'likely' ? '준수' : criterion.status === 'unclear' ? '불명확' : '불충분'
                 const statusClass = criterion.status === 'likely' 
                   ? 'bg-green-100 text-green-800 border-green-300' 
                   : criterion.status === 'unclear'
                   ? 'bg-yellow-100 text-yellow-800 border-yellow-300'
                   : 'bg-red-100 text-red-800 border-red-300'
                 
+                // 한 줄 요약 추출 (reason의 첫 줄 또는 첫 문장)
+                const oneLineSummary = criterion.reason
+                  ? criterion.reason.split('\n')[0].split('.').slice(0, 2).join('.').trim() || criterion.reason.substring(0, 100) + '...'
+                  : '법적 근거를 확인하는 중입니다.'
+                
+                const legalBasisCount = getLegalBasisForCriterion(idx).length
+                
                 return (
-                  <div key={idx} className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+                  <div key={idx} className="bg-white border border-slate-200 rounded-lg p-4 hover:shadow-md transition-shadow">
                     <div className="flex items-start gap-3">
+                      {/* 번호 뱃지 */}
                       <div className="flex-shrink-0 w-8 h-8 rounded-full bg-slate-600 text-white font-bold text-sm flex items-center justify-center">
                         {idx + 1}
                       </div>
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
+                      
+                      <div className="flex-1 min-w-0">
+                        {/* 항목명 + 상태 배지 */}
+                        <div className="flex items-center gap-2 mb-2 flex-wrap">
                           <h4 className="font-semibold text-slate-900">{criterion.name}</h4>
                           <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${statusClass}`}>
                             {statusEmoji} {statusLabel}
                           </span>
                         </div>
-                        <div className="prose prose-slate max-w-none text-xs text-slate-700">
-                          <RAGHighlightedMarkdown 
-                            content={criterion.reason}
-                            sources={analysisResult.sources || []}
-                          />
-                        </div>
+                        
+                        {/* 한 줄 설명 */}
+                        <p className="text-sm text-slate-700 mb-2 leading-relaxed line-clamp-2">
+                          {oneLineSummary}
+                        </p>
+                        
+                        {/* 법적 근거 보기 버튼 */}
+                        {legalBasisCount > 0 && (
+                          <button
+                            onClick={() => setSelectedCriterionIndex(idx)}
+                            className="text-xs text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1 transition-colors"
+                          >
+                            <span>법적 근거 보기 ({legalBasisCount})</span>
+                            <ChevronRight className="w-3 h-3" />
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -146,6 +243,18 @@ export function LegalReportCard({ analysisResult, onCopy }: LegalReportCardProps
           sources={evidenceSources}
           isOpen={isDrawerOpen}
           onOpenChange={setIsDrawerOpen}
+        />
+      )}
+
+      {/* 법적 근거 모달 */}
+      {selectedCriterionIndex !== null && analysisResult.criteria && analysisResult.criteria[selectedCriterionIndex] && (
+        <LegalBasisModal
+          isOpen={selectedCriterionIndex !== null}
+          onClose={() => setSelectedCriterionIndex(null)}
+          issueTitle={analysisResult.criteria[selectedCriterionIndex].name}
+          issueStatus={analysisResult.criteria[selectedCriterionIndex].status}
+          detailSummary={analysisResult.criteria[selectedCriterionIndex].reason}
+          legalBasis={getLegalBasisForCriterion(selectedCriterionIndex)}
         />
       )}
     </Card>
