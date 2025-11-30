@@ -408,6 +408,10 @@ export function ContractChat({
               payment: '보수·수당',
               liability: '손해배상',
               dispute: '분쟁해결',
+              harassment: '직장 내 괴롭힘',
+              probation: '수습/해지',
+              stock_option: '스톡옵션',
+              other: '기타',
             }[issue.category] || issue.category
           : '계약 조항'
         

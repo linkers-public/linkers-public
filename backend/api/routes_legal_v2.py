@@ -38,6 +38,8 @@ from models.schemas import (
     UsedChunksV2,
     UsedChunkV2,
     ConversationRequestV2,
+    CreateChatSessionRequest,
+    ChatMessageRequest,
     ActionPlan,
     CriteriaItem,
 )
