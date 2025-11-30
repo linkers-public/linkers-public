@@ -533,11 +533,30 @@ export function RAGHighlightedMarkdown({ content, sources = [] }: RAGHighlighted
 
   // 마크다운 텍스트를 파싱하여 하이라이팅 적용 (메모이제이션)
   const highlightedContent = useMemo(() => {
+    // API에서 이미 HTML이 포함된 경우를 대비해 HTML 태그 완전히 제거 (텍스트만 추출)
+    let cleanContent = content
+    // HTML 태그가 포함되어 있는지 확인하고 모든 HTML 태그 제거
+    if (content.includes('<') && content.includes('>')) {
+      console.log('🔍 [RAGHighlightedMarkdown] HTML 태그가 포함된 content 감지:', content.substring(0, 200))
+      // 모든 HTML 태그 제거 (텍스트만 추출)
+      cleanContent = content.replace(/<[^>]+>/g, '')
+      console.log('🔍 [RAGHighlightedMarkdown] HTML 태그 제거 후:', cleanContent.substring(0, 200))
+      // HTML 엔티티 디코딩
+      cleanContent = cleanContent
+        .replace(/&quot;/g, '"')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&#39;/g, "'")
+        .replace(/&#x27;/g, "'")
+    }
+    
     if (!sources || sources.length === 0) {
-      return parseMarkdown(content)
+      return parseMarkdown(cleanContent)
     }
 
-    let processedContent = content
+    let processedContent = cleanContent
     const matches: Array<{ pattern: string; title: string; source: SourceItem }> = []
 
     // 모든 패턴으로 문서 제목 찾기

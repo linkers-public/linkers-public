@@ -15,16 +15,22 @@ logger = logging.getLogger(__name__)
 # pydantic_settings가 자동으로 환경변수를 필드에 매핑함
 GROQ_API_KEY = settings.groq_api_key or os.getenv("GROQ_API_KEY")
 
-# 디버깅: 어떤 키가 사용되는지 확인 (print로 즉시 출력)
-if GROQ_API_KEY and GROQ_API_KEY != "not_set":
-    masked_key = GROQ_API_KEY[:8] + "..." + GROQ_API_KEY[-8:] if len(GROQ_API_KEY) > 16 else "***"
-    print(f"[llm_api] GROQ_API_KEY 로드됨: {masked_key} (길이: {len(GROQ_API_KEY)})")
-    print(f"[llm_api] settings.groq_api_key: {settings.groq_api_key[:8] + '...' if settings.groq_api_key and len(settings.groq_api_key) > 8 else 'None'}")
-    print(f"[llm_api] os.getenv('GROQ_API_KEY'): {os.getenv('GROQ_API_KEY')[:8] + '...' if os.getenv('GROQ_API_KEY') and len(os.getenv('GROQ_API_KEY')) > 8 else 'None'}")
-    logger.info(f"[llm_api] GROQ_API_KEY 로드됨: {masked_key} (길이: {len(GROQ_API_KEY)})")
-else:
-    print("[llm_api] ⚠️ GROQ_API_KEY가 설정되지 않았습니다!")
-    logger.warning("[llm_api] GROQ_API_KEY가 설정되지 않았습니다!")
+# 디버깅: 어떤 키가 사용되는지 확인 (logger만 사용 - multiprocessing spawn 호환성)
+# Windows에서 uvicorn reload 시 multiprocessing spawn 과정에서 모듈 레벨 print가 문제를 일으킬 수 있음
+try:
+    if GROQ_API_KEY and GROQ_API_KEY != "not_set":
+        masked_key = GROQ_API_KEY[:8] + "..." + GROQ_API_KEY[-8:] if len(GROQ_API_KEY) > 16 else "***"
+        logger.info(f"[llm_api] GROQ_API_KEY 로드됨: {masked_key} (길이: {len(GROQ_API_KEY)})")
+        logger.info(f"[llm_api] settings.groq_api_key: {settings.groq_api_key[:8] + '...' if settings.groq_api_key and len(settings.groq_api_key) > 8 else 'None'}")
+        logger.info(f"[llm_api] os.getenv('GROQ_API_KEY'): {os.getenv('GROQ_API_KEY')[:8] + '...' if os.getenv('GROQ_API_KEY') and len(os.getenv('GROQ_API_KEY')) > 8 else 'None'}")
+    else:
+        logger.warning("[llm_api] GROQ_API_KEY가 설정되지 않았습니다!")
+except (KeyboardInterrupt, SystemExit):
+    # multiprocessing spawn 과정에서 발생할 수 있는 인터럽트 무시
+    pass
+except Exception as e:
+    # 기타 예외는 로깅만 하고 계속 진행
+    logger.warning(f"[llm_api] 설정 로드 중 예외 발생 (무시됨): {e}")
 
 if not GROQ_API_KEY:
     import warnings
@@ -96,7 +102,6 @@ def ask_groq_with_messages(messages: list, temperature: float = 0.5, model: str 
     if not hasattr(ask_groq_with_messages, '_key_logged'):
         masked_key = GROQ_API_KEY[:8] + "..." + GROQ_API_KEY[-8:] if GROQ_API_KEY != "not_set" and len(GROQ_API_KEY) > 16 else "***"
         logger.info(f"[llm_api] 실제 사용 중인 GROQ_API_KEY: {masked_key} (길이: {len(GROQ_API_KEY) if GROQ_API_KEY != 'not_set' else 0})")
-        print(f"[llm_api] 실제 사용 중인 GROQ_API_KEY: {masked_key}")
         ask_groq_with_messages._key_logged = True
     
     try:

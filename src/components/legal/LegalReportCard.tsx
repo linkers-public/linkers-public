@@ -2,9 +2,10 @@
 
 import React, { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { FileText, Scale, ChevronRight } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { FileText, Scale, ChevronRight, ExternalLink, BookOpen } from 'lucide-react'
 import { RAGHighlightedMarkdown } from '@/components/legal/RAGHighlightedText'
-import { LegalEvidenceSection, EvidenceDrawer } from '@/components/legal/LegalEvidenceSection'
+import { EvidenceDrawer } from '@/components/legal/LegalEvidenceSection'
 import { LegalBasisModal, type LegalBasisDetail } from '@/components/legal/LegalBasisModal'
 import type { SituationAnalysisResponse } from '@/types/legal'
 
@@ -22,6 +23,7 @@ export function LegalReportCard({ analysisResult, onCopy }: LegalReportCardProps
   
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
   const [selectedCriterionIndex, setSelectedCriterionIndex] = useState<number | null>(null)
+  const [isSourcesExpanded, setIsSourcesExpanded] = useState(false)
   
   // summary에서 "## 상황 분석의 결과" 섹션만 추출
   const summaryText = analysisResult.summary || ''
@@ -31,11 +33,12 @@ export function LegalReportCard({ analysisResult, onCopy }: LegalReportCardProps
   
   const situationAnalysisContent = sectionMatch ? sectionMatch[1].trim() : summaryText
 
-  // 근거 자료 변환
+  // 근거 자료 변환 (중복 제거 없이 모든 항목 표시)
   const evidenceSources = analysisResult.sources?.map((source) => ({
     sourceId: source.sourceId,
     title: source.title,
     snippet: source.snippet,
+    snippetAnalyzed: source.snippetAnalyzed,  // 분석된 결과 포함
     score: source.score,
     fileUrl: source.fileUrl || null,
     sourceType: (source.sourceType || 'law') as 'law' | 'standard_contract' | 'manual' | 'case',
@@ -158,12 +161,12 @@ export function LegalReportCard({ analysisResult, onCopy }: LegalReportCardProps
           return null
         })()}
 
-        {/* 섹션 3: 법적 관점에서 본 현재 상황 (심플 카드 버전) */}
+        {/* 섹션 3: 법적 판단 기준 (criteria 카드 버전) */}
         {analysisResult.criteria && analysisResult.criteria.length > 0 && (
           <div className="space-y-4">
             <div className="flex items-center gap-2 mb-2">
               <Scale className="w-5 h-5 text-amber-600" />
-              <h3 className="text-lg font-bold text-slate-900">법적 관점에서 본 현재 상황</h3>
+              <h3 className="text-lg font-bold text-slate-900">법적 판단 기준</h3>
             </div>
             <div className="space-y-3">
               {analysisResult.criteria.map((criterion, idx) => {
@@ -175,9 +178,34 @@ export function LegalReportCard({ analysisResult, onCopy }: LegalReportCardProps
                   ? 'bg-yellow-100 text-yellow-800 border-yellow-300'
                   : 'bg-red-100 text-red-800 border-red-300'
                 
+                // 디버깅: criterion.reason 확인
+                console.log(`🔍 [LegalReportCard] criterion[${idx}]:`, {
+                  name: criterion.name,
+                  status: criterion.status,
+                  reason: criterion.reason,
+                  reasonLength: criterion.reason?.length || 0,
+                  reasonType: typeof criterion.reason,
+                })
+                
+                // reason 필드 추출
+                const reasonText = criterion.reason || ''
+                
                 // 한 줄 요약 추출 (reason의 첫 줄 또는 첫 문장)
-                const oneLineSummary = criterion.reason
-                  ? criterion.reason.split('\n')[0].split('.').slice(0, 2).join('.').trim() || criterion.reason.substring(0, 100) + '...'
+                // reason이 비어있으면 기본 메시지 표시
+                const oneLineSummary = reasonText && reasonText.trim()
+                  ? (() => {
+                      // 첫 줄 추출
+                      const firstLine = reasonText.split('\n')[0].trim()
+                      // 첫 두 문장 추출 (마침표 기준)
+                      const sentences = firstLine.split('.').filter((s: string) => s.trim())
+                      if (sentences.length >= 2) {
+                        return (sentences.slice(0, 2).join('.') + '.').trim()
+                      } else if (firstLine.length > 100) {
+                        return firstLine.substring(0, 100) + '...'
+                      } else {
+                        return firstLine
+                      }
+                    })()
                   : '법적 근거를 확인하는 중입니다.'
                 
                 const legalBasisCount = getLegalBasisForCriterion(idx).length
@@ -199,10 +227,16 @@ export function LegalReportCard({ analysisResult, onCopy }: LegalReportCardProps
                           </span>
                         </div>
                         
-                        {/* 한 줄 설명 */}
-                        <p className="text-sm text-slate-700 mb-2 leading-relaxed line-clamp-2">
-                          {oneLineSummary}
-                        </p>
+                        {/* 한 줄 설명 - reason 필드 표시 */}
+                        {reasonText && reasonText.trim() ? (
+                          <p className="text-sm text-slate-700 mb-2 leading-relaxed line-clamp-2">
+                            {oneLineSummary}
+                          </p>
+                        ) : (
+                          <p className="text-sm text-slate-500 mb-2 leading-relaxed italic">
+                            법적 근거를 확인하는 중입니다.
+                          </p>
+                        )}
                         
                         {/* 법적 근거 보기 버튼 */}
                         {legalBasisCount > 0 && (
@@ -224,9 +258,166 @@ export function LegalReportCard({ analysisResult, onCopy }: LegalReportCardProps
           </div>
         )}
 
-        {/* 섹션 3: 참고 문헌 (RAG 근거) */}
-        {evidenceSources.length > 0 && (
-          <LegalEvidenceSection sources={evidenceSources} />
+        {/* 섹션 4: 참고 문헌 및 관련 사례 */}
+        {((analysisResult.relatedCases && analysisResult.relatedCases.length > 0) || evidenceSources.length > 0) && (
+          <div className="space-y-4">
+            {(() => {
+              // 참고 문헌 및 관련 사례 섹션 데이터 로그
+              console.log('📚 [LegalReportCard] 참고 문헌 및 관련 사례 섹션 데이터:')
+              console.log('📚 [LegalReportCard] relatedCases:', analysisResult.relatedCases)
+              console.log('📚 [LegalReportCard] relatedCases 개수:', analysisResult.relatedCases?.length || 0)
+              console.log('📚 [LegalReportCard] evidenceSources:', evidenceSources)
+              console.log('📚 [LegalReportCard] evidenceSources 개수:', evidenceSources.length)
+              if (analysisResult.relatedCases && analysisResult.relatedCases.length > 0) {
+                console.log('📚 [LegalReportCard] 대표 근거 케이스 (relatedCases[0]):', analysisResult.relatedCases[0])
+              }
+              evidenceSources.forEach((source, idx) => {
+                console.log(`📚 [LegalReportCard] evidenceSources[${idx}]:`, {
+                  sourceId: source.sourceId,
+                  title: source.title,
+                  sourceType: source.sourceType,
+                  score: source.score,
+                  fileUrl: source.fileUrl,
+                  snippet: source.snippet?.substring(0, 100) + '...',
+                })
+              })
+              return null
+            })()}
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <BookOpen className="w-5 h-5 text-purple-600" />
+                <h3 className="text-lg font-bold text-slate-900">참고 문헌 및 관련 사례</h3>
+              </div>
+              {evidenceSources.length > 0 && (
+                <button
+                  onClick={() => setIsSourcesExpanded(!isSourcesExpanded)}
+                  className="text-sm text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1 transition-colors"
+                >
+                  <span>출처 문서 더보기</span>
+                  <ChevronRight className={`w-4 h-4 transition-transform ${isSourcesExpanded ? 'rotate-90' : ''}`} />
+                </button>
+              )}
+            </div>
+
+            {/* 대표 근거 케이스 3개 (1*3 그리드) */}
+            {analysisResult.relatedCases && analysisResult.relatedCases.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                {analysisResult.relatedCases.slice(0, 3).map((relatedCase, idx) => {
+                  const analyzed = relatedCase.summaryAnalyzed
+                  return (
+                    <div key={idx} className="bg-gradient-to-br from-purple-50 to-pink-50 border-2 border-purple-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="px-2 py-1 bg-purple-600 text-white text-xs font-semibold rounded">
+                          대표 근거 케이스
+                        </span>
+                      </div>
+                      <h4 className="font-semibold text-slate-900 mb-2 text-sm line-clamp-2">{relatedCase.title}</h4>
+                      
+                      {/* 분석된 결과가 있으면 표시, 없으면 원본 summary */}
+                      {analyzed ? (
+                        <div className="space-y-2 mb-3">
+                          {analyzed.core_clause && (
+                            <div className="text-xs font-semibold text-purple-700">
+                              📌 {analyzed.core_clause}
+                            </div>
+                          )}
+                          <p className="text-xs text-slate-700 leading-relaxed">
+                            {analyzed.easy_summary}
+                          </p>
+                          {analyzed.action_tip && (
+                            <div className="text-xs text-amber-700 bg-amber-50 px-2 py-1 rounded border border-amber-200">
+                              💡 {analyzed.action_tip}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-slate-700 mb-3 line-clamp-3">{relatedCase.summary}</p>
+                      )}
+                      
+                      {relatedCase.fileUrl && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => relatedCase.fileUrl && window.open(relatedCase.fileUrl, '_blank')}
+                          className="w-full text-xs"
+                        >
+                          <ExternalLink className="w-3 h-3 mr-1" />
+                          문서 보기
+                        </Button>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* sources 리스트 (토글로 표시) */}
+            {evidenceSources.length > 0 && isSourcesExpanded && (
+              <div className="space-y-3 mt-4">
+                <h4 className="font-semibold text-slate-900 mb-3">관련 법령 및 가이드라인</h4>
+                {evidenceSources.map((source, idx) => {
+                  const sourceTypeLabels = {
+                    law: '법령',
+                    manual: '매뉴얼',
+                    standard_contract: '표준계약서',
+                    case: '사례',
+                  }
+                  const sourceTypeColors = {
+                    law: 'bg-blue-100 text-blue-800 border-blue-300',
+                    manual: 'bg-green-100 text-green-800 border-green-300',
+                    standard_contract: 'bg-orange-100 text-orange-800 border-orange-300',
+                    case: 'bg-purple-100 text-purple-800 border-purple-300',
+                  }
+                  
+                  return (
+                    <div key={idx} className="bg-white border border-slate-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                      <div className="flex items-start gap-3">
+                        <span className={`px-2 py-1 rounded text-xs font-semibold border ${sourceTypeColors[source.sourceType] || sourceTypeColors.law}`}>
+                          {sourceTypeLabels[source.sourceType] || '법령'}
+                        </span>
+                        <div className="flex-1">
+                          <h5 className="font-semibold text-slate-900 mb-1">{source.title}</h5>
+                          
+                          {/* 분석된 결과가 있으면 표시, 없으면 원본 snippet */}
+                          {source.snippetAnalyzed ? (
+                            <div className="space-y-2 mb-2">
+                              {source.snippetAnalyzed.core_clause && (
+                                <div className="text-xs font-semibold text-blue-700">
+                                  📌 {source.snippetAnalyzed.core_clause}
+                                </div>
+                              )}
+                              <p className="text-sm text-slate-700 leading-relaxed">
+                                {source.snippetAnalyzed.easy_summary}
+                              </p>
+                              {source.snippetAnalyzed.action_tip && (
+                                <div className="text-xs text-amber-700 bg-amber-50 px-2 py-1 rounded border border-amber-200">
+                                  💡 {source.snippetAnalyzed.action_tip}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <p className="text-sm text-slate-600 line-clamp-2 mb-2">{source.snippet}</p>
+                          )}
+                          
+                          {source.fileUrl && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => source.fileUrl && window.open(source.fileUrl, '_blank')}
+                              className="h-7 text-xs"
+                            >
+                              <ExternalLink className="w-3 h-3 mr-1" />
+                              문서 보기
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
         )}
 
         {/* 하단 안내 */}

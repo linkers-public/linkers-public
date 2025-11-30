@@ -84,51 +84,59 @@ if llm_provider_env:
     settings.llm_provider = llm_provider_env
 
 # llm_provider에 따라 use_groq와 use_ollama 자동 설정
-if settings.llm_provider.lower() == "ollama":
-    settings.use_groq = False
-    settings.use_ollama = True
-    print(f"[설정] LLM Provider: Ollama (모델: {settings.ollama_model})")
-elif settings.llm_provider.lower() == "groq":
-    settings.use_groq = True
-    settings.use_ollama = False
-    print(f"[설정] LLM Provider: Groq (모델: {settings.groq_model})")
-else:
-    # 기본값: Groq 사용
-    settings.use_groq = True
-    settings.use_ollama = False
-    print(f"[설정] LLM Provider: Groq (기본값, 모델: {settings.groq_model})")
+# Windows에서 uvicorn reload 시 multiprocessing spawn 과정에서 모듈 레벨 print가 문제를 일으킬 수 있음
+try:
+    if settings.llm_provider.lower() == "ollama":
+        settings.use_groq = False
+        settings.use_ollama = True
+        logger.info(f"[설정] LLM Provider: Ollama (모델: {settings.ollama_model})")
+    elif settings.llm_provider.lower() == "groq":
+        settings.use_groq = True
+        settings.use_ollama = False
+        logger.info(f"[설정] LLM Provider: Groq (모델: {settings.groq_model})")
+    else:
+        # 기본값: Groq 사용
+        settings.use_groq = True
+        settings.use_ollama = False
+        logger.info(f"[설정] LLM Provider: Groq (기본값, 모델: {settings.groq_model})")
+except (KeyboardInterrupt, SystemExit):
+    # multiprocessing spawn 과정에서 발생할 수 있는 인터럽트 무시
+    pass
+except Exception as e:
+    # 기타 예외는 로깅만 하고 계속 진행
+    logger.warning(f"[설정] LLM Provider 설정 중 예외 발생 (무시됨): {e}")
 
-# 디버깅: .env 파일 로드 확인 (print로 즉시 출력)
-if settings.groq_api_key:
-    masked_key = settings.groq_api_key[:8] + "..." + settings.groq_api_key[-8:] if len(settings.groq_api_key) > 16 else "***"
-    print(f"[config] GROQ_API_KEY 로드됨: {masked_key} (길이: {len(settings.groq_api_key)})")
-    print(f"[config] .env 파일 경로: {ENV_FILE_PATH}")
-    print(f"[config] .env 파일 존재 여부: {ENV_FILE_PATH.exists()}")
-    logger.info(f"[config] GROQ_API_KEY 로드됨: {masked_key} (길이: {len(settings.groq_api_key)})")
-else:
-    print("[config] ⚠️ GROQ_API_KEY가 설정되지 않았습니다!")
-    print(f"[config] .env 파일 경로: {ENV_FILE_PATH}")
-    print(f"[config] .env 파일 존재 여부: {ENV_FILE_PATH.exists()}")
-    logger.warning("[config] GROQ_API_KEY가 설정되지 않았습니다!")
-    logger.info(f"[config] .env 파일 경로: {ENV_FILE_PATH}")
-    logger.info(f"[config] .env 파일 존재 여부: {ENV_FILE_PATH.exists()}")
-    if ENV_FILE_PATH.exists():
-        print("[config] .env 파일 내용 (GROQ 관련):")
-        logger.info(f"[config] .env 파일 내용 (GROQ 관련):")
-        try:
-            with open(ENV_FILE_PATH, 'r', encoding='utf-8') as f:
-                for line in f:
-                    if 'GROQ' in line.upper():
-                        # 키 값은 마스킹
-                        if '=' in line:
-                            key, value = line.split('=', 1)
-                            masked_value = value.strip()[:8] + "..." + value.strip()[-8:] if len(value.strip()) > 16 else "***"
-                            print(f"[config]   {key}={masked_value}")
-                            logger.info(f"[config]   {key}={masked_value}")
-                        else:
-                            print(f"[config]   {line.strip()}")
-                            logger.info(f"[config]   {line.strip()}")
-        except Exception as e:
-            print(f"[config] .env 파일 읽기 실패: {e}")
-            logger.error(f"[config] .env 파일 읽기 실패: {e}")
+# 디버깅: .env 파일 로드 확인 (logger만 사용 - multiprocessing spawn 호환성)
+# Windows에서 uvicorn reload 시 multiprocessing spawn 과정에서 모듈 레벨 print가 문제를 일으킬 수 있음
+try:
+    if settings.groq_api_key:
+        masked_key = settings.groq_api_key[:8] + "..." + settings.groq_api_key[-8:] if len(settings.groq_api_key) > 16 else "***"
+        logger.info(f"[config] GROQ_API_KEY 로드됨: {masked_key} (길이: {len(settings.groq_api_key)})")
+        logger.info(f"[config] .env 파일 경로: {ENV_FILE_PATH}")
+        logger.info(f"[config] .env 파일 존재 여부: {ENV_FILE_PATH.exists()}")
+    else:
+        logger.warning("[config] GROQ_API_KEY가 설정되지 않았습니다!")
+        logger.info(f"[config] .env 파일 경로: {ENV_FILE_PATH}")
+        logger.info(f"[config] .env 파일 존재 여부: {ENV_FILE_PATH.exists()}")
+        if ENV_FILE_PATH.exists():
+            logger.info(f"[config] .env 파일 내용 (GROQ 관련):")
+            try:
+                with open(ENV_FILE_PATH, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        if 'GROQ' in line.upper():
+                            # 키 값은 마스킹
+                            if '=' in line:
+                                key, value = line.split('=', 1)
+                                masked_value = value.strip()[:8] + "..." + value.strip()[-8:] if len(value.strip()) > 16 else "***"
+                                logger.info(f"[config]   {key}={masked_value}")
+                            else:
+                                logger.info(f"[config]   {line.strip()}")
+            except Exception as e:
+                logger.error(f"[config] .env 파일 읽기 실패: {e}")
+except (KeyboardInterrupt, SystemExit):
+    # multiprocessing spawn 과정에서 발생할 수 있는 인터럽트 무시
+    pass
+except Exception as e:
+    # 기타 예외는 로깅만 하고 계속 진행
+    logger.warning(f"[config] 설정 로드 중 예외 발생 (무시됨): {e}")
 
