@@ -108,7 +108,6 @@ interface EvidenceFile {
   file_size: number | null
   mime_type: string | null
   evidence_type: string
-  description: string | null
   file_path: string
   file_url: string
   created_at: string
@@ -118,9 +117,19 @@ interface ActionDashboardProps {
   classifiedType: SituationCategory
   analysisId: string | null
   onCopy?: (text: string, description: string) => void
+  organizations?: Array<{
+    id: string
+    name: string
+    description: string
+    capabilities: string[]
+    requiredDocs: string[]
+    legalBasis?: string
+    website?: string
+    phone?: string
+  }>
 }
 
-export function ActionDashboard({ classifiedType, analysisId, onCopy }: ActionDashboardProps) {
+export function ActionDashboard({ classifiedType, analysisId, onCopy, organizations: propOrganizations }: ActionDashboardProps) {
   const { toast } = useToast()
   const [checkedEvidence, setCheckedEvidence] = useState<Set<string>>(new Set())
   const [uploadedFiles, setUploadedFiles] = useState<EvidenceFile[]>([])
@@ -330,9 +339,108 @@ export function ActionDashboard({ classifiedType, analysisId, onCopy }: ActionDa
     return `${(bytes / 1024 / 1024).toFixed(1)} MB`
   }
 
-  const recommendedOrgs = getRecommendedOrganizations(classifiedType)
-  const mainOrg = recommendedOrgs[0]
-  const MainIcon = mainOrg.icon
+  // 기관별 주소 및 좌표 정보
+  const getOrgInfo = (orgId: string) => {
+    const orgInfoMap: Record<string, { address: string; lat: number; lng: number; name: string }> = {
+      moel: {
+        address: '서울특별시 중구 세종대로 209',
+        lat: 37.5651,
+        lng: 126.9890,
+        name: '서울지방고용노동청'
+      },
+      moel_complaint: {
+        address: '서울특별시 중구 세종대로 209',
+        lat: 37.5651,
+        lng: 126.9890,
+        name: '고용노동부 고객상담센터'
+      },
+      comwel: {
+        address: '대전광역시 서구 둔산로 100',
+        lat: 36.3504,
+        lng: 127.3845,
+        name: '근로복지공단'
+      },
+      human_rights: {
+        address: '서울특별시 종로구 세종대로 209',
+        lat: 37.5665,
+        lng: 126.9780,
+        name: '국가인권위원회'
+      },
+      labor_attorney: {
+        address: '전국 각 지역 노무사 사무실',
+        lat: 37.5665,
+        lng: 126.9780,
+        name: '노무사'
+      },
+    }
+    return orgInfoMap[orgId] || { address: '주소 정보 없음', lat: 37.5665, lng: 126.9780, name: orgId }
+  }
+
+  // 기관별 주소 반환
+  const getOrgAddress = (orgId: string): string => {
+    return getOrgInfo(orgId).address + ' (도보·버스 가능)'
+  }
+
+  // 카카오맵 Static Map 이미지 URL 생성
+  const getMapImageUrl = (orgId: string): string => {
+    const info = getOrgInfo(orgId)
+    const width = 400
+    const height = 300
+    const level = 3 // 줌 레벨 (1-14, 작을수록 넓은 범위)
+    
+    // 카카오맵 Static Map API 사용 (API 키 필요)
+    // 환경변수에서 API 키 가져오기
+    const kakaoApiKey = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY
+    
+    if (kakaoApiKey) {
+      // 카카오맵 Static Map API 사용
+      return `https://dapi.kakao.com/v2/maps/staticmap?center=${info.lat},${info.lng}&level=${level}&size=${width}x${height}&markers=size:mid,color:red,label:${encodeURIComponent(info.name)}|${info.lat},${info.lng}`
+    }
+    
+    // API 키가 없을 경우: 카카오맵 공개 이미지 서비스 사용
+    // 참고: 이 방법은 제한적일 수 있음
+    // 실제 프로덕션에서는 카카오맵 API 키를 발급받아 사용하는 것을 권장합니다
+    return `https://map2.daum.net/map/mapservice?FORMAT=PNG&SCALE=2&MAKERINFO=0&WIDTH=${width}&HEIGHT=${height}&X=${info.lng}&Y=${info.lat}&LEVEL=${level}`
+  }
+
+  // 지도 링크 생성 및 열기
+  const handleOpenMap = (org: OrganizationInfo) => {
+    const info = getOrgInfo(org.id)
+    const mapLinks: Record<string, string> = {
+      moel: `https://map.kakao.com/link/map/${encodeURIComponent(info.name)},${info.lat},${info.lng}`,
+      moel_complaint: `https://map.kakao.com/link/map/${encodeURIComponent(info.name)},${info.lat},${info.lng}`,
+      comwel: `https://map.kakao.com/link/map/${encodeURIComponent(info.name)},${info.lat},${info.lng}`,
+      human_rights: `https://map.kakao.com/link/map/${encodeURIComponent(info.name)},${info.lat},${info.lng}`,
+      labor_attorney: 'https://map.kakao.com/link/search/노무사',
+    }
+    
+    const link = mapLinks[org.id] || `https://map.kakao.com/link/search/${encodeURIComponent(org.name)}`
+    window.open(link, '_blank')
+  }
+
+  // 백엔드에서 받은 organizations가 있으면 사용, 없으면 기본값 사용
+  const recommendedOrgs = React.useMemo(() => {
+    if (propOrganizations && propOrganizations.length > 0) {
+      // 백엔드에서 받은 organizations를 OrganizationInfo 형식으로 변환
+      return propOrganizations.map(org => {
+        const existingOrg = ORGANIZATIONS.find(o => o.id === org.id)
+        return {
+          ...org,
+          icon: existingOrg?.icon || Briefcase
+        } as OrganizationInfo
+      })
+    }
+    return getRecommendedOrganizations(classifiedType)
+  }, [propOrganizations, classifiedType])
+  
+  const [selectedOrgIndex, setSelectedOrgIndex] = useState(0)
+  const mainOrg = recommendedOrgs[selectedOrgIndex] || recommendedOrgs[0]
+  const MainIcon = mainOrg?.icon || Briefcase
+  
+  // recommendedOrgs가 비어있으면 빈 배열 반환
+  if (!mainOrg || recommendedOrgs.length === 0) {
+    return null
+  }
 
   return (
     <Card className="border border-gray-100 shadow-lg bg-white">
@@ -497,13 +605,69 @@ export function ActionDashboard({ classifiedType, analysisId, onCopy }: ActionDa
             </div>
             
             {/* 지도 이미지 영역 */}
-            <div className="bg-slate-100 border border-slate-200 rounded-lg overflow-hidden mb-4" style={{ height: '200px' }}>
-              <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-50">
-                <div className="text-center">
-                  <MapPin className="w-12 h-12 text-blue-400 mx-auto mb-2" />
-                  <p className="text-sm text-slate-600 font-medium">서울지방고용노동청</p>
-                  <p className="text-xs text-slate-500 mt-1">지도 이미지 영역</p>
+            <div className="relative h-48 w-full overflow-hidden rounded-3xl bg-sky-50 mb-4">
+              {/* 실제 지도 이미지 (카카오맵 Static Map) */}
+              <img
+                src={getMapImageUrl(mainOrg.id)}
+                alt={`${mainOrg.name} 주변 지도`}
+                className="h-full w-full object-cover opacity-90"
+                onError={(e) => {
+                  // 이미지 로드 실패 시 fallback 배경 표시
+                  const target = e.target as HTMLImageElement
+                  target.style.display = 'none'
+                  const fallback = target.nextElementSibling as HTMLElement
+                  if (fallback) {
+                    fallback.style.display = 'block'
+                  }
+                }}
+              />
+              
+              {/* 지도 느낌의 그라디언트 배경 (이미지 로드 실패 시 fallback) */}
+              <div className="absolute inset-0 bg-gradient-to-br from-blue-100 via-indigo-50 to-sky-100" style={{ display: 'none' }}>
+                {/* 지도 느낌의 패턴 */}
+                <div className="absolute inset-0 opacity-30">
+                  <div className="absolute top-1/4 left-1/4 w-32 h-32 border-2 border-blue-300 rounded-lg transform rotate-12"></div>
+                  <div className="absolute top-1/2 right-1/4 w-24 h-24 border-2 border-indigo-300 rounded-lg transform -rotate-12"></div>
+                  <div className="absolute bottom-1/4 left-1/3 w-20 h-20 border-2 border-sky-300 rounded-lg transform rotate-45"></div>
+                  {/* 도로 느낌의 선 */}
+                  <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-blue-200/50 transform -rotate-6"></div>
+                  <div className="absolute top-1/3 left-0 right-0 h-0.5 bg-indigo-200/50 transform rotate-3"></div>
                 </div>
+              </div>
+              
+              {/* 그라디언트 오버레이 */}
+              <div className="absolute inset-0 bg-gradient-to-t from-white/70 via-white/10 to-white/40" />
+              
+              {/* 좌상단 배지 */}
+              <div className="absolute left-4 top-4">
+                <span className="rounded-full bg-white/80 px-3 py-1 text-xs font-medium text-sky-700 shadow-sm backdrop-blur-sm">
+                  지도 미리보기
+                </span>
+              </div>
+              
+              {/* 중앙 위치 정보 */}
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-center z-10">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white shadow-md">
+                  <MapPin className="w-6 h-6 text-sky-500" />
+                </div>
+                <p className="mt-2 text-sm font-semibold text-slate-900">
+                  {mainOrg.name}
+                </p>
+                <p className="text-xs text-slate-500">
+                  {getOrgAddress(mainOrg.id)}
+                </p>
+              </div>
+              
+              {/* 우하단 버튼 */}
+              <div className="absolute bottom-4 right-4 z-10">
+                <button
+                  type="button"
+                  className="flex items-center gap-1 rounded-full bg-white/90 px-3 py-1.5 text-xs font-medium text-sky-700 shadow-md hover:bg-white transition-colors backdrop-blur-sm"
+                  onClick={() => handleOpenMap(mainOrg)}
+                >
+                  <span>지도에서 열기</span>
+                  <ExternalLink className="w-3 h-3" />
+                </button>
               </div>
             </div>
 
@@ -553,20 +717,26 @@ export function ActionDashboard({ classifiedType, analysisId, onCopy }: ActionDa
             </div>
 
             {/* 기타 추천 기관 */}
-            {recommendedOrgs.slice(1).length > 0 && (
+            {recommendedOrgs.length > 1 && (
               <div className="space-y-2">
                 <p className="text-xs font-semibold text-slate-700 mb-2">기타 추천 기관</p>
-                {recommendedOrgs.slice(1).map((org) => {
+                {recommendedOrgs.map((org, index) => {
+                  if (index === selectedOrgIndex) return null // 현재 선택된 기관은 제외
                   const OrgIcon = org.icon
                   return (
-                    <div key={org.id} className="flex items-center gap-2 p-2 bg-white border border-slate-200 rounded-lg hover:border-blue-300 transition-colors">
+                    <div 
+                      key={org.id} 
+                      onClick={() => setSelectedOrgIndex(index)}
+                      className="flex items-center gap-2 p-2 bg-white border border-slate-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-colors cursor-pointer"
+                    >
                       <OrgIcon className="w-4 h-4 text-blue-600" />
                       <span className="flex-1 text-xs text-slate-700 font-medium">{org.name}</span>
                       {org.phone && (
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => {
+                          onClick={(e) => {
+                            e.stopPropagation() // 부모 클릭 이벤트 방지
                             if (onCopy) {
                               onCopy(org.phone || '', '전화번호가 복사되었습니다')
                             }

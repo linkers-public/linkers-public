@@ -9,9 +9,10 @@ import type { SituationAnalysisResponse } from '@/types/legal'
 
 interface LegalReportCardProps {
   analysisResult: SituationAnalysisResponse
+  onCopy?: (text: string, description: string) => void
 }
 
-export function LegalReportCard({ analysisResult }: LegalReportCardProps) {
+export function LegalReportCard({ analysisResult, onCopy }: LegalReportCardProps) {
   // 디버깅: criteria 확인
   console.log('🔍 [LegalReportCard] analysisResult:', analysisResult)
   console.log('🔍 [LegalReportCard] criteria:', analysisResult.criteria)

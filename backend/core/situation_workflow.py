@@ -1082,6 +1082,96 @@ class SituationWorkflow:
             "to_advisor": scripts.get("to_advisor", "") if isinstance(scripts.get("to_advisor"), str) else "",
         }
         
+        result["criteria"] = criteria
+        result["action_plan"] = action_plan
+        result["scripts"] = validated_scripts
+        
+        # 3. organizations 검증 및 정규화
+        organizations = result.get("organizations", [])
+        if not organizations or len(organizations) == 0:
+            logger.warning("[워크플로우] organizations가 비어있습니다. 기본 organizations 생성")
+            # classified_type에 따라 기본 기관 생성
+            classified_type = result.get("classified_type", "unknown")
+            default_orgs = {
+                "unpaid_wage": ["moel", "labor_attorney", "comwel"],
+                "harassment": ["moel_complaint", "human_rights", "labor_attorney"],
+                "unfair_dismissal": ["moel", "labor_attorney", "comwel"],
+                "overtime": ["moel", "labor_attorney", "comwel"],
+                "probation": ["moel", "labor_attorney", "comwel"],
+                "unknown": ["labor_attorney", "moel", "comwel"],
+            }
+            org_ids = default_orgs.get(classified_type, default_orgs["unknown"])
+            # 기본 기관 정보
+            org_map = {
+                "moel": {
+                    "id": "moel",
+                    "name": "노동청",
+                    "description": "체불임금 조사 및 시정 명령, 근로기준법 위반 조사",
+                    "capabilities": ["체불임금 조사", "시정 명령", "근로기준법 위반 조사"],
+                    "requiredDocs": ["근로계약서", "출퇴근 기록", "급여명세서"],
+                    "legalBasis": "근로기준법 제110조: 근로감독관의 권한",
+                    "website": "https://www.moel.go.kr",
+                    "phone": "1350"
+                },
+                "labor_attorney": {
+                    "id": "labor_attorney",
+                    "name": "노무사",
+                    "description": "상담 및 소송 대리, 근로 분쟁 해결 전문",
+                    "capabilities": ["상담", "소송 대리", "근로 분쟁 해결"],
+                    "requiredDocs": ["근로계약서", "문자/카톡 대화", "기타 증거 자료"],
+                    "legalBasis": "노무사법: 근로 분쟁 전문 법률 서비스"
+                },
+                "comwel": {
+                    "id": "comwel",
+                    "name": "근로복지공단",
+                    "description": "연차수당, 휴일수당, 실업급여 상담",
+                    "capabilities": ["연차수당 상담", "휴일수당 상담", "실업급여 안내"],
+                    "requiredDocs": ["근로계약서", "출퇴근 기록", "급여명세서"],
+                    "legalBasis": "근로기준법 제60조: 연차 유급휴가",
+                    "website": "https://www.comwel.or.kr",
+                    "phone": "1588-0075"
+                },
+                "moel_complaint": {
+                    "id": "moel_complaint",
+                    "name": "고용노동부 고객상담센터",
+                    "description": "직장 내 괴롭힘, 차별 상담 및 조사, 고용·노동 전반 상담",
+                    "capabilities": ["직장 내 괴롭힘 상담", "차별 상담", "조사 지원", "고용·노동 전반 상담"],
+                    "requiredDocs": ["증거 자료", "문자/카톡 대화", "녹음 파일"],
+                    "legalBasis": "직장 내 괴롭힘 방지법 제13조: 고충 처리",
+                    "website": "https://1350.moel.go.kr/home/hp/main/hpmain.do",
+                    "phone": "1350"
+                },
+                "human_rights": {
+                    "id": "human_rights",
+                    "name": "국가인권위원회",
+                    "description": "인권 침해 상담 및 조사, 차별 구제",
+                    "capabilities": ["인권 침해 상담", "차별 구제", "조사 및 구제"],
+                    "requiredDocs": ["증거 자료", "차별 사례 기록"],
+                    "legalBasis": "국가인권위원회법: 인권 침해 구제",
+                    "website": "https://www.humanrights.go.kr",
+                    "phone": "1331"
+                }
+            }
+            organizations = [org_map.get(org_id, {}) for org_id in org_ids if org_id in org_map]
+        else:
+            # organizations 구조 검증
+            validated_orgs = []
+            for org in organizations:
+                if isinstance(org, dict):
+                    validated_orgs.append({
+                        "id": org.get("id", ""),
+                        "name": org.get("name", ""),
+                        "description": org.get("description", ""),
+                        "capabilities": org.get("capabilities", []),
+                        "requiredDocs": org.get("requiredDocs", []),
+                        "legalBasis": org.get("legalBasis"),
+                        "website": org.get("website"),
+                        "phone": org.get("phone"),
+                    })
+            organizations = validated_orgs
+        
+        result["organizations"] = organizations
+        
         # 4. summary 검증 (4개 섹션 확인)
         summary = result.get("summary", "")
         if not isinstance(summary, str):
@@ -1158,6 +1248,7 @@ class SituationWorkflow:
             "criteria": criteria,
             "action_plan": action_plan,
             "scripts": validated_scripts,
+            "organizations": organizations,
         }
     
     async def _call_llm(self, prompt: str) -> str:

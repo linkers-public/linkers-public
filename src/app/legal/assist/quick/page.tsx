@@ -52,6 +52,7 @@ import {
   type ChatMessage as ChatMessageType,
 } from '@/apis/legal.service'
 import { MarkdownRenderer } from '@/components/rag/MarkdownRenderer'
+import { ChatAiMessage } from '@/components/legal/ChatAiMessage'
 import type { SituationAnalysisResponse } from '@/types/legal'
 
 // 색상 상수 (다른 페이지와 통일)
@@ -1366,6 +1367,12 @@ export default function QuickAssistPage() {
     setSelectedConversationId(null)
     setMessages([])
     setHasInitialGreeting(false)
+    setCurrentContext({ type: 'none', id: null })
+    setInputMessage('')
+    // 새 대화를 시작할 때는 상황 분석 결과도 초기화
+    // (URL 파라미터에서 온 경우는 페이지 로드 시 다시 설정됨)
+    setSituationAnalysis(null)
+    setSituationContext(null)
   }
 
   // 대화 선택
@@ -1691,9 +1698,7 @@ export default function QuickAssistPage() {
                         )}
                       >
                         {message.role === 'assistant' ? (
-                          <div className="prose prose-sm max-w-none prose-headings:text-slate-900 prose-p:text-slate-700 prose-strong:text-slate-900 prose-code:text-blue-600 prose-pre:bg-slate-50 prose-pre:border prose-pre:border-slate-200 text-sm leading-relaxed">
-                            <MarkdownRenderer content={message.content} />
-                          </div>
+                          <ChatAiMessage content={message.content} />
                         ) : (
                           <p className="whitespace-pre-wrap text-sm leading-relaxed text-white font-medium">
                             {message.content}

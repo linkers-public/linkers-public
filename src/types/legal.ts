@@ -154,6 +154,17 @@ export interface SourceItem {
   fileUrl?: string  // 스토리지 Signed URL (파일 다운로드용)
 }
 
+export interface OrganizationInfo {
+  id: string
+  name: string
+  description: string
+  capabilities: string[]
+  requiredDocs: string[]
+  legalBasis?: string
+  website?: string
+  phone?: string
+}
+
 export interface SituationAnalysisResponse {
   classifiedType: SituationCategory
   riskScore: number // 0~100
@@ -163,6 +174,7 @@ export interface SituationAnalysisResponse {
   scripts: Scripts
   relatedCases: RelatedCase[]
   sources?: SourceItem[] // RAG 검색 출처
+  organizations?: OrganizationInfo[] // 추천 기관 목록
 }
 
 // ========== 상황 분석 결과 페이지용 타입 정의 ==========

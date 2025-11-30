@@ -21,6 +21,7 @@ interface Message {
 
 interface SituationChatProps {
   analysisResult: SituationAnalysisResponse
+  analysisId?: string | null
   situationSummary?: string
   initialMessage?: string
   suggestedQuestions?: string[]
@@ -35,6 +36,7 @@ export function SituationChat({
   suggestedQuestions: propSuggestedQuestions,
   onLoadingChange,
   onMessageCountChange,
+  analysisId,
 }: SituationChatProps) {
   // 상황 분석 결과 기반 고유 ID 생성
   const chatId = `situation_${Date.now()}_${analysisResult.riskScore}`

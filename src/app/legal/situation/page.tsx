@@ -455,6 +455,7 @@ export default function SituationAnalysisPage() {
           title: c?.title || '',
           summary: c?.summary || '',
         })),
+        organizations: analysis?.organizations || analysisData?.organizations || [],
       }
       
       console.log('🔍 [loadAnalysisById 변환된 리포트] criteria 개수:', v1Format.criteria?.length || 0)
@@ -691,6 +692,7 @@ export default function SituationAnalysisPage() {
           externalId: source.externalId || source.external_id,
           fileUrl: source.fileUrl || source.file_url,
         })),
+        organizations: result?.organizations || [],
       }
       
       console.log('변환된 리포트:', v1Format)
@@ -703,8 +705,13 @@ export default function SituationAnalysisPage() {
       const resultId = (result as any).id
       if (resultId) {
         setAnalysisId(resultId)
+        
+        // 분석 완료 시 ID 기반 페이지로 리다이렉트
+        router.push(`/legal/situation/${resultId}`)
+        return // 리다이렉트 후 함수 종료
       }
       
+      // ID가 없는 경우 (예외 상황) - 기존 로직 유지
       // 분석 완료 시 자동으로 대화 세션 데이터 준비 (quick 페이지로 이동 시 사용)
       if (typeof window !== 'undefined') {
         const situationData = {
@@ -835,39 +842,98 @@ export default function SituationAnalysisPage() {
       <div className="container mx-auto px-4 sm:px-6 py-8 sm:py-12 max-w-5xl">
         {/* Header */}
         <div className="mb-10">
-          <div className="text-center mb-8">
-            <h1 className="text-4xl md:text-5xl font-extrabold mb-4 bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-              지금 겪는 상황, 먼저 말로 설명해 주세요
+          {/* Hero Section */}
+          <div className="text-center mb-10 relative">
+            {/* 배경 장식 요소 */}
+            <div className="absolute inset-0 -z-10 overflow-hidden">
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-96 h-96 bg-blue-200/20 rounded-full blur-3xl"></div>
+              <div className="absolute top-10 right-1/4 w-64 h-64 bg-indigo-200/20 rounded-full blur-2xl"></div>
+            </div>
+            
+            {/* 아이콘 배지 */}
+            <div className="inline-flex items-center justify-center mb-6 animate-in fade-in slide-in-from-top-4 duration-700">
+              <div className="relative">
+                <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-2xl blur-lg opacity-50 animate-pulse"></div>
+                <div className="relative p-4 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl shadow-xl">
+                  <MessageSquare className="w-8 h-8 text-white" />
+                </div>
+              </div>
+            </div>
+            
+            {/* 메인 타이틀 */}
+            <h1 className="text-4xl sm:text-5xl md:text-6xl font-extrabold mb-6 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-700 bg-clip-text text-transparent leading-tight animate-in fade-in slide-in-from-bottom-4 duration-700">
+              지금 겪는 상황,<br className="sm:hidden" /> 먼저 말로 설명해 주세요
             </h1>
-            <p className="text-lg md:text-xl text-slate-600 max-w-2xl mx-auto">
-              3가지 정보만 적으면, 법적 관점 + 행동 가이드를 한 번에 정리해 드려요.
+            
+            {/* 서브 타이틀 */}
+            <p className="text-lg sm:text-xl md:text-2xl text-slate-700 max-w-3xl mx-auto leading-relaxed font-medium animate-in fade-in slide-in-from-bottom-6 duration-700 delay-150">
+              <span className="inline-block bg-gradient-to-r from-blue-50 to-indigo-50 px-4 py-1.5 rounded-full border border-blue-200/50 shadow-sm">
+                3가지 정보만 적으면
+              </span>
+              <br className="hidden sm:block" />
+              <span className="mt-2 inline-block">법적 관점 + 행동 가이드를 한 번에 정리해 드려요</span>
             </p>
           </div>
           
-          {/* 3단계 인디케이터 */}
-          <div className="flex flex-wrap items-center justify-center gap-3 mb-8">
-            <div className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-blue-500 to-indigo-500 text-white px-5 py-2.5 text-sm font-semibold shadow-md">
-              <span className="text-base">1️⃣</span>
-              <span>상황 유형 선택</span>
+          {/* 3단계 인디케이터 - 개선된 디자인 */}
+          <div className="flex flex-wrap items-center justify-center gap-4 mb-10 animate-in fade-in slide-in-from-bottom-8 duration-700 delay-300">
+            {/* 단계 1 */}
+            <div className="group relative">
+              <div className="absolute -inset-1 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full blur opacity-30 group-hover:opacity-50 transition-opacity"></div>
+              <div className="relative inline-flex items-center gap-2.5 rounded-full bg-gradient-to-r from-blue-500 to-indigo-500 text-white px-6 py-3 text-sm font-bold shadow-lg hover:shadow-xl transition-all transform hover:scale-105">
+                <div className="flex items-center justify-center w-6 h-6 bg-white/20 rounded-full text-base font-extrabold">
+                  1
+                </div>
+                <span>상황 유형 선택</span>
+                <CheckCircle2 className="w-4 h-4 text-white/90" />
+              </div>
             </div>
-            <div className="inline-flex items-center gap-2 rounded-full bg-white border-2 border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm">
-              <span className="text-base">2️⃣</span>
-              <span>한 줄 요약 & 자세한 설명</span>
+            
+            {/* 연결선 */}
+            <div className="hidden sm:block w-8 h-0.5 bg-gradient-to-r from-blue-300 to-indigo-300"></div>
+            
+            {/* 단계 2 */}
+            <div className="group relative">
+              <div className="absolute -inset-1 bg-gradient-to-r from-slate-200 to-slate-300 rounded-full blur opacity-20 group-hover:opacity-40 transition-opacity"></div>
+              <div className="relative inline-flex items-center gap-2.5 rounded-full bg-white border-2 border-slate-300 px-6 py-3 text-sm font-semibold text-slate-700 shadow-md hover:shadow-lg hover:border-blue-400 transition-all transform hover:scale-105">
+                <div className="flex items-center justify-center w-6 h-6 bg-slate-100 rounded-full text-base font-extrabold text-slate-600">
+                  2
+                </div>
+                <span className="whitespace-nowrap">한 줄 요약 & 자세한 설명</span>
+              </div>
             </div>
-            <div className="inline-flex items-center gap-2 rounded-full bg-white border-2 border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm">
-              <span className="text-base">3️⃣</span>
-              <span>AI 분석 결과 보기</span>
+            
+            {/* 연결선 */}
+            <div className="hidden sm:block w-8 h-0.5 bg-gradient-to-r from-slate-300 to-slate-400"></div>
+            
+            {/* 단계 3 */}
+            <div className="group relative">
+              <div className="absolute -inset-1 bg-gradient-to-r from-slate-200 to-slate-300 rounded-full blur opacity-20 group-hover:opacity-40 transition-opacity"></div>
+              <div className="relative inline-flex items-center gap-2.5 rounded-full bg-white border-2 border-slate-300 px-6 py-3 text-sm font-semibold text-slate-700 shadow-md hover:shadow-lg hover:border-blue-400 transition-all transform hover:scale-105">
+                <div className="flex items-center justify-center w-6 h-6 bg-slate-100 rounded-full text-base font-extrabold text-slate-600">
+                  3
+                </div>
+                <span>AI 분석 결과 보기</span>
+              </div>
             </div>
           </div>
           
-          {/* 안내 문구 */}
-          <div className="bg-gradient-to-r from-amber-50 to-orange-50 border-2 border-amber-200 rounded-xl p-5 mb-8 shadow-sm">
-            <div className="flex items-start gap-3">
-              <div className="p-2 bg-amber-100 rounded-lg flex-shrink-0">
-                <Info className="w-5 h-5 text-amber-700" />
+          {/* 안내 문구 - 개선된 디자인 */}
+          <div className="relative bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50 border-2 border-amber-200/80 rounded-2xl p-6 mb-8 shadow-lg hover:shadow-xl transition-all animate-in fade-in slide-in-from-bottom-10 duration-700 delay-500">
+            {/* 배경 패턴 */}
+            <div className="absolute inset-0 rounded-2xl opacity-5">
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_1px_1px,_rgba(0,0,0,0.15)_1px,_transparent_0)] bg-[length:20px_20px]"></div>
+            </div>
+            
+            <div className="relative flex items-start gap-4">
+              <div className="p-3 bg-gradient-to-br from-amber-100 to-orange-100 rounded-xl flex-shrink-0 shadow-md ring-2 ring-amber-200/50">
+                <Info className="w-6 h-6 text-amber-700" />
               </div>
-              <div className="text-sm text-amber-900">
-                <p className="font-semibold mb-1.5">⚠️ 이 서비스는 법률 자문이 아닙니다</p>
+              <div className="flex-1 text-sm text-amber-900">
+                <p className="font-bold text-base mb-2 flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5 text-amber-600" />
+                  이 서비스는 법률 자문이 아닙니다
+                </p>
                 <p className="text-amber-800 leading-relaxed">
                   정보 안내와 가이드를 제공하는 것입니다. 개인정보(실명, 회사명)는 가급적 빼고 작성해주세요.
                 </p>
@@ -1420,6 +1486,7 @@ export default function SituationAnalysisPage() {
               classifiedType={analysisResult.classifiedType as SituationCategory}
               analysisId={analysisId}
               onCopy={handleCopy}
+              organizations={analysisResult.organizations}
             />
 
             {/* Section 4: AI 전담 노무사 채팅 카드 */}

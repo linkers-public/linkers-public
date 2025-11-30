@@ -316,6 +316,16 @@ export interface SituationResponseV2 {
       items: string[];
     }>;
   }; // 행동 계획 (백엔드에서 최상위 레벨에 반환)
+  organizations?: Array<{
+    id: string;
+    name: string;
+    description: string;
+    capabilities: string[];
+    requiredDocs: string[];
+    legalBasis?: string;
+    website?: string;
+    phone?: string;
+  }>; // 추천 기관 목록
 }
 
 export interface ContractIssueV2 {
@@ -1595,8 +1605,7 @@ export const getAnalysisResult = async (
 export const uploadSituationEvidence = async (
   file: File,
   analysisId: string,
-  evidenceType: string,
-  description?: string
+  evidenceType: string
 ): Promise<{ id: string; file_path: string; file_url: string }> => {
   try {
     const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client')
@@ -1694,7 +1703,6 @@ export const uploadSituationEvidence = async (
         file_size: file.size,
         mime_type: mimeType,
         evidence_type: evidenceType,
-        description: description || null,
       })
       .select()
       .single()
@@ -1742,7 +1750,7 @@ export const getSituationEvidences = async (
     
     const { data, error } = await supabase
       .from('situation_evidences')
-      .select('id, file_name, file_size, mime_type, evidence_type, description, file_path, created_at')
+      .select('id, file_name, file_size, mime_type, evidence_type, file_path, created_at')
       .eq('analysis_id', analysisId)
       .order('created_at', { ascending: false })
 

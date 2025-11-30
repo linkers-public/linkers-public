@@ -310,6 +310,18 @@ class SourceItemV2(BaseModel):
     fileUrl: Optional[str] = Field(None, description="스토리지 Signed URL (파일 다운로드용)")
 
 
+class OrganizationInfoV2(BaseModel):
+    """추천 기관 정보"""
+    id: str = Field(..., description="기관 ID")
+    name: str = Field(..., description="기관명")
+    description: str = Field(..., description="기관 설명")
+    capabilities: List[str] = Field(default_factory=list, description="기관이 제공하는 서비스 목록")
+    requiredDocs: List[str] = Field(default_factory=list, description="필요한 증거 자료 목록")
+    legalBasis: Optional[str] = Field(None, description="법적 근거")
+    website: Optional[str] = Field(None, description="웹사이트 URL")
+    phone: Optional[str] = Field(None, description="전화번호")
+
+
 class SituationResponseV2(BaseModel):
     """상황 분석 응답 (v2)"""
     id: Optional[str] = Field(None, description="상황 분석 ID (situation_analyses 테이블의 id)")
@@ -323,6 +335,7 @@ class SituationResponseV2(BaseModel):
     sources: List[SourceItemV2] = Field(default_factory=list, description="RAG 검색 출처 (법령/가이드라인)")
     criteria: Optional[List[CriteriaItem]] = Field(default_factory=list, description="법적 판단 기준")
     actionPlan: Optional[ActionPlan] = Field(None, description="행동 계획")
+    organizations: Optional[List[OrganizationInfoV2]] = Field(default_factory=list, description="추천 기관 목록")
 
 
 class ConversationRequestV2(BaseModel):

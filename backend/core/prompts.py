@@ -1081,7 +1081,27 @@ def build_situation_action_guide_prompt(
     "scripts": {{
         "to_company": "회사에 보낼 정중한 문제 제기 문구 템플릿 (실제 사용 가능한 문장)",
         "to_advisor": "노무사/기관에 상담할 때 쓸 설명 템플릿 (실제 사용 가능한 문장)"
-    }}
+    }},
+    "organizations": [
+        {{
+            "id": "moel",
+            "name": "노동청",
+            "description": "체불임금 조사 및 시정 명령, 근로기준법 위반 조사",
+            "capabilities": ["체불임금 조사", "시정 명령", "근로기준법 위반 조사"],
+            "requiredDocs": ["근로계약서", "출퇴근 기록", "급여명세서"],
+            "legalBasis": "근로기준법 제110조: 근로감독관의 권한",
+            "website": "https://www.moel.go.kr",
+            "phone": "1350"
+        }},
+        {{
+            "id": "labor_attorney",
+            "name": "노무사",
+            "description": "상담 및 소송 대리, 근로 분쟁 해결 전문",
+            "capabilities": ["상담", "소송 대리", "근로 분쟁 해결"],
+            "requiredDocs": ["근로계약서", "문자/카톡 대화", "기타 증거 자료"],
+            "legalBasis": "노무사법: 근로 분쟁 전문 법률 서비스"
+        }}
+    ]
 }}
 
 **⚠️ 매우 중요한 지시사항:**
@@ -1165,6 +1185,24 @@ def build_situation_action_guide_prompt(
    - to_advisor: 노무사/기관에 상담할 때 쓸 설명 템플릿 (실제 상담 시 바로 사용 가능)
      - 제공된 법령/가이드라인을 참고하여 구체적인 법적 근거를 포함하여 작성하세요.
    - 구체적이고 실용적인 문장으로 작성하세요.
+
+5. **organizations 필드 (필수):**
+   - 상황 유형에 맞는 추천 기관 목록을 생성하세요.
+   - 각 기관은 {{"id": "기관ID", "name": "기관명", "description": "설명", "capabilities": ["서비스1", "서비스2"], "requiredDocs": ["필요자료1"], "legalBasis": "법적근거", "website": "웹사이트URL", "phone": "전화번호"}} 형태입니다.
+   - 상황 유형별 추천 기관:
+     - unpaid_wage (임금체불): 노동청(moel), 노무사(labor_attorney), 근로복지공단(comwel)
+     - harassment (괴롭힘): 고용노동부 고객상담센터(moel_complaint), 국가인권위원회(human_rights), 노무사(labor_attorney)
+     - unfair_dismissal (부당해고): 노동청(moel), 노무사(labor_attorney), 근로복지공단(comwel)
+     - overtime (근로시간): 노동청(moel), 노무사(labor_attorney), 근로복지공단(comwel)
+     - probation (수습): 노동청(moel), 노무사(labor_attorney), 근로복지공단(comwel)
+     - unknown (기타): 노무사(labor_attorney), 노동청(moel), 근로복지공단(comwel)
+   - 각 기관의 정보는 정확하게 작성하세요:
+     - 노동청: id="moel", phone="1350", website="https://www.moel.go.kr"
+     - 노무사: id="labor_attorney", phone 없음, website 없음
+     - 근로복지공단: id="comwel", phone="1588-0075", website="https://www.comwel.or.kr"
+     - 고용노동부 고객상담센터: id="moel_complaint", phone="1350", website="https://1350.moel.go.kr/home/hp/main/hpmain.do"
+     - 국가인권위원회: id="human_rights", phone="1331", website="https://www.humanrights.go.kr"
+   - 3~5개 정도로 구성하세요.
 
 **기타 사항:**
 - 모든 응답은 한국어로 작성하세요.
@@ -1258,9 +1296,14 @@ def build_situation_analysis_prompt(
     "summary": "구조화된 마크다운 텍스트 (아래 지시사항 참고)",
     "criteria": [
         {{
-            "name": "판단 기준명",
+            "name": "판단 기준명 (예: '직장 내 괴롭힘 요건 충족 여부', '임금체불 법적 요건 충족 여부' 등)",
             "status": "likely|unclear|unlikely",
-            "reason": "판단 이유 및 설명"
+            "reason": "「참고 법령/가이드라인 제목」에 따르면, [법령 핵심 내용 요약 1-2문장]. 제공된 상황에서 [현재 상황과의 연관성 및 구체적인 판단 근거 2-3문장]. 따라서 이 기준은 [status]로 판단됩니다. [왜 이 status로 판단했는지 구체적인 이유]."
+        }},
+        {{
+            "name": "다른 판단 기준명",
+            "status": "likely|unclear|unlikely",
+            "reason": "「참고 법령/가이드라인 제목」에 따르면, [법령 핵심 내용 요약 1-2문장]. 제공된 상황에서 [현재 상황과의 연관성 및 구체적인 판단 근거 2-3문장]. 따라서 이 기준은 [status]로 판단됩니다. [왜 이 status로 판단했는지 구체적인 이유]."
         }}
     ],
     "action_plan": {{
@@ -1282,7 +1325,37 @@ def build_situation_analysis_prompt(
     "scripts": {{
         "to_company": "회사에 보낼 정중한 문제 제기 문구 템플릿",
         "to_advisor": "노무사/기관에 상담할 때 쓸 설명 템플릿"
-    }}
+    }},
+    "organizations": [
+        {{
+            "id": "moel",
+            "name": "노동청",
+            "description": "체불임금 조사 및 시정 명령, 근로기준법 위반 조사",
+            "capabilities": ["체불임금 조사", "시정 명령", "근로기준법 위반 조사"],
+            "requiredDocs": ["근로계약서", "출퇴근 기록", "급여명세서"],
+            "legalBasis": "근로기준법 제110조: 근로감독관의 권한",
+            "website": "https://www.moel.go.kr",
+            "phone": "1350"
+        }},
+        {{
+            "id": "labor_attorney",
+            "name": "노무사",
+            "description": "상담 및 소송 대리, 근로 분쟁 해결 전문",
+            "capabilities": ["상담", "소송 대리", "근로 분쟁 해결"],
+            "requiredDocs": ["근로계약서", "문자/카톡 대화", "기타 증거 자료"],
+            "legalBasis": "노무사법: 근로 분쟁 전문 법률 서비스"
+        }},
+        {{
+            "id": "comwel",
+            "name": "근로복지공단",
+            "description": "연차수당, 휴일수당, 실업급여 상담",
+            "capabilities": ["연차수당 상담", "휴일수당 상담", "실업급여 안내"],
+            "requiredDocs": ["근로계약서", "출퇴근 기록", "급여명세서"],
+            "legalBasis": "근로기준법 제60조: 연차 유급휴가",
+            "website": "https://www.comwel.or.kr",
+            "phone": "1588-0075"
+        }}
+    ]
 }}
 
 **⚠️ 매우 중요한 지시사항:**
@@ -1312,15 +1385,16 @@ summary 필드는 반드시 다음 4개 섹션을 순서대로 포함한 마크�
    - 회사나 상담 기관에 실제로 사용할 수 있는 구체적인 문구 템플릿을 제공
    - 실제 대화에서 바로 사용할 수 있는 문장으로 작성
 
-**criteria 필드 (필수):**
+**criteria 필드 (필수 - 매우 중요):**
+- ⚠️ **criteria 필드는 반드시 생성해야 하며, 빈 배열로 반환하면 안 됩니다.**
 - 위의 "참고 법령/가이드라인" 섹션에서 제공된 법령/가이드라인을 바탕으로 생성하세요.
 - 각 기준은 제공된 법령/가이드라인을 참고하여 {{"name": "판단 기준명", "status": "likely|unclear|unlikely", "reason": "판단 이유 및 설명"}} 형태로 구성하세요.
-- **reason 필드는 반드시 다음 내용을 포함해야 합니다:**
+- **reason 필드는 반드시 다음 내용을 포함해야 합니다 (최소 3문장 이상):**
   1. 위의 "참고 법령/가이드라인" 섹션에서 제공된 법령/가이드라인의 제목을 명시적으로 인용 (『...』 또는 「...」 형식)
   2. 해당 문서의 핵심 내용 요약 (1-2문장)
   3. 현재 상황과의 연관성 및 구체적인 판단 근거 (2-3문장)
   4. 왜 이 status(likely/unclear/unlikely)로 판단했는지 이유
-- **reason 필드는 최소 3문장 이상으로 작성하세요. 단순히 "에 따르면"으로 끝나지 말고, 구체적인 내용을 포함하세요.**
+- **reason 필드는 최소 3문장 이상으로 작성하세요. 단순히 "에 따르면"이나 "관련 법령 정보를 확인하는 중입니다" 같은 모호한 표현을 사용하지 마세요. 반드시 구체적인 법령 제목, 내용, 판단 근거를 포함하세요.**
 - 예시:
   - ❌ 나쁜 예: "'직장 내 괴롭힘 판단 및 예방 대응 매뉴얼★.pdf'에 따르면"
   - ✅ 좋은 예: "「직장 내 괴롭힘 판단 및 예방 대응 매뉴얼★.pdf」에 따르면, 직장 내 괴롭힘은 업무상 지위나 관계를 이용하여 피해 근로자에게 신체적·정신적 고통을 주는 행위로 정의됩니다. 제공된 상황에서 상사가 부당한 지시와 모욕적 언행을 반복적으로 행한 것은 직장 내 괴롭힘에 해당할 가능성이 높습니다. 특히 매뉴얼에서 명시한 '반복적이고 지속적인 행위' 요건을 충족하는 것으로 보입니다."
@@ -1331,13 +1405,32 @@ summary 필드는 반드시 다음 4개 섹션을 순서대로 포함한 마크�
 - 3~5개 정도로 구성하세요.
 - 각 criteria는 제공된 상황과 관련 법령을 바탕으로 구체적인 판단 기준을 제시해야 합니다.
 
+**organizations 필드 (필수):**
+- 상황 유형에 맞는 추천 기관 목록을 생성하세요.
+- 각 기관은 {{"id": "기관ID", "name": "기관명", "description": "설명", "capabilities": ["서비스1", "서비스2"], "requiredDocs": ["필요자료1"], "legalBasis": "법적근거", "website": "웹사이트URL", "phone": "전화번호"}} 형태입니다.
+- 상황 유형별 추천 기관:
+  - unpaid_wage (임금체불): 노동청(moel), 노무사(labor_attorney), 근로복지공단(comwel)
+  - harassment (괴롭힘): 고용노동부 고객상담센터(moel_complaint), 국가인권위원회(human_rights), 노무사(labor_attorney)
+  - unfair_dismissal (부당해고): 노동청(moel), 노무사(labor_attorney), 근로복지공단(comwel)
+  - overtime (근로시간): 노동청(moel), 노무사(labor_attorney), 근로복지공단(comwel)
+  - probation (수습): 노동청(moel), 노무사(labor_attorney), 근로복지공단(comwel)
+  - unknown (기타): 노무사(labor_attorney), 노동청(moel), 근로복지공단(comwel)
+- 각 기관의 정보는 정확하게 작성하세요:
+  - 노동청: id="moel", phone="1350", website="https://www.moel.go.kr"
+  - 노무사: id="labor_attorney", phone 없음, website 없음
+  - 근로복지공단: id="comwel", phone="1588-0075", website="https://www.comwel.or.kr"
+  - 고용노동부 고객상담센터: id="moel_complaint", phone="1350", website="https://1350.moel.go.kr/home/hp/main/hpmain.do"
+  - 국가인권위원회: id="human_rights", phone="1331", website="https://www.humanrights.go.kr"
+- 3~5개 정도로 구성하세요.
+
 기타 사항:
 - 모든 응답은 한국어로 작성하세요.
 - summary는 마크다운 형식으로 작성하되, 각 섹션을 명확하게 구분하세요.
 - action_plan의 steps는 3단계 정도로 구성하세요.
 - scripts는 실제로 사용할 수 있는 구체적인 문구로 작성하세요.
+- **⚠️ 매우 중요: criteria 필드는 반드시 3~5개의 항목을 포함해야 하며, 각 항목의 reason 필드는 최소 3문장 이상의 구체적인 내용을 포함해야 합니다. "관련 법령 정보를 확인하는 중입니다" 같은 모호한 표현은 절대 사용하지 마세요.**
 
-JSON 형식만 반환하세요. summary 필드에는 위의 4개 섹션을 모두 포함한 완전한 마크다운 텍스트를 작성하세요.
+JSON 형식만 반환하세요. summary 필드에는 위의 4개 섹션을 모두 포함한 완전한 마크다운 텍스트를 작성하세요. criteria 필드에는 반드시 구체적인 판단 기준과 상세한 reason을 포함하세요.
 """
     
     return prompt

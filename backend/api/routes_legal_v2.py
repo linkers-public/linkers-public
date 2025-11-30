@@ -1493,6 +1493,7 @@ async def analyze_situation(
             # 프론트엔드가 기대하는 추가 필드들 (이제 모델에 포함됨)
             "criteria": criteria_items,  # 법적 판단 기준
             "actionPlan": action_plan_model,  # 행동 계획
+            "organizations": result.get("organizations", []),  # 추천 기관 목록
         }
         response = SituationResponseV2(**response_dict)
         response_dict_final = response.model_dump()
