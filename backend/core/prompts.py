@@ -497,7 +497,7 @@ def build_legal_chat_prompt(
 ```typescript
 interface ParsedLegalResponse {{
   summary: string;                    // 한 문장으로 핵심 위험 또는 쟁점 요약
-  riskLevel: '경미' | '보통' | '높음' | '매우 고' | null;  // 위험도 레벨
+  riskLevel: '경미' | '보통' | '높음' | '매우 높음' | null;  // 위험도 레벨 (반드시 이 5가지 중 하나만 사용)
   riskLevelDescription: string;       // 위험도 설명 (예: "법적 분쟁 가능성은 크지 않지만...")
   riskContent: Array<{{               // 법적·실무 리스크 상세 설명 배열 (최소 2-3개)
     내용: string;                     // 리스크 포인트 제목 (예: "법정 임금 청구권 사전 포기")
@@ -531,11 +531,15 @@ interface ParsedLegalResponse {{
 
 1. **summary**: 한 문장으로 핵심 위험 또는 쟁점을 요약하세요. 선택된 이슈의 카테고리와 실제 조항 내용이 일치하는지 확인하세요.
 
-2. **riskLevel**: 다음 중 하나를 선택하세요:
+2. **riskLevel**: 반드시 다음 중 하나만 사용하세요 (다른 값 사용 금지):
    - "경미": 법적 문제는 있으나 실무적으로 큰 분쟁 가능성은 낮은 경우
    - "보통": 법적 위반 소지가 있고 분쟁 가능성이 있는 경우
    - "높음": 강행규정 위반 등으로 무효 가능성이 높거나 심각한 분쟁 위험이 있는 경우
+   - "매우 높음": 매우 심각한 법적 위반이나 즉시 조치가 필요한 경우
    - null: 위험도 판단이 어려운 경우
+   
+   ⚠️ 중요: "중등", "중간", "낮음", "보통 이상" 등 다른 표현을 절대 사용하지 마세요. 
+   위 5가지 값("경미", "보통", "높음", "매우 높음", null) 중 하나만 정확히 사용하세요.
 
 3. **riskLevelDescription**: riskLevel의 이유를 한 줄로 간단히 설명하세요 (예: "법적 분쟁 가능성은 크지 않지만, 임금 구성 불명확으로 분쟁 시 근로자에게 불리하게 해석될 여지가 있습니다.")
 
@@ -865,10 +869,67 @@ def build_contract_analysis_prompt(
     Returns:
         완성된 프롬프트 문자열
     """
-    # clauses가 없으면 에러
+    # clauses가 없으면 contract_chunks나 contract_text에서 생성 (fallback)
     if not clauses:
-        logger.warning("[프롬프트 생성] clauses가 비어있습니다. 빈 프롬프트 반환.")
-        return ""
+        logger.warning("[프롬프트 생성] clauses가 비어있습니다. contract_chunks 또는 contract_text에서 생성 시도.")
+        clauses = []
+        
+        # contract_chunks에서 생성 시도
+        if contract_chunks:
+            for idx, chunk in enumerate(contract_chunks[:10], 1):  # 최대 10개
+                article_num = chunk.get("article_number", idx) if isinstance(chunk, dict) else getattr(chunk, "article_number", idx)
+                content = chunk.get("content", "") if isinstance(chunk, dict) else getattr(chunk, "content", "")
+                clauses.append({
+                    "id": f"clause-{idx}",
+                    "title": f"제{article_num}조",
+                    "content": content[:400]  # 처음 400자만
+                })
+        
+        # 여전히 없으면 contract_text에서 간단히 생성
+        if not clauses and contract_text:
+            # contract_text를 줄 단위로 나누어서 조항 추출 시도
+            lines = contract_text.split('\n')
+            current_clause = None
+            clause_num = 1
+            
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                # "제N조" 패턴 찾기
+                if '제' in line and '조' in line:
+                    if current_clause:
+                        clauses.append({
+                            "id": f"clause-{clause_num}",
+                            "title": current_clause.get("title", f"제{clause_num}조"),
+                            "content": current_clause.get("content", "")[:400]
+                        })
+                        clause_num += 1
+                    current_clause = {
+                        "title": line[:50],  # 제목은 처음 50자
+                        "content": ""
+                    }
+                elif current_clause:
+                    current_clause["content"] += line + " "
+                    if len(current_clause["content"]) > 400:
+                        break
+            
+            # 마지막 조항 추가
+            if current_clause:
+                clauses.append({
+                    "id": f"clause-{clause_num}",
+                    "title": current_clause.get("title", f"제{clause_num}조"),
+                    "content": current_clause.get("content", "")[:400]
+                })
+        
+        # 여전히 없으면 최소한의 더미 조항 생성
+        if not clauses:
+            logger.warning("[프롬프트 생성] clauses를 생성할 수 없습니다. 더미 조항 생성.")
+            clauses = [{
+                "id": "clause-1",
+                "title": "계약서 내용",
+                "content": contract_text[:400] if contract_text else "계약서 내용을 확인할 수 없습니다."
+            }]
     
     # clause 컨텍스트 문자열 만들기
     clause_lines = []
@@ -883,19 +944,19 @@ def build_contract_analysis_prompt(
         )
     clause_context = "\n".join(clause_lines)
     
-    # 법령 컨텍스트 준비
+    # 법령 컨텍스트 준비 (프롬프트 길이 최적화: 개수와 길이 제한)
     legal_lines = []
     if grounding_chunks:
-        # 검색된 모든 legal_chunks 사용 (최대 15개로 제한하여 프롬프트 길이 관리)
-        max_legal_chunks = min(len(grounding_chunks), 15)
+        # 검색된 legal_chunks 사용 (최대 10개로 제한하여 프롬프트 길이 및 응답 시간 단축)
+        max_legal_chunks = min(len(grounding_chunks), 10)
         for g in grounding_chunks[:max_legal_chunks]:
             # LegalGroundingChunk는 Pydantic 모델이므로 getattr 사용
             source_type = getattr(g, 'source_type', 'law')
             title = getattr(g, 'title', '')
             snippet = getattr(g, 'snippet', getattr(g, 'content', ''))
-            # snippet 길이를 300자로 늘려서 더 많은 정보 제공
-            if len(snippet) > 300:
-                snippet = snippet[:300] + "..."
+            # snippet 길이를 200자로 제한하여 프롬프트 길이 단축
+            if len(snippet) > 200:
+                snippet = snippet[:200] + "..."
             legal_lines.append(
                 f'- ({source_type}) {title}: "{snippet}"'
             )
@@ -1240,14 +1301,16 @@ def build_situation_action_guide_prompt(
         - action_plan: steps 구조
         - scripts: to_company, to_advisor
     """
-    # 관련 법령 컨텍스트
+    # 관련 법령 컨텍스트 (프롬프트 길이 최적화)
     legal_context = ""
     if grounding_chunks:
         legal_context = "\n**참고 법령/가이드라인:**\n"
-        for chunk in grounding_chunks[:8]:
+        # 최대 6개로 제한하여 프롬프트 길이 및 응답 시간 단축
+        for chunk in grounding_chunks[:6]:
             source_type = getattr(chunk, 'source_type', 'law')
             title = getattr(chunk, 'title', '')
-            snippet = getattr(chunk, 'snippet', getattr(chunk, 'content', ''))[:300]
+            # snippet 길이를 200자로 제한
+            snippet = getattr(chunk, 'snippet', getattr(chunk, 'content', ''))[:200]
             legal_context += f"- [{source_type}] {title}: {snippet}\n"
     
     # legal_basis 정보
@@ -1487,15 +1550,17 @@ def build_situation_analysis_prompt(
     Returns:
         완성된 프롬프트 문자열
     """
-    # 관련 법령 컨텍스트
+    # 관련 법령 컨텍스트 (프롬프트 길이 최적화)
     legal_context = ""
     if grounding_chunks:
         legal_context = "\n**참고 법령/가이드라인:**\n"
-        for chunk in grounding_chunks[:8]:
+        # 최대 6개로 제한하여 프롬프트 길이 및 응답 시간 단축
+        for chunk in grounding_chunks[:6]:
             # LegalGroundingChunk는 Pydantic 모델이므로 getattr 사용
             source_type = getattr(chunk, 'source_type', 'law')
             title = getattr(chunk, 'title', '')
-            snippet = getattr(chunk, 'snippet', getattr(chunk, 'content', ''))[:300]
+            # snippet 길이를 200자로 제한
+            snippet = getattr(chunk, 'snippet', getattr(chunk, 'content', ''))[:200]
             legal_context += f"- [{source_type}] {title}: {snippet}\n"
         
         legal_context += "\n**⚠️ 중요: 위의 참고 법령/가이드라인 내용을 참고하되, 원문을 그대로 나열하지 말고 사용자에게 건네는 말로 변환하여 작성하세요.**\n"

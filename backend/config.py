@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     # Ollama 설정 (로컬 LLM 사용 - 레거시, Groq 사용 시 비활성화)
     ollama_base_url: str = "http://localhost:11434"  # Ollama 서버 주소
     ollama_model: str = "mistral"  # mistral (한국어 성능 우수), llama3, phi3 등
+    ollama_timeout: float = 600.0  # Ollama 호출 타임아웃 (초, 기본값: 10분)
     use_ollama: bool = False  # Ollama 사용 여부 (llm_provider에 따라 자동 설정됨)
     
     # 벡터 DB 선택

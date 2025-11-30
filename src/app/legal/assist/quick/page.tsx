@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
@@ -56,13 +56,25 @@ import {
   type ChatMessage as ChatMessageType,
 } from '@/apis/legal.service'
 import { MarkdownRenderer } from '@/components/rag/MarkdownRenderer'
-import { ChatAiMessage } from '@/components/legal/ChatAiMessage'
+import { QuickChatMessage } from '@/components/legal/QuickChatMessage'
 import { SituationChatMessage } from '@/components/legal/SituationChatMessage'
+import { LegalChatMessage } from '@/components/contract/LegalChatMessage'
+import { UserMessageWithContext } from '@/components/legal/UserMessageWithContext'
+import { ContextSituationList } from '@/components/legal/ContextSituationList'
+import { ContextContractList } from '@/components/legal/ContextContractList'
 import type { SituationAnalysisResponse } from '@/types/legal'
 
 // 색상 상수 (다른 페이지와 통일)
 const PRIMARY_GRADIENT = 'from-blue-600 to-indigo-600'
 const PRIMARY_GRADIENT_HOVER = 'hover:from-blue-700 hover:to-indigo-700'
+
+// 공통 유저 ID 가져오기 함수
+async function getUserId(): Promise<string | null> {
+  const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client')
+  const supabase = createSupabaseBrowserClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  return user?.id ?? null
+}
 
 // 자주 있는 상황 템플릿
 const COMMON_SITUATIONS = [
@@ -214,8 +226,8 @@ interface ChatContext {
   label?: string         // UI 표시용 (예: "편의점 야간 알바 상황", "김인턴 계약서")
 }
 
-// 컨텍스트 링크 정보 생성 유틸 함수
-function getContextLink(message: ChatMessage): { href: string; label: string; badge: string } | null {
+// 컨텍스트 링크 정보 생성 유틸 함수 (메모이제이션)
+const getContextLink = (message: ChatMessage): { href: string; label: string; badge: string } | null => {
   if (!message.context_type || !message.context_id || message.context_type === 'none') {
     return null
   }
@@ -239,128 +251,6 @@ function getContextLink(message: ChatMessage): { href: string; label: string; ba
   return null
 }
 
-// 사용자 메시지에 리포트 정보 표시 컴포넌트
-function UserMessageWithContext({ 
-  message, 
-  reportCache, 
-  setReportCache 
-}: { 
-  message: ChatMessage
-  reportCache: Map<string, { title: string; summary: string; type: 'situation' | 'contract' }>
-  setReportCache: React.Dispatch<React.SetStateAction<Map<string, { title: string; summary: string; type: 'situation' | 'contract' }>>>
-}) {
-  const [isLoadingReport, setIsLoadingReport] = useState(false)
-  const [reportInfo, setReportInfo] = useState<{ title: string; summary: string; type: 'situation' | 'contract' } | null>(null)
-
-  useEffect(() => {
-    const loadReportInfo = async () => {
-      if (!message.context_id || !message.context_type || message.context_type === 'none') {
-        return
-      }
-
-      // 캐시에서 확인
-      const cached = reportCache.get(message.context_id)
-      if (cached) {
-        setReportInfo(cached)
-        return
-      }
-
-      // 리포트 정보 가져오기
-      setIsLoadingReport(true)
-      try {
-        const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client')
-        const supabase = createSupabaseBrowserClient()
-        const { data: { user } } = await supabase.auth.getUser()
-        const userId = user?.id || null
-
-        if (message.context_type === 'situation' && message.context_id) {
-          const situation = await getSituationAnalysisByIdV2(message.context_id, userId)
-          const info = {
-            title: situation.situation?.substring(0, 50) || '상황 분석 리포트',
-            summary: situation.analysis?.summary || situation.situation || '',
-            type: 'situation' as const
-          }
-          setReportInfo(info)
-          setReportCache(prev => new Map(prev).set(message.context_id!, info))
-        } else if (message.context_type === 'contract' && message.context_id) {
-          const contract = await getContractAnalysisV2(message.context_id)
-          const info = {
-            title: contract.summary?.substring(0, 50) || '계약서 분석 리포트',
-            summary: contract.summary || '',
-            type: 'contract' as const
-          }
-          setReportInfo(info)
-          setReportCache(prev => new Map(prev).set(message.context_id!, info))
-        }
-      } catch (error) {
-        console.warn('리포트 정보 로드 실패:', error)
-      } finally {
-        setIsLoadingReport(false)
-      }
-    }
-
-    loadReportInfo()
-  }, [message.context_id, message.context_type, reportCache, setReportCache])
-
-  return (
-    <div>
-      <p className="whitespace-pre-wrap text-sm leading-relaxed text-white font-medium">
-        {message.content}
-      </p>
-      {/* 참고 리포트 표시 */}
-      {message.context_type && message.context_type !== 'none' && message.context_id && (
-        <div className="mt-2 pt-2 border-t border-white/20">
-          {isLoadingReport ? (
-            <div className="flex items-center gap-1.5 text-xs text-white/60">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              <span>리포트 정보 로딩 중...</span>
-            </div>
-          ) : reportInfo ? (
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-1.5 text-xs text-white/90">
-                {message.context_type === 'situation' ? (
-                  <>
-                    <ClipboardList className="h-3.5 w-3.5" />
-                    <span className="font-semibold">상황 분석 리포트 참고 중</span>
-                  </>
-                ) : message.context_type === 'contract' ? (
-                  <>
-                    <FileText className="h-3.5 w-3.5" />
-                    <span className="font-semibold">계약서 분석 리포트 참고 중</span>
-                  </>
-                ) : null}
-              </div>
-              <div className="bg-white/10 rounded-lg p-2 space-y-1">
-                <div className="text-xs font-medium text-white/90 line-clamp-1">
-                  {reportInfo.title}
-                </div>
-                {reportInfo.summary && (
-                  <div className="text-xs text-white/70 line-clamp-2">
-                    {reportInfo.summary}
-                  </div>
-                )}
-              </div>
-            </div>
-          ) : (
-            <div className="flex items-center gap-1.5 text-xs text-white/80">
-              {message.context_type === 'situation' ? (
-                <>
-                  <ClipboardList className="h-3.5 w-3.5" />
-                  <span>상황 분석 리포트 참고 중</span>
-                </>
-              ) : message.context_type === 'contract' ? (
-                <>
-                  <FileText className="h-3.5 w-3.5" />
-                  <span>계약서 분석 리포트 참고 중</span>
-                </>
-              ) : null}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
 
 export default function QuickAssistPage() {
   const router = useRouter()
@@ -445,10 +335,7 @@ export default function QuickAssistPage() {
 
         // 2. DB에서 상황 분석 히스토리 가져오기 (백그라운드 동기화)
         try {
-          const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client')
-          const supabase = createSupabaseBrowserClient()
-          const { data: { user } } = await supabase.auth.getUser()
-          const userId = user?.id || null
+          const userId = await getUserId()
 
           if (userId) {
             const dbConversations: ConversationSession[] = []
@@ -590,10 +477,7 @@ export default function QuickAssistPage() {
               let dbMessages: ChatMessage[] = []
               if (parsed.situationAnalysisId) {
                 try {
-                  const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client')
-                  const supabase = createSupabaseBrowserClient()
-                  const { data: { user } } = await supabase.auth.getUser()
-                  const userId = user?.id || null
+                  const userId = await getUserId()
                   
                   // 새 테이블 구조에서는 이 부분이 필요 없음 (세션 기반으로 로드)
                 } catch (error) {
@@ -671,20 +555,36 @@ export default function QuickAssistPage() {
     const loadContextData = async () => {
       if (contextType === 'situation' && contextId) {
         try {
-          const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client')
-          const supabase = createSupabaseBrowserClient()
-          const { data: { user } } = await supabase.auth.getUser()
-          const userId = user?.id || null
+          const userId = await getUserId()
 
           // 상황 분석 결과 불러오기
           const analysis = await getSituationAnalysisByIdV2(contextId, userId)
-          setSituationAnalysis(analysis)
+          // SituationResponseV2를 SituationAnalysisResponse로 변환
+          if (analysis && analysis.analysis) {
+            const convertedAnalysis: SituationAnalysisResponse = {
+              classifiedType: 'unknown', // SituationResponseV2에는 category가 없음
+              riskScore: analysis.riskScore || 0,
+              summary: analysis.analysis.summary || '',
+              criteria: analysis.criteria || [],
+              actionPlan: analysis.actionPlan || { steps: [] },
+              scripts: analysis.scripts || { toCompany: '', toAdvisor: '' },
+              relatedCases: analysis.relatedCases || [],
+              sources: analysis.sources || [],
+              organizations: analysis.organizations || [],
+            }
+            setSituationAnalysis(convertedAnalysis)
+            
+            // 컨텍스트 라벨 세팅
+            const title = analysis.analysis?.summary?.substring(0, 30) || '상황 분석'
+            setCurrentContext({
+              type: 'situation',
+              id: contextId,
+              label: title,
+            })
+          }
 
           // 새 세션 생성
-          const { getAuthHeaders } = await import('@/apis/legal.service')
-          const authHeaders = await getAuthHeaders()
           const headers: Record<string, string> = {
-            ...(authHeaders as Record<string, string>),
             'Content-Type': 'application/json',
           }
           if (userId) {
@@ -703,8 +603,7 @@ export default function QuickAssistPage() {
 
           if (sessionResponse.ok) {
             const sessionData = await sessionResponse.json()
-            setCurrentSessionId(sessionData.id)
-            setSelectedConversationId(sessionData.id)
+            setSelectedConversationId(`session-${sessionData.id}`)
           }
         } catch (error) {
           console.error('컨텍스트 데이터 로드 실패:', error)
@@ -733,9 +632,7 @@ export default function QuickAssistPage() {
         const loadLatestMessages = async () => {
           try {
             const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client')
-            const supabase = createSupabaseBrowserClient()
-            const { data: { user } } = await supabase.auth.getUser()
-            const userId = user?.id || null
+            const userId = await getUserId()
             
             if (isCancelled) return
             
@@ -816,7 +713,9 @@ export default function QuickAssistPage() {
           role: 'assistant',
           content: reportContent,
           timestamp: new Date(),
-      }
+          context_type: 'situation',
+          context_id: situationContext ? null : null, // TODO: 상황 분석 ID 연결
+        }
       
       setMessages([initialMessage])
       setHasInitialGreeting(true)
@@ -908,13 +807,13 @@ export default function QuickAssistPage() {
   }
 
   // 질문 요약 생성 (타임라인용)
-  const generateQuestionSummary = (text: string): string => {
+  const generateQuestionSummary = useCallback((text: string): string => {
     if (text.length <= 30) return text
     return text.substring(0, 30) + '...'
-  }
+  }, [])
 
   // 대화 삭제
-  const handleDeleteConversation = async (conversationId: string, e: React.MouseEvent) => {
+  const handleDeleteConversation = useCallback(async (conversationId: string, e: React.MouseEvent) => {
     e.stopPropagation() // 버튼 클릭 시 대화 선택 방지
     
     const conversation = conversations.find(c => c.id === conversationId)
@@ -923,10 +822,7 @@ export default function QuickAssistPage() {
     try {
       // 새 테이블 구조에서 DB에서도 삭제
       if (conversation.sessionId) {
-        const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client')
-        const supabase = createSupabaseBrowserClient()
-        const { data: { user } } = await supabase.auth.getUser()
-        const userId = user?.id || null
+        const userId = await getUserId()
         
         if (userId) {
           await deleteChatSession(conversation.sessionId, userId)
@@ -956,16 +852,13 @@ export default function QuickAssistPage() {
         variant: 'destructive',
       })
     }
-  }
+  }, [conversations, selectedConversationId, toast])
 
   // 상황 분석 아카이브 로드 (DB에서 가져오기 - 상황 분석 데이터만)
   const loadReports = async () => {
     setIsLoadingReports(true)
     try {
-      const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client')
-      const supabase = createSupabaseBrowserClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      const userId = user?.id || null
+      const userId = await getUserId()
 
       if (!userId) {
         setReports([])
@@ -1039,7 +932,7 @@ export default function QuickAssistPage() {
   }
 
   // 메시지 전송
-  const handleSendMessage = async () => {
+  const handleSendMessage = useCallback(async () => {
     const trimmedMessage = inputMessage.trim()
     
     // 입력 검증
@@ -1093,14 +986,8 @@ export default function QuickAssistPage() {
     setInputMessage('')
     setIsAnalyzing(true)
     
-    // 에러 발생 시 재시도를 위한 메시지 백업
-    const messageToSend = trimmedMessage
-
     // 사용자 ID 가져오기 (세션 생성 및 메시지 저장에 필요)
-    const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client')
-    const supabase = createSupabaseBrowserClient()
-    const { data: { user } } = await supabase.auth.getUser()
-    const userId = user?.id || null
+    const userId = await getUserId()
 
     // 현재 대화 세션 업데이트 또는 생성
     let currentSession: ConversationSession
@@ -1114,13 +1001,28 @@ export default function QuickAssistPage() {
           messages: [...existing.messages, userMessage],
           updatedAt: new Date(),
         }
-        // 새 구조 세션 ID가 있으면 사용
-        chatSessionId = existing.sessionId || null
+        
+        // 기존 세션인데 sessionId가 비어 있으면 새 세션 생성
+        if (userId && !existing.sessionId) {
+          const sessionTitle = generateQuestionSummary(trimmedMessage)
+          const sessionResult = await createChatSession(
+            {
+              initial_context_type: currentContext.type,
+              initial_context_id: currentContext.id,
+              title: sessionTitle,
+            },
+            userId
+          )
+          chatSessionId = sessionResult.id
+          currentSession.sessionId = sessionResult.id
+        } else {
+          chatSessionId = existing.sessionId || null
+        }
       } else {
         currentSession = {
           id: selectedConversationId,
           sessionId: '',
-          title: generateQuestionSummary(inputMessage),
+          title: generateQuestionSummary(trimmedMessage),
           messages: [userMessage],
           createdAt: new Date(),
           updatedAt: new Date(),
@@ -1131,7 +1033,7 @@ export default function QuickAssistPage() {
       try {
         if (userId) {
           // 새 챗 세션 생성
-          const sessionTitle = generateQuestionSummary(inputMessage)
+          const sessionTitle = generateQuestionSummary(trimmedMessage)
           const initialContextType = currentContext.type
           const initialContextId = currentContext.id
           
@@ -1149,7 +1051,7 @@ export default function QuickAssistPage() {
           
           currentSession = {
             id: newSessionId,
-            sessionId: chatSessionId,
+            sessionId: chatSessionId || '',
             title: sessionTitle,
             messages: [userMessage],
             createdAt: new Date(),
@@ -1162,7 +1064,7 @@ export default function QuickAssistPage() {
       currentSession = {
         id: newSessionId,
             sessionId: '',
-        title: generateQuestionSummary(inputMessage),
+        title: generateQuestionSummary(trimmedMessage),
         messages: [userMessage],
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -1176,7 +1078,7 @@ export default function QuickAssistPage() {
         currentSession = {
           id: newSessionId,
           sessionId: '',
-          title: generateQuestionSummary(inputMessage),
+          title: generateQuestionSummary(trimmedMessage),
           messages: [userMessage],
           createdAt: new Date(),
           updatedAt: new Date(),
@@ -1202,7 +1104,7 @@ export default function QuickAssistPage() {
         
         // chatWithContractV2 API 호출 (상황 분석 결과 기반)
         const chatResult = await chatWithContractV2({
-          query: inputMessage.trim(),
+          query: trimmedMessage,
           docIds: [], // 상황 분석은 docId 없음
           analysisSummary: analysisSummary,
           riskScore: situationAnalysis.riskScore,
@@ -1223,11 +1125,6 @@ export default function QuickAssistPage() {
         
         // DB에 메시지 저장
         try {
-          const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client')
-          const supabase = createSupabaseBrowserClient()
-          const { data: { user } } = await supabase.auth.getUser()
-          const userId = user?.id || null
-          
           if (userId && chatSessionId) {
             // 새 테이블 구조 사용 (legal_chat_messages)
               try {
@@ -1275,7 +1172,7 @@ export default function QuickAssistPage() {
         if (currentContext.type === 'situation' && currentContext.id) {
           // 상황 분석 리포트를 컨텍스트로 사용하는 경우
           const chatResult = await chatWithContractV2({
-            query: inputMessage.trim(),
+            query: trimmedMessage,
             docIds: [],
             topK: 8,
             contextType: 'situation',
@@ -1333,7 +1230,7 @@ export default function QuickAssistPage() {
         } else if (currentContext.type === 'contract' && currentContext.id) {
           // 계약서 분석 리포트를 컨텍스트로 사용하는 경우
           const chatResult = await chatWithContractV2({
-            query: inputMessage.trim(),
+            query: trimmedMessage,
             docIds: [currentContext.id], // 계약서 ID를 docIds에 포함
             topK: 8,
             contextType: 'contract',
@@ -1392,7 +1289,7 @@ export default function QuickAssistPage() {
           // 일반 챗 모드 - chatWithContractV2 사용
             // 일반 챗 모드 - chatWithContractV2 사용
             const chatResult = await chatWithContractV2({
-              query: inputMessage.trim(),
+              query: trimmedMessage,
               docIds: [],
               topK: 8,
               contextType: 'none',
@@ -1529,19 +1426,19 @@ export default function QuickAssistPage() {
     } finally {
       setIsAnalyzing(false)
     }
-  }
+  }, [inputMessage, isAnalyzing, messages, selectedConversationId, conversations, currentContext, situationAnalysis, situationContext, generateQuestionSummary, router, toast])
 
   // 메시지 수정
-  const handleEditMessage = (messageId: string) => {
+  const handleEditMessage = useCallback((messageId: string) => {
     const message = messages.find(m => m.id === messageId)
     if (message && message.role === 'user') {
       setEditText(message.content)
       setEditingMessageId(messageId)
     }
-  }
+  }, [messages])
 
   // 메시지 수정 저장
-  const handleSaveEdit = () => {
+  const handleSaveEdit = useCallback(() => {
     if (!editingMessageId || !editText.trim()) return
 
     const updatedMessages = messages.map(m =>
@@ -1562,24 +1459,24 @@ export default function QuickAssistPage() {
 
     setEditingMessageId(null)
     setEditText('')
-  }
+  }, [editingMessageId, editText, messages, selectedConversationId, conversations])
 
   // 메시지 복사
-  const handleCopyMessage = (text: string) => {
+  const handleCopyMessage = useCallback((text: string) => {
     navigator.clipboard.writeText(text)
     toast({
       title: '복사 완료',
       description: '메시지가 클립보드에 복사되었습니다.',
     })
-  }
+  }, [toast])
 
   // 리포트 보기 (SIMULATION 상세 페이지로 이동)
-  const handleViewReport = (reportId: string) => {
+  const handleViewReport = useCallback((reportId: string) => {
     router.push(`/legal/situation?analysisId=${reportId}`)
-  }
+  }, [router])
 
   // 새 대화 시작
-  const handleNewConversation = () => {
+  const handleNewConversation = useCallback(() => {
     setSelectedConversationId(null)
     setMessages([])
     setHasInitialGreeting(false)
@@ -1589,15 +1486,15 @@ export default function QuickAssistPage() {
     // (URL 파라미터에서 온 경우는 페이지 로드 시 다시 설정됨)
     setSituationAnalysis(null)
     setSituationContext(null)
-  }
+  }, [])
 
   // 대화 선택
-  const handleSelectConversation = (conversationId: string) => {
+  const handleSelectConversation = useCallback((conversationId: string) => {
     setSelectedConversationId(conversationId)
-  }
+  }, [])
 
   // 상황 템플릿 선택 - 카드 클릭 시 입력창에 예시 문장 자동 채우기
-  const handleSituationSelect = (situation: typeof COMMON_SITUATIONS[0]) => {
+  const handleSituationSelect = useCallback((situation: typeof COMMON_SITUATIONS[0]) => {
     // 카드 클릭 시 입력창에 예시 문장 자동 채우기
     // 예: "인턴인데 수습 기간 중에 회사가 일방적으로 계약 해지를 통보했습니다."
     const exampleText = situation.text
@@ -1609,10 +1506,10 @@ export default function QuickAssistPage() {
         textareaRef.current.setSelectionRange(exampleText.length, exampleText.length)
       }
     }, 100)
-  }
+  }, [])
 
   // 날짜 포맷팅
-  const formatDate = (date: Date | string): string => {
+  const formatDate = useCallback((date: Date | string): string => {
     const dateObj = typeof date === 'string' ? new Date(date) : date
     const today = new Date()
     const yesterday = new Date(today)
@@ -1625,257 +1522,8 @@ export default function QuickAssistPage() {
     } else {
       return `${dateObj.getMonth() + 1}/${dateObj.getDate()}`
     }
-  }
+  }, [])
 
-  // 컨텍스트 선택 컴포넌트 (상황 분석 리스트)
-  const ContextSituationList = ({ onSelect, currentContextId }: { 
-    onSelect: (situation: { id: string; situation: string }) => void
-    currentContextId: string | null
-  }) => {
-    const [situations, setSituations] = useState<Array<{ id: string; situation: string; created_at: string }>>([])
-    const [loading, setLoading] = useState(true)
-    const [error, setError] = useState<string | null>(null)
-
-    useEffect(() => {
-      let isCancelled = false
-      
-      const loadSituations = async () => {
-        try {
-          setLoading(true)
-          setError(null)
-          const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client')
-          const supabase = createSupabaseBrowserClient()
-          const { data: { user } } = await supabase.auth.getUser()
-          const userId = user?.id || null
-          
-          if (isCancelled) return
-          
-          if (!userId) {
-            setError('로그인이 필요합니다')
-            setSituations([])
-            setLoading(false)
-            return
-          }
-
-          console.log('[ContextSituationList] 상황 분석 로드 시작, userId:', userId)
-          
-          // 타임아웃 추가 (30초)
-          const timeoutPromise = new Promise((_, reject) => {
-            setTimeout(() => reject(new Error('요청 시간이 초과되었습니다. 다시 시도해주세요.')), 30000)
-          })
-          
-          const historyPromise = getSituationHistoryV2(20, 0, userId)
-          const history = await Promise.race([historyPromise, timeoutPromise]) as any
-          
-          if (isCancelled) return
-          
-          console.log('[ContextSituationList] 상황 분석 로드 성공, 개수:', history?.length || 0)
-          console.log('[ContextSituationList] 로드된 데이터:', history)
-          
-          if (history && Array.isArray(history)) {
-            // 데이터 형식 변환 (백엔드 응답 형식에 맞춤)
-            const formattedSituations = history.map((item: any) => ({
-              id: item.id,
-              situation: item.situation || '',
-              created_at: item.created_at || new Date().toISOString(),
-            }))
-            console.log('[ContextSituationList] 변환된 데이터:', formattedSituations)
-            setSituations(formattedSituations)
-          } else {
-            console.warn('[ContextSituationList] 예상과 다른 데이터 형식:', history)
-            setSituations([])
-          }
-        } catch (error: any) {
-          if (isCancelled) return
-          console.error('[ContextSituationList] 상황 분석 로드 실패:', error)
-          setError(error?.message || '상황 분석을 불러오는 중 오류가 발생했습니다')
-          setSituations([])
-        } finally {
-          if (!isCancelled) {
-            setLoading(false)
-          }
-        }
-      }
-      
-      loadSituations()
-      
-      return () => {
-        isCancelled = true
-      }
-    }, [])
-
-    if (loading) {
-      return (
-        <div className="flex items-center justify-center py-8">
-          <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
-          <span className="ml-2 text-sm text-slate-500">로딩 중...</span>
-        </div>
-      )
-    }
-
-    if (error) {
-      return (
-        <div className="rounded-lg bg-red-50 border border-red-200 p-4">
-          <div className="flex items-center gap-2 text-sm text-red-700">
-            <AlertTriangle className="h-4 w-4" />
-            <span>{error}</span>
-          </div>
-        </div>
-      )
-    }
-
-    if (situations.length === 0) {
-      return (
-        <div className="text-center py-8">
-          <div className="text-sm text-slate-500">저장된 상황 분석이 없습니다</div>
-          <div className="text-xs text-slate-400 mt-1">상황 분석 페이지에서 먼저 분석을 진행해주세요</div>
-        </div>
-      )
-    }
-
-    return (
-      <div className="space-y-2">
-        {situations.map((situation) => (
-          <button
-            key={situation.id}
-            onClick={() => onSelect(situation)}
-            className={cn(
-              "w-full p-3 rounded-lg border-2 transition-all text-left",
-              currentContextId === situation.id
-                ? "border-blue-500 bg-blue-50"
-                : "border-slate-200 hover:border-blue-300 hover:bg-slate-50"
-            )}
-          >
-            <div className="text-sm font-medium text-slate-900 line-clamp-2">
-              {situation.situation?.substring(0, 50) || '상황 분석'}
-            </div>
-            <div className="text-xs text-slate-500 mt-1">
-              {formatDate(situation.created_at)}
-            </div>
-          </button>
-        ))}
-      </div>
-    )
-  }
-
-  // 컨텍스트 선택 컴포넌트 (계약서 분석 리스트)
-  const ContextContractList = ({ onSelect, currentContextId }: { 
-    onSelect: (contract: { id: string; doc_id: string; title: string }) => void
-    currentContextId: string | null
-  }) => {
-    const [contracts, setContracts] = useState<Array<{ id: string; doc_id: string; title: string; created_at: string }>>([])
-    const [loading, setLoading] = useState(true)
-    const [error, setError] = useState<string | null>(null)
-
-    useEffect(() => {
-      let isCancelled = false
-      
-      const loadContracts = async () => {
-        try {
-          setLoading(true)
-          setError(null)
-          const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client')
-          const supabase = createSupabaseBrowserClient()
-          const { data: { user } } = await supabase.auth.getUser()
-          const userId = user?.id || null
-          
-          if (isCancelled) return
-          
-          if (!userId) {
-            setError('로그인이 필요합니다')
-            setContracts([])
-            setLoading(false)
-            return
-          }
-          
-          // 타임아웃 추가 (30초)
-          const timeoutPromise = new Promise((_, reject) => {
-            setTimeout(() => reject(new Error('요청 시간이 초과되었습니다. 다시 시도해주세요.')), 30000)
-          })
-          
-          const historyPromise = getContractHistoryV2(10, 0, userId)
-          const history = await Promise.race([historyPromise, timeoutPromise]) as any
-          
-          if (isCancelled) return
-          
-          setContracts(history.map((c: any) => ({
-            id: c.id,
-            doc_id: c.doc_id,
-            title: c.title || c.original_filename || '계약서 분석',
-            created_at: c.created_at,
-          })))
-        } catch (error: any) {
-          if (isCancelled) return
-          console.error('계약서 분석 로드 실패:', error)
-          setError(error?.message || '계약서 분석을 불러오는 중 오류가 발생했습니다')
-          setContracts([])
-        } finally {
-          if (!isCancelled) {
-            setLoading(false)
-          }
-        }
-      }
-      
-      loadContracts()
-      
-      return () => {
-        isCancelled = true
-      }
-    }, [])
-
-    if (loading) {
-      return (
-        <div className="flex items-center justify-center py-8">
-          <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
-          <span className="ml-2 text-sm text-slate-500">로딩 중...</span>
-        </div>
-      )
-    }
-
-    if (error) {
-      return (
-        <div className="rounded-lg bg-red-50 border border-red-200 p-4">
-          <div className="flex items-center gap-2 text-sm text-red-700">
-            <AlertTriangle className="h-4 w-4" />
-            <span>{error}</span>
-          </div>
-        </div>
-      )
-    }
-
-    if (contracts.length === 0) {
-      return (
-        <div className="text-center py-8">
-          <div className="text-sm text-slate-500">저장된 계약서 분석이 없습니다</div>
-          <div className="text-xs text-slate-400 mt-1">계약서 분석 페이지에서 먼저 분석을 진행해주세요</div>
-        </div>
-      )
-    }
-
-    return (
-      <div className="space-y-2">
-        {contracts.map((contract) => (
-          <button
-            key={contract.id}
-            onClick={() => onSelect(contract)}
-            className={cn(
-              "w-full p-3 rounded-lg border-2 transition-all text-left",
-              currentContextId === contract.doc_id || currentContextId === contract.id
-                ? "border-blue-500 bg-blue-50"
-                : "border-slate-200 hover:border-blue-300 hover:bg-slate-50"
-            )}
-          >
-            <div className="text-sm font-medium text-slate-900 line-clamp-2">
-              {contract.title}
-            </div>
-            <div className="text-xs text-slate-500 mt-1">
-              {formatDate(contract.created_at)}
-            </div>
-          </button>
-        ))}
-      </div>
-    )
-  }
 
   // 전체 화면 스크롤 방지
   useEffect(() => {
@@ -1884,6 +1532,19 @@ export default function QuickAssistPage() {
       document.body.style.overflow = 'unset'
     }
   }, [])
+
+  // 정렬된 대화 목록 메모이제이션 (최신순)
+  const sortedConversations = useMemo(() => {
+    return [...conversations].sort((a, b) => 
+      b.updatedAt.getTime() - a.updatedAt.getTime()
+    )
+  }, [conversations])
+
+  // 현재 선택된 대화 세션 메모이제이션
+  const currentSession = useMemo(() => {
+    if (!selectedConversationId) return null
+    return conversations.find(c => c.id === selectedConversationId) || null
+  }, [selectedConversationId, conversations])
 
   return (
     <div className="h-[calc(100vh-64px)] w-full overflow-hidden bg-gradient-to-br from-slate-50 via-blue-50/30 to-indigo-50/20 flex flex-col">
@@ -1907,15 +1568,15 @@ export default function QuickAssistPage() {
                 <Zap className="w-3.5 h-3.5" />
               </Button>
             </div>
-            {conversations.length > 0 && (
+            {sortedConversations.length > 0 && (
               <div className="text-xs text-white/80 font-medium">
-                총 {conversations.length}개
+                총 {sortedConversations.length}개
               </div>
             )}
           </div>
           
           <div className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-transparent min-h-0">
-            {conversations.length === 0 ? (
+            {sortedConversations.length === 0 ? (
               <div className="p-5 text-center">
                 <div className="p-3 bg-slate-100 rounded-full w-14 h-14 mx-auto mb-3 flex items-center justify-center">
                   <MessageSquare className="w-7 h-7 text-slate-400" />
@@ -1925,7 +1586,7 @@ export default function QuickAssistPage() {
               </div>
             ) : (
               <div className="p-2.5 space-y-1.5">
-                {conversations.map((conv) => (
+                {sortedConversations.map((conv) => (
                   <button
                     key={conv.id}
                     onClick={() => handleSelectConversation(conv.id)}
@@ -2036,14 +1697,30 @@ export default function QuickAssistPage() {
                       >
                         {message.role === 'assistant' ? (
                           // 메시지의 context_type에 따라 다른 컴포넌트 사용
-                          message.context_type === 'situation' ? (
-                            <SituationChatMessage 
-                              content={message.content} 
-                              contextId={message.context_id || null}
-                            />
-                          ) : (
-                            <ChatAiMessage content={message.content} />
-                          )
+                          // 최종 구분 구조:
+                          // 1. 상황 분석 (context_type === 'situation') -> SituationChatMessage (구조화된 카드 UI)
+                          // 2. 계약서 (context_type === 'contract') -> LegalChatMessage (Contract 페이지와 동일한 구조화된 탭 UI)
+                          // 3. 일반 (context_type === 'none' 또는 없음) -> QuickChatMessage (마크다운 렌더링)
+                          (() => {
+                            const contextType = message.context_type || 'none'
+                            if (contextType === 'situation') {
+                              return (
+                                <SituationChatMessage 
+                                  content={message.content} 
+                                  contextId={message.context_id || null}
+                                />
+                              )
+                            } else if (contextType === 'contract') {
+                              return (
+                                <LegalChatMessage content={message.content} />
+                              )
+                            } else {
+                              // 'none' 또는 undefined
+                              return (
+                                <QuickChatMessage content={message.content} />
+                              )
+                            }
+                          })()
                         ) : (
                           <UserMessageWithContext 
                             message={message}
