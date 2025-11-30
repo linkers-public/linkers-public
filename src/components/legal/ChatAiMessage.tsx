@@ -11,23 +11,37 @@ export function ChatAiMessage({ content }: ChatAiMessageProps) {
   let disclaimer: string | null = null
 
   try {
-    // ⚠️ 뒤에 붙는 안내 문구 분리
-    const warningIndex = content.indexOf("⚠️")
     let jsonPart = content
     
-    if (warningIndex !== -1) {
-      jsonPart = content.substring(0, warningIndex).trim()
-      disclaimer = content.substring(warningIndex).trim()
+    // --- 구분선 찾기 (JSON과 안내 문구 사이)
+    const separatorIndex = jsonPart.indexOf('---')
+    if (separatorIndex !== -1) {
+      jsonPart = jsonPart.substring(0, separatorIndex).trim()
+      disclaimer = content.substring(separatorIndex).trim()
+    } else {
+      // ⚠️ 뒤에 붙는 안내 문구 분리 (구분선이 없는 경우)
+      const warningIndex = content.indexOf("⚠️")
+      if (warningIndex !== -1) {
+        jsonPart = content.substring(0, warningIndex).trim()
+        disclaimer = content.substring(warningIndex).trim()
+      }
     }
     
     // ```json 코드 블록 제거
     jsonPart = jsonPart.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim()
     
+    // JSON 객체 시작/끝 찾기 (중괄호로 감싸진 부분만 추출)
+    const firstBrace = jsonPart.indexOf('{')
+    const lastBrace = jsonPart.lastIndexOf('}')
+    if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+      jsonPart = jsonPart.substring(firstBrace, lastBrace + 1)
+    }
+    
     // JSON 파싱 시도
     parsed = JSON.parse(jsonPart)
     
     // ContractRiskResult 타입 검증 (최소한의 필수 필드 확인)
-    if (!parsed || typeof parsed !== 'object') {
+    if (!parsed || typeof parsed !== 'object' || !parsed.summary) {
       parsed = null
     }
   } catch (e) {

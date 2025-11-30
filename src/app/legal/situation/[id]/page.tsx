@@ -13,6 +13,7 @@ import { RAGHighlightedMarkdown, RAGHighlightedText } from '../../../../componen
 import { SituationChat } from '../../../../components/legal/SituationChat'
 import { LegalReportCard } from '../../../../components/legal/LegalReportCard'
 import { ActionDashboard } from '../../../../components/legal/ActionDashboard'
+import { LegalEmailHelper } from '../../../../components/legal/LegalEmailHelper'
 import { parseSummary, findSectionByEmoji, removeEmojiFromTitle } from '../../../../utils/parseSummary'
 import type { 
   SituationCategory, 
@@ -71,6 +72,12 @@ export default function SituationDetailPage() {
         return
       }
       
+      // 디버깅: scripts 확인
+      console.log('🔍 [상황분석 상세] analysis 객체:', analysis)
+      console.log('🔍 [상황분석 상세] analysis.scripts:', analysis?.scripts)
+      console.log('🔍 [상황분석 상세] analysis.scripts?.toCompany:', analysis?.scripts?.toCompany)
+      console.log('🔍 [상황분석 상세] analysis.scripts?.toAdvisor:', analysis?.scripts?.toAdvisor)
+      
       setAnalysisId(situationId)
       
       // v2 응답을 v1 형식으로 변환
@@ -82,6 +89,22 @@ export default function SituationDetailPage() {
         : (analysisData?.criteria && Array.isArray(analysisData.criteria) && analysisData.criteria.length > 0)
         ? analysisData.criteria
         : []
+      
+      // scripts 변환 - 명시적으로 처리
+      const scriptsData = analysis?.scripts
+      const scripts = scriptsData
+        ? {
+            toCompany: scriptsData.toCompany || undefined,
+            toAdvisor: scriptsData.toAdvisor || undefined,
+          }
+        : {
+            toCompany: undefined,
+            toAdvisor: undefined,
+          }
+      
+      console.log('🔍 [상황분석 상세] 변환된 scripts:', scripts)
+      console.log('🔍 [상황분석 상세] 변환된 scripts.toCompany:', scripts.toCompany)
+      console.log('🔍 [상황분석 상세] 변환된 scripts.toAdvisor:', scripts.toAdvisor)
       
       const v1Format: SituationAnalysisResponse = {
         classifiedType: (analysis?.tags?.[0] || analysisData?.classifiedType || 'unknown') as SituationCategory,
@@ -104,10 +127,7 @@ export default function SituationDetailPage() {
             },
           ],
         },
-        scripts: analysisData?.scripts || analysis?.scripts || {
-          toCompany: undefined,
-          toAdvisor: undefined,
-        },
+        scripts: scripts,
         relatedCases: (analysis?.relatedCases || []).map((c: any) => ({
           id: c?.id || '',
           title: c?.title || '',
@@ -124,6 +144,11 @@ export default function SituationDetailPage() {
         })),
         organizations: analysis?.organizations || [],
       }
+      
+      // 디버깅: 최종 변환된 scripts 확인
+      console.log('🔍 [상황분석 상세] v1Format.scripts:', v1Format.scripts)
+      console.log('🔍 [상황분석 상세] v1Format.scripts?.toCompany:', v1Format.scripts?.toCompany)
+      console.log('🔍 [상황분석 상세] v1Format.scripts?.toAdvisor:', v1Format.scripts?.toAdvisor)
       
       setAnalysisResult(v1Format)
     } catch (err: any) {
@@ -197,6 +222,17 @@ export default function SituationDetailPage() {
 
   // 요약 텍스트 추출 (첫 줄만)
   const summaryText = summarySection?.content?.split('\n')[0] || summarySection?.content || ''
+  
+  // 디버깅: 렌더링 시점 scripts 확인
+  console.log('🔍 [상황분석 상세] 렌더링 시점 analysisResult.scripts:', analysisResult.scripts)
+  console.log('🔍 [상황분석 상세] 렌더링 시점 analysisResult.scripts?.toCompany:', analysisResult.scripts?.toCompany)
+  console.log('🔍 [상황분석 상세] 렌더링 시점 analysisResult.scripts?.toAdvisor:', analysisResult.scripts?.toAdvisor)
+  console.log('🔍 [상황분석 상세] 조건 체크:', {
+    speakSection: !!speakSection,
+    toCompany: !!analysisResult.scripts?.toCompany,
+    toAdvisor: !!analysisResult.scripts?.toAdvisor,
+    shouldShow: !!(speakSection || analysisResult.scripts?.toCompany || analysisResult.scripts?.toAdvisor)
+  })
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 py-12">
@@ -387,34 +423,46 @@ export default function SituationDetailPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               {/* 말하기 팁 카드 */}
+              {/* 이렇게 말해보세요 섹션 - Gmail 메일 작성 도우미 */}
               {(speakSection || analysisResult.scripts?.toCompany || analysisResult.scripts?.toAdvisor) && (
-                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 space-y-3">
-                  <h4 className="font-semibold text-slate-900 flex items-center gap-2">
-                    <span>💬</span>
-                    <span>이렇게 말해보세요</span>
-                  </h4>
-                  
+                <div className="space-y-4">
                   {speakSection?.content && (
-                    <div className="prose prose-slate max-w-none text-sm">
-                      <RAGHighlightedMarkdown 
-                        content={speakSection.content}
-                        sources={analysisResult.sources || []}
-                      />
+                    <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                      <h4 className="font-semibold text-slate-900 flex items-center gap-2 mb-3">
+                        <span>💬</span>
+                        <span>이렇게 말해보세요</span>
+                      </h4>
+                      <div className="prose prose-slate max-w-none text-sm">
+                        <RAGHighlightedMarkdown 
+                          content={speakSection.content}
+                          sources={analysisResult.sources || []}
+                        />
+                      </div>
                     </div>
                   )}
                   
+                  {/* 회사에 보낼 메일 */}
                   {analysisResult.scripts?.toCompany && (
-                    <div className="bg-white border border-purple-200 rounded p-3">
-                      <p className="text-xs font-semibold text-purple-700 mb-1">회사에 이렇게 말해보세요:</p>
-                      <p className="text-sm text-slate-700">{analysisResult.scripts.toCompany}</p>
-                    </div>
+                    <LegalEmailHelper
+                      toEmail=""
+                      recipientName="회사"
+                      defaultSubject="[문의] 근로 관련 사안에 대한 확인 요청"
+                      suggestionText={analysisResult.scripts.toCompany}
+                      title="회사에 이렇게 말해보세요"
+                      description="아래 내용을 복사하거나 Gmail로 바로 보낼 수 있습니다."
+                    />
                   )}
                   
+                  {/* 노무사/기관에 보낼 메일 */}
                   {analysisResult.scripts?.toAdvisor && (
-                    <div className="bg-white border border-purple-200 rounded p-3">
-                      <p className="text-xs font-semibold text-purple-700 mb-1">노무사/기관에 이렇게 말해보세요:</p>
-                      <p className="text-sm text-slate-700">{analysisResult.scripts.toAdvisor}</p>
-                    </div>
+                    <LegalEmailHelper
+                      toEmail=""
+                      recipientName="노무사/상담 기관"
+                      defaultSubject="[상담 요청] 근로 관련 문의"
+                      suggestionText={analysisResult.scripts.toAdvisor}
+                      title="노무사/상담 기관에 이렇게 말해보세요"
+                      description="아래 내용을 복사하거나 Gmail로 바로 보낼 수 있습니다."
+                    />
                   )}
                 </div>
               )}

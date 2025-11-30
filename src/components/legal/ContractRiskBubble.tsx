@@ -47,7 +47,7 @@ export function ContractRiskBubble({ result }: Props) {
       </div>
 
       {/* 핵심 위험 포인트 */}
-      {result.riskContent?.length > 0 && (
+      {Array.isArray(result.riskContent) && result.riskContent.length > 0 && (
         <div className="space-y-2">
           <p className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
             <span className="text-base">🔍</span>
@@ -68,7 +68,7 @@ export function ContractRiskBubble({ result }: Props) {
       )}
 
       {/* 체크리스트 */}
-      {result.checklist?.length > 0 && (
+      {Array.isArray(result.checklist) && result.checklist.length > 0 && (
         <div className="space-y-2">
           <p className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
             <span className="text-base">✅</span>
@@ -88,17 +88,18 @@ export function ContractRiskBubble({ result }: Props) {
       {/* 수정 포인트 (있으면) */}
       {result.negotiationPoints &&
         Object.keys(result.negotiationPoints).length > 0 && (
-          <div>
-            <p className="mb-1 text-[10px] font-semibold text-slate-700">
-              📝 수정·협상 포인트
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
+              <span className="text-base">📝</span>
+              수정·협상 포인트
             </p>
-            <ul className="space-y-1 text-[10px] text-slate-700">
+            <ul className="space-y-2">
               {Object.entries(result.negotiationPoints).map(([k, v]) => (
-                <li key={k} className="rounded-lg bg-white px-2 py-1.5 border border-slate-200">
-                  <span className="font-semibold text-indigo-600 mr-1 text-[10px]">
-                    {k}
+                <li key={k} className="rounded-lg bg-indigo-50/50 border border-indigo-200 px-3 py-2.5">
+                  <span className="font-semibold text-indigo-700 text-xs mr-2">
+                    {k}:
                   </span>
-                  <span className="text-[10px]">{v}</span>
+                  <span className="text-xs text-slate-700 leading-relaxed">{v}</span>
                 </li>
               ))}
             </ul>
@@ -106,16 +107,18 @@ export function ContractRiskBubble({ result }: Props) {
         )}
 
       {/* 법적 근거 */}
-      {result.legalReferences?.length > 0 && (
-        <div>
-          <p className="mb-1 text-[10px] font-semibold text-slate-700">
-            ⚖️ 참고 법령
+      {Array.isArray(result.legalReferences) && result.legalReferences.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
+            <span className="text-base">⚖️</span>
+            참고 법령
           </p>
-          <ul className="space-y-0.5 text-[10px] text-slate-700">
+          <ul className="space-y-1.5">
             {result.legalReferences.map((ref, i) => (
-              <li key={i} className="leading-relaxed">
-                <span className="font-medium">{ref.name}</span> –{" "}
-                {ref.description}
+              <li key={i} className="rounded-lg bg-blue-50/50 border border-blue-200 px-3 py-2 text-xs leading-relaxed">
+                <span className="font-semibold text-blue-900">{ref.name}</span>
+                <span className="text-slate-600 mx-1.5">–</span>
+                <span className="text-slate-700">{ref.description}</span>
               </li>
             ))}
           </ul>
