@@ -707,7 +707,14 @@ class ContractStorageService:
             sources = analysis_data.get("sources", [])
             criteria = analysis_data.get("criteria", [])
             action_plan = analysis_data.get("actionPlan", {})
-            scripts = analysis_data.get("scripts", {})
+            scripts_raw = analysis_data.get("scripts", {})
+            # scripts를 camelCase로 변환 (to_company -> toCompany, to_advisor -> toAdvisor)
+            scripts = {}
+            if isinstance(scripts_raw, dict):
+                scripts = {
+                    "toCompany": scripts_raw.get("to_company") or scripts_raw.get("toCompany"),
+                    "toAdvisor": scripts_raw.get("to_advisor") or scripts_raw.get("toAdvisor"),
+                }
             classified_type = analysis_data.get("classifiedType", analysis.get("classified_type", "unknown"))
             risk_score = analysis_data.get("riskScore", float(analysis.get("risk_score", 0)))
             
