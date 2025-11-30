@@ -9,13 +9,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Slider } from '@/components/ui/slider'
-import { Loader2, AlertTriangle, CheckCircle2, Copy, FileText, Sparkles, Info, ChevronDown, ChevronUp, Scale, Clock, DollarSign, Users, Briefcase, TrendingUp, Zap, MessageSquare, XCircle, ExternalLink, Phone, Globe, BookOpen } from 'lucide-react'
+import { Loader2, AlertTriangle, CheckCircle2, Copy, FileText, Sparkles, Info, ChevronDown, ChevronUp, Scale, Clock, DollarSign, Users, Briefcase, TrendingUp, Zap, MessageSquare, XCircle, ExternalLink, Phone, Globe, BookOpen, Download } from 'lucide-react'
 import { analyzeSituationV2, type SituationRequestV2, type SituationResponseV2, getSituationAnalysisByIdV2 } from '@/apis/legal.service'
 import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
 import { MarkdownRenderer } from '@/components/rag/MarkdownRenderer'
 import { RAGHighlightedMarkdown, RAGHighlightedText } from '@/components/legal/RAGHighlightedText'
 import { SituationChat } from '@/components/legal/SituationChat'
+import { LegalReportCard } from '@/components/legal/LegalReportCard'
+import { ActionDashboard } from '@/components/legal/ActionDashboard'
 import type { 
   SituationCategory, 
   EmploymentType, 
@@ -293,6 +295,8 @@ export default function SituationAnalysisPage() {
   const [analysisId, setAnalysisId] = useState<string | null>(null)  // situation_analyses의 ID 저장
   const [checkedItems, setCheckedItems] = useState<Set<string>>(new Set())
   const [checkedEvidence, setCheckedEvidence] = useState<Set<string>>(new Set())
+  const [showSourcesList, setShowSourcesList] = useState(false)  // 참고 법령 리스트 표시 여부
+  const [showSourcesPopover, setShowSourcesPopover] = useState(false)  // 참고 자료 Popover 표시 여부
 
   // 체크박스 상태를 localStorage에서 불러오기
   useEffect(() => {
@@ -350,16 +354,20 @@ export default function SituationAnalysisPage() {
       setAnalysisId(analysisId)
       
       // v2 응답을 v1 형식으로 변환
+      // analysis JSONB 필드에서 직접 데이터 추출
+      const analysisData = analysis?.analysis || {}
+      
       const v1Format: SituationAnalysisResponse = {
-        classifiedType: (analysis?.tags?.[0] || 'unknown') as SituationCategory,
-        riskScore: analysis?.riskScore ?? analysis?.risk_score ?? 0,
-        summary: analysis?.analysis?.summary || '',
-        criteria: (analysis?.analysis?.legalBasis || []).map((basis: any) => ({
-          name: basis?.title || '',
-          status: (basis?.status || 'likely') as 'likely' | 'unclear' | 'unlikely',
-          reason: basis?.snippet || '',
+        classifiedType: (analysis?.tags?.[0] || analysisData?.classifiedType || 'unknown') as SituationCategory,
+        riskScore: analysis?.riskScore ?? analysis?.risk_score ?? analysisData?.riskScore ?? 0,
+        summary: analysisData?.summary || analysis?.analysis?.summary || '',
+        // criteria는 analysis.criteria에서 직접 가져오기
+        criteria: (analysisData?.criteria || []).map((criterion: any) => ({
+          name: criterion?.name || '',
+          status: (criterion?.status || 'likely') as 'likely' | 'unclear' | 'unlikely',
+          reason: criterion?.reason || '',
         })),
-        sources: (analysis?.sources || []).map((source: any) => ({
+        sources: (analysis?.sources || analysisData?.sources || []).map((source: any) => ({
           sourceId: source.sourceId || source.source_id || '',
           sourceType: (source.sourceType || source.source_type || 'law') as 'law' | 'manual' | 'case',
           title: source.title || '',
@@ -368,7 +376,7 @@ export default function SituationAnalysisPage() {
           externalId: source.externalId || source.external_id,
           fileUrl: source.fileUrl || source.file_url,
         })),
-        actionPlan: {
+        actionPlan: analysisData?.actionPlan || {
           steps: [
             {
               title: '즉시 조치',
@@ -378,7 +386,7 @@ export default function SituationAnalysisPage() {
                   return analysis.checklist.slice(0, 3)
                 }
                 // checklist가 없으면 summary에서 "지금 당장 할 수 있는 행동" 섹션 파싱
-                const summary = analysis?.analysis?.summary || ''
+                const summary = analysisData?.summary || analysis?.analysis?.summary || ''
                 const actionSectionMatch = summary.match(/##\s*🎯\s*지금\s*당장\s*할\s*수\s*있는\s*행동\s*\n([\s\S]*?)(?=##|$)/i)
                 if (actionSectionMatch) {
                   const actionContent = actionSectionMatch[1].trim()
@@ -394,11 +402,11 @@ export default function SituationAnalysisPage() {
             },
             {
               title: '권고사항',
-              items: analysis?.analysis?.recommendations || [],
+              items: analysisData?.recommendations || analysis?.analysis?.recommendations || [],
             },
           ],
         },
-        scripts: {
+        scripts: analysisData?.scripts || analysis?.scripts || {
           toCompany: undefined,
           toAdvisor: undefined,
         },
@@ -567,10 +575,11 @@ export default function SituationAnalysisPage() {
         classifiedType: (result?.tags?.[0] || 'unknown') as SituationCategory,
         riskScore: result?.riskScore ?? 0,
         summary: result?.analysis?.summary || '',
-        criteria: (result?.analysis?.legalBasis || []).map(basis => ({
-          name: basis?.title || '',
-          status: (basis?.status || 'likely') as 'likely' | 'unclear' | 'unlikely',
-          reason: basis?.snippet || '',
+        // criteria는 v2 응답에서 직접 가져오기 (백엔드가 criteria를 반환하는 경우)
+        criteria: ((result as any)?.criteria || []).map((criterion: any) => ({
+          name: criterion?.name || '',
+          status: (criterion?.status || 'likely') as 'likely' | 'unclear' | 'unlikely',
+          reason: criterion?.reason || '',
         })),
         actionPlan: {
           steps: [
@@ -1235,29 +1244,35 @@ export default function SituationAnalysisPage() {
 
         {analysisResult && !isLoadingAnalysis && (
           <div id="analysis-result" className="space-y-8">
-            {/* Section 1: 진단 결과 */}
+            {/* 상황 분류 카드 */}
             <div className="mb-8">
               <div className="text-center mb-6">
-                <h2 className="text-3xl md:text-4xl font-extrabold text-slate-900 mb-3">
-                  {summary ? `${summary.split(' ')[0]}님의 상황 분석 결과입니다.` : '상황 분석 결과입니다.'}
+                <h2 className="text-3xl md:text-4xl font-extrabold text-slate-900 mb-6">
+                  사용자님의 상황 분석 결과입니다.
                 </h2>
               </div>
               
-              {/* 상황 분류 카드 (태그 형태) */}
-              <div className="flex flex-wrap gap-3 justify-center mb-6">
+              {/* 상황 분류 태그 (Badge 형태) */}
+              <div className="flex flex-wrap gap-3 justify-center mb-8">
                 {/* 메인 카테고리 태그 */}
                 <div className="px-5 py-3 bg-gradient-to-r from-red-500 to-rose-600 text-white rounded-xl shadow-lg font-bold text-base flex items-center gap-2">
                   <span>🚨</span>
                   <span>{getCategoryLabel(analysisResult.classifiedType as SituationCategory)}</span>
                 </div>
                 
+                {/* 위험도 태그 */}
+                <div className={`px-5 py-3 rounded-xl shadow-lg font-bold text-base flex items-center gap-2 text-white ${getRiskColor(analysisResult.riskScore)}`}>
+                  <span>{analysisResult.riskScore <= 30 ? '✅' : analysisResult.riskScore <= 70 ? '⚠️' : '🚨'}</span>
+                  <span>위험도 {analysisResult.riskScore}</span>
+                </div>
+                
                 {/* 추가 태그들 (분석 결과에서 추출) */}
                 {analysisResult.criteria && analysisResult.criteria.length > 0 && (
                   <>
-                    {analysisResult.criteria.slice(0, 2).map((criterion, idx) => {
+                    {analysisResult.criteria.slice(0, 3).map((criterion, idx) => {
                       // criterion.name에서 키워드 추출하여 태그 생성
                       const tagEmoji = criterion.status === 'likely' ? '🌙' : criterion.status === 'unclear' ? '📉' : '⚠️'
-                      const tagText = criterion.name.length > 15 ? criterion.name.substring(0, 15) + '...' : criterion.name
+                      const tagText = criterion.name.length > 20 ? criterion.name.substring(0, 20) + '...' : criterion.name
                       return (
                         <div key={idx} className="px-5 py-3 bg-gradient-to-r from-amber-500 to-orange-600 text-white rounded-xl shadow-lg font-bold text-base flex items-center gap-2">
                           <span>{tagEmoji}</span>
@@ -1270,463 +1285,77 @@ export default function SituationAnalysisPage() {
               </div>
             </div>
 
-            {/* Section 2: 핵심 가이드 */}
-            <div className="space-y-6">
-              {/* 청소년·청년 노동 가이드 카드 (핵심 법리 1~2줄) */}
-              {(analysisResult.sources && analysisResult.sources.length > 0) ? (
-                <Card className="border-2 border-blue-400 shadow-xl bg-gradient-to-br from-blue-50 to-indigo-50">
-                  <CardHeader className="pb-4">
-                    <CardTitle className="text-xl flex items-center gap-3">
-                      <div className="p-2 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg shadow-md">
-                        <BookOpen className="w-5 h-5 text-white" />
-                      </div>
-                      <span className="font-bold">청소년·청년 노동 가이드</span>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="bg-white border-2 border-blue-200 rounded-xl p-6 shadow-sm">
-                      {/* 문서 제목 표시 */}
-                      {analysisResult.sources[0]?.title && (
-                        <div className="mb-4 pb-4 border-b border-blue-100">
-                          <h3 className="text-lg font-bold text-slate-900 mb-2 flex items-center gap-2">
-                            <span>📄</span>
-                            <span>
-                              {(() => {
-                                try {
-                                  // 파일명 정리: .pdf 제거 및 사용자 친화적인 형식으로 변환
-                                  let title = analysisResult.sources[0]?.title || ''
-                                  
-                                  if (!title) return '법률 가이드'
-                                  
-                                  // .pdf 확장자 제거
-                                  title = title.replace(/\.pdf$/i, '')
-                                  
-                                  // 사용자 친화적인 제목으로 변환
-                                  // 예: "개정 표준취업규칙(2025년, 배포)" → "표준 취업규칙 가이드"
-                                  if (title.includes('표준') && (title.includes('취업규칙') || title.includes('근로계약'))) {
-                                    // "표준 취업규칙 가이드" 또는 "표준 근로계약 가이드" 형식
-                                    if (title.includes('취업규칙')) {
-                                      title = '표준 취업규칙 가이드'
-                                    } else if (title.includes('근로계약')) {
-                                      title = '표준 근로계약 가이드'
-                                    } else {
-                                      title = title.replace(/^.*?표준\s*/, '표준 ').replace(/\(.*?\)/g, '').trim() + ' 가이드'
-                                    }
-                                  } else if (title.includes('가이드') || title.includes('매뉴얼') || title.includes('안내')) {
-                                    // 이미 가이드/매뉴얼/안내가 포함된 경우
-                                    title = title.replace(/\(.*?\)/g, '').trim()
-                                  } else {
-                                    // 기타 문서명은 간단히 정리하고 "가이드" 추가
-                                    title = title.replace(/\(.*?\)/g, '').trim()
-                                    if (!title.endsWith('가이드') && !title.endsWith('매뉴얼')) {
-                                      title += ' 가이드'
-                                    }
-                                  }
-                                  
-                                  return title || '법률 가이드'
-                                } catch (e) {
-                                  console.error('제목 변환 오류:', e)
-                                  return '법률 가이드'
-                                }
-                              })()}
-                            </span>
-                            <span className="text-sm font-normal text-slate-500">
-                              (고용노동부 자료 기반)
-                            </span>
-                          </h3>
-                          {analysisResult.sources[0]?.fileUrl && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                if (analysisResult.sources?.[0]?.fileUrl) {
-                                  window.open(analysisResult.sources[0].fileUrl, '_blank')
-                                }
-                              }}
-                              className="border-blue-300 hover:bg-blue-50 hover:border-blue-400 text-blue-700"
-                            >
-                              <FileText className="w-4 h-4 mr-2" />
-                              원본 문서 보기
-                              <ExternalLink className="w-4 h-4 ml-2" />
-                            </Button>
-                          )}
-                        </div>
-                      )}
-                      
-                      {/* 핵심 법리 요약 */}
-                      <div className="space-y-3">
-                        {/* 인용구 형태로 핵심 문장 표시 */}
-                        {(() => {
-                          try {
-                            const firstSource = analysisResult.sources?.[0]
-                            if (firstSource?.snippet) {
-                              // snippet을 사용자 친화적으로 변환
-                              let snippet = firstSource.snippet
-                              
-                              // 불필요한 형식적 내용 제거 및 사용자 친화적인 변환
-                              snippet = snippet
-                                .replace(/\d+\s+\d+\s+/g, '') // "9 10" 같은 번호 제거
-                                .replace(/취업규칙\(안\).*?착안사항/g, '') // "취업규칙(안) (작성시 착안사항)" 제거
-                                .replace(/제\d+항/g, '') // "제1항" 같은 조항 번호 제거
-                                .replace(/제\d+조/g, '') // "제7조" 같은 조문 번호 제거
-                                .replace(/\(.*?안\).*?착안/g, '') // "(안) (작성시 착안사항)" 제거
-                                .replace(/^\d+\s*/, '') // 문장 시작의 숫자 제거
-                                .replace(/회사는\s+근로계약\s+체결\s+시\s+제\d+항의\s+일부\s+내용을\s+대신하기\s+위한\s+것임을\s+명확히\s+밝히면서/gi, '') // "회사는 근로계약 체결 시 제1항의 일부 내용을 대신하기 위한 것임을 명확히 밝히면서" 제거
-                                .replace(/\.\.\./g, '') // "..." 제거
-                                .replace(/\s+/g, ' ') // 연속된 공백 정리
-                                .trim()
-                              
-                              // 법 조항 번호가 포함된 문장을 자연스러운 문장으로 변환 시도
-                              snippet = snippet
-                                .replace(/([가-힣]+)\s*제\d+[항조]\s*([가-힣]+)/g, '$1 $2') // "수습기간 제7조 규정" → "수습기간 규정"
-                                .replace(/제\d+[항조]\s*\([^)]+\)/g, '') // "제7조(수습기간)" 제거
-                                .replace(/제\d+[항조]/g, '') // 남은 "제7조" 제거
-                                .replace(/\s+/g, ' ') // 다시 공백 정리
-                                .trim()
-                              
-                              // "~해야 합니다" 형식으로 자연스럽게 변환 시도
-                              snippet = snippet
-                                .replace(/([가-힣]+)\s*임을\s*명확히\s*밝히면서/g, '$1해야 합니다')
-                                .replace(/([가-힣]+)\s*임을\s*명확히/g, '$1해야 합니다')
-                                .replace(/([가-힣]+)\s*이어야\s*한다/g, '$1해야 합니다')
-                                .replace(/([가-힣]+)\s*하여야\s*한다/g, '$1해야 합니다')
-                                .replace(/\s+/g, ' ')
-                                .trim()
-                              
-                              // 문장 단위로 분리하고 의미 있는 문장만 추출
-                              const sentences = snippet
-                                .split(/[.!?]\s+/)
-                                .filter(s => {
-                                  const trimmed = s.trim()
-                                  // 너무 짧거나 형식적인 문장 제외
-                                  return trimmed.length > 15 && 
-                                         !/^\d+$/.test(trimmed) && // 숫자만 있는 경우 제외
-                                         !trimmed.includes('작성시') &&
-                                         !trimmed.includes('착안사항') &&
-                                         !trimmed.match(/^제\d+[항조]/) // "제1항", "제7조" 같은 형식 제외
-                                })
-                              
-                              if (sentences.length > 0) {
-                                // 첫 번째 의미 있는 문장을 사용자 친화적으로 변환
-                                let firstSentence = sentences[0]
-                                
-                                // "표준 취업규칙에 따르면" 같은 자연스러운 도입부 추가 시도
-                                if (!firstSentence.includes('따르면') && !firstSentence.includes('에 따르면')) {
-                                  // 제목에서 "표준 취업규칙" 같은 키워드가 있으면 활용
-                                  const title = firstSource.title || ''
-                                  if (title.includes('표준') || title.includes('취업규칙')) {
-                                    firstSentence = `표준 취업규칙에 따르면, ${firstSentence}`
-                                  } else if (title.includes('근로기준법') || title.includes('근로기준')) {
-                                    firstSentence = `근로기준법에 따르면, ${firstSentence}`
-                                  } else if (title.includes('가이드') || title.includes('매뉴얼')) {
-                                    firstSentence = `고용노동부 자료에 따르면, ${firstSentence}`
-                                  }
-                                }
-                                
-                                // 문장이 너무 길면 요약
-                                if (firstSentence.length > 150) {
-                                  // 마침표나 쉼표 기준으로 앞부분만 사용
-                                  const shortened = firstSentence.split(/[.,]/)[0]
-                                  if (shortened.length > 20) {
-                                    firstSentence = shortened + '해야 합니다.'
-                                  } else {
-                                    firstSentence = firstSentence.substring(0, 150) + '...'
-                                  }
-                                }
-                                
-                                const restSentences = sentences.slice(1, 3) // 나머지 1-2개 문장
-                                
-                                return (
-                                  <>
-                                    <blockquote className="border-l-4 border-blue-400 pl-4 py-2 bg-blue-50/50 rounded-r-lg">
-                                      <p className="text-base text-slate-800 font-medium italic">
-                                        "{firstSentence}"
-                                      </p>
-                                    </blockquote>
-                                    {restSentences.length > 0 && (
-                                      <p className="text-sm text-slate-700 leading-relaxed">
-                                        {(() => {
-                                          // 나머지 문장들을 자연스럽게 연결
-                                          let restText = restSentences
-                                            .map(s => {
-                                              // 각 문장도 정제
-                                              let cleaned = s.trim()
-                                              // 법 조항 번호 제거
-                                              cleaned = cleaned.replace(/제\d+[항조]/g, '')
-                                              // 자연스러운 마침표 추가
-                                              if (!cleaned.endsWith('.') && !cleaned.endsWith('!') && !cleaned.endsWith('?')) {
-                                                cleaned += '.'
-                                              }
-                                              return cleaned
-                                            })
-                                            .filter(s => s.length > 10) // 너무 짧은 문장 제외
-                                            .join(' ')
-                                          return restText
-                                        })()}
-                                      </p>
-                                    )}
-                                  </>
-                                )
-                              }
-                              
-                              // 필터링 후에도 문장이 없으면 원본 snippet의 일부를 표시
-                              if (snippet.length > 0) {
-                                const cleanedSnippet = snippet.substring(0, 200)
-                                return (
-                                  <p className="text-base text-slate-800 leading-relaxed font-medium">
-                                    {cleanedSnippet}{cleanedSnippet.length >= 200 ? '...' : ''}
-                                  </p>
-                                )
-                              }
-                            }
-                          } catch (e) {
-                            console.error('Snippet 처리 오류:', e)
-                          }
-                          
-                          // 기본 메시지
-                          return (
-                            <p className="text-base text-slate-800 leading-relaxed font-medium">
-                              고용노동부 자료에 따르면, 관련 법령에 따라 권리를 보호받을 수 있습니다.
-                            </p>
-                          )
-                        })()}
-                      </div>
-                      <p className="text-xs text-slate-500 mt-3 italic">
-                        (고용노동부 자료 기반)
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-              ) : (
-                // sources가 없을 때도 기본 메시지 표시
-                <Card className="border-2 border-blue-400 shadow-xl bg-gradient-to-br from-blue-50 to-indigo-50">
-                  <CardHeader className="pb-4">
-                    <CardTitle className="text-xl flex items-center gap-3">
-                      <div className="p-2 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg shadow-md">
-                        <BookOpen className="w-5 h-5 text-white" />
-                      </div>
-                      <span className="font-bold">청소년·청년 노동 가이드</span>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="bg-white border-2 border-blue-200 rounded-xl p-6 shadow-sm">
-                      <p className="text-base text-slate-800 leading-relaxed font-medium">
-                        관련 법령 정보를 불러오는 중입니다. 잠시 후 다시 시도해주세요.
-                      </p>
-                      <p className="text-xs text-slate-500 mt-3 italic">
-                        (고용노동부 자료 기반)
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
+            {/* 🔴 섹션 1: AI 법률 진단 리포트 */}
+            <LegalReportCard analysisResult={analysisResult} />
 
-              {/* 행동 가이드 카드 (Do & Don't) */}
-              <Card className="border-2 border-emerald-400 shadow-xl bg-gradient-to-br from-emerald-50 to-green-50">
+            {/* 카드 5: 이렇게 말해보세요 */}
+            {analysisResult.scripts && (analysisResult.scripts.toCompany || analysisResult.scripts.toAdvisor) && (
+              <Card className="border-2 border-indigo-300 shadow-xl bg-gradient-to-br from-indigo-50 to-purple-50">
                 <CardHeader className="pb-4">
                   <CardTitle className="text-xl flex items-center gap-3">
-                    <div className="p-2 bg-gradient-to-br from-emerald-500 to-green-600 rounded-lg shadow-md">
-                      <CheckCircle2 className="w-5 h-5 text-white" />
+                    <div className="p-2 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg shadow-md">
+                      <MessageSquare className="w-5 h-5 text-white" />
                     </div>
-                    <span className="font-bold">행동 가이드</span>
+                    <span className="font-bold">이렇게 말해보세요</span>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Do (해야 할 일) */}
-                    <div className="bg-white border-2 border-emerald-300 rounded-xl p-5 shadow-sm">
-                      <div className="flex items-center gap-2 mb-4">
-                        <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                        <h3 className="font-bold text-emerald-900">해야 할 일</h3>
+                  <div className="space-y-6">
+                    {analysisResult.scripts.toCompany && (
+                      <div className="bg-white border-2 border-indigo-200 rounded-xl p-5 shadow-sm">
+                        <div className="flex items-center justify-between mb-3">
+                          <h3 className="text-lg font-bold text-indigo-900">내부 보고</h3>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleCopy(analysisResult.scripts!.toCompany!, '내부 보고 템플릿이 복사되었습니다')}
+                            className="border-indigo-300 hover:bg-indigo-50 hover:border-indigo-400 text-indigo-700"
+                          >
+                            <Copy className="w-4 h-4 mr-2" />
+                            복사
+                          </Button>
+                        </div>
+                        <div className="prose prose-slate max-w-none text-sm">
+                          <RAGHighlightedMarkdown 
+                            content={analysisResult.scripts.toCompany}
+                            sources={analysisResult.sources || []}
+                          />
+                        </div>
                       </div>
-                      <ul className="space-y-2">
-                        {(() => {
-                          // actionPlan에서 증거 확보 관련 항목 추출
-                          const doItems: string[] = []
-                          analysisResult.actionPlan.steps.forEach(step => {
-                            step.items.forEach(item => {
-                              if (/증거|확보|캡처|기록|계약서|카톡/i.test(item) && doItems.length < 3) {
-                                doItems.push(item)
-                              }
-                            })
-                          })
-                          // 없으면 기본 항목
-                          if (doItems.length === 0) {
-                            return [
-                              '근로계약서 확보',
-                              '출퇴근 기록 캡처',
-                              '급여명세서 보관'
-                            ].map((item, idx) => (
-                              <li key={idx} className="flex items-start gap-2 text-sm text-slate-700">
-                                <span className="text-emerald-600 mt-0.5">✓</span>
-                                <span>{item}</span>
-                              </li>
-                            ))
-                          }
-                          return doItems.map((item, idx) => (
-                            <li key={idx} className="flex items-start gap-2 text-sm text-slate-700">
-                              <span className="text-emerald-600 mt-0.5">✓</span>
-                              <span>{item}</span>
-                            </li>
-                          ))
-                        })()}
-                      </ul>
-                    </div>
-
-                    {/* Don't (하지 말아야 할 일) */}
-                    <div className="bg-white border-2 border-red-300 rounded-xl p-5 shadow-sm">
-                      <div className="flex items-center gap-2 mb-4">
-                        <XCircle className="w-5 h-5 text-red-600" />
-                        <h3 className="font-bold text-red-900">하지 말아야 할 일</h3>
+                    )}
+                    {analysisResult.scripts.toAdvisor && (
+                      <div className="bg-white border-2 border-indigo-200 rounded-xl p-5 shadow-sm">
+                        <div className="flex items-center justify-between mb-3">
+                          <h3 className="text-lg font-bold text-indigo-900">외부 상담</h3>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleCopy(analysisResult.scripts!.toAdvisor!, '외부 상담 템플릿이 복사되었습니다')}
+                            className="border-indigo-300 hover:bg-indigo-50 hover:border-indigo-400 text-indigo-700"
+                          >
+                            <Copy className="w-4 h-4 mr-2" />
+                            복사
+                          </Button>
+                        </div>
+                        <div className="prose prose-slate max-w-none text-sm">
+                          <RAGHighlightedMarkdown 
+                            content={analysisResult.scripts.toAdvisor}
+                            sources={analysisResult.sources || []}
+                          />
+                        </div>
                       </div>
-                      <ul className="space-y-2">
-                        {[
-                          '합의 없는 새 계약서 서명',
-                          '증거 없이 대화하기',
-                          '법적 조치 전에 성급하게 결정하기'
-                        ].map((item, idx) => (
-                          <li key={idx} className="flex items-start gap-2 text-sm text-slate-700">
-                            <span className="text-red-600 mt-0.5">✗</span>
-                            <span>{item}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>
-            </div>
+            )}
 
-            {/* Section 3: 실전 해결 (신고 루트 안내) */}
-            <Card className="border-4 border-blue-500 shadow-2xl bg-gradient-to-br from-blue-50 via-indigo-50 to-blue-50">
-              <CardHeader className="pb-4">
-                <CardTitle className="text-xl flex items-center gap-3">
-                  <div className="p-2 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg shadow-md">
-                    <Briefcase className="w-5 h-5 text-white" />
-                  </div>
-                  <span className="font-bold">추천 조치 및 기관</span>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {(() => {
-                  const recommendedOrgs = getRecommendedOrganizations(analysisResult.classifiedType as SituationCategory)
-                  const mainOrg = recommendedOrgs[0] // 첫 번째 기관을 메인 추천으로
-                  const MainIcon = mainOrg.icon
-                  
-                  return (
-                    <div className="space-y-6">
-                      {/* 메인 추천 기관 (강조) */}
-                      <div className="bg-white border-4 border-blue-400 rounded-xl p-6 shadow-lg">
-                        <div className="flex items-start gap-4 mb-4">
-                          <div className="p-3 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg shadow-md">
-                            <MainIcon className="w-6 h-6 text-white" />
-                          </div>
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-2">
-                              <span className="px-3 py-1 bg-red-500 text-white text-xs font-bold rounded-full">우선순위 1위</span>
-                              <h3 className="text-xl font-extrabold text-slate-900">{mainOrg.name} 진정이 가장 빠릅니다.</h3>
-                            </div>
-                            <p className="text-sm text-slate-600 mb-3">
-                              <strong>Why:</strong> {(() => {
-                                // 상황에 맞는 이유 생성
-                                if (analysisResult.classifiedType === 'unpaid_wage') {
-                                  return '야간수당 미지급은 임금체불에 해당하여 근로감독관 직권 조사 대상이기 때문입니다.'
-                                } else if (analysisResult.classifiedType === 'harassment') {
-                                  return '직장 내 괴롭힘은 근로기준법 위반으로 근로감독관이 조사할 수 있습니다.'
-                                }
-                                return '해당 상황은 근로기준법 위반으로 근로감독관의 직권 조사 대상입니다.'
-                              })()}
-                            </p>
-                            <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-4 mb-4">
-                              <p className="text-xs font-semibold text-blue-900 mb-2">준비물:</p>
-                              <div className="flex flex-wrap gap-2">
-                                {mainOrg.requiredDocs.slice(0, 4).map((doc, idx) => (
-                                  <span key={idx} className="px-2 py-1 text-xs bg-white border border-blue-300 text-blue-700 rounded-md">
-                                    {doc}
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-                            <div className="flex flex-wrap gap-3">
-                              {mainOrg.phone && (
-                                <Button
-                                  onClick={() => {
-                                    handleCopy(mainOrg.phone || '', '전화번호가 복사되었습니다')
-                                    toast({
-                                      title: '전화번호 복사',
-                                      description: `${mainOrg.name}: ${mainOrg.phone}`,
-                                    })
-                                  }}
-                                  className="bg-blue-600 hover:bg-blue-700 text-white"
-                                >
-                                  <Phone className="w-4 h-4 mr-2" />
-                                  {mainOrg.phone} (클릭 시 복사)
-                                </Button>
-                              )}
-                              {mainOrg.website && (
-                                <Button
-                                  variant="outline"
-                                  onClick={() => window.open(mainOrg.website, '_blank')}
-                                  className="border-blue-300 hover:bg-blue-50"
-                                >
-                                  <Globe className="w-4 h-4 mr-2" />
-                                  온라인 진정 바로가기
-                                  <ExternalLink className="w-4 h-4 ml-2" />
-                                </Button>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* 기타 추천 기관들 */}
-                      {recommendedOrgs.slice(1).length > 0 && (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          {recommendedOrgs.slice(1).map((org) => {
-                            const OrgIcon = org.icon
-                            return (
-                              <div
-                                key={org.id}
-                                className="border-2 border-slate-200 rounded-xl p-5 bg-white hover:border-blue-400 hover:shadow-lg transition-all"
-                              >
-                                <div className="flex items-start gap-3 mb-3">
-                                  <div className="p-2 bg-blue-100 rounded-lg">
-                                    <OrgIcon className="w-5 h-5 text-blue-600" />
-                                  </div>
-                                  <div className="flex-1">
-                                    <h3 className="font-bold text-lg text-slate-900 mb-1">
-                                      {org.name}
-                                    </h3>
-                                    <p className="text-xs text-slate-600">{org.description}</p>
-                                  </div>
-                                </div>
-                                {org.phone && (
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => {
-                                      handleCopy(org.phone || '', '전화번호가 복사되었습니다')
-                                      toast({
-                                        title: '전화번호 복사',
-                                        description: `${org.name}: ${org.phone}`,
-                                      })
-                                    }}
-                                    className="w-full justify-start text-xs h-8 border-slate-300 hover:bg-slate-50"
-                                  >
-                                    <Phone className="w-3 h-3 mr-2" />
-                                    {org.phone}
-                                  </Button>
-                                )}
-                              </div>
-                            )
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  )
-                })()}
-              </CardContent>
-            </Card>
+            {/* 🔴 섹션 2: 실전 대응 대시보드 */}
+            <ActionDashboard 
+              classifiedType={analysisResult.classifiedType as SituationCategory}
+              analysisId={analysisId}
+              onCopy={handleCopy}
+            />
 
             {/* Section 4: AI 전담 노무사 채팅 카드 */}
             <Card className="border-2 border-purple-300 shadow-xl bg-gradient-to-br from-white to-purple-50/30">

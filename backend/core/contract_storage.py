@@ -682,24 +682,59 @@ class ContractStorageService:
             
             # v2 API 형식으로 변환
             analysis_data = analysis.get("analysis", {})
-            legal_basis = analysis_data.get("legalBasis", []) if isinstance(analysis_data, dict) else []
-            recommendations = analysis_data.get("recommendations", []) if isinstance(analysis_data, dict) else []
-            summary = analysis_data.get("summary", "") if isinstance(analysis_data, dict) else ""
+            if not isinstance(analysis_data, dict):
+                analysis_data = {}
+            
+            # 프론트엔드가 기대하는 구조로 변환
+            # analysis JSONB 필드에 저장된 전체 구조를 그대로 사용
+            summary = analysis_data.get("summary", analysis.get("answer", ""))
+            sources = analysis_data.get("sources", [])
+            criteria = analysis_data.get("criteria", [])
+            action_plan = analysis_data.get("actionPlan", {})
+            scripts = analysis_data.get("scripts", {})
+            classified_type = analysis_data.get("classifiedType", analysis.get("classified_type", "unknown"))
+            risk_score = analysis_data.get("riskScore", float(analysis.get("risk_score", 0)))
+            
+            # legalBasis는 criteria에서 변환 (레거시 호환성)
+            legal_basis = []
+            if criteria and len(criteria) > 0:
+                for criterion in criteria:
+                    legal_basis.append({
+                        "title": criterion.get("name", ""),
+                        "snippet": criterion.get("reason", ""),
+                        "status": criterion.get("status", "likely"),
+                    })
+            elif analysis_data.get("legalBasis"):
+                legal_basis = analysis_data.get("legalBasis", [])
+            
+            # recommendations는 actionPlan에서 추출 (레거시 호환성)
+            recommendations = []
+            if action_plan and action_plan.get("steps"):
+                for step in action_plan.get("steps", [])[1:]:  # 첫 번째 step 제외
+                    recommendations.extend(step.get("items", []))
+            elif analysis_data.get("recommendations"):
+                recommendations = analysis_data.get("recommendations", [])
             
             return {
                 "id": analysis["id"],
                 "situation": analysis.get("situation", ""),
                 "category": analysis.get("category", "unknown"),
-                "risk_score": float(analysis.get("risk_score", 0)),
+                "risk_score": float(risk_score),
+                "riskScore": float(risk_score),  # camelCase 추가
+                "riskLevel": analysis.get("risk_level", "low"),
                 "risk_level": analysis.get("risk_level", "low"),
-                "tags": [analysis.get("category", "unknown")],
+                "tags": [classified_type or analysis.get("category", "unknown")],
                 "analysis": {
                     "summary": summary,
                     "legalBasis": legal_basis,
                     "recommendations": recommendations,
                 },
+                "criteria": criteria,  # 최상위 레벨에 criteria 추가 (프론트엔드가 기대하는 구조)
+                "actionPlan": action_plan,  # 최상위 레벨에 actionPlan 추가
+                "sources": sources,  # 최상위 레벨에 sources 추가
                 "checklist": analysis.get("checklist", []),
                 "relatedCases": analysis.get("related_cases", []),
+                "scripts": scripts,  # scripts 추가
                 "created_at": analysis.get("created_at"),
             }
         except Exception as e:

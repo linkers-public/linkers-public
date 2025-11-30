@@ -60,7 +60,7 @@ def ask_groq(user_input: str, system_role: str = "너는 유능한 법률 AI야.
     
     try:
         completion = CLIENT.chat.completions.create(
-            model="llama-3.1-8b-instant",
+            model="llama-3.3-70b-versatile",
             messages=[
                 {"role": "system", "content": system_role},
                 {"role": "user", "content": user_input}
@@ -74,14 +74,14 @@ def ask_groq(user_input: str, system_role: str = "너는 유능한 법률 AI야.
         return f"에러가 발생했습니다: {str(e)}"
 
 
-def ask_groq_with_messages(messages: list, temperature: float = 0.5, model: str = "llama-3.1-8b-instant") -> str:
+def ask_groq_with_messages(messages: list, temperature: float = 0.5, model: str = "llama-3.3-70b-versatile") -> str:
     """
     메시지 리스트를 받아서 Groq에게 물어보고 답을 리턴합니다.
     
     Args:
         messages: 메시지 리스트 (예: [{"role": "system", "content": "..."}, {"role": "user", "content": "..."}])
         temperature: 온도 설정 (기본값: 0.5)
-        model: 사용할 모델 (기본값: "llama-3.1-8b-instant")
+        model: 사용할 모델 (기본값: "llama-3.3-70b-versatile")
     
     Returns:
         LLM 응답 텍스트
