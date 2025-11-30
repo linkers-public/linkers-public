@@ -23,6 +23,7 @@ from core.generator_v2 import LLMGenerator
 from core.document_processor_v2 import DocumentProcessor
 from core.prompts import (
     build_legal_chat_prompt,
+    build_situation_chat_prompt,
     build_contract_analysis_prompt,
     build_situation_analysis_prompt,
     LEGAL_CHAT_SYSTEM_PROMPT,
@@ -1772,21 +1773,37 @@ class LegalRAGService:
 이 계약서 분석 리포트를 기준으로 사용자의 질문에 답변해주세요.
 """
         
-        # 프롬프트 템플릿 사용
-        prompt = build_legal_chat_prompt(
-            query=query,
-            contract_chunks=contract_chunks,
-            legal_chunks=chunks_to_use,
-            selected_issue=selected_issue,
-            analysis_summary=analysis_summary,
-            risk_score=risk_score,
-            total_issues=total_issues,
-        )
-        
-        # 컨텍스트 리포트가 있으면 프롬프트에 추가
-        if context_report:
-            # 프롬프트 끝부분에 컨텍스트 리포트 추가
-            prompt = prompt.rstrip() + "\n\n" + context_report
+        # context_type에 따라 다른 프롬프트 사용
+        if context_type == 'situation':
+            # 상황분석용 프롬프트 사용
+            situation_criteria = context_data.get("criteria", []) if context_data else []
+            situation_checklist = context_data.get("checklist", []) if context_data else []
+            situation_related_cases = context_data.get("related_cases", []) if context_data else []
+            
+            prompt = build_situation_chat_prompt(
+                query=query,
+                legal_chunks=chunks_to_use,
+                analysis_summary=analysis_summary,
+                criteria=situation_criteria,
+                checklist=situation_checklist,
+                related_cases=situation_related_cases,
+            )
+        else:
+            # 계약서 분석용 프롬프트 사용 (기본)
+            prompt = build_legal_chat_prompt(
+                query=query,
+                contract_chunks=contract_chunks,
+                legal_chunks=chunks_to_use,
+                selected_issue=selected_issue,
+                analysis_summary=analysis_summary,
+                risk_score=risk_score,
+                total_issues=total_issues,
+            )
+            
+            # 컨텍스트 리포트가 있으면 프롬프트에 추가
+            if context_report:
+                # 프롬프트 끝부분에 컨텍스트 리포트 추가
+                prompt = prompt.rstrip() + "\n\n" + context_report
 
         try:
             # Groq 사용 (우선)
@@ -1815,9 +1832,94 @@ class LegalRAGService:
                 logger.info(f"Response Content:\n{response_text}")
                 logger.info("=" * 80)
                 
-                # 답변에 전문가 상담 권장 문구 추가 (없는 경우)
-                if "전문가 상담" not in response_text and "법률 자문" not in response_text:
-                    response_text += "\n\n---\n\n**⚠️ 참고:** 이 답변은 정보 안내를 위한 것이며 법률 자문이 아닙니다. 중요한 사안은 전문 변호사나 노동위원회 등 전문 기관에 상담하시기 바랍니다."
+                # 상황분석일 때는 ```json 코드 블록 형식 그대로 반환
+                if context_type == 'situation':
+                    # ```json 코드 블록이 있는지 확인
+                    response_clean = response_text.strip()
+                    if response_clean.startswith('```json') or response_clean.startswith('```'):
+                        # 이미 코드 블록 형식이면 그대로 반환
+                        logger.info(f"[상황분석 응답] 코드 블록 형식으로 반환 (길이: {len(response_clean)} characters)")
+                        return response_clean
+                    else:
+                        # 코드 블록이 없으면 추가
+                        # JSON 객체 찾기
+                        first_brace = response_clean.find('{')
+                        if first_brace != -1:
+                            json_str = response_clean[first_brace:]
+                            brace_count = 0
+                            last_valid_pos = -1
+                            for i, char in enumerate(json_str):
+                                if char == '{':
+                                    brace_count += 1
+                                elif char == '}':
+                                    brace_count -= 1
+                                    if brace_count == 0:
+                                        last_valid_pos = i + 1
+                                        break
+                            
+                            if last_valid_pos > 0:
+                                json_content = json_str[:last_valid_pos].strip()
+                                # JSON 유효성 검증
+                                try:
+                                    json.loads(json_content)
+                                    logger.info(f"[상황분석 응답] JSON 검증 성공, 코드 블록 형식으로 변환")
+                                    return f"```json\n{json_content}\n```"
+                                except json.JSONDecodeError:
+                                    logger.warning(f"[상황분석 응답] JSON 파싱 실패, 원본 반환")
+                                    return response_text
+                        # JSON을 찾을 수 없으면 원본 반환
+                        logger.warning(f"[상황분석 응답] JSON 객체를 찾을 수 없음, 원본 반환")
+                        return response_text
+                
+                # 계약서 분석일 때도 JSON만 추출하여 반환
+                if context_type == 'contract' or context_type == 'none':
+                    # JSON 추출 로직 (마크다운이나 추가 텍스트 제거)
+                    response_clean = response_text.strip()
+                    
+                    # 1. JSON 코드 블록 찾기 (```json ... ```) - 첫 번째 것만
+                    json_block_match = re.search(r'```(?:json)?\s*(\{[\s\S]*?\})\s*```', response_clean, re.DOTALL)
+                    if json_block_match:
+                        response_clean = json_block_match.group(1).strip()
+                    else:
+                        # 2. 직접 JSON 객체 찾기 (첫 번째 { ... } 추출)
+                        # 중괄호 매칭하여 완전한 JSON 객체 추출
+                        first_brace = response_clean.find('{')
+                        if first_brace != -1:
+                            json_str = response_clean[first_brace:]
+                            brace_count = 0
+                            last_valid_pos = -1
+                            for i, char in enumerate(json_str):
+                                if char == '{':
+                                    brace_count += 1
+                                elif char == '}':
+                                    brace_count -= 1
+                                    if brace_count == 0:
+                                        last_valid_pos = i + 1
+                                        break
+                            
+                            if last_valid_pos > 0:
+                                response_clean = json_str[:last_valid_pos].strip()
+                            else:
+                                # 중괄호 매칭 실패 시 정규식으로 시도
+                                json_match = re.search(r'\{[\s\S]*\}', response_clean, re.DOTALL)
+                                if json_match:
+                                    response_clean = json_match.group(0).strip()
+                    
+                    # JSON 유효성 검증
+                    try:
+                        parsed_json = json.loads(response_clean)
+                        logger.info(f"[JSON 추출 성공] 추출된 JSON 길이: {len(response_clean)} characters")
+                        logger.info(f"[JSON 추출 성공] summary: {parsed_json.get('summary', 'N/A')[:50]}...")
+                        # 참고 문구는 프론트엔드에서 추가하므로 여기서는 JSON만 반환
+                        return response_clean
+                    except json.JSONDecodeError as e:
+                        logger.warning(f"[JSON 추출 실패] JSON 파싱 오류: {e}")
+                        logger.warning(f"[JSON 추출 실패] 원본 응답 (처음 500자): {response_text[:500]}")
+                        logger.warning(f"[JSON 추출 실패] 추출 시도한 텍스트 (처음 500자): {response_clean[:500]}")
+                        # 파싱 실패 시 원본 반환 (프론트엔드에서 처리)
+                        if "전문가 상담" not in response_text and "법률 자문" not in response_text:
+                            response_text += "\n\n---\n\n**⚠️ 참고:** 이 답변은 정보 안내를 위한 것이며 법률 자문이 아닙니다. 중요한 사안은 전문 변호사나 노동위원회 등 전문 기관에 상담하시기 바랍니다."
+                        return response_text
                 
                 return response_text
             
@@ -1847,6 +1949,95 @@ class LegalRAGService:
                 logger.info(f"Response Length: {len(response_text)} characters")
                 logger.info(f"Response Content:\n{response_text}")
                 logger.info("=" * 80)
+                
+                # 상황분석일 때는 ```json 코드 블록 형식 그대로 반환
+                if context_type == 'situation':
+                    # ```json 코드 블록이 있는지 확인
+                    response_clean = response_text.strip()
+                    if response_clean.startswith('```json') or response_clean.startswith('```'):
+                        # 이미 코드 블록 형식이면 그대로 반환
+                        logger.info(f"[상황분석 응답] 코드 블록 형식으로 반환 (길이: {len(response_clean)} characters)")
+                        return response_clean
+                    else:
+                        # 코드 블록이 없으면 추가
+                        # JSON 객체 찾기
+                        first_brace = response_clean.find('{')
+                        if first_brace != -1:
+                            json_str = response_clean[first_brace:]
+                            brace_count = 0
+                            last_valid_pos = -1
+                            for i, char in enumerate(json_str):
+                                if char == '{':
+                                    brace_count += 1
+                                elif char == '}':
+                                    brace_count -= 1
+                                    if brace_count == 0:
+                                        last_valid_pos = i + 1
+                                        break
+                            
+                            if last_valid_pos > 0:
+                                json_content = json_str[:last_valid_pos].strip()
+                                # JSON 유효성 검증
+                                try:
+                                    json.loads(json_content)
+                                    logger.info(f"[상황분석 응답] JSON 검증 성공, 코드 블록 형식으로 변환")
+                                    return f"```json\n{json_content}\n```"
+                                except json.JSONDecodeError:
+                                    logger.warning(f"[상황분석 응답] JSON 파싱 실패, 원본 반환")
+                                    return response_text
+                        # JSON을 찾을 수 없으면 원본 반환
+                        logger.warning(f"[상황분석 응답] JSON 객체를 찾을 수 없음, 원본 반환")
+                        return response_text
+                
+                # 계약서 분석일 때도 JSON만 추출하여 반환
+                if context_type == 'contract' or context_type == 'none':
+                    # JSON 추출 로직 (마크다운이나 추가 텍스트 제거)
+                    response_clean = response_text.strip()
+                    
+                    # 1. JSON 코드 블록 찾기 (```json ... ```) - 첫 번째 것만
+                    json_block_match = re.search(r'```(?:json)?\s*(\{[\s\S]*?\})\s*```', response_clean, re.DOTALL)
+                    if json_block_match:
+                        response_clean = json_block_match.group(1).strip()
+                    else:
+                        # 2. 직접 JSON 객체 찾기 (첫 번째 { ... } 추출)
+                        # 중괄호 매칭하여 완전한 JSON 객체 추출
+                        first_brace = response_clean.find('{')
+                        if first_brace != -1:
+                            json_str = response_clean[first_brace:]
+                            brace_count = 0
+                            last_valid_pos = -1
+                            for i, char in enumerate(json_str):
+                                if char == '{':
+                                    brace_count += 1
+                                elif char == '}':
+                                    brace_count -= 1
+                                    if brace_count == 0:
+                                        last_valid_pos = i + 1
+                                        break
+                            
+                            if last_valid_pos > 0:
+                                response_clean = json_str[:last_valid_pos].strip()
+                            else:
+                                # 중괄호 매칭 실패 시 정규식으로 시도
+                                json_match = re.search(r'\{[\s\S]*\}', response_clean, re.DOTALL)
+                                if json_match:
+                                    response_clean = json_match.group(0).strip()
+                    
+                    # JSON 유효성 검증
+                    try:
+                        parsed_json = json.loads(response_clean)
+                        logger.info(f"[JSON 추출 성공] 추출된 JSON 길이: {len(response_clean)} characters")
+                        logger.info(f"[JSON 추출 성공] summary: {parsed_json.get('summary', 'N/A')[:50]}...")
+                        # 참고 문구는 프론트엔드에서 추가하므로 여기서는 JSON만 반환
+                        return response_clean
+                    except json.JSONDecodeError as e:
+                        logger.warning(f"[JSON 추출 실패] JSON 파싱 오류: {e}")
+                        logger.warning(f"[JSON 추출 실패] 원본 응답 (처음 500자): {response_text[:500]}")
+                        logger.warning(f"[JSON 추출 실패] 추출 시도한 텍스트 (처음 500자): {response_clean[:500]}")
+                        # 파싱 실패 시 원본 반환 (프론트엔드에서 처리)
+                        if "전문가 상담" not in response_text and "법률 자문" not in response_text:
+                            response_text += "\n\n---\n\n**⚠️ 참고:** 이 답변은 정보 안내를 위한 것이며 법률 자문이 아닙니다. 중요한 사안은 전문 변호사나 노동위원회 등 전문 기관에 상담하시기 바랍니다."
+                        return response_text
                 
                 # 한국어가 포함되어 있는지 확인 (한글 유니코드 범위: AC00-D7A3)
                 # 첫 200자 중 한국어가 없으면 재시도
@@ -1898,9 +2089,11 @@ class LegalRAGService:
                         logger.info(f"Response Content:\n{response_text}")
                         logger.info("=" * 80)
                 
-                # 답변에 전문가 상담 권장 문구 추가 (없는 경우)
-                if "전문가 상담" not in response_text and "법률 자문" not in response_text:
-                    response_text += "\n\n---\n\n**⚠️ 참고:** 이 답변은 정보 안내를 위한 것이며 법률 자문이 아닙니다. 중요한 사안은 전문 변호사나 노동위원회 등 전문 기관에 상담하시기 바랍니다."
+                # 상황분석일 때는 JSON 형식이므로 참고 문구 추가하지 않음 (프롬프트에 이미 포함됨)
+                # 계약서 분석일 때만 참고 문구 추가
+                if context_type != 'situation':
+                    if "전문가 상담" not in response_text and "법률 자문" not in response_text:
+                        response_text += "\n\n---\n\n**⚠️ 참고:** 이 답변은 정보 안내를 위한 것이며 법률 자문이 아닙니다. 중요한 사안은 전문 변호사나 노동위원회 등 전문 기관에 상담하시기 바랍니다."
                 
                 return response_text
         except Exception as e:

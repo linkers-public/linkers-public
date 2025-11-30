@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -30,7 +31,8 @@ import {
   Users,
   TrendingUp,
   Sparkles,
-  Plus
+  Plus,
+  ClipboardList
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
@@ -40,6 +42,8 @@ import {
   chatWithContractV2, 
   getSituationHistoryV2, 
   getContractHistoryV2,
+  getSituationAnalysisByIdV2,
+  getContractAnalysisV2,
   // 새로운 통합 챗 API
   createChatSession,
   getChatSessions,
@@ -53,6 +57,7 @@ import {
 } from '@/apis/legal.service'
 import { MarkdownRenderer } from '@/components/rag/MarkdownRenderer'
 import { ChatAiMessage } from '@/components/legal/ChatAiMessage'
+import { SituationChatMessage } from '@/components/legal/SituationChatMessage'
 import type { SituationAnalysisResponse } from '@/types/legal'
 
 // 색상 상수 (다른 페이지와 통일)
@@ -173,6 +178,8 @@ interface ChatMessage {
   content: string
   timestamp: Date
   reportId?: string // 리포트가 생성된 경우 리포트 ID
+  context_type?: 'none' | 'situation' | 'contract'
+  context_id?: string | null
 }
 
 // 리포트 타입 정의 (Supabase와 호환)
@@ -205,6 +212,154 @@ interface ChatContext {
   type: ChatContextType
   id: string | null      // situation_analyses.id or contract_analyses.id
   label?: string         // UI 표시용 (예: "편의점 야간 알바 상황", "김인턴 계약서")
+}
+
+// 컨텍스트 링크 정보 생성 유틸 함수
+function getContextLink(message: ChatMessage): { href: string; label: string; badge: string } | null {
+  if (!message.context_type || !message.context_id || message.context_type === 'none') {
+    return null
+  }
+
+  if (message.context_type === 'situation') {
+    return {
+      href: `/legal/situation/${message.context_id}`,
+      label: '상황 분석 리포트 보러가기',
+      badge: '상황분석'
+    }
+  }
+
+  if (message.context_type === 'contract') {
+    return {
+      href: `/legal/contract/${message.context_id}`,
+      label: '계약서 분석 리포트 보러가기',
+      badge: '계약서분석'
+    }
+  }
+
+  return null
+}
+
+// 사용자 메시지에 리포트 정보 표시 컴포넌트
+function UserMessageWithContext({ 
+  message, 
+  reportCache, 
+  setReportCache 
+}: { 
+  message: ChatMessage
+  reportCache: Map<string, { title: string; summary: string; type: 'situation' | 'contract' }>
+  setReportCache: React.Dispatch<React.SetStateAction<Map<string, { title: string; summary: string; type: 'situation' | 'contract' }>>>
+}) {
+  const [isLoadingReport, setIsLoadingReport] = useState(false)
+  const [reportInfo, setReportInfo] = useState<{ title: string; summary: string; type: 'situation' | 'contract' } | null>(null)
+
+  useEffect(() => {
+    const loadReportInfo = async () => {
+      if (!message.context_id || !message.context_type || message.context_type === 'none') {
+        return
+      }
+
+      // 캐시에서 확인
+      const cached = reportCache.get(message.context_id)
+      if (cached) {
+        setReportInfo(cached)
+        return
+      }
+
+      // 리포트 정보 가져오기
+      setIsLoadingReport(true)
+      try {
+        const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client')
+        const supabase = createSupabaseBrowserClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        const userId = user?.id || null
+
+        if (message.context_type === 'situation' && message.context_id) {
+          const situation = await getSituationAnalysisByIdV2(message.context_id, userId)
+          const info = {
+            title: situation.situation?.substring(0, 50) || '상황 분석 리포트',
+            summary: situation.analysis?.summary || situation.situation || '',
+            type: 'situation' as const
+          }
+          setReportInfo(info)
+          setReportCache(prev => new Map(prev).set(message.context_id!, info))
+        } else if (message.context_type === 'contract' && message.context_id) {
+          const contract = await getContractAnalysisV2(message.context_id)
+          const info = {
+            title: contract.summary?.substring(0, 50) || '계약서 분석 리포트',
+            summary: contract.summary || '',
+            type: 'contract' as const
+          }
+          setReportInfo(info)
+          setReportCache(prev => new Map(prev).set(message.context_id!, info))
+        }
+      } catch (error) {
+        console.warn('리포트 정보 로드 실패:', error)
+      } finally {
+        setIsLoadingReport(false)
+      }
+    }
+
+    loadReportInfo()
+  }, [message.context_id, message.context_type, reportCache, setReportCache])
+
+  return (
+    <div>
+      <p className="whitespace-pre-wrap text-sm leading-relaxed text-white font-medium">
+        {message.content}
+      </p>
+      {/* 참고 리포트 표시 */}
+      {message.context_type && message.context_type !== 'none' && message.context_id && (
+        <div className="mt-2 pt-2 border-t border-white/20">
+          {isLoadingReport ? (
+            <div className="flex items-center gap-1.5 text-xs text-white/60">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              <span>리포트 정보 로딩 중...</span>
+            </div>
+          ) : reportInfo ? (
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-1.5 text-xs text-white/90">
+                {message.context_type === 'situation' ? (
+                  <>
+                    <ClipboardList className="h-3.5 w-3.5" />
+                    <span className="font-semibold">상황 분석 리포트 참고 중</span>
+                  </>
+                ) : message.context_type === 'contract' ? (
+                  <>
+                    <FileText className="h-3.5 w-3.5" />
+                    <span className="font-semibold">계약서 분석 리포트 참고 중</span>
+                  </>
+                ) : null}
+              </div>
+              <div className="bg-white/10 rounded-lg p-2 space-y-1">
+                <div className="text-xs font-medium text-white/90 line-clamp-1">
+                  {reportInfo.title}
+                </div>
+                {reportInfo.summary && (
+                  <div className="text-xs text-white/70 line-clamp-2">
+                    {reportInfo.summary}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 text-xs text-white/80">
+              {message.context_type === 'situation' ? (
+                <>
+                  <ClipboardList className="h-3.5 w-3.5" />
+                  <span>상황 분석 리포트 참고 중</span>
+                </>
+              ) : message.context_type === 'contract' ? (
+                <>
+                  <FileText className="h-3.5 w-3.5" />
+                  <span>계약서 분석 리포트 참고 중</span>
+                </>
+              ) : null}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
 }
 
 export default function QuickAssistPage() {
@@ -250,6 +405,8 @@ export default function QuickAssistPage() {
   const [showContextSelector, setShowContextSelector] = useState(false)
   const [contextSelectorType, setContextSelectorType] = useState<'situation' | 'contract' | null>(null)
   const [openReportMenu, setOpenReportMenu] = useState(false) // + 버튼 메뉴 열림 상태
+  // 리포트 정보 캐시 (context_id -> 리포트 정보)
+  const [reportCache, setReportCache] = useState<Map<string, { title: string; summary: string; type: 'situation' | 'contract' }>>(new Map())
   
 
   // localStorage 및 DB에서 대화 내역 로드
@@ -306,6 +463,8 @@ export default function QuickAssistPage() {
                     role: msg.sender_type,
                     content: msg.message,
                     timestamp: new Date(msg.created_at),
+                    context_type: (msg.context_type as 'none' | 'situation' | 'contract') || 'none',
+                    context_id: msg.context_id || null,
                   }))
                 
                 // 대화 세션 생성
@@ -366,9 +525,23 @@ export default function QuickAssistPage() {
             
             // localStorage 업데이트 (DB 데이터 포함, DB 삭제 반영)
             localStorage.setItem('legal_assist_conversations', JSON.stringify(mergedConversations))
+            
+            // 최근 대화가 있으면 자동으로 선택
+            if (mergedConversations.length > 0 && !selectedConversationId) {
+              const latestConversation = mergedConversations[0]
+              setSelectedConversationId(latestConversation.id)
+            }
           } else {
             // 사용자 ID가 없으면 localStorage만 사용
             setConversations(localConversations)
+            
+            // 최근 대화가 있으면 자동으로 선택
+            if (localConversations.length > 0 && !selectedConversationId) {
+              const latestConversation = localConversations.sort((a, b) => 
+                b.createdAt.getTime() - a.createdAt.getTime()
+              )[0]
+              setSelectedConversationId(latestConversation.id)
+            }
           }
         } catch (dbError) {
           console.warn('DB에서 대화 로드 실패, localStorage만 사용:', dbError)
@@ -552,6 +725,8 @@ export default function QuickAssistPage() {
                     role: msg.sender_type,
                     content: msg.message,
                     timestamp: new Date(msg.created_at),
+                    context_type: (msg.context_type as 'none' | 'situation' | 'contract') || 'none',
+                    context_id: msg.context_id || null,
                   }))
                 
                 setConversations((prev) => 
@@ -1011,6 +1186,8 @@ export default function QuickAssistPage() {
           role: 'assistant',
           content: chatResult.answer || '답변을 생성할 수 없습니다.',
           timestamp: new Date(),
+          context_type: currentContext.type,
+          context_id: currentContext.id,
         }
         
         // DB에 메시지 저장
@@ -1081,6 +1258,8 @@ export default function QuickAssistPage() {
             role: 'assistant',
             content: chatResult?.answer || chatResult?.markdown || '답변을 생성할 수 없습니다.',
             timestamp: new Date(),
+            context_type: 'situation',
+            context_id: currentContext.id,
           }
           
           // 상황 컨텍스트인 경우 DB에 저장
@@ -1137,6 +1316,8 @@ export default function QuickAssistPage() {
             role: 'assistant',
             content: chatResult?.answer || chatResult?.markdown || '답변을 생성할 수 없습니다.',
             timestamp: new Date(),
+            context_type: 'contract',
+            context_id: currentContext.id,
           }
           
           // 계약서 컨텍스트인 경우도 새 테이블에 저장
@@ -1192,6 +1373,8 @@ export default function QuickAssistPage() {
               role: 'assistant',
               content: chatResult.answer || '답변을 생성할 수 없습니다.',
               timestamp: new Date(),
+              context_type: 'none',
+              context_id: null,
             }
             
             // 일반 챗도 새 테이블에 저장
@@ -1246,6 +1429,8 @@ export default function QuickAssistPage() {
             role: 'assistant',
             content: result.analysis.summary,
             timestamp: new Date(),
+            context_type: result.id ? 'situation' : 'none',
+            context_id: result.id || null,
           }
           
           // 새로운 상황 분석인 경우 컨텍스트 업데이트
@@ -1418,34 +1603,103 @@ export default function QuickAssistPage() {
   }) => {
     const [situations, setSituations] = useState<Array<{ id: string; situation: string; created_at: string }>>([])
     const [loading, setLoading] = useState(true)
+    const [error, setError] = useState<string | null>(null)
 
     useEffect(() => {
+      let isCancelled = false
+      
       const loadSituations = async () => {
         try {
+          setLoading(true)
+          setError(null)
           const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client')
           const supabase = createSupabaseBrowserClient()
           const { data: { user } } = await supabase.auth.getUser()
           const userId = user?.id || null
           
-          if (userId) {
-            const history = await getSituationHistoryV2(10, 0, userId)
-            setSituations(history)
+          if (isCancelled) return
+          
+          if (!userId) {
+            setError('로그인이 필요합니다')
+            setSituations([])
+            setLoading(false)
+            return
           }
-        } catch (error) {
-          console.error('상황 분석 로드 실패:', error)
+
+          console.log('[ContextSituationList] 상황 분석 로드 시작, userId:', userId)
+          
+          // 타임아웃 추가 (30초)
+          const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('요청 시간이 초과되었습니다. 다시 시도해주세요.')), 30000)
+          })
+          
+          const historyPromise = getSituationHistoryV2(20, 0, userId)
+          const history = await Promise.race([historyPromise, timeoutPromise]) as any
+          
+          if (isCancelled) return
+          
+          console.log('[ContextSituationList] 상황 분석 로드 성공, 개수:', history?.length || 0)
+          console.log('[ContextSituationList] 로드된 데이터:', history)
+          
+          if (history && Array.isArray(history)) {
+            // 데이터 형식 변환 (백엔드 응답 형식에 맞춤)
+            const formattedSituations = history.map((item: any) => ({
+              id: item.id,
+              situation: item.situation || '',
+              created_at: item.created_at || new Date().toISOString(),
+            }))
+            console.log('[ContextSituationList] 변환된 데이터:', formattedSituations)
+            setSituations(formattedSituations)
+          } else {
+            console.warn('[ContextSituationList] 예상과 다른 데이터 형식:', history)
+            setSituations([])
+          }
+        } catch (error: any) {
+          if (isCancelled) return
+          console.error('[ContextSituationList] 상황 분석 로드 실패:', error)
+          setError(error?.message || '상황 분석을 불러오는 중 오류가 발생했습니다')
+          setSituations([])
         } finally {
-          setLoading(false)
+          if (!isCancelled) {
+            setLoading(false)
+          }
         }
       }
+      
       loadSituations()
+      
+      return () => {
+        isCancelled = true
+      }
     }, [])
 
     if (loading) {
-      return <div className="text-sm text-slate-500 py-4">로딩 중...</div>
+      return (
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
+          <span className="ml-2 text-sm text-slate-500">로딩 중...</span>
+        </div>
+      )
+    }
+
+    if (error) {
+      return (
+        <div className="rounded-lg bg-red-50 border border-red-200 p-4">
+          <div className="flex items-center gap-2 text-sm text-red-700">
+            <AlertTriangle className="h-4 w-4" />
+            <span>{error}</span>
+          </div>
+        </div>
+      )
     }
 
     if (situations.length === 0) {
-      return <div className="text-sm text-slate-500 py-4">저장된 상황 분석이 없습니다</div>
+      return (
+        <div className="text-center py-8">
+          <div className="text-sm text-slate-500">저장된 상황 분석이 없습니다</div>
+          <div className="text-xs text-slate-400 mt-1">상황 분석 페이지에서 먼저 분석을 진행해주세요</div>
+        </div>
+      )
     }
 
     return (
@@ -1480,39 +1734,91 @@ export default function QuickAssistPage() {
   }) => {
     const [contracts, setContracts] = useState<Array<{ id: string; doc_id: string; title: string; created_at: string }>>([])
     const [loading, setLoading] = useState(true)
+    const [error, setError] = useState<string | null>(null)
 
     useEffect(() => {
+      let isCancelled = false
+      
       const loadContracts = async () => {
         try {
+          setLoading(true)
+          setError(null)
           const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client')
           const supabase = createSupabaseBrowserClient()
           const { data: { user } } = await supabase.auth.getUser()
           const userId = user?.id || null
           
-          if (userId) {
-            const history = await getContractHistoryV2(10, 0, userId)
-            setContracts(history.map(c => ({
-              id: c.id,
-              doc_id: c.doc_id,
-              title: c.title || c.original_filename || '계약서 분석',
-              created_at: c.created_at,
-            })))
+          if (isCancelled) return
+          
+          if (!userId) {
+            setError('로그인이 필요합니다')
+            setContracts([])
+            setLoading(false)
+            return
           }
-        } catch (error) {
+          
+          // 타임아웃 추가 (30초)
+          const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('요청 시간이 초과되었습니다. 다시 시도해주세요.')), 30000)
+          })
+          
+          const historyPromise = getContractHistoryV2(10, 0, userId)
+          const history = await Promise.race([historyPromise, timeoutPromise]) as any
+          
+          if (isCancelled) return
+          
+          setContracts(history.map((c: any) => ({
+            id: c.id,
+            doc_id: c.doc_id,
+            title: c.title || c.original_filename || '계약서 분석',
+            created_at: c.created_at,
+          })))
+        } catch (error: any) {
+          if (isCancelled) return
           console.error('계약서 분석 로드 실패:', error)
+          setError(error?.message || '계약서 분석을 불러오는 중 오류가 발생했습니다')
+          setContracts([])
         } finally {
-          setLoading(false)
+          if (!isCancelled) {
+            setLoading(false)
+          }
         }
       }
+      
       loadContracts()
+      
+      return () => {
+        isCancelled = true
+      }
     }, [])
 
     if (loading) {
-      return <div className="text-sm text-slate-500 py-4">로딩 중...</div>
+      return (
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
+          <span className="ml-2 text-sm text-slate-500">로딩 중...</span>
+        </div>
+      )
+    }
+
+    if (error) {
+      return (
+        <div className="rounded-lg bg-red-50 border border-red-200 p-4">
+          <div className="flex items-center gap-2 text-sm text-red-700">
+            <AlertTriangle className="h-4 w-4" />
+            <span>{error}</span>
+          </div>
+        </div>
+      )
     }
 
     if (contracts.length === 0) {
-      return <div className="text-sm text-slate-500 py-4">저장된 계약서 분석이 없습니다</div>
+      return (
+        <div className="text-center py-8">
+          <div className="text-sm text-slate-500">저장된 계약서 분석이 없습니다</div>
+          <div className="text-xs text-slate-400 mt-1">계약서 분석 페이지에서 먼저 분석을 진행해주세요</div>
+        </div>
+      )
     }
 
     return (
@@ -1698,13 +2004,44 @@ export default function QuickAssistPage() {
                         )}
                       >
                         {message.role === 'assistant' ? (
-                          <ChatAiMessage content={message.content} />
+                          // 메시지의 context_type에 따라 다른 컴포넌트 사용
+                          message.context_type === 'situation' ? (
+                            <SituationChatMessage 
+                              content={message.content} 
+                              contextId={message.context_id || null}
+                            />
+                          ) : (
+                            <ChatAiMessage content={message.content} />
+                          )
                         ) : (
-                          <p className="whitespace-pre-wrap text-sm leading-relaxed text-white font-medium">
-                            {message.content}
-                          </p>
+                          <UserMessageWithContext 
+                            message={message}
+                            reportCache={reportCache}
+                            setReportCache={setReportCache}
+                          />
                         )}
                       </div>
+                      
+                      {/* 컨텍스트 링크 버튼 (assistant 메시지에만 표시) */}
+                      {message.role === 'assistant' && (() => {
+                        const contextLink = getContextLink(message)
+                        return contextLink ? (
+                          <div className="flex items-center gap-2 px-1">
+                            <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-1 text-[11px] font-medium text-slate-600">
+                              {contextLink.badge}
+                            </span>
+                            <Link
+                              href={contextLink.href}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-sky-600 hover:border-sky-300 hover:bg-sky-50 transition-colors"
+                            >
+                              <span>리포트 자세히 보기</span>
+                              <span className="text-[10px]">↗</span>
+                            </Link>
+                          </div>
+                        ) : null
+                      })()}
                       
                       <div className="flex items-center gap-2 px-1">
                         <span className={cn(
@@ -1738,7 +2075,8 @@ export default function QuickAssistPage() {
                             </Button>
                           </div>
                         )}
-                        {message.role === 'assistant' && message.reportId && (
+                        {/* 기존 reportId 기반 리포트 보기 버튼 (컨텍스트 링크가 없을 때만 표시) */}
+                        {message.role === 'assistant' && message.reportId && !getContextLink(message) && (
                           <Button
                             variant="outline"
                             size="sm"
@@ -1978,34 +2316,6 @@ export default function QuickAssistPage() {
           
           <div className="flex-1 overflow-y-auto px-6 py-4 scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-transparent">
             <div className="space-y-4">
-              {/* 컨텍스트 없음 옵션 */}
-              <button
-                onClick={() => {
-                  setCurrentContext({ type: 'none', id: null })
-                  setShowContextSelector(false)
-                  setContextSelectorType(null)
-                }}
-                className={cn(
-                  "w-full p-4 rounded-xl border-2 transition-all text-left",
-                  currentContext.type === 'none'
-                    ? "border-blue-500 bg-blue-50"
-                    : "border-slate-200 hover:border-blue-300 hover:bg-slate-50"
-                )}
-              >
-                <div className="flex items-center gap-3">
-                  <div className={cn(
-                    "p-2 rounded-lg",
-                    currentContext.type === 'none' ? "bg-blue-100" : "bg-slate-100"
-                  )}>
-                    <X className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <div className="font-semibold text-slate-900">컨텍스트 없음</div>
-                    <div className="text-xs text-slate-500 mt-1">일반 Q&A 모드로 대화합니다</div>
-                  </div>
-                </div>
-              </button>
-
               {/* 상황 분석 선택 - 상황 분석 버튼 클릭 시에만 표시 */}
               {contextSelectorType === 'situation' && (
                 <div>

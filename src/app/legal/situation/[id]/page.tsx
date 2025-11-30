@@ -168,6 +168,11 @@ export default function SituationDetailPage() {
     loadAnalysis()
   }, [loadAnalysis])
 
+  // 페이지 진입 시 상단으로 스크롤
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }, [situationId])
+
   const handleCopy = (text: string, description: string) => {
     navigator.clipboard.writeText(text)
     toast({
@@ -237,16 +242,6 @@ export default function SituationDetailPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 py-12">
       <div className="container mx-auto px-4 max-w-7xl">
-        {/* 뒤로가기 버튼 */}
-        <Button
-          onClick={() => router.push('/legal/situation')}
-          variant="ghost"
-          className="mb-6"
-        >
-          <ArrowLeft className="w-4 h-4 mr-2" />
-          상황 분석 페이지로 돌아가기
-        </Button>
-
         {/* 분석 결과 */}
         <div id="analysis-result" className="space-y-6">
           {/* 1. 상단 헤더 영역 */}

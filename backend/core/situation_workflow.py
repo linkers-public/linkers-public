@@ -269,6 +269,7 @@ class SituationWorkflow:
             "action_plan": normalized_result.get("action_plan", {"steps": []}),  # steps 구조
             "scripts": normalized_result.get("scripts", {}),  # toCompany, toAdvisor
             "criteria": normalized_result.get("criteria", []),  # name, status, reason
+            "organizations": normalized_result.get("organizations", []),  # 추천 기관 목록
         }
     
     
@@ -281,6 +282,7 @@ class SituationWorkflow:
         action_plan = state.get("action_plan", {})
         scripts = state.get("scripts", {})
         criteria = state.get("criteria", [])
+        organizations = state.get("organizations", [])  # 추천 기관 목록
         summary_report = state.get("summary_report", "")  # generate_action_guide에서 생성됨
         
         # grounding_chunks 가져오기
@@ -372,6 +374,7 @@ class SituationWorkflow:
             "scripts": scripts,  # toCompany, toAdvisor
             "related_cases": formatted_related_cases,
             "grounding_chunks": formatted_sources,  # sources 형식으로 변환
+            "organizations": organizations,  # 추천 기관 목록
         }
         
         return {
