@@ -225,28 +225,52 @@ class PerformanceTester:
         ]
         
         # LLM 초기화
-        try:
-            from core.generator_v2 import _get_ollama_llm
-            llm = _get_ollama_llm()
-        except Exception as e:
-            print(f"   ❌ LLM 초기화 실패: {str(e)}")
-            return []
-        
+        from config import settings
         times = []
+        
         for i in range(iterations):
             query = queries[i % len(queries)]
             start = time.time()
             try:
-                # 간단한 LLM 호출 테스트
-                response = await asyncio.to_thread(
-                    llm.invoke,
-                    f"다음 질문에 간단히 답변하세요: {query}"
-                )
+                if settings.use_groq:
+                    # Groq 사용
+                    from llm_api import ask_groq_with_messages
+                    messages = [
+                        {"role": "system", "content": "너는 유능한 법률 AI야. 한국어로만 답변해주세요."},
+                        {"role": "user", "content": f"다음 질문에 간단히 답변하세요: {query}"}
+                    ]
+                    response_text = await asyncio.to_thread(
+                        ask_groq_with_messages,
+                        messages=messages,
+                        temperature=settings.llm_temperature,
+                        model=settings.groq_model
+                    )
+                elif settings.use_ollama:
+                    # Ollama 사용
+                    try:
+                        from langchain_ollama import OllamaLLM
+                        llm = OllamaLLM(
+                            base_url=settings.ollama_base_url,
+                            model=settings.ollama_model
+                        )
+                    except ImportError:
+                        from langchain_community.llms import Ollama
+                        llm = Ollama(
+                            base_url=settings.ollama_base_url,
+                            model=settings.ollama_model
+                        )
+                    
+                    prompt = f"다음 질문에 간단히 답변하세요: {query}"
+                    response_text = await asyncio.to_thread(llm.invoke, prompt)
+                else:
+                    print(f"   ❌ [{i+1}/{iterations}] LLM이 설정되지 않았습니다.")
+                    continue
+                
                 elapsed = time.time() - start
                 times.append(elapsed)
-                response_text = response.content[:50] if hasattr(response, 'content') else str(response)[:50]
+                response_preview = response_text[:50] if isinstance(response_text, str) else str(response_text)[:50]
                 print(f"   [{i+1}/{iterations}] {elapsed:.3f}초 - '{query}'")
-                print(f"      응답: {response_text}...")
+                print(f"      응답: {response_preview}...")
             except Exception as e:
                 print(f"   ❌ [{i+1}/{iterations}] 실패: {str(e)}")
         
@@ -379,11 +403,21 @@ class PerformanceTester:
         print("   5단계: LLM 분석")
         start = time.time()
         try:
+            # 청크에서 간단한 clauses 생성 (성능 테스트용)
+            clauses = []
+            for idx, chunk in enumerate(chunks[:4], 1):  # 최대 4개만
+                clauses.append({
+                    "id": f"clause-{idx}",
+                    "title": f"제{idx}조",
+                    "content": chunk.content[:300]  # 처음 300자만
+                })
+            
             result = await self.legal_service._llm_summarize_risk(
                 query=query,
                 contract_text=test_text,
                 contract_chunks=[],
-                grounding_chunks=legal_chunks[:5]  # 상위 5개만 사용
+                grounding_chunks=legal_chunks[:5],  # 상위 5개만 사용
+                clauses=clauses  # clauses 추가
             )
             elapsed = time.time() - start
             pipeline_times["LLM 분석"] = elapsed
