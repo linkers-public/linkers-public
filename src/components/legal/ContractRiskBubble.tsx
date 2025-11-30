@@ -54,15 +54,29 @@ export function ContractRiskBubble({ result }: Props) {
             핵심 위험 포인트
           </p>
           <ul className="space-y-2">
-            {result.riskContent.map((item, i) => (
-              <li
-                key={i}
-                className="rounded-lg bg-red-50/50 border border-red-200 px-3 py-2.5"
-              >
-                <p className="font-semibold text-xs text-red-900 mb-1">{item.내용}</p>
-                <p className="text-xs text-slate-700 leading-relaxed">{item.설명}</p>
-              </li>
-            ))}
+            {result.riskContent.map((item, i) => {
+              // 객체 형식: { 내용: string, 설명: string }
+              if (typeof item === 'object' && item !== null && '내용' in item) {
+                return (
+                  <li
+                    key={i}
+                    className="rounded-lg bg-red-50/50 border border-red-200 px-3 py-2.5"
+                  >
+                    <p className="font-semibold text-xs text-red-900 mb-1">{item.내용}</p>
+                    <p className="text-xs text-slate-700 leading-relaxed">{item.설명}</p>
+                  </li>
+                )
+              }
+              // 문자열 형식: string (fallback)
+              return (
+                <li
+                  key={i}
+                  className="rounded-lg bg-red-50/50 border border-red-200 px-3 py-2.5"
+                >
+                  <p className="text-xs text-slate-700 leading-relaxed">{String(item)}</p>
+                </li>
+              )
+            })}
           </ul>
         </div>
       )}
@@ -75,12 +89,23 @@ export function ContractRiskBubble({ result }: Props) {
             꼭 확인해 볼 것
           </p>
           <ul className="space-y-2">
-            {result.checklist.map((item, i) => (
-              <li key={i} className="rounded-lg bg-amber-50/50 border border-amber-200 px-3 py-2.5">
-                <p className="font-semibold text-xs text-slate-900 mb-1">• {item.항목}</p>
-                <p className="text-xs text-slate-700 leading-relaxed">{item.결론}</p>
-              </li>
-            ))}
+            {result.checklist.map((item, i) => {
+              // 객체 형식: { 항목: string, 결론: string }
+              if (typeof item === 'object' && item !== null && '항목' in item) {
+                return (
+                  <li key={i} className="rounded-lg bg-amber-50/50 border border-amber-200 px-3 py-2.5">
+                    <p className="font-semibold text-xs text-slate-900 mb-1">• {item.항목}</p>
+                    <p className="text-xs text-slate-700 leading-relaxed">{item.결론}</p>
+                  </li>
+                )
+              }
+              // 문자열 형식: string (fallback)
+              return (
+                <li key={i} className="rounded-lg bg-amber-50/50 border border-amber-200 px-3 py-2.5">
+                  <p className="text-xs text-slate-700 leading-relaxed">• {String(item)}</p>
+                </li>
+              )
+            })}
           </ul>
         </div>
       )}

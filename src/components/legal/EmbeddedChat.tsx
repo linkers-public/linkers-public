@@ -169,15 +169,27 @@ export function EmbeddedChat({
         (a, b) => a.sequence_number - b.sequence_number
       )
       
-      const loadedMessages: Message[] = sortedMessages.map((msg) => ({
-        id: msg.id,
-        dbId: msg.id,
-        role: msg.sender_type,
-        content: msg.message,
-        timestamp: new Date(msg.created_at),
-        context_type: msg.context_type || 'none',
-        context_id: msg.context_id || null,
-      }))
+      const loadedMessages: Message[] = sortedMessages.map((msg) => {
+        const message: Message = {
+          id: msg.id,
+          dbId: msg.id,
+          role: msg.sender_type,
+          content: msg.message,
+          timestamp: new Date(msg.created_at),
+          context_type: msg.context_type || 'none',
+          context_id: msg.context_id || null,
+        }
+        // 디버깅: assistant 메시지의 context_type 확인
+        if (message.role === 'assistant') {
+          console.log('[EmbeddedChat] 메시지 로드:', {
+            id: message.id,
+            context_type: message.context_type,
+            context_id: message.context_id,
+            content_preview: message.content.substring(0, 100),
+          })
+        }
+        return message
+      })
       
       // Warm Start: DB에 초기 메시지가 없으면 생성
       const hasInitialAssistantMessage = loadedMessages.some(
@@ -415,6 +427,8 @@ export function EmbeddedChat({
         role: 'assistant',
         content: assistantContent,
         timestamp: new Date(),
+        context_type: 'situation',
+        context_id: reportId,
       }
 
       setMessages((prev) => {
@@ -587,8 +601,12 @@ export function EmbeddedChat({
                     )}
                   </div>
                 ) : message.role === 'assistant' ? (
-                  // assistant 메시지는 상황분석용 컴포넌트 사용 (EmbeddedChat은 상황분석 리포트 페이지에서만 사용)
-                  <SituationChatMessage content={message.content} />
+                  // assistant 메시지는 context_type에 따라 다른 컴포넌트 사용
+                  message.context_type === 'situation' ? (
+                    <SituationChatMessage content={message.content} />
+                  ) : (
+                    <ChatAiMessage content={message.content} />
+                  )
                 ) : (
                   <MarkdownRenderer content={message.content} />
                 )}

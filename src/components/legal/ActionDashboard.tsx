@@ -409,8 +409,31 @@ export function ActionDashboard({ classifiedType, analysisId, onCopy, organizati
     return getOrgInfo(orgId).address + ' (도보·버스 가능)'
   }
 
+  // 기관별 정적 이미지 파일명 매핑
+  const getOrgImageFileName = (orgId: string): string => {
+    const imageMap: Record<string, string> = {
+      moel: 'moel-seoul-map.png',
+      moel_complaint: 'moel-complaint-center-map.png',
+      comwel: 'comwel-daejeon-map.png',
+      human_rights: 'human-rights-commission-map.png',
+      labor_attorney: 'labor-attorney-generic-map.png',
+      company_hr: 'company-hr-generic-map.png',
+      police: 'police-station-generic-map.png',
+      free_labor_consult: 'free-labor-consult-map.png',
+    }
+    return imageMap[orgId] || 'default-map.png'
+  }
+
   // 카카오맵 Static Map 이미지 URL 생성
   const getMapImageUrl = (orgId: string): string => {
+    // 먼저 정적 이미지 파일 경로 생성
+    const staticImagePath = `/images/legal/organizations/${getOrgImageFileName(orgId)}`
+    
+    // 정적 이미지가 있으면 사용 (이미지 로드 실패 시 fallback으로 동적 생성)
+    // 실제로는 이미지 존재 여부를 확인할 수 없으므로, 항상 정적 이미지를 시도하고
+    // onError에서 동적 생성으로 fallback
+    
+    // 동적 생성용 정보
     const info = getOrgInfo(orgId)
     const width = 400
     const height = 300
@@ -420,14 +443,32 @@ export function ActionDashboard({ classifiedType, analysisId, onCopy, organizati
     // 환경변수에서 API 키 가져오기
     const kakaoApiKey = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY
     
+    let dynamicImageUrl = ''
     if (kakaoApiKey) {
       // 카카오맵 Static Map API 사용
+      dynamicImageUrl = `https://dapi.kakao.com/v2/maps/staticmap?center=${info.lat},${info.lng}&level=${level}&size=${width}x${height}&markers=size:mid,color:red,label:${encodeURIComponent(info.name)}|${info.lat},${info.lng}`
+    } else {
+      // API 키가 없을 경우: 카카오맵 공개 이미지 서비스 사용
+      dynamicImageUrl = `https://map2.daum.net/map/mapservice?FORMAT=PNG&SCALE=2&MAKERINFO=0&WIDTH=${width}&HEIGHT=${height}&X=${info.lng}&Y=${info.lat}&LEVEL=${level}`
+    }
+    
+    // 정적 이미지 경로 반환 (onError에서 동적 URL로 대체)
+    return staticImagePath
+  }
+  
+  // 동적 이미지 URL 생성 (fallback용)
+  const getDynamicMapImageUrl = (orgId: string): string => {
+    const info = getOrgInfo(orgId)
+    const width = 400
+    const height = 300
+    const level = 3
+    
+    const kakaoApiKey = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY
+    
+    if (kakaoApiKey) {
       return `https://dapi.kakao.com/v2/maps/staticmap?center=${info.lat},${info.lng}&level=${level}&size=${width}x${height}&markers=size:mid,color:red,label:${encodeURIComponent(info.name)}|${info.lat},${info.lng}`
     }
     
-    // API 키가 없을 경우: 카카오맵 공개 이미지 서비스 사용
-    // 참고: 이 방법은 제한적일 수 있음
-    // 실제 프로덕션에서는 카카오맵 API 키를 발급받아 사용하는 것을 권장합니다
     return `https://map2.daum.net/map/mapservice?FORMAT=PNG&SCALE=2&MAKERINFO=0&WIDTH=${width}&HEIGHT=${height}&X=${info.lng}&Y=${info.lat}&LEVEL=${level}`
   }
 
@@ -733,18 +774,24 @@ export function ActionDashboard({ classifiedType, analysisId, onCopy, organizati
             
             {/* 지도 이미지 영역 */}
             <div className="relative h-48 w-full overflow-hidden rounded-3xl bg-sky-50 mb-4">
-              {/* 실제 지도 이미지 (카카오맵 Static Map) */}
+              {/* 실제 지도 이미지 (정적 이미지 우선, 실패 시 동적 생성) */}
               <img
                 src={getMapImageUrl(mainOrg.id)}
                 alt={`${mainOrg.name} 주변 지도`}
                 className="h-full w-full object-cover opacity-90"
                 onError={(e) => {
-                  // 이미지 로드 실패 시 fallback 배경 표시
+                  // 정적 이미지 로드 실패 시 동적 생성 이미지로 대체
                   const target = e.target as HTMLImageElement
-                  target.style.display = 'none'
-                  const fallback = target.nextElementSibling as HTMLElement
-                  if (fallback) {
-                    fallback.style.display = 'block'
+                  const dynamicUrl = getDynamicMapImageUrl(mainOrg.id)
+                  if (target.src !== dynamicUrl) {
+                    target.src = dynamicUrl
+                  } else {
+                    // 동적 이미지도 실패하면 fallback 배경 표시
+                    target.style.display = 'none'
+                    const fallback = target.nextElementSibling as HTMLElement
+                    if (fallback) {
+                      fallback.style.display = 'block'
+                    }
                   }
                 }}
               />
