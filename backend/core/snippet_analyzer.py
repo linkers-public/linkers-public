@@ -6,8 +6,8 @@ LLM을 사용하여 법률 문서의 snippet을 일반인이 이해하기 쉬운
 import json
 import logging
 import re
+import asyncio
 from typing import Dict, Any, Optional
-from llm_api import ask_groq_with_messages
 from config import settings
 
 logger = logging.getLogger(__name__)
@@ -49,6 +49,112 @@ SYSTEM_PROMPT = """
 """
 
 
+async def _call_llm_for_snippet(messages: list, temperature: float = 0.3) -> str:
+    """
+    LLM 호출 (Groq/Ollama) - snippet 분석용
+    Groq가 없으면 Ollama로 자동 fallback
+    """
+    if settings.use_groq:
+        try:
+            from llm_api import ask_groq_with_messages
+            # 동기 함수를 비동기로 실행
+            return await asyncio.to_thread(
+                ask_groq_with_messages,
+                messages=messages,
+                temperature=temperature,
+                model=settings.groq_model if hasattr(settings, 'groq_model') else "llama-3.3-70b-versatile"
+            )
+        except (ValueError, Exception) as e:
+            # Groq API 키가 없거나 실패하면 Ollama로 fallback
+            logger.warning(f"[snippet_analyzer] Groq 호출 실패, Ollama로 fallback: {str(e)}")
+            if settings.use_ollama:
+                # Ollama 사용 - langchain-community 우선 사용 (think 파라미터 에러 방지)
+                try:
+                    from langchain_community.llms import Ollama
+                    llm = Ollama(
+                        base_url=settings.ollama_base_url,
+                        model=settings.ollama_model
+                    )
+                except ImportError:
+                    # 대안: langchain-ollama 사용 (think 파라미터 에러 가능)
+                    try:
+                        from langchain_ollama import OllamaLLM
+                        llm = OllamaLLM(
+                            base_url=settings.ollama_base_url,
+                            model=settings.ollama_model
+                        )
+                    except Exception as e:
+                        if "think" in str(e).lower():
+                            logger.warning("[snippet_analyzer] langchain-ollama에서 think 파라미터 에러 발생. langchain-community로 재시도...")
+                            from langchain_community.llms import Ollama
+                            llm = Ollama(
+                                base_url=settings.ollama_base_url,
+                                model=settings.ollama_model
+                            )
+                        else:
+                            raise
+                
+                # 메시지를 프롬프트로 변환
+                prompt = ""
+                for msg in messages:
+                    role = msg.get("role", "")
+                    content = msg.get("content", "")
+                    if role == "system":
+                        prompt += f"{content}\n\n"
+                    elif role == "user":
+                        prompt += f"{content}\n"
+                
+                # Ollama 호출을 비동기로 처리
+                response_text = await asyncio.to_thread(llm.invoke, prompt)
+                return response_text
+            else:
+                # Groq와 Ollama 모두 사용 불가
+                raise ValueError("LLM이 설정되지 않았습니다. LLM_PROVIDER 환경변수를 'groq' 또는 'ollama'로 설정하세요.")
+    elif settings.use_ollama:
+        # Ollama 사용 - langchain-community 우선 사용 (think 파라미터 에러 방지)
+        try:
+            from langchain_community.llms import Ollama
+            llm = Ollama(
+                base_url=settings.ollama_base_url,
+                model=settings.ollama_model
+            )
+        except ImportError:
+            # 대안: langchain-ollama 사용 (think 파라미터 에러 가능)
+            try:
+                from langchain_ollama import OllamaLLM
+                llm = OllamaLLM(
+                    base_url=settings.ollama_base_url,
+                    model=settings.ollama_model
+                )
+            except Exception as e:
+                if "think" in str(e).lower():
+                    logger.warning("[snippet_analyzer] langchain-ollama에서 think 파라미터 에러 발생. langchain-community로 재시도...")
+                    from langchain_community.llms import Ollama
+                    llm = Ollama(
+                        base_url=settings.ollama_base_url,
+                        model=settings.ollama_model
+                    )
+                else:
+                    raise
+        
+        # 메시지를 프롬프트로 변환
+        prompt = ""
+        for msg in messages:
+            role = msg.get("role", "")
+            content = msg.get("content", "")
+            if role == "system":
+                prompt += f"{content}\n\n"
+            elif role == "user":
+                prompt += f"{content}\n"
+        
+        # Ollama 호출을 비동기로 처리
+        response_text = await asyncio.to_thread(llm.invoke, prompt)
+        return response_text
+    else:
+        # Groq와 Ollama 모두 사용 안 함
+        raise ValueError("LLM이 설정되지 않았습니다. LLM_PROVIDER 환경변수를 'groq' 또는 'ollama'로 설정하세요.")
+
+
 async def analyze_snippet(snippet: str) -> Optional[Dict[str, Any]]:
     """
     법률 문서 snippet을 분석하여 일반인이 이해하기 쉬운 형태로 변환
@@ -87,11 +193,8 @@ JSON만 출력하고 다른 설명은 하지 마세요.
             {"role": "user", "content": user_prompt}
         ]
         
-        response = ask_groq_with_messages(
-            messages=messages,
-            temperature=0.3,  # 일관성 있는 출력을 위해 낮은 temperature
-            model=settings.groq_model if hasattr(settings, 'groq_model') else "llama-3.3-70b-versatile"
-        )
+        # LLM 호출 (Groq 또는 Ollama)
+        response = await _call_llm_for_snippet(messages, temperature=0.3)
         
         # JSON 추출 (코드 블록 제거)
         response_clean = response.strip()

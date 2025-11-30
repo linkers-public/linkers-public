@@ -228,6 +228,8 @@ class SituationWorkflow:
         legal_basis = state.get("legal_basis", [])
         query_text = state.get("query_text", "")
         
+        logger.info(f"[워크플로우] 입력 데이터 확인 - classification: {bool(classification)}, grounding_chunks: {len(grounding_chunks)}개, legal_basis: {len(legal_basis)}개, query_text 길이: {len(query_text)}자")
+        
         # legal_basis가 빈 배열일 때 fallback
         if not legal_basis:
             logger.warning("[워크플로우] legal_basis가 비어있습니다. 기본 criteria 생성")
@@ -238,6 +240,7 @@ class SituationWorkflow:
             }]
         
         # 액션 가이드 생성 (summary 포함)
+        logger.info("[워크플로우] _llm_generate_action_guide 호출 시작...")
         action_result = await self._llm_generate_action_guide(
             situation_text=query_text,
             classification=classification,
@@ -572,6 +575,7 @@ class SituationWorkflow:
         social_insurance: Optional[str] = None,
     ) -> Dict[str, Any]:
         """행동 가이드 생성 (summary, criteria, actionPlan, scripts 모두)"""
+        logger.info("[워크플로우] _llm_generate_action_guide 시작 - 프롬프트 생성 중...")
         prompt = build_situation_action_guide_prompt(
             situation_text=situation_text,
             classification=classification,
@@ -583,8 +587,11 @@ class SituationWorkflow:
             is_probation=is_probation,
             social_insurance=social_insurance,
         )
+        logger.info(f"[워크플로우] 프롬프트 생성 완료 - 길이: {len(prompt)}자, grounding_chunks: {len(grounding_chunks)}개, legal_basis: {len(legal_basis)}개")
         
+        logger.info("[워크플로우] LLM 호출 시작 (행동 가이드 생성)...")
         response = await self._call_llm(prompt)
+        logger.info("[워크플로우] LLM 응답 수신 완료 - JSON 파싱 시작...")
         
         # JSON 파싱
         import json
@@ -788,7 +795,7 @@ class SituationWorkflow:
                     
                     result["summary"] = summary.strip()
                 
-                logger.info("[워크플로우] JSON 파싱 성공")
+                logger.info(f"[워크플로우] JSON 파싱 성공 - summary 길이: {len(result.get('summary', ''))}자, criteria 개수: {len(result.get('criteria', []))}개, action_plan steps: {len(result.get('action_plan', {}).get('steps', []))}개")
                 
                 # action_plan 안전하게 처리
                 action_plan_safe = result.get('action_plan', {})
@@ -1497,38 +1504,162 @@ class SituationWorkflow:
         }
     
     async def _call_llm(self, prompt: str) -> str:
-        """LLM 호출 (Groq/Ollama)"""
+        """LLM 호출 (Groq/Ollama) - 타임아웃 및 로깅 포함"""
         from config import settings
         
+        # 프롬프트 정보 로깅
+        prompt_length = len(prompt)
+        logger.info(f"[워크플로우] LLM 호출 시작 - 프롬프트 길이: {prompt_length}자")
+        
         if settings.use_groq:
+            logger.info(f"[워크플로우] Groq 사용 (모델: {settings.groq_model})")
             from llm_api import ask_groq_with_messages
             messages = [
                 {"role": "system", "content": "너는 유능한 법률 AI야. 한국어로만 답변해주세요."},
                 {"role": "user", "content": prompt}
             ]
-            return ask_groq_with_messages(
-                messages=messages,
-                temperature=settings.llm_temperature,
-                model=settings.groq_model
-            )
-        elif settings.use_ollama:
-            # Ollama 사용
             try:
-                from langchain_ollama import OllamaLLM
-                llm = OllamaLLM(
-                    base_url=settings.ollama_base_url,
-                    model=settings.ollama_model
+                # Groq는 일반적으로 빠르므로 타임아웃 2분
+                response = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        ask_groq_with_messages,
+                        messages=messages,
+                        temperature=settings.llm_temperature,
+                        model=settings.groq_model
+                    ),
+                    timeout=120.0  # 2분 타임아웃
                 )
-            except ImportError:
-                # 대안: langchain-community 사용
+                logger.info(f"[워크플로우] Groq 응답 완료 - 응답 길이: {len(response)}자")
+                return response
+            except asyncio.TimeoutError:
+                logger.error("[워크플로우] Groq 호출 타임아웃 (2분 초과)")
+                raise TimeoutError("Groq LLM 호출이 타임아웃되었습니다 (2분 초과)")
+        elif settings.use_ollama:
+            logger.info(f"[워크플로우] Ollama 사용 (모델: {settings.ollama_model}, URL: {settings.ollama_base_url})")
+            
+            # Ollama 모델 존재 여부 확인 (비동기로 실행)
+            async def check_ollama_model():
+                """Ollama 모델 존재 여부 확인"""
+                try:
+                    import httpx
+                    async with httpx.AsyncClient(timeout=5.0) as client:
+                        response = await client.get(f"{settings.ollama_base_url}/api/tags")
+                        if response.status_code == 200:
+                            models_data = response.json()
+                            available_models = [model.get("name", "") for model in models_data.get("models", [])]
+                            # 모델 이름에서 태그 제거 (예: "mistral:latest" -> "mistral")
+                            available_model_names = [name.split(":")[0] for name in available_models]
+                            
+                            if settings.ollama_model not in available_model_names:
+                                error_msg = (
+                                    f"Ollama 모델 '{settings.ollama_model}'이 설치되지 않았습니다.\n"
+                                    f"설치된 모델: {', '.join(available_model_names) if available_model_names else '(없음)'}\n"
+                                    f"모델을 다운로드하려면 다음 명령을 실행하세요:\n"
+                                    f"  ollama pull {settings.ollama_model}\n"
+                                    f"또는 다른 모델을 사용하려면 .env 파일에서 OLLAMA_MODEL을 변경하세요."
+                                )
+                                logger.error(f"[워크플로우] {error_msg}")
+                                raise ValueError(error_msg)
+                            else:
+                                logger.info(f"[워크플로우] Ollama 모델 확인 완료: {settings.ollama_model}")
+                        else:
+                            logger.warning(f"[워크플로우] Ollama 모델 목록 조회 실패 (HTTP {response.status_code}), 계속 진행합니다...")
+                except ImportError:
+                    # httpx가 없으면 requests로 시도
+                    try:
+                        import requests
+                        response = requests.get(f"{settings.ollama_base_url}/api/tags", timeout=5.0)
+                        if response.status_code == 200:
+                            models_data = response.json()
+                            available_models = [model.get("name", "") for model in models_data.get("models", [])]
+                            available_model_names = [name.split(":")[0] for name in available_models]
+                            
+                            if settings.ollama_model not in available_model_names:
+                                error_msg = (
+                                    f"Ollama 모델 '{settings.ollama_model}'이 설치되지 않았습니다.\n"
+                                    f"설치된 모델: {', '.join(available_model_names) if available_model_names else '(없음)'}\n"
+                                    f"모델을 다운로드하려면 다음 명령을 실행하세요:\n"
+                                    f"  ollama pull {settings.ollama_model}\n"
+                                    f"또는 다른 모델을 사용하려면 .env 파일에서 OLLAMA_MODEL을 변경하세요."
+                                )
+                                logger.error(f"[워크플로우] {error_msg}")
+                                raise ValueError(error_msg)
+                            else:
+                                logger.info(f"[워크플로우] Ollama 모델 확인 완료: {settings.ollama_model}")
+                        else:
+                            logger.warning(f"[워크플로우] Ollama 모델 목록 조회 실패 (HTTP {response.status_code}), 계속 진행합니다...")
+                    except ImportError:
+                        logger.warning("[워크플로우] httpx/requests가 설치되지 않아 모델 확인을 건너뜁니다.")
+                except Exception as e:
+                    logger.warning(f"[워크플로우] 모델 확인 중 오류 발생: {str(e)}, 계속 진행합니다...")
+            
+            # 모델 확인 실행 (타임아웃 5초)
+            try:
+                await asyncio.wait_for(check_ollama_model(), timeout=5.0)
+            except asyncio.TimeoutError:
+                logger.warning("[워크플로우] 모델 확인 타임아웃 (5초), 계속 진행합니다...")
+            except ValueError:
+                # 모델이 없으면 에러를 다시 발생시켜서 중단
+                raise
+            except Exception as e:
+                logger.warning(f"[워크플로우] 모델 확인 실패: {str(e)}, 계속 진행합니다...")
+            
+            # Ollama 사용 - 비동기 처리 및 타임아웃 추가
+            # langchain-community를 우선 사용 (think 파라미터 에러 방지)
+            try:
                 from langchain_community.llms import Ollama
                 llm = Ollama(
                     base_url=settings.ollama_base_url,
                     model=settings.ollama_model
                 )
+            except ImportError:
+                # 대안: langchain-ollama 사용 (think 파라미터 에러 가능)
+                try:
+                    from langchain_ollama import OllamaLLM
+                    llm = OllamaLLM(
+                        base_url=settings.ollama_base_url,
+                        model=settings.ollama_model
+                    )
+                except Exception as e:
+                    if "think" in str(e).lower():
+                        logger.warning("[워크플로우] langchain-ollama에서 think 파라미터 에러 발생. langchain-community로 재시도...")
+                        from langchain_community.llms import Ollama
+                        llm = Ollama(
+                            base_url=settings.ollama_base_url,
+                            model=settings.ollama_model
+                        )
+                    else:
+                        raise
             
-            response_text = llm.invoke(prompt)
-            return response_text
+            # 진행 상황 로깅을 위한 백그라운드 태스크
+            async def log_progress():
+                """주기적으로 진행 상황 로깅"""
+                elapsed = 0
+                while elapsed < 600:  # 최대 10분까지
+                    await asyncio.sleep(30)  # 30초마다
+                    elapsed += 30
+                    logger.info(f"[워크플로우] Ollama 응답 대기 중... ({elapsed}초 경과)")
+            
+            progress_task = asyncio.create_task(log_progress())
+            
+            try:
+                # Ollama 호출을 비동기로 처리하고 타임아웃 설정 (10분)
+                logger.info("[워크플로우] Ollama LLM 호출 시작...")
+                response_text = await asyncio.wait_for(
+                    asyncio.to_thread(llm.invoke, prompt),
+                    timeout=600.0  # 10분 타임아웃
+                )
+                progress_task.cancel()  # 성공 시 진행 로깅 중지
+                logger.info(f"[워크플로우] Ollama 응답 완료 - 응답 길이: {len(response_text)}자")
+                return response_text
+            except asyncio.TimeoutError:
+                progress_task.cancel()
+                logger.error("[워크플로우] Ollama 호출 타임아웃 (10분 초과)")
+                raise TimeoutError("Ollama LLM 호출이 타임아웃되었습니다 (10분 초과). 모델이 응답을 생성하는 데 시간이 너무 오래 걸립니다.")
+            except Exception as e:
+                progress_task.cancel()
+                logger.error(f"[워크플로우] Ollama 호출 실패: {str(e)}", exc_info=True)
+                raise
         else:
             # Groq와 Ollama 모두 사용 안 함
             raise ValueError("LLM이 설정되지 않았습니다. LLM_PROVIDER 환경변수를 'groq' 또는 'ollama'로 설정하세요.")

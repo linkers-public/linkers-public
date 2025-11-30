@@ -1171,22 +1171,34 @@ class LegalRAGService:
             elif self.generator.use_ollama:
                 logger.info(f"[LLM 호출] Ollama 호출 시작: base_url={settings.ollama_base_url}, model={settings.ollama_model}")
                 
-                # langchain-ollama 우선 사용 (deprecated 경고 없음)
+                # langchain-community 우선 사용 (think 파라미터 에러 방지)
                 try:
-                    from langchain_ollama import OllamaLLM
-                    llm = OllamaLLM(
-                        base_url=settings.ollama_base_url,
-                        model=settings.ollama_model
-                    )
-                    logger.info("[LLM 호출] langchain_ollama.OllamaLLM 사용")
-                except ImportError:
-                    # 대안: langchain-community 사용 (deprecated)
                     from langchain_community.llms import Ollama
                     llm = Ollama(
                         base_url=settings.ollama_base_url,
                         model=settings.ollama_model
                     )
                     logger.info("[LLM 호출] langchain_community.llms.Ollama 사용")
+                except ImportError:
+                    # 대안: langchain-ollama 사용 (think 파라미터 에러 가능)
+                    try:
+                        from langchain_ollama import OllamaLLM
+                        llm = OllamaLLM(
+                            base_url=settings.ollama_base_url,
+                            model=settings.ollama_model
+                        )
+                        logger.info("[LLM 호출] langchain_ollama.OllamaLLM 사용")
+                    except Exception as e:
+                        if "think" in str(e).lower():
+                            logger.warning("[LLM 호출] langchain-ollama에서 think 파라미터 에러 발생. langchain-community로 재시도...")
+                            from langchain_community.llms import Ollama
+                            llm = Ollama(
+                                base_url=settings.ollama_base_url,
+                                model=settings.ollama_model
+                            )
+                            logger.info("[LLM 호출] langchain_community.llms.Ollama 사용 (fallback)")
+                        else:
+                            raise
                 
                 logger.info(f"[LLM 호출] 프롬프트 길이: {len(prompt)}자, invoke 호출 중...")
                 logger.debug(f"[LLM 호출] 프롬프트 미리보기 (처음 500자): {prompt[:500]}")

@@ -88,13 +88,46 @@ def test_ollama_setup():
     
     # 4. 실제 LLM 호출 테스트
     print("\n4. LLM 호출 테스트...")
+    # langchain-community 우선 사용 (think 파라미터 에러 방지)
     try:
-        from langchain_ollama import OllamaLLM
-        llm = OllamaLLM(
+        from langchain_community.llms import Ollama
+        llm = Ollama(
             base_url=settings.ollama_base_url,
             model=settings.ollama_model
         )
-        
+        print("   langchain-community.llms.Ollama 사용")
+    except ImportError:
+        print("   ⚠️ langchain-community를 사용할 수 없습니다.")
+        print("   langchain-ollama로 시도...")
+        try:
+            from langchain_ollama import OllamaLLM
+            llm = OllamaLLM(
+                base_url=settings.ollama_base_url,
+                model=settings.ollama_model
+            )
+            print("   langchain-ollama.OllamaLLM 사용")
+        except ImportError:
+            print("   ❌ Ollama 지원 패키지가 설치되지 않았습니다.")
+            return False
+        except Exception as e:
+            if "think" in str(e).lower():
+                print("   ⚠️ langchain-ollama에서 think 파라미터 에러 발생.")
+                print("   langchain-community로 재시도...")
+                try:
+                    from langchain_community.llms import Ollama
+                    llm = Ollama(
+                        base_url=settings.ollama_base_url,
+                        model=settings.ollama_model
+                    )
+                    print("   langchain-community.llms.Ollama 사용 (fallback)")
+                except Exception as e2:
+                    print(f"   ❌ LLM 초기화 실패: {str(e2)}")
+                    return False
+            else:
+                print(f"   ❌ LLM 초기화 실패: {str(e)}")
+                return False
+    
+    try:
         # 간단한 테스트 프롬프트
         test_prompt = "한 줄로 답변: 안녕하세요"
         print(f"   테스트 프롬프트: '{test_prompt}'")
@@ -107,29 +140,6 @@ def test_ollama_setup():
             return True
         else:
             print("   ❌ LLM 응답이 비어있습니다")
-            return False
-    except ImportError:
-        print("   ⚠️ langchain-ollama를 사용할 수 없습니다.")
-        print("   langchain-community로 시도...")
-        try:
-            from langchain_community.llms import Ollama
-            llm = Ollama(
-                base_url=settings.ollama_base_url,
-                model=settings.ollama_model
-            )
-            test_prompt = "한 줄로 답변: 안녕하세요"
-            print(f"   테스트 프롬프트: '{test_prompt}'")
-            print("   LLM 응답 대기 중...")
-            response = llm.invoke(test_prompt)
-            if response and len(response) > 0:
-                print(f"   ✅ LLM 호출 성공!")
-                print(f"   응답: {response[:100]}...")
-                return True
-            else:
-                print("   ❌ LLM 응답이 비어있습니다")
-                return False
-        except Exception as e:
-            print(f"   ❌ LLM 호출 실패: {str(e)}")
             return False
     except Exception as e:
         print(f"   ❌ LLM 호출 실패: {str(e)}")

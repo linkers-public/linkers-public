@@ -6,7 +6,11 @@ Generator v2 - 실전형
 from typing import List, Dict, Any, Optional
 import os
 import json
+import warnings
 from config import settings
+
+# langchain-community의 Ollama Deprecated 경고 무시
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="langchain")
 
 # 로컬 임베딩 모델 (선택사항)
 _local_embedding_model = None
@@ -179,30 +183,42 @@ def _get_ollama_llm():
     """Ollama LLM 지연 로드"""
     global _ollama_llm
     if _ollama_llm is None:
+        # langchain-community를 우선 사용 (think 파라미터 에러 방지)
         try:
-            # langchain-ollama 사용 (권장, deprecated 경고 없음)
-            from langchain_ollama import OllamaLLM
+            from langchain_community.llms import Ollama
             print(f"[연결] Ollama LLM: {settings.ollama_base_url} (모델: {settings.ollama_model})")
-            _ollama_llm = OllamaLLM(
+            _ollama_llm = Ollama(
                 base_url=settings.ollama_base_url,
                 model=settings.ollama_model,
                 temperature=settings.llm_temperature
             )
-            print("[완료] Ollama LLM 연결 완료 (langchain-ollama)")
+            print("[완료] Ollama LLM 연결 완료 (langchain-community)")
         except ImportError:
             try:
-                # 대안: langchain-community의 Ollama 사용 (deprecated)
-                from langchain_community.llms import Ollama
-                print(f"[경고] langchain-ollama를 사용할 수 없습니다. deprecated된 langchain_community.llms.Ollama를 사용합니다.")
+                # 대안: langchain-ollama 사용 (think 파라미터 에러 가능)
+                from langchain_ollama import OllamaLLM
                 print(f"[연결] Ollama LLM: {settings.ollama_base_url} (모델: {settings.ollama_model})")
-                _ollama_llm = Ollama(
+                print("[경고] langchain-ollama 사용 중 - think 파라미터 에러가 발생할 수 있습니다.")
+                _ollama_llm = OllamaLLM(
                     base_url=settings.ollama_base_url,
                     model=settings.ollama_model,
                     temperature=settings.llm_temperature
                 )
-                print("[완료] Ollama LLM 연결 완료")
+                print("[완료] Ollama LLM 연결 완료 (langchain-ollama)")
             except ImportError:
-                raise ImportError("Ollama 지원이 설치되지 않았습니다. pip install langchain-ollama 또는 pip install langchain-community")
+                raise ImportError("Ollama 지원이 설치되지 않았습니다. pip install langchain-community 또는 pip install langchain-ollama")
+            except Exception as e:
+                if "think" in str(e).lower():
+                    print("[경고] langchain-ollama에서 think 파라미터 에러 발생. langchain-community로 재시도...")
+                    from langchain_community.llms import Ollama
+                    _ollama_llm = Ollama(
+                        base_url=settings.ollama_base_url,
+                        model=settings.ollama_model,
+                        temperature=settings.llm_temperature
+                    )
+                    print("[완료] Ollama LLM 연결 완료 (langchain-community, fallback)")
+                else:
+                    raise Exception(f"Ollama 연결 실패: {str(e)}\n[팁] Ollama가 실행 중인지 확인하세요: ollama serve")
         except Exception as e:
             raise Exception(f"Ollama 연결 실패: {str(e)}\n[팁] Ollama가 실행 중인지 확인하세요: ollama serve")
     return _ollama_llm

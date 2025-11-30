@@ -11,6 +11,10 @@ from datetime import datetime
 from typing import List, Dict, Any
 from pathlib import Path
 import sys
+import warnings
+
+# langchain-community의 Ollama Deprecated 경고 무시
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="langchain")
 
 # 프로젝트 루트를 Python 경로에 추가
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -246,19 +250,31 @@ class PerformanceTester:
                         model=settings.groq_model
                     )
                 elif settings.use_ollama:
-                    # Ollama 사용
+                    # Ollama 사용 - langchain-community 우선 사용 (think 파라미터 에러 방지)
                     try:
-                        from langchain_ollama import OllamaLLM
-                        llm = OllamaLLM(
-                            base_url=settings.ollama_base_url,
-                            model=settings.ollama_model
-                        )
-                    except ImportError:
                         from langchain_community.llms import Ollama
                         llm = Ollama(
                             base_url=settings.ollama_base_url,
                             model=settings.ollama_model
                         )
+                    except ImportError:
+                        # 대안: langchain-ollama 사용 (think 파라미터 에러 가능)
+                        try:
+                            from langchain_ollama import OllamaLLM
+                            llm = OllamaLLM(
+                                base_url=settings.ollama_base_url,
+                                model=settings.ollama_model
+                            )
+                        except Exception as e:
+                            if "think" in str(e).lower():
+                                print("   [경고] langchain-ollama에서 think 파라미터 에러 발생. langchain-community로 재시도...")
+                                from langchain_community.llms import Ollama
+                                llm = Ollama(
+                                    base_url=settings.ollama_base_url,
+                                    model=settings.ollama_model
+                                )
+                            else:
+                                raise
                     
                     prompt = f"다음 질문에 간단히 답변하세요: {query}"
                     response_text = await asyncio.to_thread(llm.invoke, prompt)
