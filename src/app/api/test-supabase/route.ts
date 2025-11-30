@@ -58,18 +58,32 @@ export async function GET(request: NextRequest) {
       .limit(1);
 
     // 3. estimate_embeddings 테이블 존재 확인
-    const { data: tableExists, error: tableError } = await supabase
-      .from('estimate_embeddings')
-      .select('id')
-      .limit(1)
-      .catch(() => ({ data: null, error: { message: '테이블이 존재하지 않습니다' } }));
+    let tableExists: any = null;
+    let tableError: any = null;
+    try {
+      const result = await supabase
+        .from('estimate_embeddings')
+        .select('id')
+        .limit(1);
+      tableExists = result.data;
+      tableError = result.error;
+    } catch (err) {
+      tableError = { message: '테이블이 존재하지 않습니다' };
+    }
 
     // 4. estimate 테이블 확인
-    const { data: estimateData, error: estimateError } = await supabase
-      .from('estimate')
-      .select('estimate_id')
-      .limit(1)
-      .catch(() => ({ data: null, error: null }));
+    let estimateData: any = null;
+    let estimateError: any = null;
+    try {
+      const result = await supabase
+        .from('estimate')
+        .select('estimate_id')
+        .limit(1);
+      estimateData = result.data;
+      estimateError = result.error;
+    } catch (err) {
+      // 에러 무시
+    }
 
     return NextResponse.json({
       success: true,
@@ -81,11 +95,11 @@ export async function GET(request: NextRequest) {
       tests: {
         healthCheck: {
           success: !healthError,
-          error: healthError?.message || null,
+          error: (healthError as any)?.message || null,
         },
         accountsTable: {
           success: !tablesError,
-          error: tablesError?.message || null,
+          error: (tablesError as any)?.message || null,
         },
         estimateTable: {
           success: !estimateError,

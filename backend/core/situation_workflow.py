@@ -287,9 +287,10 @@ class SituationWorkflow:
             "scripts": scripts,  # toCompany, toAdvisor
             "related_cases": [
                 {
-                    "id": case.id,
+                    "id": case.id,  # external_id
                     "title": case.title,
                     "summary": case.situation[:200] if len(case.situation) > 200 else case.situation,
+                    "source_type": getattr(case, 'source_type', None),  # source_type 정보 추가
                 }
                 for case in related_cases[:3]  # 최대 3개만 (이중 안전장치)
             ],
@@ -441,28 +442,40 @@ class SituationWorkflow:
         self,
         query_embedding: List[float],
         top_k: int = 3,
-    ) -> List[LegalCasePreview]:
-        """케이스 검색"""
+    ) -> List[Dict[str, Any]]:
+        """
+        케이스 검색 (case 또는 standard_contract 타입)
+        source_type 정보를 포함하여 반환
+        """
+        # case와 standard_contract 모두 검색 (필터 제거)
         rows = self.vector_store.search_similar_legal_chunks(
             query_embedding=query_embedding,
-            top_k=top_k,
-            filters={"source_type": "case"},
+            top_k=top_k * 2,  # 더 많이 가져와서 필터링
         )
         
-        cases: List[LegalCasePreview] = []
+        cases: List[Dict[str, Any]] = []
         for row in rows:
+            source_type = row.get("source_type", "case")
+            # case 또는 standard_contract만 포함
+            if source_type not in ["case", "standard_contract"]:
+                continue
+            
             external_id = row.get("external_id", "")
             title = row.get("title", "제목 없음")
             content = row.get("content", "")
             metadata = row.get("metadata", {})
-            cases.append(
-                LegalCasePreview(
-                    id=external_id,
-                    title=title,
-                    situation=metadata.get("situation", content[:200]),
-                    main_issues=metadata.get("issues", []),
-                )
-            )
+            
+            cases.append({
+                "id": external_id,
+                "title": title,
+                "situation": metadata.get("situation", content[:200]),
+                "main_issues": metadata.get("issues", []),
+                "source_type": source_type,  # source_type 정보 포함
+            })
+            
+            if len(cases) >= top_k:
+                break
+        
         return cases
     
     def _extract_legal_basis(self, grounding_chunks: List[LegalGroundingChunk]) -> List[Dict[str, Any]]:

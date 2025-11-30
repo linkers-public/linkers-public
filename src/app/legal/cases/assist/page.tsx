@@ -23,7 +23,8 @@ import {
 import { cn } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
 import { searchLegalCases, analyzeSituationV2, type SituationRequestV2 } from '@/apis/legal.service'
-import type { LegalCasePreview, SituationAnalysisResponse } from '@/apis/legal.service'
+import type { LegalCasePreview } from '@/apis/legal.service'
+import type { SituationAnalysisResponse } from '@/types/legal'
 
 // 태그 추천
 const RECOMMENDED_TAGS = [
@@ -98,7 +99,7 @@ export default function CaseBasedAssistPage() {
       
       // v2 응답을 v1 형식으로 변환 (기존 UI 호환성)
       const v1Format: SituationAnalysisResponse = {
-        classifiedType: result.tags[0] || 'unknown',
+        classifiedType: (result.tags[0] || 'unknown') as SituationAnalysisResponse['classifiedType'],
         riskScore: result.riskScore,
         summary: result.analysis.summary,
         criteria: result.analysis.legalBasis.map(basis => ({

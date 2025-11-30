@@ -289,6 +289,8 @@ class RelatedCaseV2(BaseModel):
     title: str
     summary: str
     link: Optional[str] = None
+    externalId: Optional[str] = Field(None, description="파일 ID (스토리지 경로 생성용, id와 동일)")
+    fileUrl: Optional[str] = Field(None, description="스토리지 Signed URL (파일 다운로드용)")
 
 
 class ScriptsV2(BaseModel):
@@ -319,14 +321,34 @@ class SituationResponseV2(BaseModel):
     scripts: Optional[ScriptsV2] = None
     relatedCases: List[RelatedCaseV2]
     sources: List[SourceItemV2] = Field(default_factory=list, description="RAG 검색 출처 (법령/가이드라인)")
+    criteria: Optional[List[CriteriaItem]] = Field(default_factory=list, description="법적 판단 기준")
+    actionPlan: Optional[ActionPlan] = Field(None, description="행동 계획")
 
 
 class ConversationRequestV2(BaseModel):
-    """대화 메시지 저장 요청 (v2)"""
+    """대화 메시지 저장 요청 (v2) - 레거시 호환성"""
     report_id: str = Field(..., description="리포트 ID (situation_analyses의 id)")
     message: str = Field(..., description="메시지 내용")
     sender_type: str = Field(..., description="발신자 타입 ('user' 또는 'assistant')")
     sequence_number: int = Field(..., description="메시지 순서")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="추가 메타데이터")
+
+
+class ChatSessionCreateRequest(BaseModel):
+    """채팅 세션 생성 요청"""
+    initial_context_type: str = Field("none", description="초기 컨텍스트 타입 ('none', 'situation', 'contract')")
+    initial_context_id: Optional[str] = Field(None, description="초기 컨텍스트 ID")
+    title: Optional[str] = Field(None, description="세션 제목")
+
+
+class ChatMessageRequest(BaseModel):
+    """채팅 메시지 저장 요청"""
+    session_id: str = Field(..., description="세션 ID")
+    message: str = Field(..., description="메시지 내용")
+    sender_type: str = Field(..., description="발신자 타입 ('user' 또는 'assistant')")
+    sequence_number: int = Field(..., description="메시지 순서")
+    context_type: str = Field("none", description="컨텍스트 타입 ('none', 'situation', 'contract')")
+    context_id: Optional[str] = Field(None, description="컨텍스트 ID")
     metadata: Optional[Dict[str, Any]] = Field(None, description="추가 메타데이터")
 
 

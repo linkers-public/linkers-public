@@ -39,6 +39,8 @@ interface ContractViewerProps {
     content: string
     articleNumber?: number
     category?: string
+    startIndex?: number
+    endIndex?: number
   }>
   scrollContainerRef?: React.RefObject<HTMLDivElement>
 }
@@ -58,7 +60,7 @@ export function ContractViewer({
   const internalContainerRef = useRef<HTMLDivElement>(null)
   const containerRef = scrollContainerRef || internalContainerRef
   const highlightedRefs = useRef<Map<string, HTMLSpanElement>>(new Map())
-  const clauseRefs = useRef<Map<number, HTMLDivElement>>(new Map())
+  const clauseRefs = useRef<Map<number, HTMLElement>>(new Map())
   const [currentHoveredIssue, setCurrentHoveredIssue] = useState<LegalIssue | null>(null)
   const [selectedClauseNumber, setSelectedClauseNumber] = useState<number | null>(null)
   const [scrollProgress, setScrollProgress] = useState(0)
@@ -131,7 +133,7 @@ export function ContractViewer({
     CLAUSE_REGEX.lastIndex = 0
     
     // matchAll로 모든 매칭 찾기
-    const clauseMatches = contractText.matchAll(CLAUSE_REGEX)
+    const clauseMatches = Array.from(contractText.matchAll(CLAUSE_REGEX))
     const parsed: Clause[] = []
     let lastIndex = 0
     let matchCount = 0
@@ -187,7 +189,7 @@ export function ContractViewer({
       // 🔥 fallback도 lastIndex 문제 방지: 새로운 정규식 인스턴스 사용
       const SIMPLE_CLAUSE_REGEX = /제\s*(\d+)\s*조[^\n]*/g
       SIMPLE_CLAUSE_REGEX.lastIndex = 0  // 리셋
-      const simpleClauseMatches = contractText.matchAll(SIMPLE_CLAUSE_REGEX)
+      const simpleClauseMatches = Array.from(contractText.matchAll(SIMPLE_CLAUSE_REGEX))
       const simpleParsed: Clause[] = []
       for (const match of simpleClauseMatches) {
         const clauseNumber = parseInt(match[1])

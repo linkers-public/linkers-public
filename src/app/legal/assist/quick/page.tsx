@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -33,7 +33,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
-import { analyzeSituationV2, type SituationRequestV2, chatWithContractV2, saveConversationV2, getSituationHistoryV2, getConversationsV2 } from '@/apis/legal.service'
+import { analyzeSituationV2, type SituationRequestV2, chatWithContractV2, saveConversationV2, getSituationHistoryV2, getConversationsV2, getSituationAnalysisByIdV2 } from '@/apis/legal.service'
 import { MarkdownRenderer } from '@/components/rag/MarkdownRenderer'
 import type { SituationAnalysisResponse } from '@/types/legal'
 
@@ -182,6 +182,7 @@ interface ConversationSession {
 
 export default function QuickAssistPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { toast } = useToast()
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const chatContainerRef = useRef<HTMLDivElement>(null)
@@ -189,7 +190,12 @@ export default function QuickAssistPage() {
   const isUserScrollingRef = useRef(false)
   const shouldAutoScrollRef = useRef(true)
 
-  const [inputMessage, setInputMessage] = useState('')
+  // URL 쿼리 파라미터에서 context 정보 가져오기
+  const contextType = searchParams.get('contextType') as 'none' | 'situation' | 'contract' | null
+  const contextId = searchParams.get('contextId')
+  const prefilledQuestion = searchParams.get('question')
+
+  const [inputMessage, setInputMessage] = useState(prefilledQuestion || '')
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [hasInitialGreeting, setHasInitialGreeting] = useState(false)
@@ -209,6 +215,7 @@ export default function QuickAssistPage() {
     workPeriod?: string
     socialInsurance?: string
   } | null>(null)
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
   
 
   // localStorage 및 DB에서 대화 내역 로드
@@ -466,6 +473,55 @@ export default function QuickAssistPage() {
     
     loadConversations()
   }, [])
+
+  // contextType과 contextId가 있을 때 상황 분석 결과 불러오기
+  useEffect(() => {
+    const loadContextData = async () => {
+      if (contextType === 'situation' && contextId) {
+        try {
+          const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client')
+          const supabase = createSupabaseBrowserClient()
+          const { data: { user } } = await supabase.auth.getUser()
+          const userId = user?.id || null
+
+          // 상황 분석 결과 불러오기
+          const analysis = await getSituationAnalysisByIdV2(contextId, userId)
+          setSituationAnalysis(analysis)
+
+          // 새 세션 생성
+          const { getAuthHeaders } = await import('@/apis/legal.service')
+          const authHeaders = await getAuthHeaders()
+          const headers: Record<string, string> = {
+            ...(authHeaders as Record<string, string>),
+            'Content-Type': 'application/json',
+          }
+          if (userId) {
+            headers['X-User-Id'] = userId
+          }
+
+          const sessionResponse = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://localhost:8000'}/api/v2/legal/chat/sessions`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              initial_context_type: 'situation',
+              initial_context_id: contextId,
+              title: analysis.analysis?.summary?.substring(0, 30) || '상황 분석',
+            }),
+          })
+
+          if (sessionResponse.ok) {
+            const sessionData = await sessionResponse.json()
+            setCurrentSessionId(sessionData.id)
+            setSelectedConversationId(sessionData.id)
+          }
+        } catch (error) {
+          console.error('컨텍스트 데이터 로드 실패:', error)
+        }
+      }
+    }
+
+    loadContextData()
+  }, [contextType, contextId])
 
   // Supabase에서는 만료일이 없으므로 정리 로직 제거
 
@@ -878,8 +934,81 @@ export default function QuickAssistPage() {
           timestamp: new Date(),
         }
         
-        // DB에 메시지 저장 (reportId가 있는 경우)
-        if (currentSession.reportId) {
+        // DB에 메시지 저장 (새로운 DB 구조 사용)
+        if (currentSessionId) {
+          try {
+            const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client')
+            const supabase = createSupabaseBrowserClient()
+            const { data: { user } } = await supabase.auth.getUser()
+            const userId = user?.id || null
+            
+            if (userId) {
+              const { getAuthHeaders } = await import('@/apis/legal.service')
+              const authHeaders = await getAuthHeaders()
+              const headers: Record<string, string> = {
+                ...(authHeaders as Record<string, string>),
+                'Content-Type': 'application/json',
+              }
+              if (userId) {
+                headers['X-User-Id'] = userId
+              }
+
+              // DB에서 실제 메시지 수를 확인하여 sequence_number 계산
+              try {
+                const messagesResponse = await fetch(
+                  `${process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://localhost:8000'}/api/v2/legal/chat/sessions/${currentSessionId}/messages`,
+                  { headers }
+                )
+                const dbMessages = messagesResponse.ok ? await messagesResponse.json() : []
+                const maxSequenceNumber = dbMessages.length > 0 
+                  ? Math.max(...dbMessages.map((m: any) => m.sequence_number))
+                  : -1
+                
+                const userSequenceNumber = maxSequenceNumber + 1
+                const assistantSequenceNumber = maxSequenceNumber + 2
+                
+                // 사용자 메시지 저장
+                await fetch(
+                  `${process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://localhost:8000'}/api/v2/legal/chat/messages`,
+                  {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify({
+                      session_id: currentSessionId,
+                      message: userMessage.content,
+                      sender_type: 'user',
+                      sequence_number: userSequenceNumber,
+                      context_type: contextType || 'none',
+                      context_id: contextId || null,
+                    }),
+                  }
+                )
+                
+                // AI 메시지 저장
+                await fetch(
+                  `${process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://localhost:8000'}/api/v2/legal/chat/messages`,
+                  {
+                    method: 'POST',
+                    headers,
+                    body: JSON.stringify({
+                      session_id: currentSessionId,
+                      message: assistantMessage.content,
+                      sender_type: 'assistant',
+                      sequence_number: assistantSequenceNumber,
+                      context_type: contextType || 'none',
+                      context_id: contextId || null,
+                    }),
+                  }
+                )
+              } catch (dbError) {
+                console.warn('DB 메시지 저장 실패 (계속 진행):', dbError)
+              }
+            }
+          } catch (saveError) {
+            console.warn('대화 메시지 DB 저장 실패 (계속 진행):', saveError)
+          }
+        } else if (currentSession.reportId) {
+          // 레거시: reportId가 있는 경우 (기존 방식)
           try {
             const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client')
             const supabase = createSupabaseBrowserClient()

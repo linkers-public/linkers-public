@@ -170,13 +170,18 @@ export const analyzeSituationDetailed = async (
         id: caseItem.id,
         title: caseItem.title,
         summary: caseItem.summary,
+        link: caseItem.link,
+        externalId: caseItem.externalId || caseItem.external_id || caseItem.id, // id와 동일
+        fileUrl: caseItem.fileUrl || caseItem.file_url,
       })),
       sources: (backendData.sources || []).map((source: any) => ({
         sourceId: source.source_id || source.sourceId,
-        sourceType: source.source_type || source.sourceType,
+        sourceType: (source.source_type || source.sourceType || 'law') as 'law' | 'manual' | 'case' | 'standard_contract',
         title: source.title,
         snippet: source.snippet,
         score: source.score,
+        externalId: source.externalId || source.external_id,
+        fileUrl: source.fileUrl || source.file_url,
       })),
     };
     
@@ -269,6 +274,8 @@ export interface RelatedCaseV2 {
   title: string;
   summary: string;
   link?: string;
+  externalId?: string; // 파일 ID (스토리지 경로 생성용, id와 동일)
+  fileUrl?: string; // 스토리지 Signed URL (파일 다운로드용)
 }
 
 export interface ScriptsV2 {
@@ -278,10 +285,18 @@ export interface ScriptsV2 {
 
 export interface SourceItemV2 {
   sourceId: string;
-  sourceType: 'law' | 'manual' | 'case';
+  sourceType: 'law' | 'manual' | 'case' | 'standard_contract';
   title: string;
   snippet: string;
   score: number;
+  externalId?: string; // 파일 ID (스토리지 경로 생성용)
+  fileUrl?: string; // 스토리지 Signed URL (파일 다운로드용)
+}
+
+export interface CriteriaItemV2 {
+  name: string;
+  status: 'likely' | 'unclear' | 'unlikely';
+  reason: string;
 }
 
 export interface SituationResponseV2 {
@@ -294,6 +309,13 @@ export interface SituationResponseV2 {
   scripts?: ScriptsV2;
   relatedCases: RelatedCaseV2[];
   sources?: SourceItemV2[]; // RAG 검색 출처
+  criteria?: CriteriaItemV2[]; // 법적 판단 기준 (백엔드에서 최상위 레벨에 반환)
+  actionPlan?: {
+    steps: Array<{
+      title: string;
+      items: string[];
+    }>;
+  }; // 행동 계획 (백엔드에서 최상위 레벨에 반환)
 }
 
 export interface ContractIssueV2 {
@@ -1317,36 +1339,289 @@ export const getAnalysisResult = async (
     let analysis: import('@/types/legal').AnalysisJSON;
     if (typeof data.analysis === 'string') {
       try {
-        analysis = JSON.parse(data.analysis);
+        analysis = JSON.parse(data.analysis) as import('@/types/legal').AnalysisJSON;
       } catch (parseError) {
         console.error('analysis JSON 파싱 실패:', parseError);
         // 기본값으로 fallback
         analysis = {
-          summary: data.answer || data.situation || '',
+          summary: data.situation || '',
           risk_score: data.risk_score || 0,
         };
       }
+    } else if (data.analysis && typeof data.analysis === 'object' && !Array.isArray(data.analysis)) {
+      // Json 타입을 AnalysisJSON으로 타입 단언 (unknown을 거쳐서)
+      analysis = data.analysis as unknown as import('@/types/legal').AnalysisJSON;
     } else {
-      analysis = data.analysis || {
-        summary: data.answer || data.situation || '',
+      // 기본값으로 fallback
+      analysis = {
+        summary: data.situation || '',
         risk_score: data.risk_score || 0,
       };
     }
 
     return {
       id: data.id,
-      user_id: data.user_id,
-      situation: data.situation,
-      category: data.category || data.category_hint,
-      risk_score: data.risk_score,
-      risk_level: data.risk_level,
+      user_id: data.user_id ?? undefined,
+      situation: data.situation ?? undefined,
+      category: data.category || data.category_hint || undefined,
+      risk_score: data.risk_score ?? undefined,
+      risk_level: data.risk_level ?? undefined,
       analysis,
       created_at: data.created_at,
-      updated_at: data.updated_at,
+      updated_at: data.updated_at ?? undefined,
     };
   } catch (error) {
     console.error('분석 결과 조회 오류:', error);
     throw error;
   }
 };
+
+/**
+ * 상황 분석 증거 파일 업로드
+ * Supabase Storage에 파일 업로드하고 situation_evidences 테이블에 메타데이터 저장
+ */
+export const uploadSituationEvidence = async (
+  file: File,
+  analysisId: string,
+  evidenceType: string,
+  description?: string
+): Promise<{ id: string; file_path: string; file_url: string }> => {
+  try {
+    const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client')
+    const supabase = createSupabaseBrowserClient()
+    
+    // 사용자 ID 가져오기
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
+    if (userError || !user) {
+      throw new Error('로그인이 필요합니다.')
+    }
+    const userId = user.id
+
+    // 파일 확장자 추출
+    const fileExt = file.name.split('.').pop() || 'pdf'
+    const timestamp = Date.now()
+    const randomStr = Math.random().toString(36).substring(7)
+    
+    // Storage 경로: situation_evidences/{analysis_id}/{timestamp}_{random}.{ext}
+    const sanitizedFileName = file.name
+      .replace(/\s+/g, '_')
+      .replace(/[^\w\.\-]/g, '')
+      .substring(0, 50) // 파일명 길이 제한
+    
+    const storageFileName = `${analysisId}/${timestamp}_${randomStr}_${sanitizedFileName}`
+    
+    // Storage 버킷 목록 시도 (우선순위: attach_file > announcements)
+    const bucketNames = ['attach_file', 'announcements']
+    let uploadData: any = null
+    let usedBucket: string | null = null
+
+    for (const bucketName of bucketNames) {
+      try {
+        const { data, error } = await supabase.storage
+          .from(bucketName)
+          .upload(`situation_evidences/${storageFileName}`, file, {
+            cacheControl: '3600',
+            upsert: false,
+          })
+
+        if (!error && data) {
+          uploadData = data
+          usedBucket = bucketName
+          break
+        } else if (error?.message?.includes('Bucket not found') || error?.message?.includes('404')) {
+          continue
+        } else {
+          console.warn(`[${bucketName}] 버킷 업로드 실패:`, error)
+          continue
+        }
+      } catch (err) {
+        console.warn(`[${bucketName}] 버킷 접근 실패:`, err)
+        continue
+      }
+    }
+
+    if (!uploadData || !usedBucket) {
+      throw new Error('파일 업로드에 실패했습니다. Storage 버킷을 확인해주세요.')
+    }
+
+    const filePath = `situation_evidences/${storageFileName}`
+    
+    // Public URL 가져오기
+    const { data: { publicUrl } } = supabase.storage
+      .from(usedBucket)
+      .getPublicUrl(filePath)
+
+    // MIME 타입 추정
+    const mimeType = file.type || (() => {
+      const ext = fileExt.toLowerCase()
+      const mimeMap: Record<string, string> = {
+        'pdf': 'application/pdf',
+        'jpg': 'image/jpeg',
+        'jpeg': 'image/jpeg',
+        'png': 'image/png',
+        'txt': 'text/plain',
+        'doc': 'application/msword',
+        'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'hwp': 'application/x-hwp',
+        'hwpx': 'application/x-hwpx',
+        'mp3': 'audio/mpeg',
+        'mp4': 'video/mp4',
+        'wav': 'audio/wav',
+      }
+      return mimeMap[ext] || 'application/octet-stream'
+    })()
+
+    // DB에 메타데이터 저장
+    const { data: evidenceData, error: dbError } = await supabase
+      .from('situation_evidences')
+      .insert({
+        analysis_id: analysisId,
+        user_id: userId,
+        file_path: filePath,
+        file_name: file.name,
+        file_size: file.size,
+        mime_type: mimeType,
+        evidence_type: evidenceType,
+        description: description || null,
+      })
+      .select()
+      .single()
+
+    if (dbError) {
+      // DB 저장 실패 시 업로드한 파일 삭제 시도
+      await supabase.storage
+        .from(usedBucket)
+        .remove([filePath])
+        .catch(console.error)
+      
+      throw new Error(`DB 저장 실패: ${dbError.message}`)
+    }
+
+    return {
+      id: evidenceData.id,
+      file_path: filePath,
+      file_url: publicUrl,
+    }
+  } catch (error: any) {
+    console.error('증거 파일 업로드 오류:', error)
+    throw error
+  }
+}
+
+/**
+ * 상황 분석 증거 파일 목록 조회
+ */
+export const getSituationEvidences = async (
+  analysisId: string
+): Promise<Array<{
+  id: string
+  file_name: string
+  file_size: number | null
+  mime_type: string | null
+  evidence_type: string
+  description: string | null
+  file_path: string
+  file_url: string
+  created_at: string
+}>> => {
+  try {
+    const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client')
+    const supabase = createSupabaseBrowserClient()
+    
+    const { data, error } = await supabase
+      .from('situation_evidences')
+      .select('id, file_name, file_size, mime_type, evidence_type, description, file_path, created_at')
+      .eq('analysis_id', analysisId)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      throw new Error(`증거 파일 목록 조회 실패: ${error.message}`)
+    }
+
+    // 파일 경로를 기반으로 다운로드 URL 생성
+    const bucketNames = ['attach_file', 'announcements']
+    const filesWithUrls = (data || []).map((file) => {
+      let fileUrl = ''
+      
+      // 각 버킷에서 public URL 시도
+      for (const bucketName of bucketNames) {
+        try {
+          const { data: { publicUrl } } = supabase.storage
+            .from(bucketName)
+            .getPublicUrl(file.file_path)
+          
+          if (publicUrl) {
+            fileUrl = publicUrl
+            break
+          }
+        } catch (err) {
+          // 다음 버킷 시도
+          continue
+        }
+      }
+
+      return {
+        ...file,
+        file_url: fileUrl,
+      }
+    })
+
+    return filesWithUrls
+  } catch (error: any) {
+    console.error('증거 파일 목록 조회 오류:', error)
+    throw error
+  }
+}
+
+/**
+ * 상황 분석 증거 파일 삭제
+ */
+export const deleteSituationEvidence = async (
+  evidenceId: string
+): Promise<void> => {
+  try {
+    const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client')
+    const supabase = createSupabaseBrowserClient()
+    
+    // 먼저 파일 정보 가져오기
+    const { data: evidence, error: fetchError } = await supabase
+      .from('situation_evidences')
+      .select('file_path')
+      .eq('id', evidenceId)
+      .single()
+
+    if (fetchError || !evidence) {
+      throw new Error('증거 파일을 찾을 수 없습니다.')
+    }
+
+    // Storage에서 파일 삭제
+    const bucketNames = ['attach_file', 'announcements']
+    for (const bucketName of bucketNames) {
+      try {
+        const { error: storageError } = await supabase.storage
+          .from(bucketName)
+          .remove([evidence.file_path])
+        
+        if (!storageError) {
+          break // 성공하면 중단
+        }
+      } catch (err) {
+        console.warn(`[${bucketName}] 파일 삭제 실패:`, err)
+      }
+    }
+
+    // DB에서 레코드 삭제
+    const { error: dbError } = await supabase
+      .from('situation_evidences')
+      .delete()
+      .eq('id', evidenceId)
+
+    if (dbError) {
+      throw new Error(`DB 삭제 실패: ${dbError.message}`)
+    }
+  } catch (error: any) {
+    console.error('증거 파일 삭제 오류:', error)
+    throw error
+  }
+}
 

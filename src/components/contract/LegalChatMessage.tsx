@@ -283,7 +283,7 @@ export function LegalChatMessage({ content, selectedIssue }: LegalChatMessagePro
           const allRefs: Array<{ name: string; description: string }> = []
           
           for (const pattern of lawPatterns) {
-            const matches = legalText.matchAll(pattern)
+            const matches = Array.from(legalText.matchAll(pattern))
             for (const match of matches) {
               if (match[1] && match[2]) {
                 allRefs.push({

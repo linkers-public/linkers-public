@@ -196,7 +196,6 @@ export function ContractChat({
           summary: selectedIssue.summary,
           severity: selectedIssue.severity,
           originalText: selectedIssue.originalText,
-          article_number: selectedIssue.location?.clauseNumber, // ✅ 조항 번호 추가
           legalBasis: legalBasisV2,
         } : undefined,
         analysisSummary: analysisSummary,
@@ -630,7 +629,26 @@ export function ContractChat({
                     
                     if (currentIssue) {
                       const clauseNumber = currentIssue.location?.clauseNumber
-                      const clauseText = clauseNumber ? `제${clauseNumber}조` : '이 조항'
+                      const categoryLabelForPlaceholder = ({
+                        working_hours: '근로시간/연장근로',
+                        wage: '보수·수당',
+                        probation: '수습/해지',
+                        stock_option: '스톡옵션',
+                        ip: 'IP/저작권',
+                        harassment: '직장 내 괴롭힘',
+                        job_stability: '고용안정',
+                        dismissal: '해고·해지',
+                        payment: '보수·수당',
+                        non_compete: '경업금지',
+                        liability: '손해배상',
+                        dispute: '분쟁해결',
+                        nda: '비밀유지',
+                        other: '이 조항',
+                      }[currentIssue.category] ?? '이 조항')
+                      
+                      const clauseText = clauseNumber 
+                        ? `제${clauseNumber}조 ${categoryLabelForPlaceholder}` 
+                        : categoryLabelForPlaceholder
                       return `예) ${clauseText} 이대로 서명해도 괜찮나요? / 회사에 이렇게 수정 요청해도 될까요?`
                     }
                     

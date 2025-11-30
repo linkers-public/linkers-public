@@ -17,6 +17,13 @@ const CATEGORY_LABELS: Record<LegalCategory, string> = {
   stock_option: '스톡옵션/IP',
   ip: 'IP/저작권',
   harassment: '직장내괴롭힘',
+  job_stability: '고용안정',
+  dismissal: '해고·해지',
+  payment: '보수·수당',
+  non_compete: '경업금지',
+  liability: '손해배상',
+  dispute: '분쟁해결',
+  nda: '비밀유지',
   other: '기타',
 }
 

@@ -1,9 +1,10 @@
 'use client'
 
-import React from 'react'
+import React, { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { FileText, Scale, BookOpen } from 'lucide-react'
+import { FileText, Scale, ChevronRight } from 'lucide-react'
 import { RAGHighlightedMarkdown } from '@/components/legal/RAGHighlightedText'
+import { LegalEvidenceSection, EvidenceDrawer } from '@/components/legal/LegalEvidenceSection'
 import type { SituationAnalysisResponse } from '@/types/legal'
 
 interface LegalReportCardProps {
@@ -11,6 +12,14 @@ interface LegalReportCardProps {
 }
 
 export function LegalReportCard({ analysisResult }: LegalReportCardProps) {
+  // 디버깅: criteria 확인
+  console.log('🔍 [LegalReportCard] analysisResult:', analysisResult)
+  console.log('🔍 [LegalReportCard] criteria:', analysisResult.criteria)
+  console.log('🔍 [LegalReportCard] criteria 존재 여부:', !!analysisResult.criteria)
+  console.log('🔍 [LegalReportCard] criteria 길이:', analysisResult.criteria?.length || 0)
+  
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false)
+  
   // summary에서 "## 상황 분석의 결과" 섹션만 추출
   const summaryText = analysisResult.summary || ''
   const sectionMatch = summaryText.match(/##\s*📊\s*상황\s*분석의\s*결과\s*\n([\s\S]*?)(?=##|$)/i) ||
@@ -19,15 +28,38 @@ export function LegalReportCard({ analysisResult }: LegalReportCardProps) {
   
   const situationAnalysisContent = sectionMatch ? sectionMatch[1].trim() : summaryText
 
+  // 근거 자료 변환
+  const evidenceSources = analysisResult.sources?.map((source) => ({
+    sourceId: source.sourceId,
+    title: source.title,
+    snippet: source.snippet,
+    score: source.score,
+    fileUrl: source.fileUrl || null,
+    sourceType: (source.sourceType || 'law') as 'law' | 'standard_contract' | 'manual' | 'case',
+    externalId: source.externalId || null,
+  })) || []
+
   return (
     <Card className="border border-gray-100 shadow-lg bg-white">
       <CardHeader className="pb-4 border-b border-gray-100">
-        <CardTitle className="text-2xl font-bold text-slate-900 flex items-center gap-3">
-          <div className="p-2 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg shadow-md">
-            <FileText className="w-6 h-6 text-white" />
-          </div>
-          <span>AI 법률 진단 리포트</span>
-        </CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-2xl font-bold text-slate-900 flex items-center gap-3">
+            <div className="p-2 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg shadow-md">
+              <FileText className="w-6 h-6 text-white" />
+            </div>
+            <span>AI 법률 진단 리포트</span>
+          </CardTitle>
+          {/* 헤더 우측: 근거 자료 전체 보기 버튼 */}
+          {evidenceSources.length > 0 && (
+            <button
+              onClick={() => setIsDrawerOpen(true)}
+              className="text-sm text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1 transition-colors"
+            >
+              <span>근거 자료 전체 보기 ({evidenceSources.length}건)</span>
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          )}
+        </div>
       </CardHeader>
       
       <CardContent className="p-6 space-y-6">
@@ -95,30 +127,8 @@ export function LegalReportCard({ analysisResult }: LegalReportCardProps) {
         )}
 
         {/* 섹션 3: 참고 문헌 (RAG 근거) */}
-        {analysisResult.sources && analysisResult.sources.length > 0 && (
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 mb-2">
-              <BookOpen className="w-5 h-5 text-purple-600" />
-              <h3 className="text-lg font-bold text-slate-900">참고 문헌</h3>
-            </div>
-            <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
-              <div className="space-y-2">
-                {analysisResult.sources.slice(0, 5).map((source, idx) => (
-                  <div key={idx} className="text-xs text-slate-700">
-                    <span className="font-semibold text-slate-900">{idx + 1}. {source.title}</span>
-                    {source.score > 0 && (
-                      <span className="ml-2 text-slate-500">(유사도: {(source.score * 100).toFixed(0)}%)</span>
-                    )}
-                  </div>
-                ))}
-                {analysisResult.sources.length > 5 && (
-                  <div className="text-xs text-slate-500 italic">
-                    외 {analysisResult.sources.length - 5}개 문서 참고
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
+        {evidenceSources.length > 0 && (
+          <LegalEvidenceSection sources={evidenceSources} />
         )}
 
         {/* 하단 안내 */}
@@ -128,6 +138,15 @@ export function LegalReportCard({ analysisResult }: LegalReportCardProps) {
           </p>
         </div>
       </CardContent>
+
+      {/* 근거 자료 Drawer */}
+      {evidenceSources.length > 0 && (
+        <EvidenceDrawer
+          sources={evidenceSources}
+          isOpen={isDrawerOpen}
+          onOpenChange={setIsDrawerOpen}
+        />
+      )}
     </Card>
   )
 }

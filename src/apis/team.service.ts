@@ -571,34 +571,35 @@ export const updateTeam = async (
   if (error) throw error
 
   // 팀 임베딩 자동 업데이트 (비동기, 실패해도 팀 업데이트는 성공)
-  try {
-    const { generateTeamSummarySimple } = await import('@/lib/rag/team-summary')
-    const summaryData = generateTeamSummarySimple({
-      name: updatedTeam.name,
-      bio: updatedTeam.bio,
-      specialty: updatedTeam.specialty,
-      sub_specialty: updatedTeam.sub_specialty,
-      prefered: updatedTeam.prefered,
-    })
+  // TODO: @/lib/rag/team-summary 모듈이 구현되면 활성화
+  // try {
+  //   const { generateTeamSummarySimple } = await import('@/lib/rag/team-summary')
+  //   const summaryData = generateTeamSummarySimple({
+  //     name: updatedTeam.name,
+  //     bio: updatedTeam.bio,
+  //     specialty: updatedTeam.specialty,
+  //     sub_specialty: updatedTeam.sub_specialty,
+  //     prefered: updatedTeam.prefered,
+  //   })
 
-    // 백엔드 API로 임베딩 저장
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://localhost:8000'
-    await fetch(`${backendUrl}/api/v2/teams/embedding`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: new URLSearchParams({
-        team_id: String(teamId),
-        summary: summaryData.summary,
-        meta: JSON.stringify(summaryData.meta),
-      }),
-    }).catch(err => {
-      console.warn('[팀 임베딩] 자동 업데이트 실패 (무시됨):', err)
-    })
-  } catch (err) {
-    console.warn('[팀 임베딩] 자동 업데이트 중 오류 (무시됨):', err)
-  }
+  //   // 백엔드 API로 임베딩 저장
+  //   const backendUrl = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://localhost:8000'
+  //   await fetch(`${backendUrl}/api/v2/teams/embedding`, {
+  //     method: 'POST',
+  //     headers: {
+  //       'Content-Type': 'application/x-www-form-urlencoded',
+  //     },
+  //     body: new URLSearchParams({
+  //       team_id: String(teamId),
+  //       summary: summaryData.summary,
+  //       meta: JSON.stringify(summaryData.meta),
+  //     }),
+  //   }).catch(err => {
+  //     console.warn('[팀 임베딩] 자동 업데이트 실패 (무시됨):', err)
+  //   })
+  // } catch (err) {
+  //   console.warn('[팀 임베딩] 자동 업데이트 중 오류 (무시됨):', err)
+  // }
 
   return updatedTeam
 }

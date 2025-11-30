@@ -125,11 +125,18 @@ export function AmendmentModal({ issue, isOpen, onClose }: AmendmentModalProps) 
     
     setLoading(true)
     try {
+      // legalBasis가 LegalBasisItem[]인 경우 string[]로 변환
+      const legalBasisArray = Array.isArray(issue.legalBasis) 
+        ? issue.legalBasis.map(item => 
+            typeof item === 'string' ? item : item.title || item.snippet || ''
+          )
+        : []
+      
       const result = await rewriteClauseV2(
         issue.id, 
         issue.originalText, 
         issue.id,
-        issue.legalBasis || []
+        legalBasisArray
       )
       setRewritten(result)
       toast({

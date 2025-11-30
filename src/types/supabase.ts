@@ -990,6 +990,272 @@ export type Database = {
         }
         Relationships: []
       }
+      situation_analyses: {
+        Row: {
+          id: string
+          user_id: string | null
+          situation: string | null
+          category: string | null
+          category_hint: string | null
+          risk_score: number | null
+          risk_level: string | null
+          analysis: Json
+          created_at: string
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id?: string | null
+          situation?: string | null
+          category?: string | null
+          category_hint?: string | null
+          risk_score?: number | null
+          risk_level?: string | null
+          analysis?: Json
+          created_at?: string
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string | null
+          situation?: string | null
+          category?: string | null
+          category_hint?: string | null
+          risk_score?: number | null
+          risk_level?: string | null
+          analysis?: Json
+          created_at?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      contract_analyses: {
+        Row: {
+          id: string
+          doc_id: string | null
+          user_id: string | null
+          title: string | null
+          original_filename: string | null
+          file_name: string | null
+          doc_type: string | null
+          file_url: string | null
+          file_size: number | null
+          file_type: string | null
+          risk_score: number | null
+          risk_level: string | null
+          summary: string | null
+          contract_text: string | null
+          sections: Json | null
+          retrieved_contexts: Json | null
+          clauses: Json | null
+          highlighted_texts: Json | null
+          analysis_result: Json | null
+          created_at: string
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          doc_id?: string | null
+          user_id?: string | null
+          title?: string | null
+          original_filename?: string | null
+          file_name?: string | null
+          doc_type?: string | null
+          file_url?: string | null
+          file_size?: number | null
+          file_type?: string | null
+          risk_score?: number | null
+          risk_level?: string | null
+          summary?: string | null
+          contract_text?: string | null
+          sections?: Json | null
+          retrieved_contexts?: Json | null
+          clauses?: Json | null
+          highlighted_texts?: Json | null
+          analysis_result?: Json | null
+          created_at?: string
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          doc_id?: string | null
+          user_id?: string | null
+          title?: string | null
+          original_filename?: string | null
+          file_name?: string | null
+          doc_type?: string | null
+          file_url?: string | null
+          file_size?: number | null
+          file_type?: string | null
+          risk_score?: number | null
+          risk_level?: string | null
+          summary?: string | null
+          contract_text?: string | null
+          sections?: Json | null
+          retrieved_contexts?: Json | null
+          clauses?: Json | null
+          highlighted_texts?: Json | null
+          analysis_result?: Json | null
+          created_at?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      contract_issues: {
+        Row: {
+          id: string
+          contract_analysis_id: string
+          issue_id: string | null
+          category: string | null
+          severity: string | null
+          summary: string | null
+          original_text: string | null
+          legal_basis: string[] | null
+          explanation: string | null
+          suggested_revision: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          contract_analysis_id: string
+          issue_id?: string | null
+          category?: string | null
+          severity?: string | null
+          summary?: string | null
+          original_text?: string | null
+          legal_basis?: string[] | null
+          explanation?: string | null
+          suggested_revision?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          contract_analysis_id?: string
+          issue_id?: string | null
+          category?: string | null
+          severity?: string | null
+          summary?: string | null
+          original_text?: string | null
+          legal_basis?: string[] | null
+          explanation?: string | null
+          suggested_revision?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contract_issues_contract_analysis_id_fkey"
+            columns: ["contract_analysis_id"]
+            isOneToOne: false
+            referencedRelation: "contract_analyses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contract_chunks: {
+        Row: {
+          id: string
+          contract_id: string
+          article_number: number | null
+          paragraph_index: number | null
+          content: string
+          chunk_index: number | null
+          chunk_type: string | null
+          embedding: Json | null
+          metadata: Json | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          contract_id: string
+          article_number?: number | null
+          paragraph_index?: number | null
+          content: string
+          chunk_index?: number | null
+          chunk_type?: string | null
+          embedding?: Json | null
+          metadata?: Json | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          contract_id?: string
+          article_number?: number | null
+          paragraph_index?: number | null
+          content?: string
+          chunk_index?: number | null
+          chunk_type?: string | null
+          embedding?: Json | null
+          metadata?: Json | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      legal_chunks: {
+        Row: {
+          id: string
+          external_id: string
+          source_type: string
+          title: string
+          content: string
+          chunk_index: number
+          file_path: string | null
+          metadata: Json | null
+          embedding: Json | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          external_id: string
+          source_type: string
+          title: string
+          content: string
+          chunk_index?: number
+          file_path?: string | null
+          metadata?: Json | null
+          embedding?: Json | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          external_id?: string
+          source_type?: string
+          title?: string
+          content?: string
+          chunk_index?: number
+          file_path?: string | null
+          metadata?: Json | null
+          embedding?: Json | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      user_profiles: {
+        Row: {
+          id: string
+          user_id: string
+          username: string | null
+          email: string | null
+          created_at: string
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          username?: string | null
+          email?: string | null
+          created_at?: string
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          username?: string | null
+          email?: string | null
+          created_at?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

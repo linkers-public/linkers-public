@@ -357,12 +357,52 @@ export default function SituationAnalysisPage() {
       // analysis JSONB 필드에서 직접 데이터 추출
       const analysisData = analysis?.analysis || {}
       
+      // 디버깅: criteria 데이터 확인
+      console.log('🔍 [loadAnalysisById] 원본 analysis 객체:', analysis)
+      console.log('🔍 [loadAnalysisById] analysis.criteria:', analysis?.criteria)
+      console.log('🔍 [loadAnalysisById] analysis.analysis:', analysis?.analysis)
+      console.log('🔍 [loadAnalysisById] analysisData:', analysisData)
+      console.log('🔍 [loadAnalysisById] analysisData.criteria:', analysisData?.criteria)
+      
+      // 여러 경로에서 criteria 찾기 (우선순위: 최상위 > analysis.analysis > analysisData)
+      const criteriaFromTop = analysis?.criteria
+      const criteriaFromNestedAnalysis = analysis?.analysis?.criteria
+      const criteriaFromAnalysis = analysisData?.criteria
+      
+      console.log('🔍 [loadAnalysisById] criteriaFromTop:', criteriaFromTop)
+      console.log('🔍 [loadAnalysisById] criteriaFromNestedAnalysis:', criteriaFromNestedAnalysis)
+      console.log('🔍 [loadAnalysisById] criteriaFromAnalysis:', criteriaFromAnalysis)
+      
+      // 우선순위에 따라 criteria 선택
+      let criteriaRaw = null
+      if (criteriaFromTop && Array.isArray(criteriaFromTop) && criteriaFromTop.length > 0) {
+        criteriaRaw = criteriaFromTop
+        console.log('🔍 [loadAnalysisById] criteriaFromTop 사용')
+      } else if (criteriaFromNestedAnalysis && Array.isArray(criteriaFromNestedAnalysis) && criteriaFromNestedAnalysis.length > 0) {
+        criteriaRaw = criteriaFromNestedAnalysis
+        console.log('🔍 [loadAnalysisById] criteriaFromNestedAnalysis 사용')
+      } else if (criteriaFromAnalysis && Array.isArray(criteriaFromAnalysis) && criteriaFromAnalysis.length > 0) {
+        criteriaRaw = criteriaFromAnalysis
+        console.log('🔍 [loadAnalysisById] criteriaFromAnalysis 사용')
+      } else {
+        criteriaRaw = []
+        console.log('🔍 [loadAnalysisById] criteria를 찾을 수 없음, 빈 배열 사용')
+      }
+      
+      console.log('🔍 [loadAnalysisById] 최종 criteriaRaw:', criteriaRaw)
+      console.log('🔍 [loadAnalysisById] criteriaRaw 타입:', typeof criteriaRaw, Array.isArray(criteriaRaw))
+      console.log('🔍 [loadAnalysisById] criteriaRaw 길이:', Array.isArray(criteriaRaw) ? criteriaRaw.length : 0)
+      
+      // criteria가 배열이 아니거나 비어있으면 빈 배열로 설정
+      const criteriaArray = Array.isArray(criteriaRaw) ? criteriaRaw : []
+      console.log('🔍 [loadAnalysisById] 최종 criteriaArray:', criteriaArray)
+      
       const v1Format: SituationAnalysisResponse = {
         classifiedType: (analysis?.tags?.[0] || analysisData?.classifiedType || 'unknown') as SituationCategory,
         riskScore: analysis?.riskScore ?? analysis?.risk_score ?? analysisData?.riskScore ?? 0,
         summary: analysisData?.summary || analysis?.analysis?.summary || '',
-        // criteria는 analysis.criteria에서 직접 가져오기
-        criteria: (analysisData?.criteria || []).map((criterion: any) => ({
+        // criteria는 최상위 레벨(analysis.criteria) 또는 analysis JSONB 내부(analysisData.criteria)에서 가져오기
+        criteria: criteriaArray.map((criterion: any) => ({
           name: criterion?.name || '',
           status: (criterion?.status || 'likely') as 'likely' | 'unclear' | 'unlikely',
           reason: criterion?.reason || '',
@@ -417,6 +457,9 @@ export default function SituationAnalysisPage() {
         })),
       }
       
+      console.log('🔍 [loadAnalysisById 변환된 리포트] criteria 개수:', v1Format.criteria?.length || 0)
+      console.log('🔍 [loadAnalysisById 변환된 리포트] criteria 내용:', v1Format.criteria)
+      console.log('🔍 [loadAnalysisById 변환된 리포트] 전체 v1Format:', JSON.stringify(v1Format, null, 2))
       setAnalysisResult(v1Format)
       
       // 원본 상황 텍스트도 표시
@@ -568,6 +611,22 @@ export default function SituationAnalysisPage() {
       
       console.log('분석 결과:', result)
       console.log('summary 필드:', result.analysis.summary)
+      console.log('🔍 [handleAnalyze] 전체 응답 구조:', JSON.stringify(result, null, 2))
+      console.log('🔍 [handleAnalyze] result.criteria:', result?.criteria)
+      console.log('🔍 [handleAnalyze] result.criteria 타입:', typeof result?.criteria)
+      console.log('🔍 [handleAnalyze] result.criteria 배열 여부:', Array.isArray(result?.criteria))
+      
+      // 백엔드에서 criteria를 최상위 레벨에 반환하므로 result.criteria 사용
+      const criteriaArray = (result?.criteria && Array.isArray(result.criteria) && result.criteria.length > 0)
+        ? result.criteria
+        : []
+      
+      console.log('✅ [handleAnalyze] criteria 개수:', criteriaArray.length)
+      if (criteriaArray.length > 0) {
+        console.log('✅ [handleAnalyze] criteria 첫 번째 항목:', criteriaArray[0])
+      } else {
+        console.warn('⚠️ [handleAnalyze] criteria가 비어있습니다. 백엔드 응답 확인 필요.')
+      }
       
       // v2 응답을 v1 형식으로 변환 (기존 UI 호환성)
       // 안전성 검사: 모든 필드에 기본값 제공
@@ -575,8 +634,8 @@ export default function SituationAnalysisPage() {
         classifiedType: (result?.tags?.[0] || 'unknown') as SituationCategory,
         riskScore: result?.riskScore ?? 0,
         summary: result?.analysis?.summary || '',
-        // criteria는 v2 응답에서 직접 가져오기 (백엔드가 criteria를 반환하는 경우)
-        criteria: ((result as any)?.criteria || []).map((criterion: any) => ({
+        // criteria는 최상위 레벨(result.criteria) 또는 analysis 내부(result.analysis.criteria)에서 가져오기
+        criteria: criteriaArray.map((criterion: any) => ({
           name: criterion?.name || '',
           status: (criterion?.status || 'likely') as 'likely' | 'unclear' | 'unlikely',
           reason: criterion?.reason || '',
@@ -619,10 +678,13 @@ export default function SituationAnalysisPage() {
           id: c?.id || '',
           title: c?.title || '',
           summary: c?.summary || '',
+          link: c?.link,
+          externalId: c?.externalId || c?.id, // id와 동일
+          fileUrl: c?.fileUrl,
         })),
         sources: (result?.sources || []).map((source: any) => ({
           sourceId: source.sourceId || source.source_id || '',
-          sourceType: (source.sourceType || source.source_type || 'law') as 'law' | 'manual' | 'case',
+          sourceType: (source.sourceType || source.source_type || 'law') as 'law' | 'manual' | 'case' | 'standard_contract',
           title: source.title || '',
           snippet: source.snippet || '',
           score: source.score || 0,
@@ -632,6 +694,9 @@ export default function SituationAnalysisPage() {
       }
       
       console.log('변환된 리포트:', v1Format)
+      console.log('🔍 [변환된 리포트] criteria 개수:', v1Format.criteria?.length || 0)
+      console.log('🔍 [변환된 리포트] criteria 내용:', v1Format.criteria)
+      console.log('🔍 [변환된 리포트] 전체 v1Format:', JSON.stringify(v1Format, null, 2))
       setAnalysisResult(v1Format)
       
       // 분석 결과 ID 저장
@@ -1370,33 +1435,59 @@ export default function SituationAnalysisPage() {
                   분석 결과를 바탕으로 궁금한 점을 물어보세요
                 </CardDescription>
               </CardHeader>
-              <CardContent className="p-0">
-                <div className="h-[600px] border-t border-purple-200">
-                  <SituationChat
-                    analysisResult={analysisResult}
-                    situationSummary={summary ? `${summary}\n\n${details || ''}` : details}
-                    initialMessage={(() => {
-                      // 분석 결과 기반 초기 메시지 생성
-                      const criteria = analysisResult.criteria || []
-                      if (criteria.length > 0) {
-                        const firstCriterion = criteria[0]
-                        const criterionName = firstCriterion.name || ''
-                        if (criterionName.includes('수습') || criterionName.includes('인턴')) {
-                          return '위 분석 결과를 보니 수습기간 관련 부분이 법적으로 모호해 보입니다. 이 부분에 대해 구체적으로 상담해 드릴까요?'
-                        }
-                        if (criterionName.includes('임금') || criterionName.includes('체불')) {
-                          return '분석 결과에서 임금 체불 의심 사항이 확인되었습니다. 이 상황에서 어떤 조치를 취해야 하는지 자세히 알려드릴 수 있습니다.'
-                        }
+              <CardContent className="p-6">
+                <div className="flex flex-col items-center justify-center py-12 space-y-6">
+                  <div className="p-6 bg-gradient-to-br from-purple-100 to-indigo-100 rounded-3xl shadow-lg">
+                    <MessageSquare className="w-16 h-16 text-purple-600" />
+                  </div>
+                  <div className="text-center space-y-2">
+                    <h3 className="text-xl font-bold text-slate-900">챗봇 대화 시작하기</h3>
+                    <p className="text-slate-600 max-w-md">
+                      이 분석 결과를 참고하여 AI와 대화를 시작하세요.<br />
+                      법적 권리나 다음 단계에 대해 상세히 상담받을 수 있습니다.
+                    </p>
+                  </div>
+                  <Button
+                    onClick={() => {
+                      if (analysisId) {
+                        router.push(`/legal/assist/quick?contextType=situation&contextId=${analysisId}`)
+                      } else {
+                        router.push('/legal/assist/quick')
                       }
-                      return '위 분석 결과를 바탕으로 궁금한 점을 물어보세요. 법적 권리나 다음 단계에 대해 상담해 드릴 수 있습니다.'
-                    })()}
-                    suggestedQuestions={[
+                    }}
+                    className={cn(
+                      "bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700",
+                      "text-white shadow-xl hover:shadow-2xl",
+                      "px-8 py-6 text-lg font-semibold",
+                      "transition-all duration-200"
+                    )}
+                    size="lg"
+                  >
+                    <MessageSquare className="w-5 h-5 mr-2" />
+                    챗봇 대화 시작하기
+                  </Button>
+                  <div className="flex flex-wrap gap-2 justify-center mt-4">
+                    {[
                       '지금 그만두면 손해인가요?',
                       '신고 절차 알려줘',
                       '증거는 어떻게 모으나요?',
                       '사장님이 협박성 발언을 하는데 어떡하죠?'
-                    ]}
-                  />
+                    ].map((question, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => {
+                          if (analysisId) {
+                            router.push(`/legal/assist/quick?contextType=situation&contextId=${analysisId}&question=${encodeURIComponent(question)}`)
+                          } else {
+                            router.push(`/legal/assist/quick?question=${encodeURIComponent(question)}`)
+                          }
+                        }}
+                        className="px-4 py-2 text-sm bg-white border-2 border-purple-200 rounded-lg hover:border-purple-400 hover:bg-purple-50 transition-colors text-slate-700"
+                      >
+                        {question}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </CardContent>
             </Card>

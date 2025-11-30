@@ -36,6 +36,10 @@ from models.schemas import (
     UsedChunksV2,
     UsedChunkV2,
     ConversationRequestV2,
+    ChatSessionCreateRequest,
+    ChatMessageRequest,
+    ActionPlan,
+    CriteriaItem,
 )
 from core.legal_rag_service import LegalRAGService
 from core.document_processor_v2 import DocumentProcessor
@@ -1249,6 +1253,12 @@ async def analyze_situation(
             use_workflow=True,  # 워크플로우 활성화: 분류 → 필터링 → RAG 검색 → 리포트 생성
         )
         
+        # 디버깅: 워크플로우 결과 확인
+        _logger.info(f"[analyze-situation] 워크플로우 결과 키: {list(result.keys()) if isinstance(result, dict) else 'Not a dict'}")
+        _logger.info(f"[analyze-situation] 워크플로우 결과 criteria: {result.get('criteria', 'NOT FOUND')}")
+        _logger.info(f"[analyze-situation] 워크플로우 결과 criteria 타입: {type(result.get('criteria', []))}")
+        _logger.info(f"[analyze-situation] 워크플로우 결과 criteria 길이: {len(result.get('criteria', [])) if isinstance(result.get('criteria', []), list) else 'Not a list'}")
+        
         # v2 스펙에 맞춰 변환
         risk_level = "low"
         if result["risk_score"] >= 70:
@@ -1310,14 +1320,37 @@ async def analyze_situation(
                 toAdvisor=scripts_data.get("to_advisor"),
             )
         
-        # relatedCases 변환
+        # relatedCases 변환 (externalId와 fileUrl 추가)
         related_cases = []
+        # 공통 유틸 함수 사용 (fileUrl 생성용)
+        from core.file_utils import get_document_file_url
+        
         for case in result.get("related_cases", []):
+            case_id = case.get("id", "")
+            # relatedCases의 id는 이미 external_id입니다
+            external_id = case_id
+            # source_type 가져오기 (grounding_chunks에서 제공된 경우)
+            case_source_type = case.get("source_type", "case")  # 기본값: case
+            
+            # fileUrl 생성 (공통 유틸 함수 사용, 실제 source_type 사용)
+            file_url = None
+            if external_id:
+                try:
+                    file_url = get_document_file_url(
+                        external_id=external_id,
+                        source_type=case_source_type,  # 실제 source_type 사용 (case 또는 standard_contract)
+                        expires_in=3600
+                    )
+                except Exception as e:
+                    _logger.warning(f"relatedCase fileUrl 생성 실패 (id={case_id}, sourceType={case_source_type}): {str(e)}")
+            
             related_cases.append({
-                "id": case.get("id", ""),
+                "id": case_id,  # external_id
                 "title": case.get("title", ""),
                 "summary": case.get("summary", ""),
                 "link": None,
+                "externalId": external_id,  # id와 동일 (이미 external_id)
+                "fileUrl": file_url,  # 스토리지 Signed URL (공통 유틸 함수 사용, 실제 source_type 사용)
             })
         
         # tags 추출 (classified_type 기반)
@@ -1326,15 +1359,48 @@ async def analyze_situation(
         # sources 변환 (RAG 검색 출처)
         sources = []
         grounding_chunks = result.get("grounding_chunks", [])
+        # 공통 유틸 함수 사용 (fileUrl 생성용)
+        from core.file_utils import get_document_file_url
+        # DB 조회용 vector_store 인스턴스
+        from core.supabase_vector_store import SupabaseVectorStore
+        vector_store = SupabaseVectorStore()
+        
         for chunk in grounding_chunks:
+            source_id = chunk.get("source_id", "")  # legal_chunks.id (UUID)
+            source_type = chunk.get("source_type", "law")
+            # externalId는 grounding_chunks에서 제공된 external_id 사용 (실제 파일 ID)
+            external_id = chunk.get("external_id") or chunk.get("externalId")
+            
+            # external_id나 source_type이 없으면 DB에서 조회
+            if not external_id or not source_type:
+                chunk_info = vector_store.get_legal_chunk_by_id(source_id)
+                if chunk_info:
+                    external_id = external_id or chunk_info.get("external_id")
+                    source_type = source_type or chunk_info.get("source_type", "law")
+            
+            # fileUrl 생성 (공통 유틸 함수 사용, external_id와 source_type 사용)
+            file_url = None
+            if external_id and source_type:
+                try:
+                    file_url = get_document_file_url(
+                        external_id=external_id,
+                        source_type=source_type,
+                        expires_in=3600
+                    )
+                except Exception as e:
+                    _logger.warning(f"source fileUrl 생성 실패 (externalId={external_id}, sourceType={source_type}): {str(e)}")
+            elif chunk.get("file_url"):
+                # 이미 생성된 file_url이 있으면 사용
+                file_url = chunk.get("file_url")
+            
             sources.append({
-                "sourceId": chunk.get("source_id", ""),
-                "sourceType": chunk.get("source_type", "law"),
+                "sourceId": source_id,  # legal_chunks.id (UUID)
+                "sourceType": source_type,
                 "title": chunk.get("title", ""),
                 "snippet": chunk.get("snippet", ""),
                 "score": float(chunk.get("score", 0.0)),
-                "externalId": chunk.get("external_id"),  # 파일 ID 추가
-                "fileUrl": chunk.get("file_url"),  # 스토리지 Signed URL 추가
+                "externalId": external_id,  # legal_chunks.external_id (실제 파일 ID, DB 조회로 보완)
+                "fileUrl": file_url or chunk.get("file_url"),  # 스토리지 Signed URL (공통 유틸 함수 사용)
             })
         
         # DB에 저장 (비동기, 실패해도 응답은 반환)
@@ -1387,6 +1453,32 @@ async def analyze_situation(
         
         # v2 응답 생성 (DB 저장 후 ID 포함)
         # Pydantic 모델에 없는 필드는 dict로 변환 후 추가
+        
+        # criteria 확인 및 로깅
+        criteria_from_result = result.get("criteria", [])
+        _logger.info(f"[analyze-situation] result에서 criteria 가져옴: 개수={len(criteria_from_result) if isinstance(criteria_from_result, list) else 0}")
+        if criteria_from_result:
+            _logger.info(f"[analyze-situation] criteria 첫 번째 항목: {criteria_from_result[0] if isinstance(criteria_from_result, list) and len(criteria_from_result) > 0 else 'N/A'}")
+        
+        # criteria를 CriteriaItem 모델 리스트로 변환
+        criteria_items = []
+        if isinstance(criteria_from_result, list) and len(criteria_from_result) > 0:
+            for criterion in criteria_from_result:
+                if isinstance(criterion, dict):
+                    criteria_items.append(CriteriaItem(**criterion))
+                else:
+                    criteria_items.append(criterion)
+        
+        # actionPlan을 ActionPlan 모델로 변환
+        action_plan_dict = result.get("action_plan", {})
+        action_plan_model = None
+        if action_plan_dict and isinstance(action_plan_dict, dict) and action_plan_dict.get("steps"):
+            try:
+                action_plan_model = ActionPlan(**action_plan_dict)
+            except Exception as e:
+                _logger.warning(f"[analyze-situation] actionPlan 변환 실패: {str(e)}, 원본 사용: {action_plan_dict}")
+                action_plan_model = None
+        
         response_dict = {
             "id": situation_analysis_id,  # DB 저장 후 ID 포함
             "riskScore": float(result["risk_score"]),
@@ -1401,15 +1493,14 @@ async def analyze_situation(
             "scripts": scripts,
             "relatedCases": related_cases,
             "sources": sources,  # RAG 검색 출처
-            # 프론트엔드가 기대하는 추가 필드들
-            "criteria": result.get("criteria", []),  # 법적 판단 기준
-            "actionPlan": result.get("action_plan", {}),  # 행동 계획
+            # 프론트엔드가 기대하는 추가 필드들 (이제 모델에 포함됨)
+            "criteria": criteria_items,  # 법적 판단 기준
+            "actionPlan": action_plan_model,  # 행동 계획
         }
-        response = SituationResponseV2(**{k: v for k, v in response_dict.items() if k in SituationResponseV2.model_fields})
-        # Pydantic 모델에 없는 필드는 직접 추가
+        response = SituationResponseV2(**response_dict)
         response_dict_final = response.model_dump()
-        response_dict_final["criteria"] = result.get("criteria", [])
-        response_dict_final["actionPlan"] = result.get("action_plan", {})
+        
+        _logger.info(f"[analyze-situation] 최종 응답에 criteria 포함: 개수={len(response_dict_final.get('criteria', []))}")
         return response_dict_final
         
         return response
@@ -1480,7 +1571,7 @@ async def save_conversation(
     x_user_id: Optional[str] = Header(None, alias="X-User-Id", description="사용자 ID"),
 ):
     """
-    상황 분석 대화 메시지 저장
+    상황 분석 대화 메시지 저장 (레거시 호환성)
     """
     try:
         storage_service = get_storage_service()
@@ -1507,7 +1598,7 @@ async def get_conversations(
     x_user_id: Optional[str] = Header(None, alias="X-User-Id", description="사용자 ID"),
 ):
     """
-    상황 분석 대화 메시지 조회
+    상황 분석 대화 메시지 조회 (레거시 호환성)
     """
     try:
         storage_service = get_storage_service()
@@ -1521,6 +1612,126 @@ async def get_conversations(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"대화 메시지 조회 중 오류가 발생했습니다: {str(e)}",
+        )
+
+
+@router.post("/chat/sessions", response_model=dict)
+async def create_chat_session(
+    payload: ChatSessionCreateRequest,
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id", description="사용자 ID"),
+):
+    """
+    새로운 채팅 세션 생성
+    """
+    if not x_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="사용자 ID가 필요합니다",
+        )
+    
+    try:
+        storage_service = get_storage_service()
+        session_id = await storage_service.create_chat_session(
+            user_id=x_user_id,
+            initial_context_type=payload.initial_context_type,
+            initial_context_id=payload.initial_context_id,
+            title=payload.title,
+        )
+        return {"id": session_id, "success": True}
+    except Exception as e:
+        logger.error(f"채팅 세션 생성 중 오류 발생: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"채팅 세션 생성 중 오류가 발생했습니다: {str(e)}",
+        )
+
+
+@router.post("/chat/messages", response_model=dict)
+async def save_chat_message(
+    payload: ChatMessageRequest,
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id", description="사용자 ID"),
+):
+    """
+    채팅 메시지 저장
+    """
+    if not x_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="사용자 ID가 필요합니다",
+        )
+    
+    try:
+        storage_service = get_storage_service()
+        message_id = await storage_service.save_chat_message(
+            session_id=payload.session_id,
+            user_id=x_user_id,
+            message=payload.message,
+            sender_type=payload.sender_type,
+            sequence_number=payload.sequence_number,
+            context_type=payload.context_type,
+            context_id=payload.context_id,
+            metadata=payload.metadata,
+        )
+        return {"id": message_id, "success": True}
+    except Exception as e:
+        logger.error(f"채팅 메시지 저장 중 오류 발생: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"채팅 메시지 저장 중 오류가 발생했습니다: {str(e)}",
+        )
+
+
+@router.get("/chat/sessions", response_model=List[dict])
+async def get_user_chat_sessions(
+    limit: int = 50,
+    offset: int = 0,
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id", description="사용자 ID"),
+):
+    """
+    사용자의 채팅 세션 목록 조회
+    """
+    if not x_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="사용자 ID가 필요합니다",
+        )
+    
+    try:
+        storage_service = get_storage_service()
+        sessions = await storage_service.get_user_chat_sessions(
+            user_id=x_user_id,
+            limit=limit,
+            offset=offset,
+        )
+        return sessions
+    except Exception as e:
+        logger.error(f"채팅 세션 목록 조회 중 오류 발생: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"채팅 세션 목록 조회 중 오류가 발생했습니다: {str(e)}",
+        )
+
+
+@router.get("/chat/sessions/{session_id}/messages", response_model=List[dict])
+async def get_chat_messages(
+    session_id: str,
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id", description="사용자 ID"),
+):
+    """
+    채팅 메시지 조회
+    """
+    try:
+        storage_service = get_storage_service()
+        messages = await storage_service.get_chat_messages(
+            session_id=session_id,
+            user_id=x_user_id,
+        )
+        return messages
+    except Exception as e:
+        logger.error(f"채팅 메시지 조회 중 오류 발생: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"채팅 메시지 조회 중 오류가 발생했습니다: {str(e)}",
         )
 
 

@@ -584,6 +584,41 @@ class SupabaseVectorStore:
             print(f"[경고] 중복 체크 실패: {str(e)}")
             return False
     
+    def get_legal_chunk_by_id(self, chunk_id: str) -> Optional[Dict[str, Any]]:
+        """
+        legal_chunks 테이블에서 id로 청크 정보 조회
+        
+        Args:
+            chunk_id: legal_chunks.id (UUID)
+            
+        Returns:
+            {
+                "id": str,
+                "external_id": str,
+                "source_type": str,
+                "title": str,
+                ...
+            } 또는 None
+        """
+        self._ensure_initialized()
+        if not chunk_id:
+            return None
+        
+        try:
+            result = self.sb.table("legal_chunks")\
+                .select("id, external_id, source_type, title, file_path")\
+                .eq("id", chunk_id)\
+                .limit(1)\
+                .single()\
+                .execute()
+            
+            return result.data if result.data else None
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"legal_chunk 조회 실패 (id={chunk_id}): {str(e)}")
+            return None
+    
     def bulk_upsert_legal_chunks(
         self,
         chunks: List[Dict[str, Any]]
@@ -740,55 +775,102 @@ class SupabaseVectorStore:
         self,
         external_id: str,
         source_type: str,
-        expires_in: int = 3600  # 1시간
+        expires_in: int = 3600,  # 1시간 (Public URL에서는 사용하지 않지만 호환성을 위해 유지)
+        bucket_name: Optional[str] = None,  # 버킷 이름 (None이면 자동 선택)
+        file_path_override: Optional[str] = None  # 직접 경로 지정 (우선순위 높음)
     ) -> Optional[str]:
         """
-        스토리지에서 파일 다운로드 Signed URL 생성
+        스토리지에서 파일 다운로드 Public URL 생성
         
         Args:
-            external_id: 파일 ID (legal_chunks.external_id)
+            external_id: 파일 ID (legal_chunks.external_id 또는 related_cases.id)
             source_type: 소스 타입 ('law' | 'manual' | 'case' | 'standard_contract')
-            expires_in: URL 만료 시간 (초, 기본값: 3600 = 1시간)
+            expires_in: URL 만료 시간 (초, Public URL에서는 사용하지 않지만 호환성을 위해 유지)
+            bucket_name: 버킷 이름 (None이면 source_type에 따라 자동 선택)
+            file_path_override: 직접 경로 지정 (우선순위 높음, 예: "contracts/anonymous/1764330928000_olvxin.pdf")
         
         Returns:
-            Signed URL 또는 None (파일이 없거나 오류 발생 시)
+            Public URL 또는 None (파일이 없거나 오류 발생 시)
         """
         self._ensure_initialized()
         
         if not external_id:
             return None
         
-        # source_type에 따른 버킷 경로 매핑
-        bucket_map = {
-            'law': 'laws',
-            'manual': 'manuals',
-            'case': 'cases',
-            'standard_contract': 'standard_contracts',
-        }
-        
-        bucket_folder = bucket_map.get(source_type, 'laws')
-        file_path = f"{bucket_folder}/{external_id}.pdf"
+        # file_path_override가 있으면 직접 사용
+        if file_path_override:
+            file_path = file_path_override
+            # 버킷 이름이 지정되지 않았으면 기본값 사용
+            if not bucket_name:
+                bucket_name = "attach_file"
+        else:
+            # 버킷 이름 자동 선택
+            if not bucket_name:
+                # standard_contract는 attach_file 버킷 사용
+                if source_type == 'standard_contract':
+                    bucket_name = "attach_file"
+                    # standard_contract의 경우 contracts 폴더 사용
+                    # external_id가 이미 전체 경로일 수도 있음
+                    if '/' in external_id:
+                        file_path = external_id
+                    else:
+                        # external_id만 있으면 contracts/anonymous/{external_id}.pdf 형식 가정
+                        file_path = f"contracts/anonymous/{external_id}.pdf"
+                else:
+                    # 기존 legal-sources 버킷 사용
+                    bucket_name = "legal-sources"
+                    # source_type에 따른 버킷 경로 매핑
+                    bucket_map = {
+                        'law': 'laws',
+                        'manual': 'manuals',
+                        'case': 'cases',
+                        'standard_contract': 'standard_contracts',
+                    }
+                    bucket_folder = bucket_map.get(source_type, 'laws')
+                    file_path = f"{bucket_folder}/{external_id}.pdf"
+            else:
+                # 버킷 이름이 지정되었지만 경로는 자동 생성
+                if source_type == 'standard_contract':
+                    if '/' in external_id:
+                        file_path = external_id
+                    else:
+                        file_path = f"contracts/anonymous/{external_id}.pdf"
+                else:
+                    bucket_map = {
+                        'law': 'laws',
+                        'manual': 'manuals',
+                        'case': 'cases',
+                        'standard_contract': 'standard_contracts',
+                    }
+                    bucket_folder = bucket_map.get(source_type, 'laws')
+                    file_path = f"{bucket_folder}/{external_id}.pdf"
         
         try:
-            # Supabase Storage에서 Signed URL 생성
-            response = self.sb.storage.from_('legal-sources')\
-                .create_signed_url(file_path, expires_in)
+            # 방법 1: Supabase Python SDK의 get_public_url 메서드 사용 시도
+            try:
+                public_url = self.sb.storage.from_(bucket_name).get_public_url(file_path)
+                if public_url:
+                    return public_url
+            except (AttributeError, Exception) as sdk_error:
+                # get_public_url 메서드가 없거나 실패한 경우 직접 URL 조합
+                pass
             
-            if response and 'signedURL' in response:
-                return response['signedURL']
-            elif response and isinstance(response, dict) and 'data' in response:
-                # 응답 형식이 다른 경우
-                data = response.get('data', {})
-                if isinstance(data, dict) and 'signedURL' in data:
-                    return data['signedURL']
-                elif isinstance(data, str):
-                    return data
+            # 방법 2: 직접 Public URL 조합
+            supabase_url = os.getenv("SUPABASE_URL") or settings.supabase_url
+            if not supabase_url:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"SUPABASE_URL이 설정되지 않아 Public URL 생성 실패")
+                return None
             
-            return None
+            # Public URL 형식: {supabase_url}/storage/v1/object/public/{bucket}/{path}
+            public_url = f"{supabase_url.rstrip('/')}/storage/v1/object/public/{bucket_name}/{file_path}"
+            return public_url
+            
         except Exception as e:
             import logging
             logger = logging.getLogger(__name__)
-            logger.warning(f"스토리지 URL 생성 실패 (external_id={external_id}, source_type={source_type}): {str(e)}")
+            logger.warning(f"스토리지 Public URL 생성 실패 (external_id={external_id}, source_type={source_type}, bucket={bucket_name}): {str(e)}")
             return None
     
     def search_similar_contract_chunks(

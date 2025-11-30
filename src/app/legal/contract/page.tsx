@@ -291,8 +291,8 @@ export default function ContractAnalysisPage() {
       const analysisData = {
         ...result, // 백엔드 응답 전체 포함 (docId, title, riskScore, riskLevel, sections, issues, summary, retrievedContexts, contractText, createdAt)
         // 호환성을 위해 contractText와 contract_text 둘 다 저장
-        contractText: result.contractText ?? result.contract_text ?? contractText ?? '',
-        contract_text: result.contract_text ?? result.contractText ?? contractText ?? '',
+        contractText: result.contractText ?? contractText ?? '',
+        contract_text: result.contractText ?? contractText ?? '',
         // 추가 메타데이터
         risk_score: result.riskScore,
         risk_level: result.riskLevel,
@@ -481,8 +481,8 @@ export default function ContractAnalysisPage() {
       // Step 3: 분석 결과를 로컬 스토리지에 저장
       const analysisData = {
         ...result,
-        contractText: result.contractText ?? result.contract_text ?? contractText ?? '',
-        contract_text: result.contract_text ?? result.contractText ?? contractText ?? '',
+        contractText: result.contractText ?? contractText ?? '',
+        contract_text: result.contractText ?? contractText ?? '',
         risk_score: result.riskScore,
         risk_level: result.riskLevel,
         fileUrl,

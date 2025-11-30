@@ -139,11 +139,14 @@ export interface RelatedCase {
   id: string
   title: string
   summary: string
+  link?: string
+  externalId?: string  // 파일 ID (스토리지 경로 생성용, id와 동일)
+  fileUrl?: string  // 스토리지 Signed URL (파일 다운로드용)
 }
 
 export interface SourceItem {
   sourceId: string
-  sourceType: 'law' | 'manual' | 'case'
+  sourceType: 'law' | 'manual' | 'case' | 'standard_contract'
   title: string
   snippet: string
   score: number

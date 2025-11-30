@@ -27,6 +27,7 @@ interface Document {
   external_id?: string
   budget_min?: number
   budget_max?: number
+  duration_months?: number
   start_date?: string
   end_date?: string
   status?: string
