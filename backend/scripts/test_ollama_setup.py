@@ -4,7 +4,11 @@ Ollama 설정 확인 스크립트
 """
 
 import sys
+import warnings
 from pathlib import Path
+
+# langchain-community의 Ollama Deprecated 경고 무시
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="langchain")
 
 # 프로젝트 루트를 Python 경로에 추가
 sys.path.insert(0, str(Path(__file__).parent.parent))

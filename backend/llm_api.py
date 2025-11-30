@@ -80,7 +80,7 @@ def ask_groq(user_input: str, system_role: str = "너는 유능한 법률 AI야.
         return f"에러가 발생했습니다: {str(e)}"
 
 
-def ask_groq_with_messages(messages: list, temperature: float = 0.5, model: str = "llama-3.3-70b-versatile") -> str:
+def ask_groq_with_messages(messages: list, temperature: float = 0.5, model: str = "llama-3.3-70b-versatile", max_tokens: int = 4096) -> str:
     """
     메시지 리스트를 받아서 Groq에게 물어보고 답을 리턴합니다.
     
@@ -88,6 +88,7 @@ def ask_groq_with_messages(messages: list, temperature: float = 0.5, model: str 
         messages: 메시지 리스트 (예: [{"role": "system", "content": "..."}, {"role": "user", "content": "..."}])
         temperature: 온도 설정 (기본값: 0.5)
         model: 사용할 모델 (기본값: "llama-3.3-70b-versatile")
+        max_tokens: 최대 토큰 수 (기본값: 4096, 응답 시간 단축을 위해 제한)
     
     Returns:
         LLM 응답 텍스트
@@ -109,6 +110,7 @@ def ask_groq_with_messages(messages: list, temperature: float = 0.5, model: str 
             model=model,
             messages=messages,
             temperature=temperature,
+            max_tokens=max_tokens,  # 응답 길이 제한으로 생성 시간 단축
         )
         # 결과 텍스트만 깔끔하게 뽑아서 돌려줌
         response_content = completion.choices[0].message.content

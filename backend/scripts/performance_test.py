@@ -25,6 +25,13 @@ from core.supabase_vector_store import SupabaseVectorStore
 from core.document_processor_v2 import DocumentProcessor
 from config import settings
 
+# 상황분석 워크플로우 (선택적)
+try:
+    from core.situation_workflow import SituationWorkflow
+    SITUATION_WORKFLOW_AVAILABLE = True
+except ImportError:
+    SITUATION_WORKFLOW_AVAILABLE = False
+
 
 class PerformanceTester:
     """성능 테스트 클래스"""
@@ -449,9 +456,109 @@ class PerformanceTester:
         
         return pipeline_times
     
+    async def test_situation_analysis_pipeline(self, iterations: int = 3) -> Dict[str, Any]:
+        """상황분석 파이프라인 전체 테스트"""
+        self.print_header("8. 상황분석 파이프라인 성능")
+        
+        if not SITUATION_WORKFLOW_AVAILABLE:
+            print("   ⚠️ LangGraph가 설치되지 않아 상황분석 워크플로우를 테스트할 수 없습니다.")
+            print("   해결: pip install langgraph")
+            return {}
+        
+        # 테스트 케이스
+        test_cases = [
+            {
+                "situation_text": "3개월째 월급이 늦게 들어와요. 매번 다음 달 중순에 들어오는데, 이번 달은 아직도 안 들어왔어요.",
+                "category_hint": "unpaid_wage",
+                "employment_type": "regular",
+                "work_period": "1_3_years",
+                "weekly_hours": 40,
+                "is_probation": False,
+                "social_insurance": "all",
+            },
+            {
+                "situation_text": "수습 기간 중인데 갑자기 해고 통보를 받았어요. 이유를 물어봐도 명확한 답변을 주지 않아요.",
+                "category_hint": "unfair_dismissal",
+                "employment_type": "regular",
+                "work_period": "under_1_month",
+                "weekly_hours": 40,
+                "is_probation": True,
+                "social_insurance": "all",
+            },
+            {
+                "situation_text": "주 60시간씩 일하는데 연장수당을 제대로 받지 못하고 있어요.",
+                "category_hint": "overtime",
+                "employment_type": "regular",
+                "work_period": "1_3_years",
+                "weekly_hours": 60,
+                "is_probation": False,
+                "social_insurance": "all",
+            },
+        ]
+        
+        all_pipeline_times = []
+        
+        for i in range(min(iterations, len(test_cases))):
+            test_case = test_cases[i]
+            print(f"\n   테스트 케이스 {i+1}/{iterations}: {test_case['category_hint']}")
+            print(f"   상황: {test_case['situation_text'][:50]}...")
+            
+            pipeline_times = {}
+            
+            try:
+                workflow = SituationWorkflow()
+                
+                # 전체 파이프라인 시간 측정
+                start = time.time()
+                result = await workflow.run(test_case)
+                total_time = time.time() - start
+                pipeline_times["전체 파이프라인"] = total_time
+                
+                # 결과 확인
+                if result:
+                    print(f"      ✅ 완료: {total_time:.3f}초")
+                    if "final_output" in result:
+                        final = result["final_output"]
+                        print(f"         - 위험도: {final.get('risk_score', 'N/A')}")
+                        print(f"         - 판단 기준: {len(final.get('criteria', []))}개")
+                        print(f"         - 행동 계획: {len(final.get('action_plan', {}).get('steps', []))}단계")
+                    else:
+                        print(f"         - 분류: {result.get('classification', {}).get('classified_type', 'N/A')}")
+                        print(f"         - 위험도: {result.get('classification', {}).get('risk_score', 'N/A')}")
+                else:
+                    print(f"      ⚠️ 결과 없음: {total_time:.3f}초")
+                
+                all_pipeline_times.append(pipeline_times)
+                
+            except Exception as e:
+                print(f"      ❌ 실패: {str(e)}")
+                import traceback
+                traceback.print_exc()
+        
+        # 통계 계산
+        if all_pipeline_times:
+            total_times = [pt["전체 파이프라인"] for pt in all_pipeline_times if "전체 파이프라인" in pt]
+            if total_times:
+                avg_time = statistics.mean(total_times)
+                min_time = min(total_times)
+                max_time = max(total_times)
+                print(f"\n   통계:")
+                print(f"      평균: {avg_time:.3f}초")
+                print(f"      최소: {min_time:.3f}초")
+                print(f"      최대: {max_time:.3f}초")
+                
+                return {
+                    "평균 시간": avg_time,
+                    "최소 시간": min_time,
+                    "최대 시간": max_time,
+                    "테스트 횟수": len(total_times),
+                }
+        
+        return {}
+    
     async def test_async_parallelism(self) -> Dict[str, float]:
         """비동기 병렬 처리 효과 테스트"""
-        self.print_header("8. 비동기 병렬 처리 효과")
+        self.print_header("9. 비동기 병렬 처리 효과")
         
         queries = [
             "수습 기간 해고 조건",
@@ -615,7 +722,7 @@ async def main():
         dual_rag_times = await tester.test_dual_rag_search(iterations=5)
         tester.print_result("Dual RAG 검색", dual_rag_times)
         
-        # 7. 전체 파이프라인
+        # 7. 전체 계약서 분석 파이프라인
         pipeline_results = await tester.test_contract_analysis_pipeline()
         for stage, time_taken in pipeline_results.items():
             print(f"\n   {stage}: {time_taken:.3f}초")
@@ -628,7 +735,24 @@ async def main():
             }
             tester._save_final_results()
         
-        # 8. 비동기 병렬 처리
+        # 8. 상황분석 파이프라인
+        situation_results = await tester.test_situation_analysis_pipeline(iterations=3)
+        if situation_results:
+            print(f"\n   상황분석 파이프라인 결과:")
+            for key, value in situation_results.items():
+                if isinstance(value, float):
+                    print(f"      {key}: {value:.3f}초")
+                else:
+                    print(f"      {key}: {value}")
+            
+            # 상황분석 결과도 저장
+            tester.all_results["situation_pipeline_results"] = {
+                key: round(value, 3) if isinstance(value, float) else value
+                for key, value in situation_results.items()
+            }
+            tester._save_final_results()
+        
+        # 9. 비동기 병렬 처리
         async_results = await tester.test_async_parallelism()
         for test_type, time_taken in async_results.items():
             if isinstance(time_taken, float):

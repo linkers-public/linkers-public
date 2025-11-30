@@ -10,6 +10,10 @@ import asyncio
 import logging
 import json
 import re
+import warnings
+
+# langchain-community의 Ollama Deprecated 경고 무시
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="langchain")
 
 from models.schemas import (
     LegalAnalysisResult,
@@ -1161,7 +1165,8 @@ class LegalRAGService:
                     response_text = ask_groq_with_messages(
                         messages=messages,
                         temperature=settings.llm_temperature,
-                        model=settings.groq_model
+                        model=settings.groq_model,
+                        max_tokens=8192  # 계약서 분석은 긴 JSON 응답이 필요하므로 토큰 수 증가
                     )
                     logger.info(f"[Groq 호출 성공] 응답 길이: {len(response_text) if response_text else 0}자")
                 except Exception as groq_error:
@@ -1244,7 +1249,8 @@ class LegalRAGService:
                         logger.warning(f"[JSON 파싱] ❌ JSON 파싱 실패: {str(json_err)}")
                         logger.warning(f"[JSON 파싱] 에러 위치: line {json_err.lineno}, col {json_err.colno}")
                         logger.warning(f"[JSON 파싱] 문제가 있는 부분: {json_str[max(0, json_err.pos-50):json_err.pos+50]}")
-                        # 마지막 중괄호까지 찾기
+                        # 더 robust한 JSON 복구 시도
+                        # 1. 마지막 완전한 중괄호까지 찾기
                         brace_count = 0
                         last_valid_pos = -1
                         for i, char in enumerate(json_str):
@@ -1257,11 +1263,27 @@ class LegalRAGService:
                                     break
                         
                         if last_valid_pos > 0:
-                            json_str = json_str[:last_valid_pos]
+                            json_str_truncated = json_str[:last_valid_pos]
                             try:
-                                analysis = json.loads(json_str)
+                                analysis = json.loads(json_str_truncated)
+                                logger.warning(f"[JSON 파싱] ⚠️ JSON이 잘렸지만 복구 성공 (원본: {len(json_str)}자, 복구: {len(json_str_truncated)}자)")
                             except:
-                                raise json_err
+                                # 2. issues 배열의 마지막 항목까지 찾기
+                                try:
+                                    # issues 배열의 마지막 항목 찾기
+                                    issues_match = re.search(r'"issues"\s*:\s*\[([\s\S]*?)\]', json_str)
+                                    if issues_match:
+                                        # issues 배열을 닫고 나머지 필드 추가
+                                        json_str_fixed = json_str[:json_err.pos]
+                                        # 마지막 불완전한 객체 제거
+                                        json_str_fixed = re.sub(r',\s*\{[^}]*$', '', json_str_fixed)
+                                        json_str_fixed += '\n  ]\n}'
+                                        analysis = json.loads(json_str_fixed)
+                                        logger.warning(f"[JSON 파싱] ⚠️ issues 배열 복구로 JSON 파싱 성공")
+                                    else:
+                                        raise json_err
+                                except:
+                                    raise json_err
                         else:
                             raise json_err
                     risk_score = analysis.get("risk_score", 50)

@@ -7,8 +7,12 @@ import json
 import logging
 import re
 import asyncio
+import warnings
 from typing import Dict, Any, Optional
 from config import settings
+
+# langchain-community의 Ollama Deprecated 경고 무시
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="langchain")
 
 logger = logging.getLogger(__name__)
 

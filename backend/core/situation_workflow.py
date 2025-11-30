@@ -8,6 +8,10 @@ import asyncio
 import logging
 import json
 import re
+import warnings
+
+# langchain-community의 Ollama Deprecated 경고 무시
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="langchain")
 
 logger = logging.getLogger(__name__)
 
@@ -795,7 +799,16 @@ class SituationWorkflow:
                     
                     result["summary"] = summary.strip()
                 
-                logger.info(f"[워크플로우] JSON 파싱 성공 - summary 길이: {len(result.get('summary', ''))}자, criteria 개수: {len(result.get('criteria', []))}개, action_plan steps: {len(result.get('action_plan', {}).get('steps', []))}개")
+                # action_plan이 딕셔너리인지 리스트인지 확인
+                action_plan = result.get('action_plan', {})
+                if isinstance(action_plan, dict):
+                    action_plan_steps = len(action_plan.get('steps', []))
+                elif isinstance(action_plan, list):
+                    action_plan_steps = len(action_plan)
+                else:
+                    action_plan_steps = 0
+                
+                logger.info(f"[워크플로우] JSON 파싱 성공 - summary 길이: {len(result.get('summary', ''))}자, criteria 개수: {len(result.get('criteria', []))}개, action_plan steps: {action_plan_steps}개")
                 
                 # action_plan 안전하게 처리
                 action_plan_safe = result.get('action_plan', {})
