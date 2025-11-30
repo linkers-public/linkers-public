@@ -6,7 +6,13 @@ import { Textarea } from '@/components/ui/textarea'
 import { Loader2, Send, Bot, User, AlertCircle } from 'lucide-react'
 import { MarkdownRenderer } from '@/components/rag/MarkdownRenderer'
 import { cn } from '@/lib/utils'
-import { getConversationsV2, saveConversationV2, chatWithContractV2 } from '@/apis/legal.service'
+import { 
+  getChatMessages, 
+  saveChatMessage, 
+  chatWithContractV2,
+  getChatSessions,
+  createChatSession,
+} from '@/apis/legal.service'
 import { createSupabaseBrowserClient } from '@/supabase/supabase-client'
 import type { SituationAnalysisResponse } from '@/types/legal'
 
@@ -49,6 +55,7 @@ export function EmbeddedChat({
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true)
   const [isUserScrolling, setIsUserScrolling] = useState(false)
   const subscriptionRef = useRef<any>(null)
+  const [chatSessionId, setChatSessionId] = useState<string | null>(null)
 
   // 초기 메시지 생성 (analysis 데이터 기반)
   const generateInitialMessage = useCallback((): string => {
@@ -95,27 +102,78 @@ export function EmbeddedChat({
     return initialMessage
   }, [analysisResult])
 
+  // 챗 세션 찾기 또는 생성 (상황 분석 리포트 기반)
+  const findOrCreateChatSession = useCallback(async (): Promise<string> => {
+    try {
+      const supabase = createSupabaseBrowserClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      const userId = user?.id || null
+      
+      if (!userId) {
+        throw new Error('사용자 인증이 필요합니다.')
+      }
+      
+      // 기존 세션 찾기 (상황 분석 리포트를 초기 컨텍스트로 가진 세션)
+      const sessions = await getChatSessions(userId, 50, 0)
+      const existingSession = sessions.find(
+        (s) => s.initial_context_type === 'situation' && s.initial_context_id === reportId
+      )
+      
+      if (existingSession) {
+        return existingSession.id
+      }
+      
+      // 새 세션 생성
+      const sessionResult = await createChatSession(
+        {
+          initial_context_type: 'situation',
+          initial_context_id: reportId,
+          title: `상황 분석 리포트 - ${reportId.substring(0, 8)}`,
+        },
+        userId
+      )
+      
+      return sessionResult.id
+    } catch (error) {
+      console.error('챗 세션 생성/조회 실패:', error)
+      throw error
+    }
+  }, [reportId])
+
   // DB에서 대화 내역 로드
   const loadConversationsFromDB = useCallback(async () => {
     try {
       setIsLoadingHistory(true)
-      const conversations = await getConversationsV2(reportId)
+      
+      // 챗 세션 찾기 또는 생성
+      const sessionId = await findOrCreateChatSession()
+      setChatSessionId(sessionId)
+      
+      // 새 테이블에서 메시지 조회
+      const supabase = createSupabaseBrowserClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      const userId = user?.id || null
+      
+      if (!userId) {
+        throw new Error('사용자 인증이 필요합니다.')
+      }
+      
+      const messages = await getChatMessages(sessionId, userId)
       
       // sequence_number 순서대로 정렬하여 메시지로 변환
-      const sortedConversations = [...conversations].sort(
+      const sortedMessages = [...messages].sort(
         (a, b) => a.sequence_number - b.sequence_number
       )
       
-      const loadedMessages: Message[] = sortedConversations.map((conv) => ({
-        id: conv.id,
-        dbId: conv.id,
-        role: conv.sender_type,
-        content: conv.message,
-        timestamp: new Date(conv.created_at),
+      const loadedMessages: Message[] = sortedMessages.map((msg) => ({
+        id: msg.id,
+        dbId: msg.id,
+        role: msg.sender_type,
+        content: msg.message,
+        timestamp: new Date(msg.created_at),
       }))
       
       // Warm Start: DB에 초기 메시지가 없으면 생성
-      // 트리거가 있으면 보통 sequence_number 0 또는 1에 assistant 메시지가 있음
       const hasInitialAssistantMessage = loadedMessages.some(
         (msg) => msg.role === 'assistant' && (msg.dbId || msg.id.startsWith('temp_') === false)
       )
@@ -129,7 +187,7 @@ export function EmbeddedChat({
           timestamp: new Date(),
         }
         
-        // DB에 저장하지 않고 로컬에서만 표시 (트리거가 나중에 생성할 수도 있음)
+        // DB에 저장하지 않고 로컬에서만 표시
         setMessages([initialMessage, ...loadedMessages])
         onMessageCountChange?.([initialMessage, ...loadedMessages].length)
       } else {
@@ -150,36 +208,36 @@ export function EmbeddedChat({
     } finally {
       setIsLoadingHistory(false)
     }
-  }, [reportId, onMessageCountChange, generateInitialMessage])
+  }, [reportId, onMessageCountChange, generateInitialMessage, findOrCreateChatSession])
 
-  // Supabase Realtime 구독 설정
+  // Supabase Realtime 구독 설정 (새 테이블)
   useEffect(() => {
-    if (!reportId) return
+    if (!chatSessionId) return
 
     const supabase = createSupabaseBrowserClient()
     
-    // situation_conversations 테이블 구독
+    // legal_chat_messages 테이블 구독
     subscriptionRef.current = supabase
-      .channel(`situation_conversations:${reportId}`)
+      .channel(`legal_chat_messages:${chatSessionId}`)
       .on(
         'postgres_changes',
         {
           event: '*',
           schema: 'public',
-          table: 'situation_conversations',
-          filter: `report_id=eq.${reportId}`,
+          table: 'legal_chat_messages',
+          filter: `session_id=eq.${chatSessionId}`,
         },
         (payload) => {
           console.log('Realtime 이벤트 수신:', payload)
           
           if (payload.eventType === 'INSERT') {
-            const newConv = payload.new as any
+            const newMsg = payload.new as any
             const newMessage: Message = {
-              id: newConv.id,
-              dbId: newConv.id,
-              role: newConv.sender_type,
-              content: newConv.message,
-              timestamp: new Date(newConv.created_at),
+              id: newMsg.id,
+              dbId: newMsg.id,
+              role: newMsg.sender_type,
+              content: newMsg.message,
+              timestamp: new Date(newMsg.created_at),
             }
             
             setMessages((prev) => {
@@ -196,28 +254,25 @@ export function EmbeddedChat({
               return newMessages
             })
           } else if (payload.eventType === 'UPDATE') {
-            const updatedConv = payload.new as any
+            const updatedMsg = payload.new as any
             setMessages((prev) =>
               prev.map((msg) =>
-                msg.dbId === updatedConv.id
+                msg.dbId === updatedMsg.id
                   ? {
                       ...msg,
-                      content: updatedConv.message,
-                      timestamp: new Date(updatedConv.created_at),
+                      content: updatedMsg.message,
+                      timestamp: new Date(updatedMsg.created_at),
                     }
                   : msg
               )
             )
           } else if (payload.eventType === 'DELETE') {
-            const deletedConv = payload.old as any
-            setMessages((prev) => prev.filter((msg) => msg.dbId !== deletedConv.id))
+            const deletedMsg = payload.old as any
+            setMessages((prev) => prev.filter((msg) => msg.dbId !== deletedMsg.id))
           }
         }
       )
       .subscribe()
-
-    // 초기 대화 내역 로드
-    loadConversationsFromDB()
 
     // 정리 함수
     return () => {
@@ -225,6 +280,13 @@ export function EmbeddedChat({
         supabase.removeChannel(subscriptionRef.current)
         subscriptionRef.current = null
       }
+    }
+  }, [chatSessionId])
+
+  // 초기 대화 내역 로드
+  useEffect(() => {
+    if (reportId) {
+      loadConversationsFromDB()
     }
   }, [reportId, loadConversationsFromDB])
 
@@ -268,24 +330,50 @@ export function EmbeddedChat({
     onLoadingChange?.(true)
 
     try {
+      // 챗 세션이 없으면 생성
+      if (!chatSessionId) {
+        const sessionId = await findOrCreateChatSession()
+        setChatSessionId(sessionId)
+      }
+      
+      const sessionId = chatSessionId || await findOrCreateChatSession()
+      
       // 현재 메시지 개수로 sequence_number 계산
-      const currentMessageCount = messages.length
-      const userSequenceNumber = currentMessageCount
-      const assistantSequenceNumber = currentMessageCount + 1
+      const supabase = createSupabaseBrowserClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      const userId = user?.id || null
+      
+      if (!userId) {
+        throw new Error('사용자 인증이 필요합니다.')
+      }
+      
+      // 기존 메시지 조회하여 sequence_number 계산
+      const existingMessages = await getChatMessages(sessionId, userId)
+      const maxSequenceNumber = existingMessages.length > 0
+        ? Math.max(...existingMessages.map(m => m.sequence_number))
+        : -1
+      
+      const userSequenceNumber = maxSequenceNumber + 1
+      const assistantSequenceNumber = maxSequenceNumber + 2
 
       // 사용자 메시지를 DB에 저장
-      const userSaveResult = await saveConversationV2(
-        reportId,
-        query,
-        'user',
-        userSequenceNumber
+      const userSaveResult = await saveChatMessage(
+        sessionId,
+        {
+          sender_type: 'user',
+          message: query,
+          sequence_number: userSequenceNumber,
+          context_type: 'situation',
+          context_id: reportId,
+        },
+        userId
       )
 
       // 법적 관점 내용을 컨텍스트로 포함한 분석 요약 생성
       const legalContext = getLegalContext()
       const analysisSummary = `${legalContext}\n\n${situationSummary || ''}`
 
-      // v2 API 호출
+      // v2 API 호출 (컨텍스트 포함)
       const data = await chatWithContractV2({
         query: query,
         docIds: [],
@@ -293,16 +381,23 @@ export function EmbeddedChat({
         riskScore: analysisResult.riskScore,
         totalIssues: analysisResult.criteria?.length || 0,
         topK: 8,
+        contextType: 'situation',
+        contextId: reportId,
       })
 
       const assistantContent = data.answer || '답변을 생성할 수 없습니다.'
 
       // 어시스턴트 메시지를 DB에 저장
-      await saveConversationV2(
-        reportId,
-        assistantContent,
-        'assistant',
-        assistantSequenceNumber
+      await saveChatMessage(
+        sessionId,
+        {
+          sender_type: 'assistant',
+          message: assistantContent,
+          sequence_number: assistantSequenceNumber,
+          context_type: 'situation',
+          context_id: reportId,
+        },
+        userId
       )
 
       // 로컬 상태 업데이트는 Realtime 구독을 통해 자동으로 처리됨
@@ -339,7 +434,7 @@ export function EmbeddedChat({
       setChatLoading(false)
       onLoadingChange?.(false)
     }
-  }, [reportId, analysisResult, situationSummary, inputMessage, messages.length, getLegalContext, onLoadingChange])
+  }, [reportId, analysisResult, situationSummary, inputMessage, messages.length, getLegalContext, onLoadingChange, chatSessionId, findOrCreateChatSession])
 
   // 재시도 함수
   const handleRetry = useCallback(

@@ -929,101 +929,7 @@ export const getSituationAnalysisByIdV2 = async (
   }
 };
 
-/**
- * 상황 분석 대화 메시지 저장 (v2)
- */
-export const saveConversationV2 = async (
-  reportId: string,
-  message: string,
-  senderType: 'user' | 'assistant',
-  sequenceNumber: number,
-  userId?: string | null,
-  metadata?: any
-): Promise<{ id: string; success: boolean }> => {
-  try {
-    const url = `${LEGAL_API_BASE_V2}/conversations`;
-    
-    const authHeaders = await getAuthHeaders();
-    const headers: Record<string, string> = {
-      ...(authHeaders as Record<string, string>),
-      'Content-Type': 'application/json',
-    };
-    
-    if (userId !== undefined && userId !== null) {
-      headers['X-User-Id'] = userId;
-    }
-
-    const response = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        report_id: reportId,
-        message: message,
-        sender_type: senderType,
-        sequence_number: sequenceNumber,
-        metadata: metadata,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`대화 메시지 저장 실패: ${response.status} - ${errorText}`);
-    }
-
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    console.error('대화 메시지 저장 오류:', error);
-    throw error;
-  }
-};
-
-/**
- * 상황 분석 대화 메시지 조회 (v2)
- */
-export const getConversationsV2 = async (
-  reportId: string,
-  userId?: string | null
-): Promise<Array<{
-  id: string;
-  report_id: string;
-  user_id: string | null;
-  message: string;
-  sender_type: 'user' | 'assistant';
-  sequence_number: number;
-  metadata: any;
-  created_at: string;
-}>> => {
-  try {
-    const url = `${LEGAL_API_BASE_V2}/conversations/${reportId}`;
-    
-    const authHeaders = await getAuthHeaders();
-    const headers: Record<string, string> = {
-      ...(authHeaders as Record<string, string>),
-      'Content-Type': 'application/json',
-    };
-    
-    if (userId !== undefined && userId !== null) {
-      headers['X-User-Id'] = userId;
-    }
-
-    const response = await fetch(url, {
-      method: 'GET',
-      headers,
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`대화 메시지 조회 실패: ${response.status} - ${errorText}`);
-    }
-
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    console.error('대화 메시지 조회 오류:', error);
-    throw error;
-  }
-};
+// 레거시 API 함수 제거됨 - 새 테이블 구조(legal_chat_sessions, legal_chat_messages) 사용
 
 /**
  * 법률 상담 챗 (v2) - Dual RAG 지원
@@ -1043,6 +949,9 @@ export interface LegalChatRequestV2 {
   riskScore?: number
   totalIssues?: number
   topK?: number
+  // 🔥 컨텍스트 타입 및 ID 추가
+  contextType?: 'none' | 'situation' | 'contract'
+  contextId?: string | null
 }
 
 export interface LegalChatResponseV2 {
@@ -1125,6 +1034,309 @@ export const healthCheckV2 = async (): Promise<{ status: string; message: string
     throw error;
   }
 };
+
+// ============================================================================
+// 새로운 통합 챗 시스템 API (legal_chat_sessions, legal_chat_messages)
+// ============================================================================
+
+export interface ChatSession {
+  id: string
+  user_id: string
+  initial_context_type: 'none' | 'situation' | 'contract'
+  initial_context_id?: string | null
+  title?: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface ChatMessage {
+  id: string
+  session_id: string
+  user_id: string
+  sender_type: 'user' | 'assistant'
+  message: string
+  sequence_number: number
+  context_type: 'none' | 'situation' | 'contract'
+  context_id?: string | null
+  metadata?: any
+  created_at: string
+}
+
+export interface CreateChatSessionRequest {
+  initial_context_type?: 'none' | 'situation' | 'contract'
+  initial_context_id?: string | null
+  title?: string | null
+}
+
+export interface SaveChatMessageRequest {
+  sender_type: 'user' | 'assistant'
+  message: string
+  sequence_number: number
+  context_type?: 'none' | 'situation' | 'contract'
+  context_id?: string | null
+}
+
+/**
+ * 챗 세션 생성
+ */
+export const createChatSession = async (
+  request: CreateChatSessionRequest,
+  userId: string
+): Promise<{ id: string; success: boolean }> => {
+  try {
+    const url = `${LEGAL_API_BASE_V2}/chat/sessions`
+    
+    const authHeaders = await getAuthHeaders()
+    const headers: Record<string, string> = {
+      ...(authHeaders as Record<string, string>),
+      'Content-Type': 'application/json',
+      'X-User-Id': userId,
+    }
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(request),
+    })
+    
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`챗 세션 생성 실패: ${response.status} - ${errorText}`)
+    }
+    
+    const data = await response.json()
+    return data
+  } catch (error) {
+    console.error('챗 세션 생성 오류:', error)
+    throw error
+  }
+}
+
+/**
+ * 챗 세션 목록 조회
+ */
+export const getChatSessions = async (
+  userId: string,
+  limit: number = 20,
+  offset: number = 0
+): Promise<ChatSession[]> => {
+  try {
+    const url = `${LEGAL_API_BASE_V2}/chat/sessions`
+    
+    const authHeaders = await getAuthHeaders()
+    const headers: Record<string, string> = {
+      ...(authHeaders as Record<string, string>),
+      'Content-Type': 'application/json',
+      'X-User-Id': userId,
+    }
+    
+    const params = new URLSearchParams({
+      limit: limit.toString(),
+      offset: offset.toString(),
+    })
+    
+    const response = await fetch(`${url}?${params}`, {
+      method: 'GET',
+      headers,
+    })
+    
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`챗 세션 목록 조회 실패: ${response.status} - ${errorText}`)
+    }
+    
+    const data = await response.json()
+    return data
+  } catch (error) {
+    console.error('챗 세션 목록 조회 오류:', error)
+    throw error
+  }
+}
+
+/**
+ * 특정 챗 세션 조회
+ */
+export const getChatSession = async (
+  sessionId: string,
+  userId?: string | null
+): Promise<ChatSession> => {
+  try {
+    const url = `${LEGAL_API_BASE_V2}/chat/sessions/${sessionId}`
+    
+    const authHeaders = await getAuthHeaders()
+    const headers: Record<string, string> = {
+      ...(authHeaders as Record<string, string>),
+      'Content-Type': 'application/json',
+    }
+    
+    if (userId) {
+      headers['X-User-Id'] = userId
+    }
+    
+    const response = await fetch(url, {
+      method: 'GET',
+      headers,
+    })
+    
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`챗 세션 조회 실패: ${response.status} - ${errorText}`)
+    }
+    
+    const data = await response.json()
+    return data
+  } catch (error) {
+    console.error('챗 세션 조회 오류:', error)
+    throw error
+  }
+}
+
+/**
+ * 챗 메시지 저장
+ */
+export const saveChatMessage = async (
+  sessionId: string,
+  request: SaveChatMessageRequest,
+  userId: string
+): Promise<{ id: string; success: boolean }> => {
+  try {
+    const url = `${LEGAL_API_BASE_V2}/chat/sessions/${sessionId}/messages`
+    
+    const authHeaders = await getAuthHeaders()
+    const headers: Record<string, string> = {
+      ...(authHeaders as Record<string, string>),
+      'Content-Type': 'application/json',
+      'X-User-Id': userId,
+    }
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(request),
+    })
+    
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`챗 메시지 저장 실패: ${response.status} - ${errorText}`)
+    }
+    
+    const data = await response.json()
+    return data
+  } catch (error) {
+    console.error('챗 메시지 저장 오류:', error)
+    throw error
+  }
+}
+
+/**
+ * 챗 메시지 목록 조회
+ */
+export const getChatMessages = async (
+  sessionId: string,
+  userId?: string | null
+): Promise<ChatMessage[]> => {
+  try {
+    const url = `${LEGAL_API_BASE_V2}/chat/sessions/${sessionId}/messages`
+    
+    const authHeaders = await getAuthHeaders()
+    const headers: Record<string, string> = {
+      ...(authHeaders as Record<string, string>),
+      'Content-Type': 'application/json',
+    }
+    
+    if (userId) {
+      headers['X-User-Id'] = userId
+    }
+    
+    const response = await fetch(url, {
+      method: 'GET',
+      headers,
+    })
+    
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`챗 메시지 조회 실패: ${response.status} - ${errorText}`)
+    }
+    
+    const data = await response.json()
+    return data
+  } catch (error) {
+    console.error('챗 메시지 조회 오류:', error)
+    throw error
+  }
+}
+
+/**
+ * 챗 세션 업데이트
+ */
+export const updateChatSession = async (
+  sessionId: string,
+  title: string,
+  userId: string
+): Promise<{ success: boolean }> => {
+  try {
+    const url = `${LEGAL_API_BASE_V2}/chat/sessions/${sessionId}`
+    
+    const authHeaders = await getAuthHeaders()
+    const headers: Record<string, string> = {
+      ...(authHeaders as Record<string, string>),
+      'Content-Type': 'application/json',
+      'X-User-Id': userId,
+    }
+    
+    const response = await fetch(url, {
+      method: 'PUT',
+      headers,
+      body: JSON.stringify({ title }),
+    })
+    
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`챗 세션 업데이트 실패: ${response.status} - ${errorText}`)
+    }
+    
+    const data = await response.json()
+    return data
+  } catch (error) {
+    console.error('챗 세션 업데이트 오류:', error)
+    throw error
+  }
+}
+
+/**
+ * 챗 세션 삭제
+ */
+export const deleteChatSession = async (
+  sessionId: string,
+  userId: string
+): Promise<{ success: boolean }> => {
+  try {
+    const url = `${LEGAL_API_BASE_V2}/chat/sessions/${sessionId}`
+    
+    const authHeaders = await getAuthHeaders()
+    const headers: Record<string, string> = {
+      ...(authHeaders as Record<string, string>),
+      'Content-Type': 'application/json',
+      'X-User-Id': userId,
+    }
+    
+    const response = await fetch(url, {
+      method: 'DELETE',
+      headers,
+    })
+    
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`챗 세션 삭제 실패: ${response.status} - ${errorText}`)
+    }
+    
+    const data = await response.json()
+    return data
+  } catch (error) {
+    console.error('챗 세션 삭제 오류:', error)
+    throw error
+  }
+}
 
 // ============================================================================
 // 상황 분석 리포트 저장/조회 (Supabase)

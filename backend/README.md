@@ -414,7 +414,9 @@ python scripts/performance_test.py
 - `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`
 
 **주요 설정:**
-- LLM 설정 (Ollama/OpenAI)
+- **LLM 설정**: [LLM_SETUP.md](./LLM_SETUP.md) - Groq/Ollama 선택 및 설정 가이드
+  - 계약서 분석, 법률 상담, 상황분석에서 모두 사용
+  - 환경변수 `LLM_PROVIDER`로 Groq/Ollama 전환 가능
 - 임베딩 설정
 - 청크 설정
 - 서버 설정
@@ -1104,6 +1106,7 @@ expected 384 dimensions, not 1024
 - [API_REFERENCE.md](./API_REFERENCE.md) - API 엔드포인트 상세 설명
 - [TESTING.md](./TESTING.md) - 테스트 방법 및 예제
 - [CONFIGURATION.md](./CONFIGURATION.md) - 환경 변수 및 설정 가이드
+- [LLM_SETUP.md](./LLM_SETUP.md) - LLM Provider 선택 및 설정 가이드 (Groq/Ollama)
 - [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) - 문제 해결 가이드
 
 ### 스크립트 문서
@@ -1119,6 +1122,7 @@ expected 384 dimensions, not 1024
 - [BACKEND_LOGIC_EXPLANATION.md](./BACKEND_LOGIC_EXPLANATION.md) - 백엔드 로직 상세 설명 (청킹, RAG, 검색)
 - [ARCHITECTURE_IMPROVEMENTS.md](./ARCHITECTURE_IMPROVEMENTS.md) - 아키텍처 개선 사항
 - [BACKEND_LOGIC_CLEANUP.md](./BACKEND_LOGIC_CLEANUP.md) - 백엔드 로직 정리 보고서
+- [core/SITUATION_WORKFLOW_README.md](./core/SITUATION_WORKFLOW_README.md) - 상황분석 LangGraph 워크플로우 가이드
 
 ---
 

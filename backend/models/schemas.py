@@ -330,6 +330,21 @@ class ConversationRequestV2(BaseModel):
     metadata: Optional[Dict[str, Any]] = Field(None, description="추가 메타데이터")
 
 
+class CreateChatSessionRequest(BaseModel):
+    """챗 세션 생성 요청"""
+    initial_context_type: Optional[str] = Field('none', description="초기 컨텍스트 타입: 'none' | 'situation' | 'contract'")
+    initial_context_id: Optional[str] = Field(None, description="초기 컨텍스트 ID")
+    title: Optional[str] = Field(None, description="세션 제목")
+
+class ChatMessageRequest(BaseModel):
+    """챗 메시지 저장 요청 (새 통합 챗 시스템)"""
+    sender_type: str = Field(..., description="발신자 타입: 'user' | 'assistant'")
+    message: str = Field(..., description="메시지 내용")
+    sequence_number: int = Field(..., description="메시지 순서")
+    context_type: Optional[str] = Field('none', description="컨텍스트 타입: 'none' | 'situation' | 'contract'")
+    context_id: Optional[str] = Field(None, description="컨텍스트 ID")
+
+
 class ClauseV2(BaseModel):
     """계약서 조항 (v2)"""
     id: str
@@ -461,6 +476,9 @@ class LegalChatRequestV2(BaseModel):
     riskScore: Optional[int] = Field(None, description="위험도 점수")
     totalIssues: Optional[int] = Field(None, description="총 이슈 개수")
     topK: int = Field(8, description="RAG 검색 결과 개수")
+    # 🔥 컨텍스트 타입 및 ID 추가
+    contextType: Optional[str] = Field(None, description="컨텍스트 타입: 'none' | 'situation' | 'contract'")
+    contextId: Optional[str] = Field(None, description="컨텍스트 ID (situation_analyses.id 또는 contract_analyses.id)")
 
 
 class UsedChunkV2(BaseModel):

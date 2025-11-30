@@ -18,6 +18,8 @@ from supabase import create_client
 from config import settings
 
 from models.schemas import (
+    CreateChatSessionRequest,
+    ChatMessageRequest,
     ScriptsV2,
     LegalSearchResponseV2,
     LegalSearchResult,
@@ -1474,53 +1476,206 @@ async def get_situation_analysis(
         )
 
 
-@router.post("/conversations", response_model=dict)
-async def save_conversation(
-    payload: ConversationRequestV2,
-    x_user_id: Optional[str] = Header(None, alias="X-User-Id", description="사용자 ID"),
+# 레거시 API 제거됨 - 새 테이블 구조(legal_chat_sessions, legal_chat_messages) 사용
+
+
+# ============================================================================
+# 새로운 통합 챗 시스템 API (legal_chat_sessions, legal_chat_messages)
+# ============================================================================
+
+@router.post("/chat/sessions", response_model=dict)
+async def create_chat_session(
+    payload: CreateChatSessionRequest,
+    x_user_id: str = Header(..., alias="X-User-Id", description="사용자 ID"),
 ):
     """
-    상황 분석 대화 메시지 저장
+    새로운 챗 세션 생성
+    """
+    try:
+        if not x_user_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="사용자 ID가 필요합니다."
+            )
+        
+        storage_service = get_storage_service()
+        session_id = await storage_service.create_chat_session(
+            user_id=x_user_id,
+            initial_context_type=payload.initial_context_type or 'none',
+            initial_context_id=payload.initial_context_id,
+            title=payload.title,
+        )
+        
+        return {"id": session_id, "success": True}
+    except Exception as e:
+        logger.error(f"챗 세션 생성 중 오류 발생: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"챗 세션 생성 중 오류가 발생했습니다: {str(e)}",
+        )
+
+
+@router.get("/chat/sessions", response_model=List[dict])
+async def get_chat_sessions(
+    x_user_id: str = Header(..., alias="X-User-Id", description="사용자 ID"),
+    limit: int = Query(20, ge=1, le=100, description="조회 개수"),
+    offset: int = Query(0, ge=0, description="오프셋"),
+):
+    """
+    사용자의 챗 세션 목록 조회
     """
     try:
         storage_service = get_storage_service()
-        conversation_id = await storage_service.save_situation_conversation(
-            report_id=payload.report_id,
-            message=payload.message,
+        sessions = await storage_service.get_chat_sessions(
+            user_id=x_user_id,
+            limit=limit,
+            offset=offset,
+        )
+        return sessions
+    except Exception as e:
+        logger.error(f"챗 세션 목록 조회 중 오류 발생: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"챗 세션 목록 조회 중 오류가 발생했습니다: {str(e)}",
+        )
+
+
+@router.get("/chat/sessions/{session_id}", response_model=dict)
+async def get_chat_session(
+    session_id: str,
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id", description="사용자 ID"),
+):
+    """
+    특정 챗 세션 조회
+    """
+    try:
+        storage_service = get_storage_service()
+        session = await storage_service.get_chat_session(
+            session_id=session_id,
+            user_id=x_user_id,
+        )
+        
+        if not session:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"챗 세션을 찾을 수 없습니다. (id: {session_id})"
+            )
+        
+        return session
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"챗 세션 조회 중 오류 발생: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"챗 세션 조회 중 오류가 발생했습니다: {str(e)}",
+        )
+
+
+@router.post("/chat/sessions/{session_id}/messages", response_model=dict)
+async def save_chat_message(
+    session_id: str,
+    payload: ChatMessageRequest,
+    x_user_id: str = Header(..., alias="X-User-Id", description="사용자 ID"),
+):
+    """
+    챗 메시지 저장
+    """
+    try:
+        if payload.sender_type not in ['user', 'assistant']:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="sender_type은 'user' 또는 'assistant'여야 합니다."
+            )
+        
+        storage_service = get_storage_service()
+        message_id = await storage_service.save_chat_message(
+            session_id=session_id,
+            user_id=x_user_id,
             sender_type=payload.sender_type,
+            message=payload.message,
             sequence_number=payload.sequence_number,
-            user_id=x_user_id,
-            metadata=payload.metadata,
+            context_type=payload.context_type or 'none',
+            context_id=payload.context_id,
         )
-        return {"id": conversation_id, "success": True}
+        
+        return {"id": message_id, "success": True}
     except Exception as e:
-        logger.error(f"대화 메시지 저장 중 오류 발생: {str(e)}", exc_info=True)
+        logger.error(f"챗 메시지 저장 중 오류 발생: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"대화 메시지 저장 중 오류가 발생했습니다: {str(e)}",
+            detail=f"챗 메시지 저장 중 오류가 발생했습니다: {str(e)}",
         )
 
 
-@router.get("/conversations/{report_id}", response_model=List[dict])
-async def get_conversations(
-    report_id: str,
+@router.get("/chat/sessions/{session_id}/messages", response_model=List[dict])
+async def get_chat_messages(
+    session_id: str,
     x_user_id: Optional[str] = Header(None, alias="X-User-Id", description="사용자 ID"),
 ):
     """
-    상황 분석 대화 메시지 조회
+    챗 세션의 메시지 목록 조회
     """
     try:
         storage_service = get_storage_service()
-        conversations = await storage_service.get_situation_conversations(
-            report_id=report_id,
+        messages = await storage_service.get_chat_messages(
+            session_id=session_id,
             user_id=x_user_id,
         )
-        return conversations
+        return messages
     except Exception as e:
-        logger.error(f"대화 메시지 조회 중 오류 발생: {str(e)}", exc_info=True)
+        logger.error(f"챗 메시지 조회 중 오류 발생: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"대화 메시지 조회 중 오류가 발생했습니다: {str(e)}",
+            detail=f"챗 메시지 조회 중 오류가 발생했습니다: {str(e)}",
+        )
+
+
+@router.put("/chat/sessions/{session_id}", response_model=dict)
+async def update_chat_session(
+    session_id: str,
+    title: Optional[str] = None,
+    x_user_id: str = Header(..., alias="X-User-Id", description="사용자 ID"),
+):
+    """
+    챗 세션 업데이트 (제목 등)
+    """
+    try:
+        storage_service = get_storage_service()
+        await storage_service.update_chat_session(
+            session_id=session_id,
+            user_id=x_user_id,
+            title=title,
+        )
+        return {"success": True}
+    except Exception as e:
+        logger.error(f"챗 세션 업데이트 중 오류 발생: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"챗 세션 업데이트 중 오류가 발생했습니다: {str(e)}",
+        )
+
+
+@router.delete("/chat/sessions/{session_id}", response_model=dict)
+async def delete_chat_session(
+    session_id: str,
+    x_user_id: str = Header(..., alias="X-User-Id", description="사용자 ID"),
+):
+    """
+    챗 세션 삭제 (CASCADE로 메시지도 함께 삭제됨)
+    """
+    try:
+        storage_service = get_storage_service()
+        await storage_service.delete_chat_session(
+            session_id=session_id,
+            user_id=x_user_id,
+        )
+        return {"success": True}
+    except Exception as e:
+        logger.error(f"챗 세션 삭제 중 오류 발생: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"챗 세션 삭제 중 오류가 발생했습니다: {str(e)}",
         )
 
 
@@ -1530,15 +1685,83 @@ async def chat_with_contract(
     x_user_id: Optional[str] = Header(None, alias="X-User-Id", description="사용자 ID"),
 ):
     """
-    계약서 기반 법률 상담 챗 (Dual RAG 지원)
+    법률 상담 챗 (컨텍스트 지원)
     
-    - 계약서 내부 청크 검색 (contract_chunks)
-    - 외부 법령 청크 검색 (legal_chunks)
-    - 선택된 이슈 기반 boosting
+    - 컨텍스트 타입: 'none' | 'situation' | 'contract'
+    - 상황 분석 리포트 또는 계약서 분석 리포트를 컨텍스트로 포함
+    - Dual RAG 검색 (계약서 내부 + 외부 법령)
     - 구조화된 프롬프트로 답변 생성
     """
     try:
         service = get_legal_service()
+        storage_service = get_storage_service()
+        
+        # 컨텍스트 타입 확인 (기본값: 'none')
+        context_type = payload.contextType or 'none'
+        context_id = payload.contextId
+        
+        # 컨텍스트 유효성 검증
+        if context_type != 'none' and not context_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"contextType이 '{context_type}'인데 contextId가 제공되지 않았습니다."
+            )
+        
+        # 컨텍스트 데이터 조회 및 구성
+        prompt_context = None
+        if context_type == 'situation' and context_id:
+            # 상황 분석 리포트 조회
+            situation = await storage_service.get_situation_analysis(
+                situation_id=context_id,
+                user_id=x_user_id
+            )
+            if not situation:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"상황 분석 리포트를 찾을 수 없습니다. (id: {context_id})"
+                )
+            
+            prompt_context = {
+                "type": "situation",
+                "analysis": situation.get("analysis", {}),
+                "risk_score": situation.get("risk_score", 0),
+                "summary": situation.get("analysis", {}).get("summary", situation.get("situation", "")),
+                "criteria": situation.get("criteria", []),
+                "checklist": situation.get("checklist", []),
+                "related_cases": situation.get("relatedCases", []),
+            }
+            
+            # 기존 analysisSummary, riskScore가 없으면 컨텍스트에서 가져오기
+            if not payload.analysisSummary:
+                payload.analysisSummary = prompt_context["summary"]
+            if not payload.riskScore:
+                payload.riskScore = int(prompt_context["risk_score"])
+                
+        elif context_type == 'contract' and context_id:
+            # 계약서 분석 리포트 조회
+            contract = await storage_service.get_contract_analysis(
+                doc_id=context_id,
+                user_id=x_user_id
+            )
+            if not contract:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"계약서 분석 리포트를 찾을 수 없습니다. (id: {context_id})"
+                )
+            
+            prompt_context = {
+                "type": "contract",
+                "risk_score": contract.get("risk_score", 0),
+                "summary": contract.get("summary", ""),
+                "issues": contract.get("issues", []),
+                "sections": contract.get("sections", {}),
+            }
+            
+            # 계약서 컨텍스트인 경우 docIds에 추가 (RAG 검색용)
+            if context_id not in (payload.docIds or []):
+                if payload.docIds is None:
+                    payload.docIds = []
+                payload.docIds.append(context_id)
         
         # selected_issue 변환 (프론트엔드 형식 → 백엔드 형식)
         selected_issue = None
@@ -1551,7 +1774,7 @@ async def chat_with_contract(
                 "legalBasis": payload.selectedIssue.get("legalBasis", []),
             }
         
-        # Dual RAG 검색 및 답변 생성
+        # Dual RAG 검색 및 답변 생성 (컨텍스트 포함)
         result = await service.chat_with_context(
             query=payload.query,
             doc_ids=payload.docIds or [],
@@ -1561,6 +1784,8 @@ async def chat_with_contract(
             risk_score=payload.riskScore,
             total_issues=payload.totalIssues,
             top_k=payload.topK or 8,
+            context_type=context_type,
+            context_data=prompt_context,
         )
         
         # used_chunks 변환 (프론트엔드 형식)

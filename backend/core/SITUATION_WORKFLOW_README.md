@@ -49,6 +49,28 @@ backend/core/
 pip install langgraph
 ```
 
+### 1-1. LLM Provider 설정
+
+상황분석 워크플로우는 환경변수 `LLM_PROVIDER`에 따라 Groq 또는 Ollama를 사용합니다.
+
+**Groq 사용 시:**
+```env
+LLM_PROVIDER=groq
+GROQ_API_KEY=your_groq_api_key_here
+GROQ_MODEL=llama-3.3-70b-versatile
+```
+
+**Ollama 사용 시:**
+```env
+LLM_PROVIDER=ollama
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=mistral
+```
+
+> **참고:** 상세한 LLM 설정 방법은 [LLM_SETUP.md](../../LLM_SETUP.md)를 참고하세요.
+
+워크플로우 내부의 모든 LLM 호출(`classify_situation_node`, `generate_action_guide_node`, `generate_summary_node` 등)은 이 설정에 따라 자동으로 Groq 또는 Ollama를 사용합니다.
+
 ### 2. 워크플로우 사용
 
 ```python
@@ -134,7 +156,7 @@ class SituationWorkflowState(TypedDict):
 - 임베딩 생성 (BAAI/bge-m3)
 
 ### 2. classify_situation_node
-- LLM으로 상황 분류
+- LLM으로 상황 분류 (Groq/Ollama - 환경변수 `LLM_PROVIDER`에 따라 자동 선택)
 - 카테고리 + 위험도 점수 계산
 - 검색에 사용할 카테고리 키워드 추출
 
@@ -148,11 +170,11 @@ class SituationWorkflowState(TypedDict):
 - 케이스 검색 (top-3)
 
 ### 5. generate_action_guide_node
-- 행동 가이드 생성
+- 행동 가이드 생성 (Groq/Ollama - 환경변수 `LLM_PROVIDER`에 따라 자동 선택)
 - 체크리스트, 스크립트, 판단 기준 생성
 
 ### 6. generate_summary_node
-- 최종 요약 리포트 생성 (마크다운)
+- 최종 요약 리포트 생성 (마크다운, Groq/Ollama - 환경변수 `LLM_PROVIDER`에 따라 자동 선택)
 - 4개 섹션 포함:
   - 📊 상황 분석의 결과
   - ⚖️ 법적 관점에서 본 현재상황

@@ -363,9 +363,11 @@ class LegalRAGService:
         risk_score: Optional[int] = None,
         total_issues: Optional[int] = None,
         top_k: int = 8,
+        context_type: Optional[str] = None,
+        context_data: Optional[dict] = None,
     ) -> dict:
         """
-        계약서 분석 결과를 컨텍스트로 포함한 법률 상담 챗
+        법률 상담 챗 (컨텍스트 지원)
         
         Args:
             query: 사용자 질문
@@ -376,6 +378,8 @@ class LegalRAGService:
             risk_score: 위험도 점수
             total_issues: 총 이슈 개수
             top_k: RAG 검색 결과 개수
+            context_type: 컨텍스트 타입 ('none' | 'situation' | 'contract')
+            context_data: 컨텍스트 데이터 (상황 분석 또는 계약서 분석 리포트)
         
         Returns:
             {
@@ -468,6 +472,8 @@ class LegalRAGService:
             analysis_summary=analysis_summary,
             risk_score=risk_score,
             total_issues=total_issues,
+            context_type=context_type,
+            context_data=context_data,
         )
         
         return {
@@ -1624,14 +1630,18 @@ class LegalRAGService:
         analysis_summary: Optional[str] = None,
         risk_score: Optional[int] = None,
         total_issues: Optional[int] = None,
+        context_type: Optional[str] = None,
+        context_data: Optional[dict] = None,
     ) -> str:
         """
-        법률 상담 챗용 LLM 응답 생성 (Dual RAG 지원)
+        법률 상담 챗용 LLM 응답 생성 (컨텍스트 지원)
         
         Args:
             contract_chunks: 계약서 내부 청크 (새로운 방식)
             legal_chunks: 법령 청크 (새로운 방식)
             grounding_chunks: 법령 청크 (레거시 호환)
+            context_type: 컨텍스트 타입 ('none' | 'situation' | 'contract')
+            context_data: 컨텍스트 데이터 (상황 분석 또는 계약서 분석 리포트)
         """
         if self.generator.disable_llm:
             # LLM 비활성화 시 기본 응답
@@ -1711,6 +1721,57 @@ class LegalRAGService:
         if total_issues is not None:
             analysis_context += f"\n**발견된 이슈 수:** {total_issues}개"
         
+        # 컨텍스트 정보 추가 (상황 분석 또는 계약서 분석 리포트)
+        context_report = ""
+        if context_data and context_type:
+            if context_type == 'situation':
+                # 상황 분석 리포트 컨텍스트
+                situation_summary = context_data.get("summary", "")
+                situation_risk = context_data.get("risk_score", 0)
+                situation_criteria = context_data.get("criteria", [])
+                situation_checklist = context_data.get("checklist", [])
+                
+                criteria_text = "\n".join([
+                    f"- {c.get('name', '')}: {c.get('reason', '')}" 
+                    for c in situation_criteria[:5]
+                ]) if situation_criteria else "없음"
+                
+                checklist_text = "\n".join([
+                    f"- {item}" for item in situation_checklist[:5]
+                ]) if situation_checklist else "없음"
+                
+                context_report = f"""
+**📋 현재 참조 중인 상황 분석 리포트:**
+- 상황 요약: {situation_summary[:300]}
+- 위험도 점수: {situation_risk}점
+- 법적 판단 기준:
+{criteria_text}
+- 체크리스트:
+{checklist_text}
+
+이 상황 분석 리포트를 기준으로 사용자의 질문에 답변해주세요.
+"""
+            elif context_type == 'contract':
+                # 계약서 분석 리포트 컨텍스트
+                contract_summary = context_data.get("summary", "")
+                contract_risk = context_data.get("risk_score", 0)
+                contract_issues = context_data.get("issues", [])
+                
+                issues_text = "\n".join([
+                    f"- [{issue.get('severity', 'medium')}] {issue.get('summary', '')}" 
+                    for issue in contract_issues[:5]
+                ]) if contract_issues else "없음"
+                
+                context_report = f"""
+**📄 현재 참조 중인 계약서 분석 리포트:**
+- 분석 요약: {contract_summary[:300]}
+- 위험도 점수: {contract_risk}점
+- 발견된 이슈:
+{issues_text}
+
+이 계약서 분석 리포트를 기준으로 사용자의 질문에 답변해주세요.
+"""
+        
         # 프롬프트 템플릿 사용
         prompt = build_legal_chat_prompt(
             query=query,
@@ -1721,6 +1782,11 @@ class LegalRAGService:
             risk_score=risk_score,
             total_issues=total_issues,
         )
+        
+        # 컨텍스트 리포트가 있으면 프롬프트에 추가
+        if context_report:
+            # 프롬프트 끝부분에 컨텍스트 리포트 추가
+            prompt = prompt.rstrip() + "\n\n" + context_report
 
         try:
             # Groq 사용 (우선)
