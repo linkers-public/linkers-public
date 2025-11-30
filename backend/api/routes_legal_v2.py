@@ -38,6 +38,8 @@ from models.schemas import (
     UsedChunksV2,
     UsedChunkV2,
     ConversationRequestV2,
+    CreateChatSessionRequest,
+    ChatMessageRequest,
     ActionPlan,
     CriteriaItem,
 )
@@ -1322,11 +1324,23 @@ async def analyze_situation(
         
         # relatedCases 변환 (externalId와 fileUrl 추가)
         related_cases = []
+        seen_case_ids = set()  # 중복 제거를 위한 id 추적
         # 공통 유틸 함수 사용 (fileUrl 생성용)
         from core.file_utils import get_document_file_url
+        from core.snippet_analyzer import analyze_snippet
         
         for case in result.get("related_cases", []):
             case_id = case.get("id", "")
+            
+            # id가 없거나 이미 추가된 경우 건너뛰기
+            if not case_id or case_id in seen_case_ids:
+                if case_id:
+                    _logger.debug(f"relatedCase 중복 제거: id={case_id}, title={case.get('title', '')}")
+                continue
+            
+            # id를 추적 세트에 추가
+            seen_case_ids.add(case_id)
+            
             # relatedCases의 id는 이미 external_id입니다
             external_id = case_id
             # source_type 가져오기 (grounding_chunks에서 제공된 경우)
@@ -1344,14 +1358,30 @@ async def analyze_situation(
                 except Exception as e:
                     _logger.warning(f"relatedCase fileUrl 생성 실패 (id={case_id}, sourceType={case_source_type}): {str(e)}")
             
+            # snippet 분석 (원본 summary를 분석하여 변환)
+            original_summary = case.get("summary", "")
+            analyzed_summary = None
+            try:
+                _logger.info(f"[analyze-situation] relatedCase snippet 분석 시작 (id={case_id}, summary 길이={len(original_summary)})")
+                analyzed_summary = await analyze_snippet(original_summary)
+                if analyzed_summary:
+                    _logger.info(f"[analyze-situation] relatedCase snippet 분석 성공 (id={case_id}): core_clause={analyzed_summary.get('core_clause', '')[:50]}")
+                else:
+                    _logger.warning(f"[analyze-situation] relatedCase snippet 분석 결과 None (id={case_id})")
+            except Exception as e:
+                _logger.error(f"relatedCase snippet 분석 실패 (id={case_id}): {str(e)}", exc_info=True)
+            
             related_cases.append({
                 "id": case_id,  # external_id
                 "title": case.get("title", ""),
-                "summary": case.get("summary", ""),
+                "summary": original_summary,  # 원본 유지 (하위 호환성)
+                "summaryAnalyzed": analyzed_summary,  # 분석된 결과 추가
                 "link": None,
                 "externalId": external_id,  # id와 동일 (이미 external_id)
                 "fileUrl": file_url,  # 스토리지 Signed URL (공통 유틸 함수 사용, 실제 source_type 사용)
             })
+        
+        _logger.info(f"relatedCases 중복 제거 후: {len(related_cases)}개 (원본: {len(result.get('related_cases', []))}개)")
         
         # tags 추출 (classified_type 기반)
         tags = [result.get("classified_type", "unknown")]
@@ -1364,6 +1394,7 @@ async def analyze_situation(
         # DB 조회용 vector_store 인스턴스
         from core.supabase_vector_store import SupabaseVectorStore
         vector_store = SupabaseVectorStore()
+        # snippet 분석 함수 (이미 위에서 import됨)
         
         for chunk in grounding_chunks:
             source_id = chunk.get("source_id", "")  # legal_chunks.id (UUID)
@@ -1390,11 +1421,25 @@ async def analyze_situation(
                 except Exception as e:
                     _logger.warning(f"source fileUrl 생성 실패 (externalId={external_id}, sourceType={source_type}): {str(e)}")
             
+            # snippet 분석
+            original_snippet = chunk.get("snippet", "")
+            analyzed_snippet = None
+            try:
+                _logger.debug(f"[analyze-situation] source snippet 분석 시작 (sourceId={source_id}, snippet 길이={len(original_snippet)})")
+                analyzed_snippet = await analyze_snippet(original_snippet)
+                if analyzed_snippet:
+                    _logger.debug(f"[analyze-situation] source snippet 분석 성공 (sourceId={source_id}): core_clause={analyzed_snippet.get('core_clause', '')[:50]}")
+                else:
+                    _logger.warning(f"[analyze-situation] source snippet 분석 결과 None (sourceId={source_id})")
+            except Exception as e:
+                _logger.error(f"source snippet 분석 실패 (sourceId={source_id}): {str(e)}", exc_info=True)
+            
             sources.append({
                 "sourceId": source_id,  # legal_chunks.id (UUID)
                 "sourceType": source_type,
                 "title": chunk.get("title", ""),
-                "snippet": chunk.get("snippet", ""),
+                "snippet": original_snippet,  # 원본 유지 (하위 호환성)
+                "snippetAnalyzed": analyzed_snippet,  # 분석된 결과 추가
                 "score": float(chunk.get("score", 0.0)),
                 "externalId": external_id,  # legal_chunks.external_id (실제 파일 ID, DB 조회로 보완)
                 "fileUrl": file_url,  # 스토리지 Signed URL (무조건 새로 생성)
@@ -1461,8 +1506,13 @@ async def analyze_situation(
         # criteria를 CriteriaItem 모델 리스트로 변환
         criteria_items = []
         if isinstance(criteria_from_result, list) and len(criteria_from_result) > 0:
-            for criterion in criteria_from_result:
+            for idx, criterion in enumerate(criteria_from_result):
                 if isinstance(criterion, dict):
+                    # 디버깅: criterion의 reason 필드 확인
+                    _logger.info(f"[analyze-situation] criterion[{idx}] 원본: name={criterion.get('name', '')}, reason={criterion.get('reason', '')[:100] if criterion.get('reason') else 'None'}...")
+                    # reason 필드가 없거나 비어있으면 경고
+                    if not criterion.get('reason') or not criterion.get('reason', '').strip():
+                        _logger.warning(f"[analyze-situation] criterion[{idx}]에 reason 필드가 없거나 비어있습니다: {criterion}")
                     criteria_items.append(CriteriaItem(**criterion))
                 else:
                     criteria_items.append(criterion)

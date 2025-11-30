@@ -151,10 +151,17 @@ export interface Scripts {
   toAdvisor?: string
 }
 
+export interface SnippetAnalyzed {
+  core_clause: string  // 핵심 조항 번호나 제목
+  easy_summary: string  // 초등학생도 이해할 수 있는 2~3문장의 친절한 설명
+  action_tip?: string  // 사용자가 주의해야 할 점 1줄 (선택사항)
+}
+
 export interface RelatedCase {
   id: string
   title: string
-  summary: string
+  summary: string  // 원본 snippet (하위 호환성)
+  summaryAnalyzed?: SnippetAnalyzed  // 분석된 결과
   link?: string
   externalId?: string  // 파일 ID (스토리지 경로 생성용, id와 동일)
   fileUrl?: string  // 스토리지 Signed URL (파일 다운로드용)
@@ -164,7 +171,8 @@ export interface SourceItem {
   sourceId: string
   sourceType: 'law' | 'manual' | 'case' | 'standard_contract'
   title: string
-  snippet: string
+  snippet: string  // 원본 snippet (하위 호환성)
+  snippetAnalyzed?: SnippetAnalyzed  // 분석된 결과
   score: number
   externalId?: string  // 파일 ID (스토리지 경로 생성용)
   fileUrl?: string  // 스토리지 Signed URL (파일 다운로드용)

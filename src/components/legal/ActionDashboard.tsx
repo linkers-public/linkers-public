@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Briefcase, Upload, Phone, Globe, ExternalLink, MapPin, FileText, X, Loader2, CheckCircle2, AlertCircle, Download, Trash2, ChevronDown, ChevronUp, Building2, Shield, Headphones } from 'lucide-react'
+import { Briefcase, Upload, Phone, Globe, ExternalLink, MapPin, FileText, X, Loader2, CheckCircle2, AlertCircle, Download, Trash2, ChevronDown, ChevronUp, Building2, Shield, Headphones, Eye } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { uploadSituationEvidence, getSituationEvidences, deleteSituationEvidence } from '@/apis/legal.service'
 import type { SituationCategory } from '@/types/legal'
@@ -234,11 +234,31 @@ export function ActionDashboard({ classifiedType, analysisId, onCopy, organizati
       return
     }
 
+    // 파일 크기 사전 검증 (100MB)
+    const maxSize = 100 * 1024 * 1024
+    if (file.size > maxSize) {
+      toast({
+        title: '파일 크기 초과',
+        description: `파일 크기가 너무 큽니다. 최대 ${maxSize / 1024 / 1024}MB까지 업로드할 수 있습니다.`,
+        variant: 'destructive',
+      })
+      return
+    }
+
     const uploadId = `${Date.now()}_${file.name}`
     setUploadingFileId(uploadId)
 
     try {
+      console.log('[파일 업로드 시작]', {
+        fileName: file.name,
+        fileSize: file.size,
+        evidenceType,
+        analysisId
+      })
+      
       const result = await uploadSituationEvidence(file, analysisId, evidenceType)
+      
+      console.log('[파일 업로드 성공]', result)
       
       toast({
         title: '업로드 완료',
@@ -253,20 +273,39 @@ export function ActionDashboard({ classifiedType, analysisId, onCopy, organizati
       newSet.add(evidenceType)
       setCheckedEvidence(newSet)
     } catch (error: any) {
-      console.error('파일 업로드 실패:', error)
+      console.error('[파일 업로드 실패]', {
+        error,
+        message: error?.message,
+        stack: error?.stack,
+        fileName: file.name
+      })
+      
+      // 더 자세한 에러 메시지 추출
+      let errorMessage = '파일 업로드 중 오류가 발생했습니다.'
+      if (error?.message) {
+        errorMessage = error.message
+      } else if (typeof error === 'string') {
+        errorMessage = error
+      }
+      
       toast({
         title: '업로드 실패',
-        description: error.message || '파일 업로드 중 오류가 발생했습니다.',
+        description: errorMessage,
         variant: 'destructive',
       })
     } finally {
       setUploadingFileId(null)
       setSelectedEvidenceType(null)
+      
+      // input 초기화
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
     }
   }
 
   // 파일 삭제 핸들러
-  const handleFileDelete = async (evidenceId: string, fileName: string) => {
+  const handleFileDelete = async (evidenceId: string, fileName: string, evidenceType?: string) => {
     if (!confirm(`"${fileName}" 파일을 삭제하시겠습니까?`)) {
       return
     }
@@ -278,6 +317,14 @@ export function ActionDashboard({ classifiedType, analysisId, onCopy, organizati
         description: `${fileName} 파일이 삭제되었습니다.`,
       })
       await loadUploadedFiles()
+      
+      // 파일 삭제 시 해당 증거 타입의 체크박스도 해제
+      // (단, 사용자가 수동으로 체크한 경우는 유지하지 않음 - 파일이 없으면 자동으로 해제)
+      if (evidenceType) {
+        const newSet = new Set(checkedEvidence)
+        newSet.delete(evidenceType)
+        setCheckedEvidence(newSet)
+      }
     } catch (error: any) {
       console.error('파일 삭제 실패:', error)
       toast({
@@ -363,8 +410,18 @@ export function ActionDashboard({ classifiedType, analysisId, onCopy, organizati
   const formatFileSize = (bytes: number | null) => {
     if (!bytes) return '알 수 없음'
     if (bytes < 1024) return `${bytes} B`
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
     return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+  }
+
+  // 특정 증거 타입에 대한 업로드된 파일 찾기
+  const getFileForEvidenceType = (evidenceType: string): EvidenceFile | null => {
+    return uploadedFiles.find(file => file.evidence_type === evidenceType) || null
+  }
+
+  // 수동 체크 여부 확인 (파일 없이 체크박스만 체크된 경우)
+  const isManuallyChecked = (evidenceType: string): boolean => {
+    return checkedEvidence.has(evidenceType) && !getFileForEvidenceType(evidenceType)
   }
 
   // 기관별 주소 및 좌표 정보
@@ -685,36 +742,120 @@ export function ActionDashboard({ classifiedType, analysisId, onCopy, organizati
             ) : null}
 
             <div className="space-y-2">
-              {EVIDENCE_DOCS.map((doc, idx) => (
-                <div key={idx} className="flex items-center gap-3 p-3 bg-slate-50 border border-slate-200 rounded-lg hover:bg-slate-100 transition-colors">
-                  <input
-                    type="checkbox"
-                    checked={checkedEvidence.has(doc)}
-                    onChange={() => toggleCheckItem(doc)}
-                    className="w-4 h-4 text-green-600 border-gray-300 rounded focus:ring-green-500"
-                  />
-                  <span className="flex-1 text-sm text-slate-700">{doc}</span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-8 text-xs border-green-300 text-green-700 hover:bg-green-50"
-                    onClick={() => handleFileSelect(doc)}
-                    disabled={!analysisId || uploadingFileId !== null}
+              {EVIDENCE_DOCS.map((doc, idx) => {
+                const uploadedFile = getFileForEvidenceType(doc)
+                const isChecked = checkedEvidence.has(doc)
+                const isManual = isManuallyChecked(doc)
+                const isUploading = uploadingFileId !== null && selectedEvidenceType === doc
+                
+                return (
+                  <div 
+                    key={idx} 
+                    className={cn(
+                      "flex items-center gap-3 p-3 rounded-lg transition-all",
+                      uploadedFile 
+                        ? "bg-green-50 border-2 border-green-300" 
+                        : isManual
+                        ? "bg-blue-50 border-2 border-blue-300"
+                        : "bg-slate-50 border border-slate-200 hover:bg-slate-100"
+                    )}
                   >
-                    {uploadingFileId && selectedEvidenceType === doc ? (
+                    {/* 체크박스 */}
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={() => toggleCheckItem(doc)}
+                      className={cn(
+                        "w-5 h-5 rounded focus:ring-2 focus:ring-offset-2 transition-all",
+                        uploadedFile 
+                          ? "text-green-600 border-green-400 bg-green-50 focus:ring-green-500" 
+                          : isManual
+                          ? "text-blue-600 border-blue-400 bg-blue-50 focus:ring-blue-500"
+                          : "text-gray-600 border-gray-300 focus:ring-gray-500"
+                      )}
+                    />
+                    
+                    {/* 파일이 업로드된 경우: 파일명 칩과 기능 버튼 */}
+                    {uploadedFile ? (
                       <>
-                        <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-                        업로드 중
+                        <div className="flex-1 flex items-center gap-2 min-w-0">
+                          <FileText className="w-4 h-4 text-green-600 flex-shrink-0" />
+                          <span className="text-sm font-medium text-slate-900 truncate">
+                            {uploadedFile.file_name}
+                          </span>
+                          <span className="text-xs text-slate-500 flex-shrink-0">
+                            ({formatFileSize(uploadedFile.file_size)})
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-100"
+                            onClick={() => {
+                              if (uploadedFile.file_url) {
+                                window.open(uploadedFile.file_url, '_blank')
+                              } else {
+                                toast({
+                                  title: '미리보기 불가',
+                                  description: '파일 미리보기 URL을 생성할 수 없습니다.',
+                                  variant: 'destructive',
+                                })
+                              }
+                            }}
+                            title="미리보기"
+                          >
+                            <Eye className="w-3 h-3 mr-1" />
+                            미리보기
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-100"
+                            onClick={() => handleFileDelete(uploadedFile.id, uploadedFile.file_name, uploadedFile.evidence_type)}
+                            title="삭제"
+                          >
+                            <Trash2 className="w-3 h-3 mr-1" />
+                            삭제
+                          </Button>
+                        </div>
+                      </>
+                    ) : isManual ? (
+                      // 수동 체크 상태: "확보됨(수동)" 표시
+                      <>
+                        <span className="flex-1 text-sm text-slate-700">{doc}</span>
+                        <span className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded-full font-medium">
+                          확보됨(수동)
+                        </span>
                       </>
                     ) : (
+                      // 업로드 전 상태: 체크박스와 업로드 버튼
                       <>
-                        <Upload className="w-3 h-3 mr-1" />
-                        업로드
+                        <span className="flex-1 text-sm text-slate-700">{doc}</span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 text-xs border-green-300 text-green-700 hover:bg-green-50"
+                          onClick={() => handleFileSelect(doc)}
+                          disabled={!analysisId || isUploading}
+                        >
+                          {isUploading ? (
+                            <>
+                              <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                              업로드 중
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="w-3 h-3 mr-1" />
+                              업로드
+                            </>
+                          )}
+                        </Button>
                       </>
                     )}
-                  </Button>
-                </div>
-              ))}
+                  </div>
+                )
+              })}
             </div>
             
             {/* 숨겨진 파일 입력 */}

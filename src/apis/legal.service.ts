@@ -1608,26 +1608,141 @@ export const uploadSituationEvidence = async (
   evidenceType: string
 ): Promise<{ id: string; file_path: string; file_url: string }> => {
   try {
+    // 입력 검증
+    if (!file) {
+      throw new Error('파일이 선택되지 않았습니다.')
+    }
+    
+    if (!analysisId) {
+      throw new Error('분석 ID가 필요합니다.')
+    }
+    
+    if (!evidenceType) {
+      throw new Error('증거 유형이 필요합니다.')
+    }
+    
+    // 파일 크기 검증 (100MB 제한)
+    const maxSize = 100 * 1024 * 1024 // 100MB
+    if (file.size > maxSize) {
+      throw new Error(`파일 크기가 너무 큽니다. 최대 ${maxSize / 1024 / 1024}MB까지 업로드할 수 있습니다.`)
+    }
+    
     const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client')
     const supabase = createSupabaseBrowserClient()
     
-    // 사용자 ID 가져오기
-    const { data: { user }, error: userError } = await supabase.auth.getUser()
-    if (userError || !user) {
-      throw new Error('로그인이 필요합니다.')
+    // 세션 먼저 확인 (토큰 손상 방지)
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+    
+    // 세션이 없거나 에러가 있는 경우
+    if (sessionError || !session) {
+      // 토큰 손상 에러 감지
+      const isTokenCorrupted = sessionError?.message?.includes('missing sub claim') || 
+                               sessionError?.message?.includes('invalid claim') ||
+                               sessionError?.message?.includes('JWT') ||
+                               sessionError?.status === 403
+      
+      if (isTokenCorrupted) {
+        console.warn('[토큰 손상 감지] 세션 정리 중:', sessionError?.message)
+        try {
+          // 손상된 세션 정리
+          await supabase.auth.signOut({ scope: 'local' })
+          // 로컬 스토리지의 세션 정보도 정리
+          if (typeof window !== 'undefined') {
+            const keys = Object.keys(localStorage)
+            keys.forEach(key => {
+              if (key.includes('supabase') || key.includes('auth')) {
+                localStorage.removeItem(key)
+              }
+            })
+          }
+        } catch (signOutError) {
+          console.error('[로그아웃 처리 실패]', signOutError)
+        }
+        throw new Error('인증 세션이 손상되었습니다. 페이지를 새로고침하거나 다시 로그인해주세요.')
+      }
+      
+      if (sessionError) {
+        console.error('[세션 에러]', sessionError)
+        throw new Error(`로그인 확인 실패: ${sessionError.message}`)
+      }
+      
+      throw new Error('로그인이 필요합니다. 로그인 후 다시 시도해주세요.')
     }
-    const userId = user.id
+    
+    // 세션이 있으면 세션의 사용자 정보 사용
+    let userId: string | null = null
+    
+    if (session?.user) {
+      userId = session.user.id
+    } else {
+      // 세션에 사용자 정보가 없으면 getUser() 시도 (하지만 더 안전하게)
+      try {
+        const { data: { user }, error: userError } = await supabase.auth.getUser()
+        
+        // 토큰 손상 에러 감지
+        const isTokenCorrupted = userError?.message?.includes('missing sub claim') || 
+                                 userError?.message?.includes('invalid claim') ||
+                                 userError?.message?.includes('JWT') ||
+                                 userError?.status === 403
+        
+        if (isTokenCorrupted) {
+          console.warn('[토큰 손상 감지] 세션 정리 중:', userError?.message)
+          try {
+            await supabase.auth.signOut({ scope: 'local' })
+            if (typeof window !== 'undefined') {
+              const keys = Object.keys(localStorage)
+              keys.forEach(key => {
+                if (key.includes('supabase') || key.includes('auth')) {
+                  localStorage.removeItem(key)
+                }
+              })
+            }
+          } catch (signOutError) {
+            console.error('[로그아웃 처리 실패]', signOutError)
+          }
+          throw new Error('인증 세션이 손상되었습니다. 페이지를 새로고침하거나 다시 로그인해주세요.')
+        }
+        
+        if (userError) {
+          console.error('[인증 에러]', userError)
+          throw new Error(`로그인 확인 실패: ${userError.message}`)
+        }
+        
+        if (!user) {
+          throw new Error('로그인이 필요합니다. 로그인 후 다시 시도해주세요.')
+        }
+        
+        userId = user.id
+      } catch (error: any) {
+        // 이미 처리된 에러는 그대로 throw
+        if (error.message?.includes('인증 세션이 손상') || error.message?.includes('로그인 확인 실패') || error.message?.includes('로그인이 필요')) {
+          throw error
+        }
+        // 예상치 못한 에러
+        console.error('[예상치 못한 인증 에러]', error)
+        throw new Error('인증 확인 중 오류가 발생했습니다. 다시 시도해주세요.')
+      }
+    }
+    
+    if (!userId) {
+      throw new Error('사용자 ID를 가져올 수 없습니다. 다시 로그인해주세요.')
+    }
 
     // 파일 확장자 추출
     const fileExt = file.name.split('.').pop() || 'pdf'
     const timestamp = Date.now()
     const randomStr = Math.random().toString(36).substring(7)
     
-    // Storage 경로: situation_evidences/{analysis_id}/{timestamp}_{random}.{ext}
+    // 파일명 정제 (더 안전하게)
     const sanitizedFileName = file.name
-      .replace(/\s+/g, '_')
-      .replace(/[^\w\.\-]/g, '')
-      .substring(0, 50) // 파일명 길이 제한
+      .replace(/\s+/g, '_') // 공백을 언더스코어로
+      .replace(/[^a-zA-Z0-9._-]/g, '') // 영문, 숫자, 점, 언더스코어, 대시만 허용
+      .replace(/_{2,}/g, '_') // 연속된 언더스코어를 하나로
+      .substring(0, 100) // 파일명 길이 제한 (더 여유있게)
+    
+    if (!sanitizedFileName) {
+      throw new Error('파일명이 유효하지 않습니다.')
+    }
     
     const storageFileName = `${analysisId}/${timestamp}_${randomStr}_${sanitizedFileName}`
     
@@ -1636,11 +1751,15 @@ export const uploadSituationEvidence = async (
     let uploadData: any = null
     let usedBucket: string | null = null
 
+    let lastError: any = null
     for (const bucketName of bucketNames) {
       try {
+        const uploadPath = `situation_evidences/${storageFileName}`
+        console.log(`[업로드 시도] 버킷: ${bucketName}, 경로: ${uploadPath}`)
+        
         const { data, error } = await supabase.storage
           .from(bucketName)
-          .upload(`situation_evidences/${storageFileName}`, file, {
+          .upload(uploadPath, file, {
             cacheControl: '3600',
             upsert: false,
           })
@@ -1648,21 +1767,49 @@ export const uploadSituationEvidence = async (
         if (!error && data) {
           uploadData = data
           usedBucket = bucketName
+          console.log(`[업로드 성공] 버킷: ${bucketName}, 경로: ${uploadPath}`)
           break
-        } else if (error?.message?.includes('Bucket not found') || error?.message?.includes('404')) {
-          continue
         } else {
+          lastError = error
           console.warn(`[${bucketName}] 버킷 업로드 실패:`, error)
+          
+          // 특정 에러들은 건너뛰기
+          if (error?.message?.includes('Bucket not found') || 
+              error?.message?.includes('404') ||
+              error?.message?.includes('not found')) {
+            console.warn(`[${bucketName}] 버킷을 찾을 수 없음, 다음 버킷 시도`)
+            continue
+          }
+          
+          // 권한 에러나 다른 에러도 기록하고 다음 버킷 시도
+          console.error(`[${bucketName}] 업로드 에러 상세:`, {
+            message: error?.message,
+            statusCode: error?.statusCode,
+            error: error
+          })
           continue
         }
-      } catch (err) {
-        console.warn(`[${bucketName}] 버킷 접근 실패:`, err)
+      } catch (err: any) {
+        lastError = err
+        console.error(`[${bucketName}] 버킷 접근 예외:`, {
+          message: err?.message,
+          stack: err?.stack,
+          error: err
+        })
         continue
       }
     }
 
     if (!uploadData || !usedBucket) {
-      throw new Error('파일 업로드에 실패했습니다. Storage 버킷을 확인해주세요.')
+      const errorMessage = lastError?.message || '알 수 없는 오류'
+      const errorDetails = lastError ? JSON.stringify(lastError, null, 2) : ''
+      console.error('파일 업로드 실패 - 모든 버킷 시도 완료:', {
+        lastError,
+        errorMessage,
+        errorDetails,
+        attemptedBuckets: bucketNames
+      })
+      throw new Error(`파일 업로드에 실패했습니다. ${errorMessage} (시도한 버킷: ${bucketNames.join(', ')})`)
     }
 
     const filePath = `situation_evidences/${storageFileName}`
@@ -1693,6 +1840,15 @@ export const uploadSituationEvidence = async (
     })()
 
     // DB에 메타데이터 저장
+    console.log('[DB 저장 시도]', {
+      analysis_id: analysisId,
+      user_id: userId,
+      file_path: filePath,
+      file_name: file.name,
+      file_size: file.size,
+      evidence_type: evidenceType
+    })
+    
     const { data: evidenceData, error: dbError } = await supabase
       .from('situation_evidences')
       .insert({
@@ -1708,14 +1864,38 @@ export const uploadSituationEvidence = async (
       .single()
 
     if (dbError) {
-      // DB 저장 실패 시 업로드한 파일 삭제 시도
-      await supabase.storage
-        .from(usedBucket)
-        .remove([filePath])
-        .catch(console.error)
+      console.error('[DB 저장 실패]', {
+        error: dbError,
+        message: dbError.message,
+        details: dbError.details,
+        hint: dbError.hint,
+        code: dbError.code
+      })
       
-      throw new Error(`DB 저장 실패: ${dbError.message}`)
+      // DB 저장 실패 시 업로드한 파일 삭제 시도
+      try {
+        await supabase.storage
+          .from(usedBucket)
+          .remove([filePath])
+        console.log('[파일 삭제 완료] 업로드 실패로 인한 롤백:', filePath)
+      } catch (deleteError) {
+        console.error('[파일 삭제 실패]', deleteError)
+      }
+      
+      // 더 자세한 에러 메시지
+      let errorMsg = `DB 저장 실패: ${dbError.message}`
+      if (dbError.code === '23503') {
+        errorMsg += ' (외래 키 제약 조건 위반 - analysis_id 또는 user_id가 유효하지 않습니다)'
+      } else if (dbError.code === '42P01') {
+        errorMsg += ' (테이블이 존재하지 않습니다 - situation_evidences 테이블을 확인해주세요)'
+      } else if (dbError.details) {
+        errorMsg += ` (상세: ${dbError.details})`
+      }
+      
+      throw new Error(errorMsg)
     }
+    
+    console.log('[DB 저장 성공]', evidenceData)
 
     return {
       id: evidenceData.id,

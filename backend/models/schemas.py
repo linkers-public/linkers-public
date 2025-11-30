@@ -284,11 +284,19 @@ class SituationAnalysisV2(BaseModel):
     recommendations: List[str]
 
 
+class SnippetAnalyzed(BaseModel):
+    """snippet 분석 결과"""
+    core_clause: str = Field(..., description="핵심 조항 번호나 제목")
+    easy_summary: str = Field(..., description="초등학생도 이해할 수 있는 2~3문장의 친절한 설명")
+    action_tip: Optional[str] = Field(None, description="사용자가 주의해야 할 점 1줄 (선택사항)")
+
+
 class RelatedCaseV2(BaseModel):
     """유사 사례 (v2)"""
     id: str
     title: str
-    summary: str
+    summary: str  # 원본 snippet (하위 호환성)
+    summaryAnalyzed: Optional[SnippetAnalyzed] = Field(None, description="분석된 결과")
     link: Optional[str] = None
     externalId: Optional[str] = Field(None, description="파일 ID (스토리지 경로 생성용, id와 동일)")
     fileUrl: Optional[str] = Field(None, description="스토리지 Signed URL (파일 다운로드용)")
@@ -305,7 +313,8 @@ class SourceItemV2(BaseModel):
     sourceId: str
     sourceType: str  # "law" | "manual" | "case"
     title: str
-    snippet: str
+    snippet: str  # 원본 snippet (하위 호환성)
+    snippetAnalyzed: Optional[SnippetAnalyzed] = Field(None, description="분석된 결과")
     score: float
     externalId: Optional[str] = Field(None, description="파일 ID (스토리지 경로 생성용)")
     fileUrl: Optional[str] = Field(None, description="스토리지 Signed URL (파일 다운로드용)")
