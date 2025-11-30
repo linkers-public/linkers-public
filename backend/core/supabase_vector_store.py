@@ -776,18 +776,21 @@ class SupabaseVectorStore:
         external_id: str,
         source_type: str,
         expires_in: int = 3600,  # 1시간 (Public URL에서는 사용하지 않지만 호환성을 위해 유지)
-        bucket_name: Optional[str] = None,  # 버킷 이름 (None이면 자동 선택)
+        bucket_name: Optional[str] = None,  # 버킷 이름 (무시됨, 항상 legal-sources 사용)
         file_path_override: Optional[str] = None  # 직접 경로 지정 (우선순위 높음)
     ) -> Optional[str]:
         """
         스토리지에서 파일 다운로드 Public URL 생성
         
+        모든 자료(case, manual, law, standard_contract)는 legal-sources 버킷에 저장되어 있으므로
+        bucket_name 파라미터는 무시되고 항상 legal-sources 버킷을 사용합니다.
+        
         Args:
             external_id: 파일 ID (legal_chunks.external_id 또는 related_cases.id)
             source_type: 소스 타입 ('law' | 'manual' | 'case' | 'standard_contract')
             expires_in: URL 만료 시간 (초, Public URL에서는 사용하지 않지만 호환성을 위해 유지)
-            bucket_name: 버킷 이름 (None이면 source_type에 따라 자동 선택)
-            file_path_override: 직접 경로 지정 (우선순위 높음, 예: "contracts/anonymous/1764330928000_olvxin.pdf")
+            bucket_name: 버킷 이름 (무시됨, 항상 legal-sources 사용)
+            file_path_override: 직접 경로 지정 (예: "standard_contracts/5989a3a317ccd827176b60367c1374a8.pdf")
         
         Returns:
             Public URL 또는 None (파일이 없거나 오류 발생 시)
@@ -797,53 +800,23 @@ class SupabaseVectorStore:
         if not external_id:
             return None
         
+        # 모든 자료(case, manual, law, standard_contract)는 legal-sources 버킷에 있음
+        # 버킷 이름을 legal-sources로 고정
+        bucket_name = "legal-sources"
+        
         # file_path_override가 있으면 직접 사용
         if file_path_override:
             file_path = file_path_override
-            # 버킷 이름이 지정되지 않았으면 기본값 사용
-            if not bucket_name:
-                bucket_name = "attach_file"
         else:
-            # 버킷 이름 자동 선택
-            if not bucket_name:
-                # standard_contract는 attach_file 버킷 사용
-                if source_type == 'standard_contract':
-                    bucket_name = "attach_file"
-                    # standard_contract의 경우 contracts 폴더 사용
-                    # external_id가 이미 전체 경로일 수도 있음
-                    if '/' in external_id:
-                        file_path = external_id
-                    else:
-                        # external_id만 있으면 contracts/anonymous/{external_id}.pdf 형식 가정
-                        file_path = f"contracts/anonymous/{external_id}.pdf"
-                else:
-                    # 기존 legal-sources 버킷 사용
-                    bucket_name = "legal-sources"
-                    # source_type에 따른 버킷 경로 매핑
-                    bucket_map = {
-                        'law': 'laws',
-                        'manual': 'manuals',
-                        'case': 'cases',
-                        'standard_contract': 'standard_contracts',
-                    }
-                    bucket_folder = bucket_map.get(source_type, 'laws')
-                    file_path = f"{bucket_folder}/{external_id}.pdf"
-            else:
-                # 버킷 이름이 지정되었지만 경로는 자동 생성
-                if source_type == 'standard_contract':
-                    if '/' in external_id:
-                        file_path = external_id
-                    else:
-                        file_path = f"contracts/anonymous/{external_id}.pdf"
-                else:
-                    bucket_map = {
-                        'law': 'laws',
-                        'manual': 'manuals',
-                        'case': 'cases',
-                        'standard_contract': 'standard_contracts',
-                    }
-                    bucket_folder = bucket_map.get(source_type, 'laws')
-                    file_path = f"{bucket_folder}/{external_id}.pdf"
+            # source_type에 따른 버킷 경로 매핑
+            bucket_map = {
+                'law': 'laws',
+                'manual': 'manuals',
+                'case': 'cases',
+                'standard_contract': 'standard_contracts',
+            }
+            bucket_folder = bucket_map.get(source_type, 'laws')
+            file_path = f"{bucket_folder}/{external_id}.pdf"
         
         try:
             # 방법 1: Supabase Python SDK의 get_public_url 메서드 사용 시도

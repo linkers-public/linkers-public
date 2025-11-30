@@ -1073,10 +1073,12 @@ export default function QuickAssistPage() {
             contextId: currentContext.id,
           })
           
+          console.log('챗 응답:', chatResult)
+          
           assistantMessage = {
             id: `msg-${Date.now()}-assistant`,
             role: 'assistant',
-            content: chatResult.answer || '답변을 생성할 수 없습니다.',
+            content: chatResult?.answer || chatResult?.markdown || '답변을 생성할 수 없습니다.',
             timestamp: new Date(),
           }
           
@@ -1127,10 +1129,12 @@ export default function QuickAssistPage() {
             contextId: currentContext.id,
           })
           
+          console.log('계약서 컨텍스트 챗 응답:', chatResult)
+          
           assistantMessage = {
             id: `msg-${Date.now()}-assistant`,
             role: 'assistant',
-            content: chatResult.answer || '답변을 생성할 수 없습니다.',
+            content: chatResult?.answer || chatResult?.markdown || '답변을 생성할 수 없습니다.',
             timestamp: new Date(),
           }
           
@@ -1169,11 +1173,10 @@ export default function QuickAssistPage() {
               )
             } catch (dbError) {
               console.warn('계약서 컨텍스트 메시지 저장 실패:', dbError)
+            }
           }
-        }
-      } else {
-          // 일반 상황 분석 API 호출 (컨텍스트 없음) 또는 일반 챗
-          if (currentContext.type === 'none') {
+        } else if (currentContext.type === 'none') {
+          // 일반 챗 모드 - chatWithContractV2 사용
             // 일반 챗 모드 - chatWithContractV2 사용
             const chatResult = await chatWithContractV2({
               query: inputMessage.trim(),
@@ -1227,56 +1230,55 @@ export default function QuickAssistPage() {
                 console.warn('일반 챗 메시지 저장 실패:', dbError)
               }
             }
-          } else {
-            // 상황 분석 API 호출 (새로운 분석 생성)
-        const request: SituationRequestV2 = {
-          situation: inputMessage.trim(),
-          category: 'unknown',
-        }
-
-        const result = await analyzeSituationV2(request)
-
-        // AI 응답 메시지 생성
-        assistantMessage = {
-          id: `msg-${Date.now()}-assistant`,
-          role: 'assistant',
-          content: result.analysis.summary,
-          timestamp: new Date(),
-        }
-        
-            // 새로운 상황 분석인 경우 컨텍스트 업데이트
-        if (result.id) {
-              // 상황 분석 결과를 컨텍스트로 설정
-              setCurrentContext({
-                type: 'situation',
-                id: result.id,
-                label: result.analysis?.summary?.substring(0, 30) || '상황 분석',
-              })
-        }
-
-        // 리포트 생성 여부 판단 (위험도가 높거나 특정 키워드가 있는 경우)
-        const shouldGenerateReport = result.riskScore > 50 || 
-          ['해고', '임금', '체불', '위반', '불법'].some(keyword => inputMessage.includes(keyword))
-
-        if (shouldGenerateReport && result.id) {
-          // 리포트는 백엔드에서 자동으로 situation_analyses 테이블에 저장됨
-          assistantMessage.reportId = result.id
-
-          // 로컬 상태 업데이트
-          const report: Report = {
-            id: result.id,
-            question: inputMessage.trim(),
-            answer: result.analysis.summary,
-                legalBasis: result.analysis.legalBasis?.map((b: any) => b.snippet) || [],
-            recommendations: result.analysis.recommendations || [],
-            riskScore: result.riskScore,
-            tags: result.tags || [],
-            createdAt: new Date(),
+        } else {
+          // 상황 분석 API 호출 (새로운 분석 생성)
+          const request: SituationRequestV2 = {
+            situation: inputMessage.trim(),
+            category: 'unknown',
           }
 
-          const updatedReports = [report, ...reports].slice(0, 50) // 최근 50개만 유지
-          setReports(updatedReports)
+          const result = await analyzeSituationV2(request)
+
+          // AI 응답 메시지 생성
+          assistantMessage = {
+            id: `msg-${Date.now()}-assistant`,
+            role: 'assistant',
+            content: result.analysis.summary,
+            timestamp: new Date(),
+          }
+          
+          // 새로운 상황 분석인 경우 컨텍스트 업데이트
+          if (result.id) {
+            // 상황 분석 결과를 컨텍스트로 설정
+            setCurrentContext({
+              type: 'situation',
+              id: result.id,
+              label: result.analysis?.summary?.substring(0, 30) || '상황 분석',
+            })
+          }
+
+          // 리포트 생성 여부 판단 (위험도가 높거나 특정 키워드가 있는 경우)
+          const shouldGenerateReport = result.riskScore > 50 || 
+            ['해고', '임금', '체불', '위반', '불법'].some(keyword => inputMessage.includes(keyword))
+
+          if (shouldGenerateReport && result.id) {
+            // 리포트는 백엔드에서 자동으로 situation_analyses 테이블에 저장됨
+            assistantMessage.reportId = result.id
+
+            // 로컬 상태 업데이트
+            const report: Report = {
+              id: result.id,
+              question: inputMessage.trim(),
+              answer: result.analysis.summary,
+              legalBasis: result.analysis.legalBasis?.map((b: any) => b.snippet) || [],
+              recommendations: result.analysis.recommendations || [],
+              riskScore: result.riskScore,
+              tags: result.tags || [],
+              createdAt: new Date(),
             }
+
+            const updatedReports = [report, ...reports].slice(0, 50) // 최근 50개만 유지
+            setReports(updatedReports)
           }
         }
       }
@@ -1606,7 +1608,9 @@ export default function QuickAssistPage() {
                           "text-sm font-semibold truncate leading-snug",
                           selectedConversationId === conv.id ? "text-blue-900" : "text-slate-800"
                         )}>
-                          {conv.title}
+                          {conv.messages.length > 0 
+                            ? (conv.messages.find(m => m.role === 'user')?.content || conv.messages[0]?.content || conv.title)
+                            : conv.title}
                         </div>
                         {conv.messages.length > 0 && (
                           <div className="text-xs text-slate-500 mt-1 line-clamp-1">

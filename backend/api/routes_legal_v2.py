@@ -38,8 +38,6 @@ from models.schemas import (
     UsedChunksV2,
     UsedChunkV2,
     ConversationRequestV2,
-    ChatSessionCreateRequest,
-    ChatMessageRequest,
     ActionPlan,
     CriteriaItem,
 )
@@ -1380,7 +1378,7 @@ async def analyze_situation(
                     external_id = external_id or chunk_info.get("external_id")
                     source_type = source_type or chunk_info.get("source_type", "law")
             
-            # fileUrl 생성 (공통 유틸 함수 사용, external_id와 source_type 사용)
+            # fileUrl 무조건 새로 생성 (legal_chunks에 저장된 file_url은 신뢰할 수 없음)
             file_url = None
             if external_id and source_type:
                 try:
@@ -1391,9 +1389,6 @@ async def analyze_situation(
                     )
                 except Exception as e:
                     _logger.warning(f"source fileUrl 생성 실패 (externalId={external_id}, sourceType={source_type}): {str(e)}")
-            elif chunk.get("file_url"):
-                # 이미 생성된 file_url이 있으면 사용
-                file_url = chunk.get("file_url")
             
             sources.append({
                 "sourceId": source_id,  # legal_chunks.id (UUID)
@@ -1402,7 +1397,7 @@ async def analyze_situation(
                 "snippet": chunk.get("snippet", ""),
                 "score": float(chunk.get("score", 0.0)),
                 "externalId": external_id,  # legal_chunks.external_id (실제 파일 ID, DB 조회로 보완)
-                "fileUrl": file_url or chunk.get("file_url"),  # 스토리지 Signed URL (공통 유틸 함수 사용)
+                "fileUrl": file_url,  # 스토리지 Signed URL (무조건 새로 생성)
             })
         
         # DB에 저장 (비동기, 실패해도 응답은 반환)
@@ -1773,7 +1768,7 @@ async def delete_chat_session(
 
 @router.post("/chat/sessions", response_model=dict)
 async def create_chat_session(
-    payload: ChatSessionCreateRequest,
+    payload: CreateChatSessionRequest,
     x_user_id: Optional[str] = Header(None, alias="X-User-Id", description="사용자 ID"),
 ):
     """

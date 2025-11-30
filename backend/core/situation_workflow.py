@@ -278,6 +278,28 @@ class SituationWorkflow:
         
         # 최종 JSON 출력 구성
         # related_cases는 이미 retrieve_guides에서 최대 3개로 제한됨
+        # related_cases는 dict 형태로 반환되므로 dict 접근 방식 사용
+        formatted_related_cases = []
+        for case in related_cases[:3]:  # 최대 3개만 (이중 안전장치)
+            if isinstance(case, dict):
+                case_id = case.get("id", "")
+                case_title = case.get("title", "")
+                case_situation = case.get("situation", "")
+                case_source_type = case.get("source_type")
+            else:
+                # 객체인 경우 (Legacy 지원)
+                case_id = getattr(case, "id", "")
+                case_title = getattr(case, "title", "")
+                case_situation = getattr(case, "situation", "")
+                case_source_type = getattr(case, "source_type", None)
+            
+            formatted_related_cases.append({
+                "id": case_id,  # external_id
+                "title": case_title,
+                "summary": case_situation[:200] if len(case_situation) > 200 else case_situation,
+                "source_type": case_source_type,  # source_type 정보 추가
+            })
+        
         final_output = {
             "classified_type": classification.get("classified_type", "unknown"),
             "risk_score": classification.get("risk_score", 50),
@@ -285,15 +307,7 @@ class SituationWorkflow:
             "criteria": criteria,  # generate_action_guide에서 legal_basis 기반으로 생성
             "action_plan": action_plan,  # steps 구조
             "scripts": scripts,  # toCompany, toAdvisor
-            "related_cases": [
-                {
-                    "id": case.id,  # external_id
-                    "title": case.title,
-                    "summary": case.situation[:200] if len(case.situation) > 200 else case.situation,
-                    "source_type": getattr(case, 'source_type', None),  # source_type 정보 추가
-                }
-                for case in related_cases[:3]  # 최대 3개만 (이중 안전장치)
-            ],
+            "related_cases": formatted_related_cases,
             "grounding_chunks": [
                 {
                     "source_id": chunk.source_id,
@@ -734,18 +748,18 @@ class SituationWorkflow:
                 
                 # JSON 파싱 실패 시에도 부분적으로 파싱 시도
                 try:
-                    # summary 필드만 추출 시도 (더 유연한 패턴)
+                    # summary, criteria, action_plan, scripts 필드 추출 시도
                     json_to_search = json_str_cleaned if 'json_str_cleaned' in locals() else (json_str if 'json_str' in locals() else response_clean)
                     
                     # 여러 패턴으로 summary 필드 찾기
-                    patterns = [
+                    summary_patterns = [
                         r'"summary"\s*:\s*"((?:[^"\\]|\\.)*)"',  # 일반적인 JSON 문자열
                         r'"summary"\s*:\s*"([^"]*)"',  # 간단한 패턴
                         r'summary["\s]*:["\s]*([^",}]+)',  # 더 유연한 패턴
                     ]
                     
                     summary_text = None
-                    for pattern in patterns:
+                    for pattern in summary_patterns:
                         summary_match = re.search(pattern, json_to_search, re.DOTALL | re.IGNORECASE)
                         if summary_match:
                             summary_text = summary_match.group(1)
@@ -754,13 +768,74 @@ class SituationWorkflow:
                             logger.warning(f"[워크플로우] summary 필드 추출 성공 (패턴: {pattern[:30]}...)")
                             break
                     
+                    # criteria 필드 추출 시도
+                    criteria_list = []
+                    try:
+                        # criteria 배열 패턴 찾기 (더 강력한 패턴)
+                        # 먼저 criteria 배열의 시작과 끝을 찾기
+                        criteria_start = json_to_search.find('"criteria"')
+                        if criteria_start != -1:
+                            # criteria 다음의 [ 찾기
+                            bracket_start = json_to_search.find('[', criteria_start)
+                            if bracket_start != -1:
+                                # 중첩된 중괄호와 대괄호를 고려하여 배열 끝 찾기
+                                bracket_count = 0
+                                bracket_end = bracket_start
+                                in_string = False
+                                escape_next = False
+                                
+                                for i in range(bracket_start, len(json_to_search)):
+                                    char = json_to_search[i]
+                                    
+                                    if escape_next:
+                                        escape_next = False
+                                        continue
+                                    
+                                    if char == '\\':
+                                        escape_next = True
+                                        continue
+                                    
+                                    if char == '"' and not escape_next:
+                                        in_string = not in_string
+                                        continue
+                                    
+                                    if not in_string:
+                                        if char == '[':
+                                            bracket_count += 1
+                                        elif char == ']':
+                                            bracket_count -= 1
+                                            if bracket_count == 0:
+                                                bracket_end = i + 1
+                                                break
+                                
+                                if bracket_end > bracket_start:
+                                    criteria_array_str = json_to_search[bracket_start:bracket_end]
+                                    # 각 객체 추출 (간단한 패턴)
+                                    # { "name": "...", "status": "...", "reason": "..." }
+                                    item_pattern = r'\{\s*"name"\s*:\s*"((?:[^"\\]|\\.)*)"\s*,\s*"status"\s*:\s*"((?:[^"\\]|\\.)*)"\s*,\s*"reason"\s*:\s*"((?:[^"\\]|\\.)*)"'
+                                    items = re.findall(item_pattern, criteria_array_str, re.DOTALL)
+                                    for name, status, reason in items:
+                                        # 이스케이프 제거
+                                        name = name.replace('\\"', '"').replace('\\n', '\n').replace('\\r', '\r').replace('\\t', '\t')
+                                        status = status.replace('\\"', '"').replace('\\n', '\n').replace('\\r', '\r').replace('\\t', '\t')
+                                        reason = reason.replace('\\"', '"').replace('\\n', '\n').replace('\\r', '\r').replace('\\t', '\t')
+                                        criteria_list.append({
+                                            "name": name,
+                                            "status": status,
+                                            "reason": reason,
+                                        })
+                                    if criteria_list:
+                                        logger.warning(f"[워크플로우] criteria 필드 추출 성공: {len(criteria_list)}개")
+                    except Exception as criteria_error:
+                        logger.warning(f"[워크플로우] criteria 추출 실패: {str(criteria_error)}")
+                    
                     if summary_text:
-                        # 부분 파싱 결과 반환
+                        # 부분 파싱 결과 반환 (criteria 포함)
                         return {
                             "summary": summary_text.strip(),
                             "action_plan": {"steps": []},
                             "scripts": {},
-                            "criteria": [],
+                            "criteria": criteria_list,  # 추출된 criteria 사용
                         }
                     else:
                         logger.warning("[워크플로우] summary 필드도 추출 실패")
