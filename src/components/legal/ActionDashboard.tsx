@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Briefcase, Upload, Phone, Globe, ExternalLink, MapPin, FileText, X, Loader2, CheckCircle2, AlertCircle, Download, Trash2 } from 'lucide-react'
+import { Briefcase, Upload, Phone, Globe, ExternalLink, MapPin, FileText, X, Loader2, CheckCircle2, AlertCircle, Download, Trash2, ChevronDown, ChevronUp, Building2, Shield, Headphones } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { uploadSituationEvidence, getSituationEvidences, deleteSituationEvidence } from '@/apis/legal.service'
 import type { SituationCategory } from '@/types/legal'
@@ -74,6 +74,34 @@ const ORGANIZATIONS: OrganizationInfo[] = [
     website: 'https://www.humanrights.go.kr',
     phone: '1331',
     icon: Briefcase,
+  },
+  {
+    id: 'company_hr',
+    name: '회사 내 인사팀/노무팀',
+    description: '회사 내부 고충 처리 및 해결',
+    capabilities: ['내부 고충 처리', '인사팀 상담', '노무팀 상담'],
+    requiredDocs: ['근로계약서', '증거 자료', '상황 설명서'],
+    icon: Building2,
+  },
+  {
+    id: 'police',
+    name: '경찰서 신고',
+    description: '폭언·폭행·스토킹 등 형사 사건 신고',
+    capabilities: ['폭행 신고', '폭언 신고', '스토킹 신고', '협박 신고'],
+    requiredDocs: ['증거 자료', '녹음 파일', '사진/동영상', '증인 정보'],
+    legalBasis: '형법: 폭행죄, 협박죄, 스토킹처벌법',
+    phone: '112',
+    icon: Shield,
+  },
+  {
+    id: 'free_labor_consult',
+    name: '무료 노무상담 / 법률구조공단',
+    description: '무료 법률 상담 및 구조 지원',
+    capabilities: ['무료 상담', '법률 구조', '소송 지원'],
+    requiredDocs: ['근로계약서', '증거 자료', '상황 설명서'],
+    website: 'https://www.klaf.or.kr',
+    phone: '132',
+    icon: Headphones,
   },
 ]
 
@@ -437,6 +465,105 @@ export function ActionDashboard({ classifiedType, analysisId, onCopy, organizati
   const mainOrg = recommendedOrgs[selectedOrgIndex] || recommendedOrgs[0]
   const MainIcon = mainOrg?.icon || Briefcase
   
+  // 기본적으로 첫 번째 기관의 절차가 열려있도록 설정
+  const [expandedOrgId, setExpandedOrgId] = useState<string | null>(() => {
+    const firstOrg = recommendedOrgs[0]
+    return firstOrg?.id || null
+  })
+  
+  // selectedOrgIndex가 변경되면 해당 기관의 절차를 자동으로 열기
+  React.useEffect(() => {
+    const currentOrg = recommendedOrgs[selectedOrgIndex] || recommendedOrgs[0]
+    if (currentOrg) {
+      setExpandedOrgId(currentOrg.id)
+    }
+  }, [selectedOrgIndex, recommendedOrgs])
+
+  // 기관별 신고 절차 데이터
+  const getOrgProcedure = (orgId: string): { steps: string[], complaintUrl?: string, title?: string } => {
+    const procedures: Record<string, { steps: string[], complaintUrl?: string, title?: string }> = {
+      moel: {
+        steps: [
+          '가까운 노동청 선택 후 주소·전화번호 확인',
+          '이 대시보드에 모인 자료로 임금체불/근로조건 위반 내용 정리',
+          '온라인/방문 중 선택해 진정서 제출',
+          '노동청에서 오는 조사 안내 연락 확인',
+          '조사 출석 또는 추가 자료 제출 → 결과 통보 확인',
+        ],
+        complaintUrl: 'https://www.moel.go.kr/info/publict/publictList.do',
+      },
+      labor_attorney: {
+        steps: [
+          '노무사 사무실 찾기 (온라인 검색 또는 추천)',
+          '상담 예약 및 준비 자료 정리',
+          '상담 시 증거 자료 제시 및 상황 설명',
+          '법적 대응 방안 논의 및 소송 여부 결정',
+          '필요 시 소송 진행 또는 조정 신청',
+        ],
+      },
+      comwel: {
+        steps: [
+          '근로복지공단 홈페이지 또는 전화 상담 예약',
+          '연차수당/휴일수당 관련 증거 자료 준비',
+          '상담 신청 및 상황 설명',
+          '공단에서 진행하는 조사 또는 확인 절차',
+          '결과 통보 및 지급 안내',
+        ],
+        complaintUrl: 'https://www.comwel.or.kr',
+      },
+      moel_complaint: {
+        steps: [
+          '상담·신고 접수\n국번 없이 1350으로 전화하거나, 고용노동부 고객상담센터 홈페이지에서 상담·신고를 접수합니다.',
+          '증거 정리 및 업로드\n직장 내 괴롭힘·차별 관련 대화 내용, 메일, 녹음, 사진 등 증거 자료를 정리해 보관하고, 필요 시 함께 제출합니다.',
+          '진정서 작성·제출\n발생 경위와 상대방, 회사 조치 여부 등을 정리하여 진정서를 작성한 뒤 온라인(또는 팩스·우편)으로 제출합니다.',
+          '고용노동부 조사 진행\n고용노동부가 회사와 당사자를 대상으로 사실조사·자료 확인을 진행하고, 필요한 경우 시정·개선 조치를 요구합니다.',
+          '결과 통보 및 후속 조치\n조사 결과와 시정 명령 내용을 통보받고, 회사 조치가 적절했는지 여부를 확인합니다. 추가 대응이 필요하면 다시 상담을 요청할 수 있습니다.',
+        ],
+        complaintUrl: 'https://1350.moel.go.kr/home/hp/main/hpmain.do',
+        title: '고용노동부 고객상담센터 신고는 이렇게 진행돼요',
+      },
+      human_rights: {
+        steps: [
+          '국가인권위원회 홈페이지 또는 전화 상담',
+          '인권 침해 관련 증거 자료 준비',
+          '진정서 작성 및 제출',
+          '인권위 조사 진행',
+          '조사 결과 및 구제 조치 확인',
+        ],
+        complaintUrl: 'https://www.humanrights.go.kr',
+      },
+      company_hr: {
+        steps: [
+          '회사 인사팀/노무팀 연락처 확인',
+          '상황을 객관적으로 정리한 문서 작성',
+          '증거 자료 준비 및 정리',
+          '인사팀/노무팀과 면담 요청',
+          '면담 후 조치 결과 확인 및 문서화',
+        ],
+      },
+      police: {
+        steps: [
+          '가까운 경찰서 또는 112 신고',
+          '폭행/폭언/스토킹 관련 증거 자료 준비',
+          '경찰서 방문 또는 전화 신고',
+          '경찰 조사 및 진술',
+          '수사 결과 및 처분 확인',
+        ],
+      },
+      free_labor_consult: {
+        steps: [
+          '법률구조공단 홈페이지 또는 전화 상담 예약',
+          '상황 설명서 및 증거 자료 준비',
+          '무료 상담 신청 및 상담 진행',
+          '법률 구조 여부 판단 및 지원 결정',
+          '필요 시 소송 지원 진행',
+        ],
+        complaintUrl: 'https://www.klaf.or.kr',
+      },
+    }
+    return procedures[orgId] || { steps: [] }
+  }
+  
   // recommendedOrgs가 비어있으면 빈 배열 반환
   if (!mainOrg || recommendedOrgs.length === 0) {
     return null
@@ -683,37 +810,111 @@ export function ActionDashboard({ classifiedType, analysisId, onCopy, organizati
                     <h4 className="font-bold text-slate-900">{mainOrg.name}</h4>
                   </div>
                   <p className="text-xs text-slate-600 mb-3">{mainOrg.description}</p>
-                  <div className="flex flex-wrap gap-2">
-                    {mainOrg.phone && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          if (onCopy) {
-                            onCopy(mainOrg.phone || '', '전화번호가 복사되었습니다')
-                          }
-                        }}
-                        className="h-8 text-xs border-blue-300 text-blue-700 hover:bg-blue-50"
-                      >
-                        <Phone className="w-3 h-3 mr-1" />
-                        {mainOrg.phone}
-                      </Button>
-                    )}
-                    {mainOrg.website && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => window.open(mainOrg.website, '_blank')}
-                        className="h-8 text-xs border-blue-300 text-blue-700 hover:bg-blue-50"
-                      >
-                        <Globe className="w-3 h-3 mr-1" />
-                        웹사이트
-                        <ExternalLink className="w-3 h-3 ml-1" />
-                      </Button>
-                    )}
-                  </div>
                 </div>
               </div>
+
+              {/* 기관별 신고 절차 (접을 수 있음) */}
+              {(() => {
+                const procedure = getOrgProcedure(mainOrg.id)
+                const isExpanded = expandedOrgId === mainOrg.id
+                
+                if (procedure.steps.length === 0) return null
+
+                return (
+                  <div className="mt-4 border-t border-blue-200 pt-4">
+                    <button
+                      onClick={() => setExpandedOrgId(isExpanded ? null : mainOrg.id)}
+                      className="flex items-center justify-between w-full text-left hover:opacity-80 transition-opacity"
+                    >
+                      <h5 className="text-sm font-semibold text-slate-900">
+                        {procedure.title || `${mainOrg.name} 신고 절차`}
+                      </h5>
+                      {isExpanded ? (
+                        <ChevronUp className="w-4 h-4 text-slate-500" />
+                      ) : (
+                        <ChevronDown className="w-4 h-4 text-slate-500" />
+                      )}
+                    </button>
+
+                    {isExpanded && (
+                      <div className="mt-4 space-y-4">
+                        {/* 절차 타임라인 */}
+                        <div className="relative">
+                          {/* 연결선 */}
+                          <div className="absolute left-[11px] top-0 bottom-0 w-0.5 bg-gradient-to-b from-blue-200 via-blue-300 to-blue-200"></div>
+                          
+                          <ol className="space-y-4 relative">
+                            {procedure.steps.map((step, idx) => {
+                              const [title, ...description] = step.split('\n')
+                              const isLast = idx === procedure.steps.length - 1
+                              return (
+                                <li key={idx} className="flex gap-4 relative">
+                                  {/* 단계 번호 원 */}
+                                  <div className="relative z-10 flex-shrink-0">
+                                    <div className="w-6 h-6 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 shadow-md flex items-center justify-center ring-2 ring-white">
+                                      <span className="text-xs font-bold text-white">{idx + 1}</span>
+                                    </div>
+                                    {!isLast && (
+                                      <div className="absolute top-6 left-1/2 -translate-x-1/2 w-0.5 h-4 bg-gradient-to-b from-blue-300 to-blue-200"></div>
+                                    )}
+                                  </div>
+                                  
+                                  {/* 내용 카드 */}
+                                  <div className="flex-1 pb-2">
+                                    <div className="bg-white border border-slate-200 rounded-lg p-3 shadow-sm hover:shadow-md transition-shadow">
+                                      <div className="font-semibold text-sm text-slate-900 mb-1.5">{title}</div>
+                                      {description.length > 0 && (
+                                        <div className="text-xs text-slate-600 leading-relaxed whitespace-pre-line">
+                                          {description.join('\n')}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </li>
+                              )
+                            })}
+                          </ol>
+                        </div>
+
+                        {/* 액션 버튼 */}
+                        <div className="flex gap-2 pt-2 border-t border-slate-200">
+                          {mainOrg.phone && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="flex-1 h-9 text-xs font-medium border-blue-300 text-blue-700 hover:bg-blue-50 hover:border-blue-400 transition-colors"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                if (onCopy) {
+                                  onCopy(mainOrg.phone || '', '전화번호가 복사되었습니다')
+                                }
+                              }}
+                            >
+                              <Phone className="w-3.5 h-3.5 mr-1.5" />
+                              연락처
+                            </Button>
+                          )}
+                          {(mainOrg.website || procedure.complaintUrl) && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="flex-1 h-9 text-xs font-medium border-blue-300 text-blue-700 hover:bg-blue-50 hover:border-blue-400 transition-colors"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                window.open(mainOrg.website || procedure.complaintUrl, '_blank')
+                              }}
+                            >
+                              <Globe className="w-3.5 h-3.5 mr-1.5" />
+                              웹사이트
+                              <ExternalLink className="w-3 h-3 ml-1" />
+                            </Button>
+                          )}
+                        </div>
+                </div>
+                    )}
+              </div>
+                )
+              })()}
             </div>
 
             {/* 기타 추천 기관 */}
@@ -723,11 +924,17 @@ export function ActionDashboard({ classifiedType, analysisId, onCopy, organizati
                 {recommendedOrgs.map((org, index) => {
                   if (index === selectedOrgIndex) return null // 현재 선택된 기관은 제외
                   const OrgIcon = org.icon
+                  const procedure = getOrgProcedure(org.id)
+                  const isExpanded = expandedOrgId === org.id
+                  
                   return (
                     <div 
                       key={org.id} 
+                      className="bg-white border border-slate-200 rounded-lg hover:border-blue-300 transition-colors"
+                    >
+                      <div
                       onClick={() => setSelectedOrgIndex(index)}
-                      className="flex items-center gap-2 p-2 bg-white border border-slate-200 rounded-lg hover:border-blue-300 hover:bg-blue-50 transition-colors cursor-pointer"
+                        className="flex items-center gap-2 p-2 cursor-pointer"
                     >
                       <OrgIcon className="w-4 h-4 text-blue-600" />
                       <span className="flex-1 text-xs text-slate-700 font-medium">{org.name}</span>
@@ -745,6 +952,103 @@ export function ActionDashboard({ classifiedType, analysisId, onCopy, organizati
                         >
                           <Phone className="w-3 h-3" />
                         </Button>
+                      )}
+                    </div>
+
+                      {/* 기관별 신고 절차 (접을 수 있음) */}
+                      {procedure.steps.length > 0 && (
+                        <div className="border-t border-slate-100">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setExpandedOrgId(isExpanded ? null : org.id)
+                            }}
+                            className="flex items-center justify-between w-full p-2 text-left hover:bg-slate-50 transition-colors"
+                          >
+                            <span className="text-xs font-medium text-slate-700">
+                              {procedure.title || `${org.name} 신고 절차`}
+                            </span>
+                            {isExpanded ? (
+                              <ChevronUp className="w-3 h-3 text-slate-500" />
+                            ) : (
+                              <ChevronDown className="w-3 h-3 text-slate-500" />
+                            )}
+                          </button>
+
+                          {isExpanded && (
+                            <div className="px-2 pb-3 space-y-3">
+                              {/* 절차 타임라인 (작은 버전) */}
+                              <div className="relative">
+                                <div className="absolute left-[9px] top-0 bottom-0 w-0.5 bg-gradient-to-b from-blue-200 via-blue-300 to-blue-200"></div>
+                                
+                                <ol className="space-y-3 relative">
+                                  {procedure.steps.map((step, idx) => {
+                                    const [title, ...description] = step.split('\n')
+                                    const isLast = idx === procedure.steps.length - 1
+                                    return (
+                                      <li key={idx} className="flex gap-2.5 relative">
+                                        <div className="relative z-10 flex-shrink-0">
+                                          <div className="w-4 h-4 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 shadow-sm flex items-center justify-center ring-1 ring-white">
+                                            <span className="text-[9px] font-bold text-white">{idx + 1}</span>
+                                          </div>
+                                          {!isLast && (
+                                            <div className="absolute top-4 left-1/2 -translate-x-1/2 w-0.5 h-3 bg-gradient-to-b from-blue-300 to-blue-200"></div>
+                                          )}
+                                        </div>
+                                        
+                                        <div className="flex-1 pb-1">
+                                          <div className="bg-white border border-slate-200 rounded-md p-2 shadow-sm">
+                                            <div className="font-semibold text-[11px] text-slate-900 mb-1">{title}</div>
+                                            {description.length > 0 && (
+                                              <div className="text-[10px] text-slate-600 leading-relaxed whitespace-pre-line">
+                                                {description.join('\n')}
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      </li>
+                                    )
+                                  })}
+                                </ol>
+                              </div>
+
+                              {/* 액션 버튼 */}
+                              <div className="flex gap-1.5 mt-3 pt-2 border-t border-slate-100">
+                                {org.phone && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="flex-1 h-7 text-[10px] font-medium border-blue-300 text-blue-700 hover:bg-blue-50 hover:border-blue-400 transition-colors"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      if (onCopy) {
+                                        onCopy(org.phone || '', '전화번호가 복사되었습니다')
+                                      }
+                                    }}
+                                  >
+                                    <Phone className="w-2.5 h-2.5 mr-1" />
+                                    연락처
+                                  </Button>
+                                )}
+                                {(org.website || procedure.complaintUrl) && (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="flex-1 h-7 text-[10px] font-medium border-blue-300 text-blue-700 hover:bg-blue-50 hover:border-blue-400 transition-colors"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      window.open(org.website || procedure.complaintUrl, '_blank')
+                                    }}
+                                  >
+                                    <Globe className="w-2.5 h-2.5 mr-1" />
+                                    웹사이트
+                                    <ExternalLink className="w-2 h-2 ml-0.5" />
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       )}
                     </div>
                   )

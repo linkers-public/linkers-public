@@ -30,7 +30,8 @@ import {
   Users,
   TrendingUp,
   Sparkles,
-  Plus
+  Plus,
+  ClipboardList
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
@@ -53,6 +54,7 @@ import {
 } from '@/apis/legal.service'
 import { MarkdownRenderer } from '@/components/rag/MarkdownRenderer'
 import { ChatAiMessage } from '@/components/legal/ChatAiMessage'
+import { SituationChatMessage } from '@/components/legal/SituationChatMessage'
 import type { SituationAnalysisResponse } from '@/types/legal'
 
 // 색상 상수 (다른 페이지와 통일)
@@ -173,6 +175,8 @@ interface ChatMessage {
   content: string
   timestamp: Date
   reportId?: string // 리포트가 생성된 경우 리포트 ID
+  context_type?: 'none' | 'situation' | 'contract'
+  context_id?: string | null
 }
 
 // 리포트 타입 정의 (Supabase와 호환)
@@ -306,6 +310,8 @@ export default function QuickAssistPage() {
                     role: msg.sender_type,
                     content: msg.message,
                     timestamp: new Date(msg.created_at),
+                    context_type: msg.context_type || 'none',
+                    context_id: msg.context_id || null,
                   }))
                 
                 // 대화 세션 생성
@@ -1698,11 +1704,35 @@ export default function QuickAssistPage() {
                         )}
                       >
                         {message.role === 'assistant' ? (
-                          <ChatAiMessage content={message.content} />
+                          currentContext.type === 'situation' ? (
+                            <SituationChatMessage content={message.content} />
+                          ) : (
+                            <ChatAiMessage content={message.content} />
+                          )
                         ) : (
-                          <p className="whitespace-pre-wrap text-sm leading-relaxed text-white font-medium">
-                            {message.content}
-                          </p>
+                          <div>
+                            <p className="whitespace-pre-wrap text-sm leading-relaxed text-white font-medium">
+                              {message.content}
+                            </p>
+                            {/* 참고 리포트 표시 */}
+                            {message.context_type && message.context_type !== 'none' && message.context_id && (
+                              <div className="mt-2 pt-2 border-t border-white/20">
+                                <div className="flex items-center gap-1.5 text-xs text-white/80">
+                                  {message.context_type === 'situation' ? (
+                                    <>
+                                      <ClipboardList className="h-3.5 w-3.5" />
+                                      <span>상황 분석 리포트 참고 중</span>
+                                    </>
+                                  ) : message.context_type === 'contract' ? (
+                                    <>
+                                      <FileText className="h-3.5 w-3.5" />
+                                      <span>계약서 분석 리포트 참고 중</span>
+                                    </>
+                                  ) : null}
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         )}
                       </div>
                       

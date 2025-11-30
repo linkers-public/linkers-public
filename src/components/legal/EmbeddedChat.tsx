@@ -3,8 +3,10 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { Loader2, Send, Bot, User, AlertCircle } from 'lucide-react'
+import { Loader2, Send, Bot, User, AlertCircle, FileText, ClipboardList } from 'lucide-react'
 import { MarkdownRenderer } from '@/components/rag/MarkdownRenderer'
+import { SituationChatMessage } from './SituationChatMessage'
+import { ChatAiMessage } from './ChatAiMessage'
 import { cn } from '@/lib/utils'
 import { 
   getChatMessages, 
@@ -25,6 +27,8 @@ interface Message {
   retryable?: boolean
   originalQuery?: string
   dbId?: string // DB에 저장된 메시지 ID
+  context_type?: 'none' | 'situation' | 'contract'
+  context_id?: string | null
 }
 
 interface EmbeddedChatProps {
@@ -171,6 +175,8 @@ export function EmbeddedChat({
         role: msg.sender_type,
         content: msg.message,
         timestamp: new Date(msg.created_at),
+        context_type: msg.context_type || 'none',
+        context_id: msg.context_id || null,
       }))
       
       // Warm Start: DB에 초기 메시지가 없으면 생성
@@ -238,6 +244,8 @@ export function EmbeddedChat({
               role: newMsg.sender_type,
               content: newMsg.message,
               timestamp: new Date(newMsg.created_at),
+              context_type: newMsg.context_type || 'none',
+              context_id: newMsg.context_id || null,
             }
             
             setMessages((prev) => {
@@ -554,6 +562,33 @@ export function EmbeddedChat({
                       </Button>
                     )}
                   </div>
+                ) : message.role === 'user' ? (
+                  <div>
+                    <p className="text-sm text-white leading-relaxed whitespace-pre-wrap break-words">
+                      {message.content}
+                    </p>
+                    {/* 참고 리포트 표시 */}
+                    {message.context_type && message.context_type !== 'none' && message.context_id && (
+                      <div className="mt-2 pt-2 border-t border-white/20">
+                        <div className="flex items-center gap-1.5 text-xs text-white/80">
+                          {message.context_type === 'situation' ? (
+                            <>
+                              <ClipboardList className="h-3.5 w-3.5" />
+                              <span>상황 분석 리포트 참고 중</span>
+                            </>
+                          ) : message.context_type === 'contract' ? (
+                            <>
+                              <FileText className="h-3.5 w-3.5" />
+                              <span>계약서 분석 리포트 참고 중</span>
+                            </>
+                          ) : null}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : message.role === 'assistant' ? (
+                  // assistant 메시지는 상황분석용 컴포넌트 사용 (EmbeddedChat은 상황분석 리포트 페이지에서만 사용)
+                  <SituationChatMessage content={message.content} />
                 ) : (
                   <MarkdownRenderer content={message.content} />
                 )}

@@ -23,6 +23,7 @@ from core.generator_v2 import LLMGenerator
 from core.document_processor_v2 import DocumentProcessor
 from core.prompts import (
     build_legal_chat_prompt,
+    build_situation_chat_prompt,
     build_contract_analysis_prompt,
     build_situation_analysis_prompt,
     LEGAL_CHAT_SYSTEM_PROMPT,
@@ -1772,21 +1773,37 @@ class LegalRAGService:
 이 계약서 분석 리포트를 기준으로 사용자의 질문에 답변해주세요.
 """
         
-        # 프롬프트 템플릿 사용
-        prompt = build_legal_chat_prompt(
-            query=query,
-            contract_chunks=contract_chunks,
-            legal_chunks=chunks_to_use,
-            selected_issue=selected_issue,
-            analysis_summary=analysis_summary,
-            risk_score=risk_score,
-            total_issues=total_issues,
-        )
-        
-        # 컨텍스트 리포트가 있으면 프롬프트에 추가
-        if context_report:
-            # 프롬프트 끝부분에 컨텍스트 리포트 추가
-            prompt = prompt.rstrip() + "\n\n" + context_report
+        # context_type에 따라 다른 프롬프트 사용
+        if context_type == 'situation':
+            # 상황분석용 프롬프트 사용
+            situation_criteria = context_data.get("criteria", []) if context_data else []
+            situation_checklist = context_data.get("checklist", []) if context_data else []
+            situation_related_cases = context_data.get("related_cases", []) if context_data else []
+            
+            prompt = build_situation_chat_prompt(
+                query=query,
+                legal_chunks=chunks_to_use,
+                analysis_summary=analysis_summary,
+                criteria=situation_criteria,
+                checklist=situation_checklist,
+                related_cases=situation_related_cases,
+            )
+        else:
+            # 계약서 분석용 프롬프트 사용 (기본)
+            prompt = build_legal_chat_prompt(
+                query=query,
+                contract_chunks=contract_chunks,
+                legal_chunks=chunks_to_use,
+                selected_issue=selected_issue,
+                analysis_summary=analysis_summary,
+                risk_score=risk_score,
+                total_issues=total_issues,
+            )
+            
+            # 컨텍스트 리포트가 있으면 프롬프트에 추가
+            if context_report:
+                # 프롬프트 끝부분에 컨텍스트 리포트 추가
+                prompt = prompt.rstrip() + "\n\n" + context_report
 
         try:
             # Groq 사용 (우선)
@@ -1815,9 +1832,11 @@ class LegalRAGService:
                 logger.info(f"Response Content:\n{response_text}")
                 logger.info("=" * 80)
                 
-                # 답변에 전문가 상담 권장 문구 추가 (없는 경우)
-                if "전문가 상담" not in response_text and "법률 자문" not in response_text:
-                    response_text += "\n\n---\n\n**⚠️ 참고:** 이 답변은 정보 안내를 위한 것이며 법률 자문이 아닙니다. 중요한 사안은 전문 변호사나 노동위원회 등 전문 기관에 상담하시기 바랍니다."
+                # 상황분석일 때는 JSON 형식이므로 참고 문구 추가하지 않음 (프롬프트에 이미 포함됨)
+                # 계약서 분석일 때만 참고 문구 추가
+                if context_type != 'situation':
+                    if "전문가 상담" not in response_text and "법률 자문" not in response_text:
+                        response_text += "\n\n---\n\n**⚠️ 참고:** 이 답변은 정보 안내를 위한 것이며 법률 자문이 아닙니다. 중요한 사안은 전문 변호사나 노동위원회 등 전문 기관에 상담하시기 바랍니다."
                 
                 return response_text
             
@@ -1898,9 +1917,11 @@ class LegalRAGService:
                         logger.info(f"Response Content:\n{response_text}")
                         logger.info("=" * 80)
                 
-                # 답변에 전문가 상담 권장 문구 추가 (없는 경우)
-                if "전문가 상담" not in response_text and "법률 자문" not in response_text:
-                    response_text += "\n\n---\n\n**⚠️ 참고:** 이 답변은 정보 안내를 위한 것이며 법률 자문이 아닙니다. 중요한 사안은 전문 변호사나 노동위원회 등 전문 기관에 상담하시기 바랍니다."
+                # 상황분석일 때는 JSON 형식이므로 참고 문구 추가하지 않음 (프롬프트에 이미 포함됨)
+                # 계약서 분석일 때만 참고 문구 추가
+                if context_type != 'situation':
+                    if "전문가 상담" not in response_text and "법률 자문" not in response_text:
+                        response_text += "\n\n---\n\n**⚠️ 참고:** 이 답변은 정보 안내를 위한 것이며 법률 자문이 아닙니다. 중요한 사안은 전문 변호사나 노동위원회 등 전문 기관에 상담하시기 바랍니다."
                 
                 return response_text
         except Exception as e:

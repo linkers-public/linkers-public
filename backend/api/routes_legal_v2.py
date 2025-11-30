@@ -1415,6 +1415,7 @@ async def analyze_situation(
                 "scripts": result.get("scripts", {}),  # 말하기 템플릿
                 "classifiedType": result.get("classified_type", "unknown"),  # 분류 유형
                 "riskScore": float(result.get("risk_score", 0)),  # 위험도 점수
+                "organizations": result.get("organizations", []),  # 추천 기관 목록
             }
             
             situation_analysis_id = await storage_service.save_situation_analysis(

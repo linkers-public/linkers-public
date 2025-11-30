@@ -589,6 +589,196 @@ interface ParsedLegalResponse {{
     return prompt
 
 
+def build_situation_chat_prompt(
+    query: str,
+    legal_chunks: list = None,
+    analysis_summary: str = None,
+    criteria: list = None,
+    checklist: list = None,
+    related_cases: list = None,
+) -> str:
+    """
+    상황분석 챗용 프롬프트 구성
+    
+    Args:
+        query: 사용자 질문
+        legal_chunks: 법령 청크
+        analysis_summary: 분석 요약
+        criteria: 법적 판단 기준
+        checklist: 체크리스트
+        related_cases: 관련 케이스
+    
+    Returns:
+        완성된 프롬프트 문자열
+    """
+    context_parts = []
+    
+    # -----------------------------
+    # 1) 법령 청크
+    # -----------------------------
+    if legal_chunks:
+        context_parts.append("\n=== 관련 법령/가이드라인 ===")
+        for chunk in legal_chunks[:5]:
+            source_type = getattr(chunk, 'source_type', 'law')
+            title = getattr(chunk, 'title', '')
+            snippet = getattr(chunk, 'snippet', getattr(chunk, 'content', ''))[:500]
+            context_parts.append(f"[{source_type}] {title}\n{snippet}")
+    
+    context = "\n\n".join(context_parts)
+    
+    # -----------------------------
+    # 2) 분석 요약 정보
+    # -----------------------------
+    analysis_context = ""
+    if analysis_summary:
+        analysis_context = f"""
+**상황 분석 결과 (현재 화면에 표시된 분석 결과):**
+
+{analysis_summary}
+
+**중요:** 위 분석 결과를 바탕으로 사용자의 질문에 답변하세요. 사용자는 이미 이 분석 결과를 보고 있으며, 이 컨텍스트를 이해하고 있는 상태입니다.
+"""
+    
+    # -----------------------------
+    # 3) 법적 판단 기준
+    # -----------------------------
+    criteria_context = ""
+    if criteria:
+        criteria_text = "\n".join([
+            f"- {c.get('name', '')}: {c.get('reason', '')}" 
+            for c in criteria[:5]
+        ]) if criteria else "없음"
+        criteria_context = f"""
+**법적 판단 기준:**
+{criteria_text}
+"""
+    
+    # -----------------------------
+    # 4) 체크리스트
+    # -----------------------------
+    checklist_context = ""
+    if checklist:
+        checklist_text = "\n".join([
+            f"- {item}" for item in checklist[:5]
+        ]) if checklist else "없음"
+        checklist_context = f"""
+**체크리스트:**
+{checklist_text}
+"""
+    
+    prompt = f"""{LEGAL_CHAT_SYSTEM_PROMPT}
+
+**⚠️ 중요: 상황 분석 결과 컨텍스트**
+- 사용자는 이미 상황 분석 결과를 받았으며, 그 결과를 화면에서 보고 있습니다.
+- 분석 결과에 포함된 법적 근거, 위험도, 권장 조치 등을 참고하여 답변하세요.
+- 사용자의 질문에 대해 구체적이고 실용적인 조언을 제공하세요.
+- 분석 결과에서 언급된 내용과 일관성 있게 답변하세요.
+
+**사용자 질문:**
+{query}
+
+{analysis_context}
+{criteria_context}
+{checklist_context}
+
+**관련 법령/가이드/케이스 컨텍스트:**
+{context}
+
+**⚠️ 중요한 출력 형식 규칙:**
+- 반드시 유효한 JSON 형식으로만 응답하세요.
+- JSON 외에 다른 설명, 마크다운 헤더, 자연어는 절대 포함하지 마세요.
+- 모든 문자열은 반드시 한국어로 작성하세요.
+
+**응답 형식 (상황분석용):**
+```typescript
+interface SituationChatResponse {{
+  reportTitle: string;                    // 리포트 제목 (예: "📊 상황 분석의 결과")
+  legalPerspective: {{
+    description: string;                  // 법적 관점에서 본 현재 상황 설명
+    references: Array<{{                  // 참고 문서 배열
+      name: string;                      // 문서명
+      description: string;               // 문서 설명
+    }}>;
+  }};
+  actions: Array<{{                       // 행동 항목 배열
+    description: string;                 // 행동 설명
+    key: string;                         // 행동 키 (예: "1", "2", "3")
+  }}>;
+  conversationExamples: Array<{{          // 대화 예시 배열
+    role: 'user' | 'assistant';
+    content: string;
+  }}>;
+}}
+```
+
+**제약 사항:**
+- legalPerspective.references는 최소 1개 이상 생성하세요.
+- actions는 최소 3개 이상 생성하세요.
+- conversationExamples는 최소 1개 이상 생성하세요.
+- JSON 형식만 반환하고, JSON 앞뒤에 설명이나 마크다운을 추가하지 마세요.
+
+위 정보를 바탕으로 **SituationChatResponse 형식의 JSON만** 반환하세요.
+
+**각 필드 작성 가이드:**
+
+1. **reportTitle**: 상황 분석 리포트의 제목 (예: "📊 상황 분석의 결과")
+
+2. **legalPerspective.description**: 현재 상황을 법적으로 평가한 내용. 관련 문서를 확인하고, 상황의 법적 의미를 설명하세요.
+
+3. **legalPerspective.references**: 관련 법령/가이드 문서 배열. legal_chunks에서 참고하여 작성하세요.
+
+4. **actions**: 사용자가 할 수 있는 구체적인 행동 항목. 상황 분석 결과의 checklist와 criteria를 참고하여 작성하세요.
+
+5. **conversationExamples**: 사용자와 AI의 대화 예시. 사용자의 질문과 AI의 답변을 포함하세요.
+
+**JSON 응답 예시:**
+```json
+{{
+  "reportTitle": "📊 상황 분석의 결과",
+  "legalPerspective": {{
+    "description": "현재 상황을 법적으로 평가해야 합니다. 관련 문서를 확인하고, 시간급제를 원칙으로 한다는 점에 주목하세요.",
+    "references": [
+      {{
+        "name": "개정+표준취업규칙(2025년, +배포).hwp.pdf",
+        "description": "이 문서에서는 임금은 시간급제를 원칙으로 하며, 최저임금의 적용을 받는 사원에게 최저임금액 이상의 임금을 지급해야 한다고 규정하고 있습니다."
+      }}
+    ]
+  }},
+  "actions": [
+    {{
+      "description": "상황을 객관적으로 정리하세요",
+      "key": "1"
+    }},
+    {{
+      "description": "관련 문서를 보관하세요",
+      "key": "2"
+    }},
+    {{
+      "description": "증거 자료를 수집하세요",
+      "key": "3"
+    }}
+  ],
+  "conversationExamples": [
+    {{
+      "role": "user",
+      "content": "이 상황에서는 사용자가 무엇을 할 수 있습니까?"
+    }},
+    {{
+      "role": "assistant",
+      "content": "사용자는 상황을 객관적으로 정리하고, 관련 문서를 보관하고, 증거 자료를 수집할 수 있습니다."
+    }}
+  ]
+}}
+```
+
+---
+
+**⚠️ 참고:** 이 답변은 정보 안내를 위한 것이며 법률 자문이 아닙니다. 중요한 사안은 전문 변호사나 노동위원회 등 전문 기관에 상담하시기 바랍니다.
+"""
+    
+    return prompt
+
+
 # ============================================================================
 # 계약서 분석 프롬프트
 # ============================================================================
