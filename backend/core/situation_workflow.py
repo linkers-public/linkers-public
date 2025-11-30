@@ -1100,9 +1100,27 @@ class SituationWorkflow:
                 temperature=settings.llm_temperature,
                 model=settings.groq_model
             )
-        else:
+        elif settings.use_ollama:
             # Ollama 사용
-            raise NotImplementedError("Ollama는 아직 구현되지 않았습니다.")
+            try:
+                from langchain_ollama import OllamaLLM
+                llm = OllamaLLM(
+                    base_url=settings.ollama_base_url,
+                    model=settings.ollama_model
+                )
+            except ImportError:
+                # 대안: langchain-community 사용
+                from langchain_community.llms import Ollama
+                llm = Ollama(
+                    base_url=settings.ollama_base_url,
+                    model=settings.ollama_model
+                )
+            
+            response_text = llm.invoke(prompt)
+            return response_text
+        else:
+            # Groq와 Ollama 모두 사용 안 함
+            raise ValueError("LLM이 설정되지 않았습니다. LLM_PROVIDER 환경변수를 'groq' 또는 'ollama'로 설정하세요.")
     
     # ==================== 공개 메서드 ====================
     

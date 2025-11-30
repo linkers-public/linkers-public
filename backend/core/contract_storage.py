@@ -771,80 +771,173 @@ class ContractStorageService:
             logger.error(f"상황 분석 조회 중 오류: {str(e)}", exc_info=True)
             raise
     
-    async def save_situation_conversation(
+    # 레거시 함수 제거됨 - 새 테이블 구조(legal_chat_sessions, legal_chat_messages) 사용
+    
+    # ============================================================================
+    # 새로운 통합 챗 시스템 (legal_chat_sessions, legal_chat_messages)
+    # ============================================================================
+    
+    async def create_chat_session(
         self,
-        report_id: str,
-        message: str,
-        sender_type: str,
-        sequence_number: int,
-        user_id: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        user_id: str,
+        initial_context_type: str = 'none',
+        initial_context_id: Optional[str] = None,
+        title: Optional[str] = None,
     ) -> str:
         """
-        상황 분석 대화 메시지 저장
+        새로운 챗 세션 생성
         
         Args:
-            report_id: 리포트 ID (situation_analyses의 id 또는 situation_reports의 id)
-            message: 메시지 내용
-            sender_type: 발신자 타입 ('user' 또는 'assistant')
-            sequence_number: 메시지 순서
-            user_id: 사용자 ID (옵션)
-            metadata: 추가 메타데이터 (옵션)
+            user_id: 사용자 ID
+            initial_context_type: 초기 컨텍스트 타입 ('none' | 'situation' | 'contract')
+            initial_context_id: 초기 컨텍스트 ID (situation_analyses.id 또는 contract_analyses.id)
+            title: 세션 제목 (옵션)
         
         Returns:
-            conversation_id (UUID)
+            session_id (UUID)
         """
         self._ensure_initialized()
         
         try:
             data = {
-                "report_id": report_id,
-                "message": message,
-                "sender_type": sender_type,
-                "sequence_number": sequence_number,
+                "user_id": user_id,
+                "initial_context_type": initial_context_type,
             }
             
-            if user_id:
-                data["user_id"] = user_id
+            if initial_context_id:
+                data["initial_context_id"] = initial_context_id
+            
+            if title:
+                data["title"] = title
+            
+            result = self.sb.table("legal_chat_sessions").insert(data).execute()
+            
+            if not result.data or len(result.data) == 0:
+                raise ValueError("챗 세션 생성 실패")
+            
+            session_id = result.data[0]["id"]
+            logger.info(f"챗 세션 생성 완료: id={session_id}, user_id={user_id}, context_type={initial_context_type}")
+            return session_id
+            
+        except Exception as e:
+            logger.error(f"챗 세션 생성 중 오류: {str(e)}", exc_info=True)
+            raise
+    
+    async def save_chat_message(
+        self,
+        session_id: str,
+        user_id: str,
+        sender_type: str,
+        message: str,
+        sequence_number: int,
+        context_type: str = 'none',
+        context_id: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> str:
+        """
+        챗 메시지 저장
+        
+        Args:
+            session_id: 챗 세션 ID
+            user_id: 사용자 ID
+            sender_type: 발신자 타입 ('user' | 'assistant')
+            message: 메시지 내용
+            sequence_number: 메시지 순서
+            context_type: 컨텍스트 타입 ('none' | 'situation' | 'contract')
+            context_id: 컨텍스트 ID (옵션)
+            metadata: 추가 메타데이터 (옵션)
+        
+        Returns:
+            message_id (UUID)
+        """
+        self._ensure_initialized()
+        
+        try:
+            data = {
+                "session_id": session_id,
+                "user_id": user_id,
+                "sender_type": sender_type,
+                "message": message,
+                "sequence_number": sequence_number,
+                "context_type": context_type,
+            }
+            
+            if context_id:
+                data["context_id"] = context_id
             
             if metadata:
                 data["metadata"] = metadata
             
-            result = self.sb.table("situation_conversations").insert(data).execute()
+            result = self.sb.table("legal_chat_messages").insert(data).execute()
             
             if not result.data or len(result.data) == 0:
-                raise ValueError("대화 메시지 저장 실패")
+                raise ValueError("챗 메시지 저장 실패")
             
-            conversation_id = result.data[0]["id"]
-            logger.info(f"대화 메시지 저장 완료: id={conversation_id}, report_id={report_id}, sender_type={sender_type}")
-            return conversation_id
+            message_id = result.data[0]["id"]
+            logger.info(f"챗 메시지 저장 완료: id={message_id}, session_id={session_id}, sender_type={sender_type}")
+            return message_id
             
         except Exception as e:
-            logger.error(f"대화 메시지 저장 중 오류: {str(e)}", exc_info=True)
+            logger.error(f"챗 메시지 저장 중 오류: {str(e)}", exc_info=True)
             raise
     
-    async def get_situation_conversations(
+    async def get_chat_sessions(
         self,
-        report_id: str,
+        user_id: str,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> List[Dict[str, Any]]:
+        """
+        사용자의 챗 세션 목록 조회
+        
+        Args:
+            user_id: 사용자 ID
+            limit: 조회 개수
+            offset: 오프셋
+        
+        Returns:
+            챗 세션 리스트
+        """
+        self._ensure_initialized()
+        
+        try:
+            result = (
+                self.sb.table("legal_chat_sessions")
+                .select("*")
+                .eq("user_id", user_id)
+                .order("updated_at", desc=True)
+                .limit(limit)
+                .offset(offset)
+                .execute()
+            )
+            
+            return result.data or []
+        except Exception as e:
+            logger.error(f"챗 세션 목록 조회 중 오류: {str(e)}", exc_info=True)
+            raise
+    
+    async def get_chat_messages(
+        self,
+        session_id: str,
         user_id: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
-        상황 분석 대화 메시지 조회 (레거시 호환성)
+        챗 세션의 메시지 목록 조회
         
         Args:
-            report_id: 리포트 ID
+            session_id: 챗 세션 ID
             user_id: 사용자 ID (옵션, 권한 확인용)
         
         Returns:
-            대화 메시지 리스트 (sequence_number 순서대로 정렬)
+            챗 메시지 리스트 (sequence_number 순서대로 정렬)
         """
         self._ensure_initialized()
         
         try:
             query = (
-                self.sb.table("situation_conversations")
+                self.sb.table("legal_chat_messages")
                 .select("*")
-                .eq("report_id", report_id)
+                .eq("session_id", session_id)
                 .order("sequence_number", desc=False)
             )
             
@@ -853,23 +946,111 @@ class ContractStorageService:
             
             result = query.execute()
             
-            conversations = []
-            if result.data:
-                for conv in result.data:
-                    conversations.append({
-                        "id": conv["id"],
-                        "report_id": conv["report_id"],
-                        "user_id": conv.get("user_id"),
-                        "message": conv["message"],
-                        "sender_type": conv["sender_type"],
-                        "sequence_number": conv["sequence_number"],
-                        "metadata": conv.get("metadata"),
-                        "created_at": conv.get("created_at"),
-                    })
-            
-            return conversations
+            return result.data or []
         except Exception as e:
-            logger.error(f"대화 메시지 조회 중 오류: {str(e)}", exc_info=True)
+            logger.error(f"챗 메시지 조회 중 오류: {str(e)}", exc_info=True)
+            raise
+    
+    async def get_chat_session(
+        self,
+        session_id: str,
+        user_id: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """
+        특정 챗 세션 조회
+        
+        Args:
+            session_id: 챗 세션 ID
+            user_id: 사용자 ID (옵션, 권한 확인용)
+        
+        Returns:
+            챗 세션 정보 또는 None
+        """
+        self._ensure_initialized()
+        
+        try:
+            query = (
+                self.sb.table("legal_chat_sessions")
+                .select("*")
+                .eq("id", session_id)
+            )
+            
+            if user_id:
+                query = query.eq("user_id", user_id)
+            
+            result = query.execute()
+            
+            if not result.data or len(result.data) == 0:
+                return None
+            
+            return result.data[0]
+        except Exception as e:
+            logger.error(f"챗 세션 조회 중 오류: {str(e)}", exc_info=True)
+            raise
+    
+    async def update_chat_session(
+        self,
+        session_id: str,
+        user_id: str,
+        title: Optional[str] = None,
+    ) -> bool:
+        """
+        챗 세션 업데이트 (제목 등)
+        
+        Args:
+            session_id: 챗 세션 ID
+            user_id: 사용자 ID
+            title: 새 제목 (옵션)
+        
+        Returns:
+            성공 여부
+        """
+        self._ensure_initialized()
+        
+        try:
+            data = {}
+            if title is not None:
+                data["title"] = title
+            
+            if not data:
+                return True
+            
+            result = (
+                self.sb.table("legal_chat_sessions")
+                .update(data)
+                .eq("id", session_id)
+                .eq("user_id", user_id)
+                .execute()
+            )
+            
+            return True
+        except Exception as e:
+            logger.error(f"챗 세션 업데이트 중 오류: {str(e)}", exc_info=True)
+            raise
+    
+    async def delete_chat_session(
+        self,
+        session_id: str,
+        user_id: str,
+    ) -> bool:
+        """
+        챗 세션 삭제 (CASCADE로 메시지도 함께 삭제됨)
+        
+        Args:
+            session_id: 챗 세션 ID
+            user_id: 사용자 ID
+        
+        Returns:
+            성공 여부
+        """
+        self._ensure_initialized()
+        
+        try:
+            self.sb.table("legal_chat_sessions").delete().eq("id", session_id).eq("user_id", user_id).execute()
+            logger.info(f"챗 세션 삭제 완료: session_id={session_id}")
+            return True
+        except Exception as e:
+            logger.error(f"챗 세션 삭제 중 오류: {str(e)}", exc_info=True)
             raise
     
     async def create_chat_session(

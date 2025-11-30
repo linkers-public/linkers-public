@@ -29,11 +29,28 @@ import {
   DollarSign,
   Users,
   TrendingUp,
-  Sparkles
+  Sparkles,
+  Plus
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
-import { analyzeSituationV2, type SituationRequestV2, chatWithContractV2, saveConversationV2, getSituationHistoryV2, getConversationsV2, getSituationAnalysisByIdV2 } from '@/apis/legal.service'
+import { 
+  analyzeSituationV2, 
+  type SituationRequestV2, 
+  chatWithContractV2, 
+  getSituationHistoryV2, 
+  getContractHistoryV2,
+  // 새로운 통합 챗 API
+  createChatSession,
+  getChatSessions,
+  getChatSession,
+  saveChatMessage,
+  getChatMessages,
+  updateChatSession,
+  deleteChatSession,
+  type ChatSession,
+  type ChatMessage as ChatMessageType,
+} from '@/apis/legal.service'
 import { MarkdownRenderer } from '@/components/rag/MarkdownRenderer'
 import type { SituationAnalysisResponse } from '@/types/legal'
 
@@ -177,7 +194,16 @@ interface ConversationSession {
   messages: ChatMessage[]
   createdAt: Date
   updatedAt: Date
-  reportId?: string  // situation_analyses의 ID (DB 저장용)
+  sessionId: string  // legal_chat_sessions의 ID
+}
+
+// 컨텍스트 타입 정의
+type ChatContextType = 'none' | 'situation' | 'contract'
+
+interface ChatContext {
+  type: ChatContextType
+  id: string | null      // situation_analyses.id or contract_analyses.id
+  label?: string         // UI 표시용 (예: "편의점 야간 알바 상황", "김인턴 계약서")
 }
 
 export default function QuickAssistPage() {
@@ -215,7 +241,14 @@ export default function QuickAssistPage() {
     workPeriod?: string
     socialInsurance?: string
   } | null>(null)
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
+  // 🔥 컨텍스트 상태 추가
+  const [currentContext, setCurrentContext] = useState<ChatContext>({
+    type: 'none',
+    id: null,
+  })
+  const [showContextSelector, setShowContextSelector] = useState(false)
+  const [contextSelectorType, setContextSelectorType] = useState<'situation' | 'contract' | null>(null)
+  const [openReportMenu, setOpenReportMenu] = useState(false) // + 버튼 메뉴 열림 상태
   
 
   // localStorage 및 DB에서 대화 내역 로드
@@ -249,19 +282,17 @@ export default function QuickAssistPage() {
           const userId = user?.id || null
 
           if (userId) {
-            // 상황 분석 히스토리 조회
-            const situationHistory = await getSituationHistoryV2(50, 0, userId)
-            
-            // 각 상황 분석에 대해 대화 메시지 가져오기 (병렬 처리로 성능 개선)
             const dbConversations: ConversationSession[] = []
             
-            // 병렬로 대화 메시지 조회 (성능 최적화)
-            const conversationPromises = situationHistory.map(async (situation) => {
+            // 2-1. 새 테이블 구조에서 챗 세션 로드 (legal_chat_sessions)
+            try {
+              const chatSessions = await getChatSessions(userId, 50, 0)
+              
+              // 각 챗 세션에 대해 메시지 가져오기
+              const chatSessionPromises = chatSessions.map(async (session: ChatSession) => {
               try {
-                // 대화 메시지 조회
-                const messages = await getConversationsV2(situation.id, userId)
+                  const messages = await getChatMessages(session.id, userId)
                 
-                // 메시지가 없으면 null 반환
                 if (messages.length === 0) {
                   return null
                 }
@@ -274,73 +305,52 @@ export default function QuickAssistPage() {
                     role: msg.sender_type,
                     content: msg.message,
                     timestamp: new Date(msg.created_at),
-                    reportId: msg.report_id,
                   }))
                 
                 // 대화 세션 생성
                 const conversation: ConversationSession = {
-                  id: `db-${situation.id}`,  // DB에서 온 대화임을 표시
-                  title: (situation.situation || situation.summary || '상황 분석').substring(0, 30),
+                    id: `session-${session.id}`,
+                    sessionId: session.id,
+                    title: session.title || '대화',
                   messages: chatMessages,
-                  createdAt: new Date(situation.created_at),
-                  updatedAt: new Date(situation.created_at),
-                  reportId: situation.id,  // situation_analyses의 ID
+                    createdAt: new Date(session.created_at),
+                    updatedAt: new Date(session.updated_at),
                 }
                 
                 return conversation
               } catch (error) {
-                console.warn(`대화 메시지 조회 실패 (situation_id: ${situation.id}):`, error)
+                  console.warn(`챗 메시지 조회 실패 (session_id: ${session.id}):`, error)
                 return null
               }
             })
             
-            // 모든 대화 메시지 조회 완료 대기
-            const conversationResults = await Promise.all(conversationPromises)
-            
-            // null이 아닌 결과만 필터링
-            for (const result of conversationResults) {
+              const chatSessionResults = await Promise.all(chatSessionPromises)
+              for (const result of chatSessionResults) {
               if (result) {
                 dbConversations.push(result)
               }
+              }
+            } catch (error) {
+              console.warn('새 챗 세션 로드 실패, 레거시만 사용:', error)
             }
             
+            
             // 3. localStorage와 DB 대화 병합
-            // reportId가 같은 경우 DB 데이터로 덮어쓰기 (최신 데이터 우선)
+            // DB 대화와 localStorage 대화 병합 (ID 중복 제거)
             const mergedConversations: ConversationSession[] = []
-            const reportIdSet = new Set<string>()
             const idSet = new Set<string>()  // ID 중복 방지
             
             // DB 대화를 먼저 추가 (최신 데이터)
             for (const dbConv of dbConversations) {
-              if (dbConv.reportId) {
-                reportIdSet.add(dbConv.reportId)
-              }
               if (!idSet.has(dbConv.id)) {
                 idSet.add(dbConv.id)
                 mergedConversations.push(dbConv)
               }
             }
             
-            // localStorage 대화 추가 (reportId가 없거나 DB에 없는 경우만)
-            // 단, DB에 데이터가 없으면 reportId가 있는 localStorage 대화는 제거 (DB 삭제 반영)
+            // localStorage 대화 추가 (ID 중복 체크)
             for (const localConv of localConversations) {
-              // ID 중복 체크
-              if (idSet.has(localConv.id)) {
-                continue
-              }
-              
-              if (!localConv.reportId) {
-                // reportId가 없는 로컬 대화는 유지 (DB에 저장되지 않은 대화)
-                idSet.add(localConv.id)
-                mergedConversations.push(localConv)
-              } else if (reportIdSet.has(localConv.reportId)) {
-                // DB에 있는 대화는 이미 추가됨 (같은 reportId를 가진 DB 대화가 있음)
-                continue
-              } else if (dbConversations.length === 0) {
-                // DB에 데이터가 없으면 reportId가 있는 localStorage 대화는 제거 (DB 삭제 반영)
-                continue
-              } else {
-                // DB에 데이터가 있지만 해당 reportId가 없는 경우 (다른 사용자의 데이터일 수 있음)
+              if (!idSet.has(localConv.id)) {
                 idSet.add(localConv.id)
                 mergedConversations.push(localConv)
               }
@@ -390,18 +400,7 @@ export default function QuickAssistPage() {
                   const { data: { user } } = await supabase.auth.getUser()
                   const userId = user?.id || null
                   
-                  if (userId) {
-                    const messages = await getConversationsV2(parsed.situationAnalysisId, userId)
-                    dbMessages = messages
-                      .sort((a, b) => a.sequence_number - b.sequence_number)
-                      .map((msg) => ({
-                        id: msg.id,
-                        role: msg.sender_type,
-                        content: msg.message,
-                        timestamp: new Date(msg.created_at),
-                        reportId: msg.report_id,
-                      }))
-                  }
+                  // 새 테이블 구조에서는 이 부분이 필요 없음 (세션 기반으로 로드)
                 } catch (error) {
                   console.warn('DB에서 메시지 조회 실패, 로컬 메시지 사용:', error)
                 }
@@ -434,23 +433,21 @@ export default function QuickAssistPage() {
                 ]
               }
               
-              const newSessionId = parsed.situationAnalysisId ? `db-${parsed.situationAnalysisId}` : `conv-${Date.now()}`
+              // 새 테이블 구조에서는 세션을 찾거나 생성해야 함
+              // 여기서는 로컬 메시지만 표시하고, 실제 세션은 메시지 전송 시 생성됨
+              const newSessionId = `conv-${Date.now()}`
               const newConversation: ConversationSession = {
                 id: newSessionId,
+                sessionId: '', // 나중에 생성됨
                 title: parsed.summary?.substring(0, 30) || '상황 분석',
                 messages: finalMessages,
                 createdAt: new Date(),
                 updatedAt: new Date(),
-                reportId: parsed.situationAnalysisId,  // situation_analyses의 ID
               }
               
               // 대화 세션 추가 (중복 제거)
               setConversations((prev) => {
-                // 같은 ID나 reportId를 가진 대화가 이미 있으면 제거
-                const filtered = prev.filter(
-                  c => c.id !== newConversation.id && 
-                  (!newConversation.reportId || c.reportId !== newConversation.reportId)
-                )
+                const filtered = prev.filter(c => c.id !== newConversation.id)
                 const updated = [newConversation, ...filtered]
                 localStorage.setItem('legal_assist_conversations', JSON.stringify(updated))
                 return updated
@@ -530,8 +527,6 @@ export default function QuickAssistPage() {
     if (selectedConversationId) {
       const conversation = conversations.find(c => c.id === selectedConversationId)
       if (conversation) {
-        // reportId가 있으면 DB에서 최신 메시지 가져오기
-        if (conversation.reportId) {
           let isCancelled = false
           
           const loadLatestMessages = async () => {
@@ -543,12 +538,12 @@ export default function QuickAssistPage() {
               
               if (isCancelled) return
               
-              if (userId) {
-                const messages = await getConversationsV2(conversation.reportId!, userId)
+            if (userId && conversation.sessionId) {
+              // 새 테이블 구조 사용
+              const messages = await getChatMessages(conversation.sessionId, userId)
                 
                 if (isCancelled) return
                 
-                // 메시지를 ChatMessage 형식으로 변환
                 const chatMessages: ChatMessage[] = messages
                   .sort((a, b) => a.sequence_number - b.sequence_number)
                   .map((msg) => ({
@@ -556,10 +551,8 @@ export default function QuickAssistPage() {
                     role: msg.sender_type,
                     content: msg.message,
                     timestamp: new Date(msg.created_at),
-                    reportId: msg.report_id,
                   }))
                 
-                // 대화 세션 업데이트
                 setConversations((prev) => 
                   prev.map((c) => 
                     c.id === selectedConversationId
@@ -571,7 +564,7 @@ export default function QuickAssistPage() {
                 setMessages(chatMessages)
                 setHasInitialGreeting(true)
               } else {
-                // 사용자 ID가 없으면 기존 메시지 사용
+              // 세션이 없거나 사용자 ID가 없으면 기존 메시지 사용
                 if (!isCancelled) {
                   setMessages(conversation.messages)
                   setHasInitialGreeting(true)
@@ -591,11 +584,6 @@ export default function QuickAssistPage() {
           // cleanup 함수: 컴포넌트 언마운트 시 요청 취소
           return () => {
             isCancelled = true
-          }
-        } else {
-          // reportId가 없으면 기존 메시지 사용 (localStorage만)
-          setMessages(conversation.messages)
-          setHasInitialGreeting(true)
         }
       }
     } else {
@@ -606,42 +594,27 @@ export default function QuickAssistPage() {
 
   // 초기 인사말 추가 (상황 분석 결과가 있으면 리포트 표시)
   useEffect(() => {
+    // 일반 챗 모드에서는 초기 메시지를 자동으로 추가하지 않음
+    // 환영 화면이 계속 표시되도록 함
+    // 상황 분석 결과가 있을 때만 초기 메시지 추가
     if (!selectedConversationId && messages.length === 0 && !hasInitialGreeting) {
-      let initialMessage: ChatMessage
-      
       if (situationAnalysis && situationContext) {
         // 상황 분석 결과가 있으면 summary 필드의 내용을 그대로 표시
         // summary 필드는 /legal/situation의 프롬프트(build_situation_analysis_prompt)에서 생성된
         // 4개 섹션(📊 상황 분석의 결과, ⚖️ 법적 관점, 🎯 지금 당장 할 수 있는 행동, 💬 이렇게 말해보세요)을 포함
         const reportContent = situationAnalysis.summary || '리포트 내용을 불러올 수 없습니다.'
         
-        initialMessage = {
+        const initialMessage: ChatMessage = {
           id: `report-${Date.now()}`,
           role: 'assistant',
           content: reportContent,
           timestamp: new Date(),
-        }
-      } else {
-        // 일반 인사말
-        initialMessage = {
-          id: `greeting-${Date.now()}`,
-          role: 'assistant',
-          content: `안녕하세요 법률 리스크를 탐지하는 Linkus legal이에요!
-
-사용자님의 상황과 함께
-
-• 언제부터 이런 일이 발생했는지
-• 상대방(회사, 팀장, 클라이언트 등)이 누구인지
-• 지금까지 어떤 대화를 나눴는지
-• 가지고 있는 증거(카톡, 메일, 녹취 등)가 있는지
-
-등을 알려주시면 더 자세한 대화가 가능해요!`,
-          timestamp: new Date(),
-        }
       }
       
       setMessages([initialMessage])
       setHasInitialGreeting(true)
+      }
+      // 일반 챗 모드에서는 초기 메시지를 추가하지 않고 환영 화면 유지
     }
   }, [selectedConversationId, messages.length, hasInitialGreeting, situationAnalysis, situationContext])
 
@@ -692,6 +665,25 @@ export default function QuickAssistPage() {
     }
   }, [inputMessage])
 
+  // 외부 클릭 시 리포트 메뉴 닫기
+  useEffect(() => {
+    if (!openReportMenu) return
+
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      // 메뉴 버튼이나 메뉴 내부 클릭은 무시
+      if (target.closest('[data-report-menu]') || target.closest('[data-report-menu-button]')) {
+        return
+      }
+      setOpenReportMenu(false)
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
+  }, [openReportMenu])
+
   // 대화 저장
   const saveConversations = (updatedConversations: ConversationSession[]) => {
     if (typeof window === 'undefined') return
@@ -715,8 +707,26 @@ export default function QuickAssistPage() {
   }
 
   // 대화 삭제
-  const handleDeleteConversation = (conversationId: string, e: React.MouseEvent) => {
+  const handleDeleteConversation = async (conversationId: string, e: React.MouseEvent) => {
     e.stopPropagation() // 버튼 클릭 시 대화 선택 방지
+    
+    const conversation = conversations.find(c => c.id === conversationId)
+    if (!conversation) return
+    
+    try {
+      // 새 테이블 구조에서 DB에서도 삭제
+      if (conversation.sessionId) {
+        const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client')
+        const supabase = createSupabaseBrowserClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        const userId = user?.id || null
+        
+        if (userId) {
+          await deleteChatSession(conversation.sessionId, userId)
+        }
+      }
+      
+      // 로컬 상태에서 제거
     const updatedConversations = conversations.filter(c => c.id !== conversationId)
     setConversations(updatedConversations)
     saveConversations(updatedConversations)
@@ -731,6 +741,14 @@ export default function QuickAssistPage() {
       title: "대화 삭제 완료",
       description: "대화 내역이 삭제되었습니다.",
     })
+    } catch (error: any) {
+      console.error('대화 삭제 실패:', error)
+      toast({
+        title: "대화 삭제 실패",
+        description: error.message || "대화 삭제 중 오류가 발생했습니다.",
+        variant: 'destructive',
+      })
+    }
   }
 
   // 상황 분석 아카이브 로드 (DB에서 가져오기 - 상황 분석 데이터만)
@@ -871,8 +889,16 @@ export default function QuickAssistPage() {
     // 에러 발생 시 재시도를 위한 메시지 백업
     const messageToSend = trimmedMessage
 
+    // 사용자 ID 가져오기 (세션 생성 및 메시지 저장에 필요)
+    const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client')
+    const supabase = createSupabaseBrowserClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    const userId = user?.id || null
+
     // 현재 대화 세션 업데이트 또는 생성
     let currentSession: ConversationSession
+    let chatSessionId: string | null = null  // legal_chat_sessions의 ID
+    
     if (selectedConversationId) {
       const existing = conversations.find(c => c.id === selectedConversationId)
       if (existing) {
@@ -881,9 +907,12 @@ export default function QuickAssistPage() {
           messages: [...existing.messages, userMessage],
           updatedAt: new Date(),
         }
+        // 새 구조 세션 ID가 있으면 사용
+        chatSessionId = existing.sessionId || null
       } else {
         currentSession = {
           id: selectedConversationId,
+          sessionId: '',
           title: generateQuestionSummary(inputMessage),
           messages: [userMessage],
           createdAt: new Date(),
@@ -891,15 +920,62 @@ export default function QuickAssistPage() {
         }
       }
     } else {
+      // 새 세션 생성 - DB에 저장
+      try {
+        if (userId) {
+          // 새 챗 세션 생성
+          const sessionTitle = generateQuestionSummary(inputMessage)
+          const initialContextType = currentContext.type
+          const initialContextId = currentContext.id
+          
+          const sessionResult = await createChatSession(
+            {
+              initial_context_type: initialContextType,
+              initial_context_id: initialContextId,
+              title: sessionTitle,
+            },
+            userId
+          )
+          
+          chatSessionId = sessionResult.id
+          const newSessionId = `session-${chatSessionId}`
+          
+          currentSession = {
+            id: newSessionId,
+            sessionId: chatSessionId,
+            title: sessionTitle,
+            messages: [userMessage],
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          }
+          setSelectedConversationId(newSessionId)
+        } else {
+          // 사용자 ID가 없으면 로컬 세션만 생성
       const newSessionId = `conv-${Date.now()}`
       currentSession = {
         id: newSessionId,
+            sessionId: '',
         title: generateQuestionSummary(inputMessage),
         messages: [userMessage],
         createdAt: new Date(),
         updatedAt: new Date(),
       }
       setSelectedConversationId(newSessionId)
+        }
+      } catch (error) {
+        console.warn('챗 세션 생성 실패, 로컬 세션 사용:', error)
+        // 실패 시 로컬 세션만 생성
+        const newSessionId = `conv-${Date.now()}`
+        currentSession = {
+          id: newSessionId,
+          sessionId: '',
+          title: generateQuestionSummary(inputMessage),
+          messages: [userMessage],
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }
+        setSelectedConversationId(newSessionId)
+      }
     }
 
     try {
@@ -925,6 +1001,8 @@ export default function QuickAssistPage() {
           riskScore: situationAnalysis.riskScore,
           totalIssues: situationAnalysis.criteria?.length || 0,
           topK: 8,
+          contextType: currentContext.type,
+          contextId: currentContext.id,
         })
         
         assistantMessage = {
@@ -934,144 +1012,223 @@ export default function QuickAssistPage() {
           timestamp: new Date(),
         }
         
-        // DB에 메시지 저장 (새로운 DB 구조 사용)
-        if (currentSessionId) {
-          try {
-            const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client')
-            const supabase = createSupabaseBrowserClient()
-            const { data: { user } } = await supabase.auth.getUser()
-            const userId = user?.id || null
-            
-            if (userId) {
-              const { getAuthHeaders } = await import('@/apis/legal.service')
-              const authHeaders = await getAuthHeaders()
-              const headers: Record<string, string> = {
-                ...(authHeaders as Record<string, string>),
-                'Content-Type': 'application/json',
-              }
-              if (userId) {
-                headers['X-User-Id'] = userId
-              }
-
-              // DB에서 실제 메시지 수를 확인하여 sequence_number 계산
+        // DB에 메시지 저장
+        try {
+          const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client')
+          const supabase = createSupabaseBrowserClient()
+          const { data: { user } } = await supabase.auth.getUser()
+          const userId = user?.id || null
+          
+          if (userId && chatSessionId) {
+            // 새 테이블 구조 사용 (legal_chat_messages)
               try {
-                const messagesResponse = await fetch(
-                  `${process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://localhost:8000'}/api/v2/legal/chat/sessions/${currentSessionId}/messages`,
-                  { headers }
-                )
-                const dbMessages = messagesResponse.ok ? await messagesResponse.json() : []
-                const maxSequenceNumber = dbMessages.length > 0 
-                  ? Math.max(...dbMessages.map((m: any) => m.sequence_number))
-                  : -1
-                
-                const userSequenceNumber = maxSequenceNumber + 1
-                const assistantSequenceNumber = maxSequenceNumber + 2
-                
-                // 사용자 메시지 저장
-                await fetch(
-                  `${process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://localhost:8000'}/api/v2/legal/chat/messages`,
-                  {
-                    method: 'POST',
-                    headers,
-                    body: JSON.stringify({
-                      session_id: currentSessionId,
-                      message: userMessage.content,
-                      sender_type: 'user',
-                      sequence_number: userSequenceNumber,
-                      context_type: contextType || 'none',
-                      context_id: contextId || null,
-                    }),
-                  }
-                )
-                
-                // AI 메시지 저장
-                await fetch(
-                  `${process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://localhost:8000'}/api/v2/legal/chat/messages`,
-                  {
-                    method: 'POST',
-                    headers,
-                    body: JSON.stringify({
-                      session_id: currentSessionId,
-                      message: assistantMessage.content,
-                      sender_type: 'assistant',
-                      sequence_number: assistantSequenceNumber,
-                      context_type: contextType || 'none',
-                      context_id: contextId || null,
-                    }),
-                  }
-                )
-              } catch (dbError) {
-                console.warn('DB 메시지 저장 실패 (계속 진행):', dbError)
-              }
-            }
-          } catch (saveError) {
-            console.warn('대화 메시지 DB 저장 실패 (계속 진행):', saveError)
-          }
-        } else if (currentSession.reportId) {
-          // 레거시: reportId가 있는 경우 (기존 방식)
-          try {
-            const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client')
-            const supabase = createSupabaseBrowserClient()
-            const { data: { user } } = await supabase.auth.getUser()
-            const userId = user?.id || null
-            
-            if (userId) {
-              // DB에서 실제 메시지 수를 확인하여 sequence_number 계산
-              try {
-                const dbMessages = await getConversationsV2(currentSession.reportId, userId)
+              const dbMessages = await getChatMessages(chatSessionId, userId)
                 const maxSequenceNumber = dbMessages.length > 0 
                   ? Math.max(...dbMessages.map(m => m.sequence_number))
                   : -1
                 
-                // 다음 sequence_number 계산 (트리거가 이미 0, 1을 저장했으므로 최소 2부터 시작)
-                const baseSequenceNumber = Math.max(2, maxSequenceNumber + 1)
+              const nextSequenceNumber = maxSequenceNumber + 1
                 
                 // 사용자 메시지 저장
-                await saveConversationV2(
-                  currentSession.reportId,
-                  userMessage.content,
-                  'user',
-                  baseSequenceNumber,
+              await saveChatMessage(
+                chatSessionId,
+                {
+                  sender_type: 'user',
+                  message: userMessage.content,
+                  sequence_number: nextSequenceNumber,
+                  context_type: currentContext.type,
+                  context_id: currentContext.id,
+                },
                   userId
                 )
                 
                 // AI 메시지 저장
-                await saveConversationV2(
-                  currentSession.reportId,
-                  assistantMessage.content,
-                  'assistant',
-                  baseSequenceNumber + 1,
+              await saveChatMessage(
+                chatSessionId,
+                {
+                  sender_type: 'assistant',
+                  message: assistantMessage.content,
+                  sequence_number: nextSequenceNumber + 1,
+                  context_type: currentContext.type,
+                  context_id: currentContext.id,
+                },
                   userId
                 )
               } catch (dbError) {
-                console.warn('DB 메시지 조회 실패, 로컬 메시지 수로 계산:', dbError)
-                // DB 조회 실패 시 로컬 메시지 수로 계산 (fallback)
-                const existingMessages = currentSession.messages.length
-                const baseSequenceNumber = Math.max(2, existingMessages - 2)
-                
-                await saveConversationV2(
-                  currentSession.reportId,
-                  userMessage.content,
-                  'user',
-                  baseSequenceNumber,
-                  userId
-                )
-                
-                await saveConversationV2(
-                  currentSession.reportId,
-                  assistantMessage.content,
-                  'assistant',
-                  baseSequenceNumber + 1,
-                  userId
-                )
-              }
+              console.warn('새 테이블 메시지 저장 실패:', dbError)
             }
-          } catch (saveError) {
-            console.warn('대화 메시지 DB 저장 실패 (계속 진행):', saveError)
+          }
+        } catch (saveError) {
+          console.warn('대화 메시지 DB 저장 실패 (계속 진행):', saveError)
+        }
+      } else {
+        // 컨텍스트에 따라 분기
+        if (currentContext.type === 'situation' && currentContext.id) {
+          // 상황 분석 리포트를 컨텍스트로 사용하는 경우
+          const chatResult = await chatWithContractV2({
+            query: inputMessage.trim(),
+            docIds: [],
+            topK: 8,
+            contextType: 'situation',
+            contextId: currentContext.id,
+          })
+          
+          assistantMessage = {
+            id: `msg-${Date.now()}-assistant`,
+            role: 'assistant',
+            content: chatResult.answer || '답변을 생성할 수 없습니다.',
+            timestamp: new Date(),
+          }
+          
+          // 상황 컨텍스트인 경우 DB에 저장
+          if (userId && chatSessionId) {
+            try {
+              const dbMessages = await getChatMessages(chatSessionId, userId)
+              const maxSequenceNumber = dbMessages.length > 0 
+                ? Math.max(...dbMessages.map(m => m.sequence_number))
+                : -1
+              
+              const nextSequenceNumber = maxSequenceNumber + 1
+              
+              await saveChatMessage(
+                chatSessionId,
+                {
+                  sender_type: 'user',
+                  message: userMessage.content,
+                  sequence_number: nextSequenceNumber,
+                  context_type: 'situation',
+                  context_id: currentContext.id,
+                },
+                  userId
+                )
+                
+              await saveChatMessage(
+                chatSessionId,
+                {
+                  sender_type: 'assistant',
+                  message: assistantMessage.content,
+                  sequence_number: nextSequenceNumber + 1,
+                  context_type: 'situation',
+                  context_id: currentContext.id,
+                },
+                  userId
+                )
+            } catch (dbError) {
+              console.warn('새 테이블 메시지 저장 실패:', dbError)
+            }
+          }
+        } else if (currentContext.type === 'contract' && currentContext.id) {
+          // 계약서 분석 리포트를 컨텍스트로 사용하는 경우
+          const chatResult = await chatWithContractV2({
+            query: inputMessage.trim(),
+            docIds: [currentContext.id], // 계약서 ID를 docIds에 포함
+            topK: 8,
+            contextType: 'contract',
+            contextId: currentContext.id,
+          })
+          
+          assistantMessage = {
+            id: `msg-${Date.now()}-assistant`,
+            role: 'assistant',
+            content: chatResult.answer || '답변을 생성할 수 없습니다.',
+            timestamp: new Date(),
+          }
+          
+          // 계약서 컨텍스트인 경우도 새 테이블에 저장
+          if (userId && chatSessionId) {
+            try {
+              const dbMessages = await getChatMessages(chatSessionId, userId)
+              const maxSequenceNumber = dbMessages.length > 0 
+                ? Math.max(...dbMessages.map(m => m.sequence_number))
+                : -1
+              
+              const nextSequenceNumber = maxSequenceNumber + 1
+              
+              await saveChatMessage(
+                chatSessionId,
+                {
+                  sender_type: 'user',
+                  message: userMessage.content,
+                  sequence_number: nextSequenceNumber,
+                  context_type: 'contract',
+                  context_id: currentContext.id,
+                },
+                userId
+              )
+              
+              await saveChatMessage(
+                chatSessionId,
+                {
+                  sender_type: 'assistant',
+                  message: assistantMessage.content,
+                  sequence_number: nextSequenceNumber + 1,
+                  context_type: 'contract',
+                  context_id: currentContext.id,
+                },
+                userId
+              )
+            } catch (dbError) {
+              console.warn('계약서 컨텍스트 메시지 저장 실패:', dbError)
           }
         }
       } else {
-        // 일반 상황 분석 API 호출
+          // 일반 상황 분석 API 호출 (컨텍스트 없음) 또는 일반 챗
+          if (currentContext.type === 'none') {
+            // 일반 챗 모드 - chatWithContractV2 사용
+            const chatResult = await chatWithContractV2({
+              query: inputMessage.trim(),
+              docIds: [],
+              topK: 8,
+              contextType: 'none',
+              contextId: null,
+            })
+            
+            assistantMessage = {
+              id: `msg-${Date.now()}-assistant`,
+              role: 'assistant',
+              content: chatResult.answer || '답변을 생성할 수 없습니다.',
+              timestamp: new Date(),
+            }
+            
+            // 일반 챗도 새 테이블에 저장
+            if (userId && chatSessionId) {
+              try {
+                const dbMessages = await getChatMessages(chatSessionId, userId)
+                const maxSequenceNumber = dbMessages.length > 0 
+                  ? Math.max(...dbMessages.map(m => m.sequence_number))
+                  : -1
+                
+                const nextSequenceNumber = maxSequenceNumber + 1
+                
+                await saveChatMessage(
+                  chatSessionId,
+                  {
+                    sender_type: 'user',
+                    message: userMessage.content,
+                    sequence_number: nextSequenceNumber,
+                    context_type: 'none',
+                    context_id: null,
+                  },
+                  userId
+                )
+                
+                await saveChatMessage(
+                  chatSessionId,
+                  {
+                    sender_type: 'assistant',
+                    message: assistantMessage.content,
+                    sequence_number: nextSequenceNumber + 1,
+                    context_type: 'none',
+                    context_id: null,
+                  },
+                  userId
+                )
+              } catch (dbError) {
+                console.warn('일반 챗 메시지 저장 실패:', dbError)
+              }
+            }
+          } else {
+            // 상황 분석 API 호출 (새로운 분석 생성)
         const request: SituationRequestV2 = {
           situation: inputMessage.trim(),
           category: 'unknown',
@@ -1087,14 +1244,14 @@ export default function QuickAssistPage() {
           timestamp: new Date(),
         }
         
-        // 새로운 상황 분석인 경우 reportId 업데이트
+            // 새로운 상황 분석인 경우 컨텍스트 업데이트
         if (result.id) {
-          currentSession.reportId = result.id
-          
-          // 백엔드가 이미 초기 메시지(sequence_number 0, 1)를 저장했으므로
-          // 프론트엔드는 추가 메시지만 저장하거나 저장하지 않음
-          // 백엔드의 트리거가 자동으로 초기 메시지를 저장하므로 여기서는 저장하지 않음
-          // 추후 추가 대화 메시지는 sequence_number 2부터 시작
+              // 상황 분석 결과를 컨텍스트로 설정
+              setCurrentContext({
+                type: 'situation',
+                id: result.id,
+                label: result.analysis?.summary?.substring(0, 30) || '상황 분석',
+              })
         }
 
         // 리포트 생성 여부 판단 (위험도가 높거나 특정 키워드가 있는 경우)
@@ -1110,7 +1267,7 @@ export default function QuickAssistPage() {
             id: result.id,
             question: inputMessage.trim(),
             answer: result.analysis.summary,
-            legalBasis: result.analysis.legalBasis.map(b => b.snippet) || [],
+                legalBasis: result.analysis.legalBasis?.map((b: any) => b.snippet) || [],
             recommendations: result.analysis.recommendations || [],
             riskScore: result.riskScore,
             tags: result.tags || [],
@@ -1119,6 +1276,8 @@ export default function QuickAssistPage() {
 
           const updatedReports = [report, ...reports].slice(0, 50) // 최근 50개만 유지
           setReports(updatedReports)
+            }
+          }
         }
       }
 
@@ -1212,17 +1371,17 @@ export default function QuickAssistPage() {
     setSelectedConversationId(conversationId)
   }
 
-  // 상황 템플릿 선택
+  // 상황 템플릿 선택 - 카드 클릭 시 입력창에 예시 문장 자동 채우기
   const handleSituationSelect = (situation: typeof COMMON_SITUATIONS[0]) => {
-    // 한 줄 요약 + 폼 형식 예시 텍스트 조합
-    const fullText = `${situation.text}\n\n사용자님의 상황과 함께\n\n${situation.exampleForm}`
-    setInputMessage(fullText)
+    // 카드 클릭 시 입력창에 예시 문장 자동 채우기
+    // 예: "인턴인데 수습 기간 중에 회사가 일방적으로 계약 해지를 통보했습니다."
+    const exampleText = situation.text
+    setInputMessage(exampleText)
     // 입력창으로 포커스 이동
     setTimeout(() => {
-      const textarea = document.querySelector('textarea')
-      if (textarea) {
-        textarea.focus()
-        textarea.setSelectionRange(textarea.value.length, textarea.value.length)
+      if (textareaRef.current) {
+        textareaRef.current.focus()
+        textareaRef.current.setSelectionRange(exampleText.length, exampleText.length)
       }
     }, 100)
   }
@@ -1241,6 +1400,135 @@ export default function QuickAssistPage() {
     } else {
       return `${dateObj.getMonth() + 1}/${dateObj.getDate()}`
     }
+  }
+
+  // 컨텍스트 선택 컴포넌트 (상황 분석 리스트)
+  const ContextSituationList = ({ onSelect, currentContextId }: { 
+    onSelect: (situation: { id: string; situation: string }) => void
+    currentContextId: string | null
+  }) => {
+    const [situations, setSituations] = useState<Array<{ id: string; situation: string; created_at: string }>>([])
+    const [loading, setLoading] = useState(true)
+
+    useEffect(() => {
+      const loadSituations = async () => {
+        try {
+          const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client')
+          const supabase = createSupabaseBrowserClient()
+          const { data: { user } } = await supabase.auth.getUser()
+          const userId = user?.id || null
+          
+          if (userId) {
+            const history = await getSituationHistoryV2(10, 0, userId)
+            setSituations(history)
+          }
+        } catch (error) {
+          console.error('상황 분석 로드 실패:', error)
+        } finally {
+          setLoading(false)
+        }
+      }
+      loadSituations()
+    }, [])
+
+    if (loading) {
+      return <div className="text-sm text-slate-500 py-4">로딩 중...</div>
+    }
+
+    if (situations.length === 0) {
+      return <div className="text-sm text-slate-500 py-4">저장된 상황 분석이 없습니다</div>
+    }
+
+    return (
+      <div className="space-y-2">
+        {situations.map((situation) => (
+          <button
+            key={situation.id}
+            onClick={() => onSelect(situation)}
+            className={cn(
+              "w-full p-3 rounded-lg border-2 transition-all text-left",
+              currentContextId === situation.id
+                ? "border-blue-500 bg-blue-50"
+                : "border-slate-200 hover:border-blue-300 hover:bg-slate-50"
+            )}
+          >
+            <div className="text-sm font-medium text-slate-900 line-clamp-2">
+              {situation.situation?.substring(0, 50) || '상황 분석'}
+            </div>
+            <div className="text-xs text-slate-500 mt-1">
+              {formatDate(situation.created_at)}
+            </div>
+          </button>
+        ))}
+      </div>
+    )
+  }
+
+  // 컨텍스트 선택 컴포넌트 (계약서 분석 리스트)
+  const ContextContractList = ({ onSelect, currentContextId }: { 
+    onSelect: (contract: { id: string; doc_id: string; title: string }) => void
+    currentContextId: string | null
+  }) => {
+    const [contracts, setContracts] = useState<Array<{ id: string; doc_id: string; title: string; created_at: string }>>([])
+    const [loading, setLoading] = useState(true)
+
+    useEffect(() => {
+      const loadContracts = async () => {
+        try {
+          const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client')
+          const supabase = createSupabaseBrowserClient()
+          const { data: { user } } = await supabase.auth.getUser()
+          const userId = user?.id || null
+          
+          if (userId) {
+            const history = await getContractHistoryV2(10, 0, userId)
+            setContracts(history.map(c => ({
+              id: c.id,
+              doc_id: c.doc_id,
+              title: c.title || c.original_filename || '계약서 분석',
+              created_at: c.created_at,
+            })))
+          }
+        } catch (error) {
+          console.error('계약서 분석 로드 실패:', error)
+        } finally {
+          setLoading(false)
+        }
+      }
+      loadContracts()
+    }, [])
+
+    if (loading) {
+      return <div className="text-sm text-slate-500 py-4">로딩 중...</div>
+    }
+
+    if (contracts.length === 0) {
+      return <div className="text-sm text-slate-500 py-4">저장된 계약서 분석이 없습니다</div>
+    }
+
+    return (
+      <div className="space-y-2">
+        {contracts.map((contract) => (
+          <button
+            key={contract.id}
+            onClick={() => onSelect(contract)}
+            className={cn(
+              "w-full p-3 rounded-lg border-2 transition-all text-left",
+              currentContextId === contract.doc_id || currentContextId === contract.id
+                ? "border-blue-500 bg-blue-50"
+                : "border-slate-200 hover:border-blue-300 hover:bg-slate-50"
+            )}
+          >
+            <div className="text-sm font-medium text-slate-900 line-clamp-2">
+              {contract.title}
+            </div>
+            <div className="text-xs text-slate-500 mt-1">
+              {formatDate(contract.created_at)}
+            </div>
+          </button>
+        ))}
+      </div>
+    )
   }
 
   // 전체 화면 스크롤 방지
@@ -1355,73 +1643,18 @@ export default function QuickAssistPage() {
 
         {/* 메인 채팅 영역 (오른쪽 80%) */}
         <div className="flex-1 flex flex-col bg-gradient-to-b from-white via-slate-50/50 to-white overflow-hidden min-h-0">
-          {/* 헤더 */}
-          <div className="px-5 py-2.5 border-b border-slate-200/80 bg-white/90 backdrop-blur-sm flex-shrink-0">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => router.push('/legal/assist')}
-                  className="text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors h-8 px-2"
-                >
-                  <ArrowLeft className="w-4 h-4" />
-                </Button>
-                <div className="h-4 w-px bg-slate-300" />
-                <div className="flex items-center gap-2">
-                  <div className="p-1.5 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-md shadow-sm">
-                    <Scale className="w-4 h-4 text-white" />
-                  </div>
-                  <h1 className="text-lg font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-                    즉시 상담
-                  </h1>
-                </div>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleOpenArchiveModal}
-                className="text-slate-700 hover:text-slate-900 border-slate-300 hover:border-slate-400 hover:bg-slate-50 transition-all h-8 px-3"
-              >
-                <FolderArchive className="w-3.5 h-3.5 mr-1.5" />
-                <span className="text-xs">상황 분석</span>
-              </Button>
-            </div>
-          </div>
-
           {/* 채팅 메시지 영역 */}
           <div ref={chatContainerRef} className="flex-1 overflow-y-auto overflow-x-hidden bg-gradient-to-b from-white via-slate-50/30 to-white px-5 sm:px-6 lg:px-8 pt-4 pb-6 space-y-5 scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-transparent min-h-0">
             {messages.length === 0 && !hasInitialGreeting && (
-              <div className="flex flex-col items-center justify-center h-full">
+              <div className="flex flex-col items-center justify-center h-full pb-8">
                 <div className="p-6 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-3xl mb-6 shadow-lg animate-pulse">
                   <Bot className="w-16 h-16 text-blue-600" />
                 </div>
                 <h2 className="text-2xl font-bold text-slate-800 mb-2">안녕하세요! 👋</h2>
-                <p className="text-slate-600 text-center max-w-md mb-2">
-                  법률 상담이 필요하신가요? 아래에서 상황을 설명해주시면<br />
-                  AI가 도와드리겠습니다.
+                <p className="text-slate-600 text-center max-w-md">
+                  법률 상담이 필요하신가요? 아래에서 상황을 한 줄로 설명해주시면<br />
+                  AI가 도와드릴게요.
                 </p>
-                <p className="text-xs text-slate-400 mb-8">
-                  💡 팁: Ctrl+K로 새 대화를 시작할 수 있습니다
-                </p>
-                <div className="grid grid-cols-2 gap-3 max-w-md">
-                  {COMMON_SITUATIONS.slice(0, 4).map((situation, index) => {
-                    const Icon = situation.icon
-                    return (
-                      <button
-                        key={index}
-                        onClick={() => handleSituationSelect(situation)}
-                        className="p-4 bg-white border-2 border-slate-200 rounded-xl hover:border-blue-400 hover:bg-blue-50 transition-all text-left group active:scale-95"
-                        title={situation.text}
-                      >
-                        <Icon className="w-5 h-5 text-blue-600 mb-2" />
-                        <div className="text-sm font-semibold text-slate-800 group-hover:text-blue-700">
-                          {situation.title}
-                        </div>
-                      </button>
-                    )
-                  })}
-                </div>
               </div>
             )}
             {messages.map((message, index) => (
@@ -1540,107 +1773,129 @@ export default function QuickAssistPage() {
 
           {/* 입력 영역 - 화면 하단 고정 */}
           <div className="flex-shrink-0 border-t border-slate-200/80 bg-white/95 backdrop-blur-md px-5 py-4 shadow-lg">
-            {/* 자주 있는 상황 태그 버튼 */}
-            {messages.length === 0 && (
-              <div className="px-1 pt-1 pb-3 mb-3 border-b border-slate-200/80">
-                <div className="flex items-center gap-2 mb-2.5">
-                  <div className="p-1 bg-blue-100 rounded-lg">
-                    <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-                  </div>
-                  <span className="text-xs font-bold text-slate-700">자주 있는 상황:</span>
+            {/* 라벨 */}
+            <label className="block text-sm font-semibold text-slate-800 mb-2">
+              한 줄로 상황을 요약해 주세요
+            </label>
+
+            {/* GPT 스타일 입력 바 */}
+            <div className="relative">
+              <div className="flex items-end rounded-3xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
+                {/* + 버튼 */}
+                <button
+                  type="button"
+                  data-report-menu-button
+                  onClick={() => setOpenReportMenu((v) => !v)}
+                  className="mr-2 flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors flex-shrink-0"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+
+                {/* textarea (채팅 입력창 느낌) */}
+                <textarea
+                  ref={textareaRef}
+                  rows={1}
+                  value={inputMessage}
+                  onChange={(e) => {
+                    setInputMessage(e.target.value)
+                    // 자동 높이 조절
+                    e.target.style.height = "0px"
+                    e.target.style.height = e.target.scrollHeight + "px"
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault()
+                      handleSendMessage()
+                    }
+                  }}
+                  placeholder="예: 단톡방/회의에서 모욕적인 말을 들었어요"
+                  className="max-h-32 flex-1 resize-none border-0 bg-transparent text-sm text-slate-900 placeholder:text-slate-400 focus:ring-0 focus:outline-none"
+                  style={{
+                    minHeight: '32px',
+                    maxHeight: '128px',
+                  }}
+                />
+
+                {/* 오른쪽 영역: 글자수 + 전송 버튼 */}
+                <div className="ml-2 flex flex-col items-end gap-1 flex-shrink-0">
+                  <span className="text-[11px] text-slate-400">
+                    {inputMessage.length}자
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={handleSendMessage}
+                    disabled={!inputMessage.trim() || isAnalyzing}
+                    className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-r from-indigo-400 to-violet-400 text-white shadow-md disabled:opacity-40 disabled:cursor-not-allowed hover:shadow-lg transition-all"
+                  >
+                    {isAnalyzing ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Send className="h-4 w-4 -translate-y-[1px] rotate-45" />
+                    )}
+                  </button>
                 </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {COMMON_SITUATIONS.map((situation, index) => {
-                    const Icon = situation.icon
-                    return (
-                      <button
-                        key={index}
-                        onClick={() => handleSituationSelect(situation)}
-                        className={cn(
-                          "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all",
-                          "bg-white border-2 border-slate-200 text-slate-700 shadow-sm",
-                          "hover:border-blue-400 hover:bg-gradient-to-br hover:from-blue-50 hover:to-indigo-50 hover:text-blue-700 hover:shadow-md",
-                          "active:scale-95"
-                        )}
-                      >
-                        <Icon className="w-4 h-4" />
-                        <span>{situation.title}</span>
-                      </button>
-                    )
-                  })}
+              </div>
+
+              {/* + 버튼 눌렀을 때 뜨는 메뉴 (GPT의 … 메뉴 느낌) */}
+              {openReportMenu && (
+                <div data-report-menu className="absolute left-2 bottom-full z-10 mb-2 w-64 rounded-2xl border border-slate-100 bg-white p-1 shadow-lg">
+                  <div className="px-3 py-1.5 text-xs text-slate-500 font-medium border-b border-slate-100">
+                    참고할 리포트
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setContextSelectorType('situation')
+                      setShowContextSelector(true)
+                      setOpenReportMenu(false)
+                    }}
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm hover:bg-slate-50 transition-colors text-slate-700"
+                  >
+                    <FileText className="w-4 h-4" />
+                    <span>상황 분석 리포트 불러오기</span>
+                    {currentContext.type === 'situation' && (
+                      <CheckCircle2 className="w-4 h-4 text-blue-600 ml-auto" />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setContextSelectorType('contract')
+                      setShowContextSelector(true)
+                      setOpenReportMenu(false)
+                    }}
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm hover:bg-slate-50 transition-colors text-slate-700"
+                  >
+                    <FileText className="w-4 h-4" />
+                    <span>계약서 분석 리포트 불러오기</span>
+                    {currentContext.type === 'contract' && (
+                      <CheckCircle2 className="w-4 h-4 text-blue-600 ml-auto" />
+                    )}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* 현재 컨텍스트 표시 (선택된 경우) */}
+            {currentContext.type !== 'none' && currentContext.label && (
+              <div className="mt-3 px-3 py-1.5 rounded-lg bg-blue-50/50 border border-blue-200/50">
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-slate-500">상담 기준:</span>
+                  <span className="font-medium text-blue-700">
+                    {currentContext.type === 'situation' && '📋 '}
+                    {currentContext.type === 'contract' && '📄 '}
+                    {currentContext.label}
+                  </span>
+                  <button
+                    onClick={() => setCurrentContext({ type: 'none', id: null })}
+                    className="ml-auto text-slate-400 hover:text-slate-600 transition-colors"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
                 </div>
               </div>
             )}
-            
-            {/* 입력창 */}
-            <div className="space-y-2.5">
-              {/* 한 줄 요약 */}
-              <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="text-xs font-bold text-slate-700">
-                    <span className="text-red-500 mr-1">*</span> 한 줄로 상황을 요약해 주세요
-                  </div>
-                </div>
-                <div className="flex gap-2.5 items-end">
-                  <div className="relative flex-1">
-                    <Textarea
-                      ref={textareaRef}
-                      value={inputMessage}
-                      onChange={(e) => setInputMessage(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !e.shiftKey) {
-                          e.preventDefault()
-                          handleSendMessage()
-                        }
-                      }}
-                      placeholder="예: 단톡방/회의에서 모욕적인 말을 들어요"
-                      className={cn(
-                        "min-h-[56px] max-h-[180px] resize-none text-sm",
-                        "border-2 border-slate-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-200",
-                        "rounded-xl px-4 py-2.5 pr-12 shadow-sm",
-                        "transition-all duration-200"
-                      )}
-                      style={{
-                        minHeight: '56px',
-                        maxHeight: '180px',
-                        resize: 'none',
-                      }}
-                      rows={2}
-                    />
-                    <div className="absolute bottom-2.5 right-2.5 flex items-center gap-1.5 text-xs text-slate-400 font-medium">
-                      <span>{inputMessage.length}자</span>
-                    </div>
-                  </div>
-                  <Button
-                    onClick={handleSendMessage}
-                    disabled={!inputMessage.trim() || isAnalyzing}
-                    size="lg"
-                    className={cn(
-                      "h-[56px] min-w-[56px] px-5 rounded-xl",
-                      PRIMARY_GRADIENT,
-                      PRIMARY_GRADIENT_HOVER,
-                      "text-white shadow-lg hover:shadow-xl",
-                      "transition-all duration-200",
-                      "disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:shadow-lg",
-                      "focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-blue-600",
-                      "flex-shrink-0"
-                    )}
-                  >
-                    {isAnalyzing ? (
-                      <Loader2 className="w-5 h-5 animate-spin" />
-                    ) : (
-                      <Send className="w-5 h-5" />
-                    )}
-                  </Button>
-                </div>
-                {inputMessage.trim() && (
-                  <div className="mt-2 flex items-center gap-1.5 text-xs text-green-600 font-medium">
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>입력 완료 - Enter 키로 전송하세요</span>
-                  </div>
-                )}
-              </div>
-            </div>
           </div>
         </div>
       </div>
@@ -1667,6 +1922,125 @@ export default function QuickAssistPage() {
             >
               저장
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 컨텍스트 선택 모달 */}
+      <Dialog 
+        open={showContextSelector} 
+        onOpenChange={(open) => {
+          setShowContextSelector(open)
+          if (!open) {
+            setContextSelectorType(null)
+          }
+        }}
+      >
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col p-0 gap-0">
+          <DialogHeader className="px-6 pt-6 pb-4 border-b border-slate-200 bg-gradient-to-r from-blue-50/50 to-indigo-50/50">
+            <DialogTitle className="flex items-center gap-3">
+              <div className="p-2 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg shadow-sm">
+                {contextSelectorType === 'situation' ? (
+                  <MessageSquare className="w-5 h-5 text-white" />
+                ) : contextSelectorType === 'contract' ? (
+                  <FileText className="w-5 h-5 text-white" />
+                ) : (
+                  <Sparkles className="w-5 h-5 text-white" />
+                )}
+              </div>
+              <div>
+                <h3 className="text-xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                  {contextSelectorType === 'situation' 
+                    ? '상황 분석 리포트 선택'
+                    : contextSelectorType === 'contract'
+                    ? '계약서 분석 리포트 선택'
+                    : '컨텍스트 선택'}
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {contextSelectorType === 'situation'
+                    ? '대화에 참조할 상황 분석 리포트를 선택하세요'
+                    : contextSelectorType === 'contract'
+                    ? '대화에 참조할 계약서 분석 리포트를 선택하세요'
+                    : '대화에 참조할 리포트를 선택하세요'}
+                </p>
+              </div>
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="flex-1 overflow-y-auto px-6 py-4 scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-transparent">
+            <div className="space-y-4">
+              {/* 컨텍스트 없음 옵션 */}
+              <button
+                onClick={() => {
+                  setCurrentContext({ type: 'none', id: null })
+                  setShowContextSelector(false)
+                  setContextSelectorType(null)
+                }}
+                className={cn(
+                  "w-full p-4 rounded-xl border-2 transition-all text-left",
+                  currentContext.type === 'none'
+                    ? "border-blue-500 bg-blue-50"
+                    : "border-slate-200 hover:border-blue-300 hover:bg-slate-50"
+                )}
+              >
+                <div className="flex items-center gap-3">
+                  <div className={cn(
+                    "p-2 rounded-lg",
+                    currentContext.type === 'none' ? "bg-blue-100" : "bg-slate-100"
+                  )}>
+                    <X className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="font-semibold text-slate-900">컨텍스트 없음</div>
+                    <div className="text-xs text-slate-500 mt-1">일반 Q&A 모드로 대화합니다</div>
+                  </div>
+                </div>
+              </button>
+
+              {/* 상황 분석 선택 - 상황 분석 버튼 클릭 시에만 표시 */}
+              {contextSelectorType === 'situation' && (
+                <div>
+                  <div className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
+                    <MessageSquare className="w-4 h-4" />
+                    상황 분석 리포트
+                  </div>
+                  <ContextSituationList
+                    onSelect={(situation) => {
+                      setCurrentContext({
+                        type: 'situation',
+                        id: situation.id,
+                        label: situation.situation?.substring(0, 30) || '상황 분석',
+                      })
+                      setShowContextSelector(false)
+                      setContextSelectorType(null)
+                    }}
+                    currentContextId={currentContext.type === 'situation' ? currentContext.id : null}
+                  />
+                </div>
+              )}
+
+              {/* 계약서 분석 선택 - 계약서 분석 버튼 클릭 시에만 표시 */}
+              {contextSelectorType === 'contract' && (
+                <div>
+                  <div className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
+                    <FileText className="w-4 h-4" />
+                    계약서 분석 리포트
+                  </div>
+                  <ContextContractList
+                    onSelect={(contract) => {
+                      setCurrentContext({
+                        type: 'contract',
+                        id: contract.doc_id || contract.id,
+                        label: contract.title || '계약서 분석',
+                      })
+                      setShowContextSelector(false)
+                      setContextSelectorType(null)
+                    }}
+                    currentContextId={currentContext.type === 'contract' ? currentContext.id : null}
+                  />
+                </div>
+              )}
+            </div>
           </div>
         </DialogContent>
       </Dialog>
