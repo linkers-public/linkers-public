@@ -1283,9 +1283,9 @@ async def analyze_situation(
         # action_plan이 비어있으면 summary에서 "지금 당장 할 수 있는 행동" 섹션 파싱
         if len(steps) == 0:
             summary_text = result.get("summary", "")
-            # "## 🎯 지금 당장 할 수 있는 행동" 섹션 추출
+            # "## 지금 당장 할 수 있는 행동" 섹션 추출
             action_section_match = re.search(
-                r'##\s*🎯\s*지금\s*당장\s*할\s*수\s*있는\s*행동\s*\n(.*?)(?=##|$)',
+                r'##\s*지금\s*당장\s*할\s*수\s*있는\s*행동\s*\n(.*?)(?=##|$)',
                 summary_text,
                 re.DOTALL | re.IGNORECASE
             )

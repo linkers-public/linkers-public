@@ -415,7 +415,7 @@ export default function QuickAssistPage() {
     
     const loadConversations = async () => {
       try {
-        // 1. localStorage에서 대화 로드
+        // 1. localStorage에서 대화 로드 (즉시 표시)
         const stored = localStorage.getItem('legal_assist_conversations')
         let localConversations: ConversationSession[] = []
         
@@ -430,9 +430,20 @@ export default function QuickAssistPage() {
               timestamp: new Date(m.timestamp),
             })),
           }))
+          
+          // localStorage 데이터를 먼저 표시 (빠른 초기 렌더링)
+          setConversations(localConversations)
+          
+          // 최근 대화가 있으면 자동으로 선택
+          if (localConversations.length > 0 && !selectedConversationId) {
+            const latestConversation = localConversations.sort((a, b) => 
+              b.createdAt.getTime() - a.createdAt.getTime()
+            )[0]
+            setSelectedConversationId(latestConversation.id)
+          }
         }
 
-        // 2. DB에서 상황 분석 히스토리 가져오기
+        // 2. DB에서 상황 분석 히스토리 가져오기 (백그라운드 동기화)
         try {
           const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client')
           const supabase = createSupabaseBrowserClient()
@@ -443,52 +454,69 @@ export default function QuickAssistPage() {
             const dbConversations: ConversationSession[] = []
             
             // 2-1. 새 테이블 구조에서 챗 세션 로드 (legal_chat_sessions)
+            // 성능 최적화: 최근 20개 세션만 로드 (초기 로드)
             try {
-              const chatSessions = await getChatSessions(userId, 50, 0)
+              const chatSessions = await getChatSessions(userId, 20, 0)
               
-              // 각 챗 세션에 대해 메시지 가져오기
-              const chatSessionPromises = chatSessions.map(async (session: ChatSession) => {
-              try {
-                  const messages = await getChatMessages(session.id, userId)
-                
-                if (messages.length === 0) {
-                  return null
-                }
-                
-                // 메시지를 ChatMessage 형식으로 변환
-                const chatMessages: ChatMessage[] = messages
-                  .sort((a, b) => a.sequence_number - b.sequence_number)
-                  .map((msg) => ({
-                    id: msg.id,
-                    role: msg.sender_type,
-                    content: msg.message,
-                    timestamp: new Date(msg.created_at),
-                    context_type: (msg.context_type as 'none' | 'situation' | 'contract') || 'none',
-                    context_id: msg.context_id || null,
-                  }))
-                
-                // 대화 세션 생성
-                const conversation: ConversationSession = {
-                    id: `session-${session.id}`,
-                    sessionId: session.id,
-                    title: session.title || '대화',
-                  messages: chatMessages,
-                    createdAt: new Date(session.created_at),
-                    updatedAt: new Date(session.updated_at),
-                }
-                
-                return conversation
-              } catch (error) {
-                  console.warn(`챗 메시지 조회 실패 (session_id: ${session.id}):`, error)
-                return null
+              // 병렬 처리: 각 세션의 메시지를 동시에 가져오기
+              // 성능 최적화: 최대 10개 세션만 동시에 처리 (너무 많으면 타임아웃 위험)
+              const BATCH_SIZE = 10
+              const batches: ChatSession[][] = []
+              for (let i = 0; i < chatSessions.length; i += BATCH_SIZE) {
+                batches.push(chatSessions.slice(i, i + BATCH_SIZE))
               }
-            })
-            
-              const chatSessionResults = await Promise.all(chatSessionPromises)
-              for (const result of chatSessionResults) {
-              if (result) {
-                dbConversations.push(result)
-              }
+              
+              // 배치별로 순차 처리 (각 배치는 병렬)
+              for (const batch of batches) {
+                const chatSessionPromises = batch.map(async (session: ChatSession) => {
+                  try {
+                    // 타임아웃 추가 (5초)
+                    const timeoutPromise = new Promise((_, reject) => {
+                      setTimeout(() => reject(new Error('타임아웃')), 5000)
+                    })
+                    
+                    const messagesPromise = getChatMessages(session.id, userId)
+                    const messages = await Promise.race([messagesPromise, timeoutPromise]) as any
+                    
+                    if (!messages || messages.length === 0) {
+                      return null
+                    }
+                    
+                    // 메시지를 ChatMessage 형식으로 변환
+                    const chatMessages: ChatMessage[] = messages
+                      .sort((a: any, b: any) => a.sequence_number - b.sequence_number)
+                      .map((msg: any) => ({
+                        id: msg.id,
+                        role: msg.sender_type,
+                        content: msg.message,
+                        timestamp: new Date(msg.created_at),
+                        context_type: (msg.context_type as 'none' | 'situation' | 'contract') || 'none',
+                        context_id: msg.context_id || null,
+                      }))
+                    
+                    // 대화 세션 생성
+                    const conversation: ConversationSession = {
+                      id: `session-${session.id}`,
+                      sessionId: session.id,
+                      title: session.title || '대화',
+                      messages: chatMessages,
+                      createdAt: new Date(session.created_at),
+                      updatedAt: new Date(session.updated_at),
+                    }
+                    
+                    return conversation
+                  } catch (error) {
+                    console.warn(`챗 메시지 조회 실패 (session_id: ${session.id}):`, error)
+                    return null
+                  }
+                })
+                
+                const batchResults = await Promise.all(chatSessionPromises)
+                for (const result of batchResults) {
+                  if (result) {
+                    dbConversations.push(result)
+                  }
+                }
               }
             } catch (error) {
               console.warn('새 챗 세션 로드 실패, 레거시만 사용:', error)
@@ -521,27 +549,20 @@ export default function QuickAssistPage() {
               b.createdAt.getTime() - a.createdAt.getTime()
             )
             
+            // DB 동기화 결과로 업데이트 (이미 localStorage 데이터는 표시됨)
             setConversations(mergedConversations)
             
             // localStorage 업데이트 (DB 데이터 포함, DB 삭제 반영)
             localStorage.setItem('legal_assist_conversations', JSON.stringify(mergedConversations))
             
-            // 최근 대화가 있으면 자동으로 선택
+            // 최근 대화가 있으면 자동으로 선택 (아직 선택되지 않은 경우만)
             if (mergedConversations.length > 0 && !selectedConversationId) {
               const latestConversation = mergedConversations[0]
               setSelectedConversationId(latestConversation.id)
             }
           } else {
-            // 사용자 ID가 없으면 localStorage만 사용
-            setConversations(localConversations)
-            
-            // 최근 대화가 있으면 자동으로 선택
-            if (localConversations.length > 0 && !selectedConversationId) {
-              const latestConversation = localConversations.sort((a, b) => 
-                b.createdAt.getTime() - a.createdAt.getTime()
-              )[0]
-              setSelectedConversationId(latestConversation.id)
-            }
+            // 사용자 ID가 없으면 localStorage만 사용 (이미 표시됨)
+            // 추가 작업 없음
           }
         } catch (dbError) {
           console.warn('DB에서 대화 로드 실패, localStorage만 사용:', dbError)
@@ -701,65 +722,75 @@ export default function QuickAssistPage() {
     if (selectedConversationId) {
       const conversation = conversations.find(c => c.id === selectedConversationId)
       if (conversation) {
-          let isCancelled = false
-          
-          const loadLatestMessages = async () => {
-            try {
-              const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client')
-              const supabase = createSupabaseBrowserClient()
-              const { data: { user } } = await supabase.auth.getUser()
-              const userId = user?.id || null
+        // 먼저 기존 메시지 표시 (빠른 렌더링)
+        if (conversation.messages.length > 0) {
+          setMessages(conversation.messages)
+          setHasInitialGreeting(true)
+        }
+        
+        let isCancelled = false
+        
+        const loadLatestMessages = async () => {
+          try {
+            const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client')
+            const supabase = createSupabaseBrowserClient()
+            const { data: { user } } = await supabase.auth.getUser()
+            const userId = user?.id || null
+            
+            if (isCancelled) return
+            
+            if (userId && conversation.sessionId) {
+              // 타임아웃 추가 (5초)
+              const timeoutPromise = new Promise((_, reject) => {
+                setTimeout(() => reject(new Error('타임아웃')), 5000)
+              })
+              
+              const messagesPromise = getChatMessages(conversation.sessionId, userId)
+              const messages = await Promise.race([messagesPromise, timeoutPromise]) as any
+                
+              if (isCancelled) return
+              
+              const chatMessages: ChatMessage[] = messages
+                .sort((a: any, b: any) => a.sequence_number - b.sequence_number)
+                .map((msg: any) => ({
+                  id: msg.id,
+                  role: msg.sender_type,
+                  content: msg.message,
+                  timestamp: new Date(msg.created_at),
+                  context_type: (msg.context_type as 'none' | 'situation' | 'contract') || 'none',
+                  context_id: msg.context_id || null,
+                }))
               
               if (isCancelled) return
               
-            if (userId && conversation.sessionId) {
-              // 새 테이블 구조 사용
-              const messages = await getChatMessages(conversation.sessionId, userId)
-                
-                if (isCancelled) return
-                
-                const chatMessages: ChatMessage[] = messages
-                  .sort((a, b) => a.sequence_number - b.sequence_number)
-                  .map((msg) => ({
-                    id: msg.id,
-                    role: msg.sender_type,
-                    content: msg.message,
-                    timestamp: new Date(msg.created_at),
-                    context_type: (msg.context_type as 'none' | 'situation' | 'contract') || 'none',
-                    context_id: msg.context_id || null,
-                  }))
-                
-                setConversations((prev) => 
-                  prev.map((c) => 
-                    c.id === selectedConversationId
-                      ? { ...c, messages: chatMessages, updatedAt: new Date() }
-                      : c
-                  )
+              setConversations((prev) => 
+                prev.map((c) => 
+                  c.id === selectedConversationId
+                    ? { ...c, messages: chatMessages, updatedAt: new Date() }
+                    : c
                 )
-                
-                setMessages(chatMessages)
-                setHasInitialGreeting(true)
-              } else {
-              // 세션이 없거나 사용자 ID가 없으면 기존 메시지 사용
-                if (!isCancelled) {
-                  setMessages(conversation.messages)
-                  setHasInitialGreeting(true)
-                }
-              }
-            } catch (error) {
-              if (!isCancelled) {
-                console.warn('DB에서 최신 메시지 로드 실패, 기존 메시지 사용:', error)
-                setMessages(conversation.messages)
-                setHasInitialGreeting(true)
-              }
+              )
+              
+              setMessages(chatMessages)
+              setHasInitialGreeting(true)
+            } else {
+              // 세션이 없거나 사용자 ID가 없으면 기존 메시지 사용 (이미 표시됨)
+              // 추가 작업 없음
+            }
+          } catch (error) {
+            if (!isCancelled) {
+              console.warn('DB에서 최신 메시지 로드 실패, 기존 메시지 사용:', error)
+              // 기존 메시지는 이미 표시됨
             }
           }
-          
-          loadLatestMessages()
-          
-          // cleanup 함수: 컴포넌트 언마운트 시 요청 취소
-          return () => {
-            isCancelled = true
+        }
+        
+        // 백그라운드에서 최신 메시지 동기화
+        loadLatestMessages()
+        
+        // cleanup 함수: 컴포넌트 언마운트 시 요청 취소
+        return () => {
+          isCancelled = true
         }
       }
     } else {
