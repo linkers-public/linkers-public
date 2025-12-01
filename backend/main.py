@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from api.routes_v2 import router, router_v2  # v2 라우터 사용
 from api.routes_legal import router_legal  # 법률 RAG 라우터
 from api.routes_legal_v2 import router as router_legal_v2  # 법률 RAG 라우터 v2
+from api.routes_legal_agent import router as router_legal_agent  # Agent 기반 통합 챗 라우터
 from config import settings
 import uvicorn
 import os
@@ -46,7 +47,8 @@ app.add_middleware(
 # 라우터 등록
 # 중요: 더 구체적인 경로를 가진 라우터를 먼저 등록해야 함
 app.include_router(router)
-app.include_router(router_legal_v2)  # 법률 RAG 엔드포인트 (v2 - 가이드 스펙) - 먼저 등록 (더 구체적)
+app.include_router(router_legal_agent)  # Agent 기반 통합 챗 엔드포인트 - 먼저 등록 (더 구체적)
+app.include_router(router_legal_v2)  # 법률 RAG 엔드포인트 (v2 - 가이드 스펙)
 app.include_router(router_legal)  # 법률 RAG 엔드포인트 (v1)
 app.include_router(router_v2)  # v2 엔드포인트 - 나중에 등록 (덜 구체적)
 

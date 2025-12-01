@@ -495,11 +495,508 @@ return LegalChatAgentResponse(
 
 **서비스**: `legal_service.analyze_contract()`
 
+**엔드포인트**: `POST /api/v2/legal/analyze-contract`
+
+**코드 위치**: 
+- API 엔드포인트: `backend/api/routes_legal_v2.py:146-540`
+- 분석 서비스: `backend/core/legal_rag_service.py:111-181`
+- LLM 분석: `backend/core/legal_rag_service.py:1199-1507`
+
+---
+
+#### 📋 계약서 분석 전체 절차
+
+```
+[1] 파일 업로드 및 검증
+    ↓
+[2] 텍스트 추출 (OCR/파싱)
+    - DocumentProcessor.process_file()
+    - PDF/HWPX → 텍스트 변환
+    ↓
+[3] 조항 추출 (Clause Extraction)
+    - extract_clauses() → LegalChunker.split_by_article()
+    - "제n조" 패턴 또는 키워드 기반 분할
+    ↓
+[4] 계약서 청킹 및 벡터 저장
+    - processor.to_contract_chunks()
+    - 임베딩 생성 (BAAI/bge-m3)
+    - contract_chunks 테이블에 저장
+    ↓
+[5] Dual RAG 검색 (병렬 실행)
+    ├─ 계약서 내부 검색 (contract_chunks)
+    │  - 벡터 유사도 검색 (top_k=5)
+    │  - 조항 번호 기반 boosting
+    └─ 외부 법령 검색 (legal_chunks)
+       - 법령/가이드/케이스 검색 (top_k=8)
+       - 타입 다양성 확보 (law, manual, case, standard_contract)
+    ↓
+[6] 위험 패턴 감지 (프리프로세싱)
+    - 법정 수당 청구권 포기 패턴 감지
+    - 위험 힌트 생성
+    ↓
+[7] LLM 위험 분석
+    - build_contract_analysis_prompt()로 프롬프트 생성
+    - Groq/Ollama로 위험 조항 식별
+    - JSON 형식 응답 파싱
+    ↓
+[8] 결과 변환 및 검증
+    - clause_id 기반으로 original_text 매핑
+    - legal_basis 구조화
+    - issues 배열 구성
+    ↓
+[9] DB 저장
+    - contract_analyses 테이블
+    - contract_issues 테이블
+    ↓
+[10] 응답 반환
+    - ContractAnalysisResponseV2 형식
+```
+
+---
+
+#### 🔍 단계별 상세 설명
+
+##### 1단계: 파일 업로드 및 검증
+
+**위치**: `backend/api/routes_legal_v2.py:164-196`
+
 **처리 내용**:
-1. 계약서 텍스트 파싱 및 조항 추출
-2. 법적 이슈 탐지 (위험 조항, 불공정 조항 등)
-3. 위험도 평가 (0-100 점수)
-4. 분석 요약 생성
+- 파일명 검증 (`file.filename` 필수)
+- 캐시 조회 (현재 개발 모드로 비활성화)
+- 임시 파일 저장 (`tempfile.NamedTemporaryFile`)
+
+**코드**:
+```python
+if not file.filename:
+    raise HTTPException(status_code=400, detail="파일이 필요합니다.")
+
+# 임시 파일 저장
+temp_file = tempfile.NamedTemporaryFile(
+    delete=False,
+    suffix=suffix,
+    dir=TEMP_DIR
+)
+content = await file.read()
+temp_file.write(content)
+temp_file.close()
+```
+
+---
+
+##### 2단계: 텍스트 추출 (OCR/파싱)
+
+**위치**: `backend/api/routes_legal_v2.py:216-233`
+
+**처리 내용**:
+- `DocumentProcessor.process_file()` 호출
+- `mode="contract"` 설정 시 자동으로 `prefer_ocr=True` 적용
+- 이미지 기반 PDF도 OCR로 처리
+
+**코드**:
+```python
+processor = get_processor()
+extracted_text, _ = processor.process_file(
+    temp_path, 
+    file_type=None, 
+    mode="contract"  # OCR 우선 사용
+)
+
+if not extracted_text or extracted_text.strip() == "":
+    raise HTTPException(
+        status_code=400,
+        detail="업로드된 파일에서 텍스트를 추출할 수 없습니다."
+    )
+```
+
+**출력**: 계약서 원문 텍스트 (`extracted_text`)
+
+---
+
+##### 3단계: 조항 추출 (Clause Extraction)
+
+**위치**: `backend/api/routes_legal_v2.py:290-292`
+
+**처리 내용**:
+- `extract_clauses()` 함수 호출
+- 내부적으로 `LegalChunker.split_by_article()` 사용
+- "제n조" 패턴 또는 키워드 기반 섹션 분할
+
+**조항 인식 방법**:
+1. **"제n조" 패턴** (우선순위 1)
+   - 정규식: `^제\s*\d+\s*조\b.*`
+   - 예: "제1조 (목적)", "제 2 조"
+
+2. **키워드 기반** (패턴이 없을 때)
+   - 섹션 키워드: `근로계약기간`, `근무 장소`, `업무의 내용`, `소정근로시간`, `휴게시간`, `임금`, `특약사항`, `수습 기간`, `연차유급휴가`, `사회보험 적용`, `근로계약서 교부`, `기타`
+
+**출력 형식**:
+```python
+[
+    {
+        "id": "clause-1",
+        "title": "제1조 (목적)",
+        "content": "조항 본문...",
+        "articleNumber": 1,
+        "startIndex": 0,
+        "endIndex": 150,
+        "category": None  # LLM 라벨링 이후 채움
+    },
+    ...
+]
+```
+
+**코드 위치**: `backend/core/clause_extractor.py:13-125`
+
+---
+
+##### 4단계: 계약서 청킹 및 벡터 저장
+
+**위치**: `backend/api/routes_legal_v2.py:240-288`
+
+**처리 내용**:
+1. **조항 단위 청킹**
+   ```python
+   contract_chunks = processor.to_contract_chunks(
+       text=extracted_text,
+       base_meta={
+           "contract_id": doc_id,
+           "title": doc_title,
+           "filename": file.filename,
+       }
+   )
+   ```
+
+2. **임베딩 생성** (비동기)
+   ```python
+   generator = LLMGenerator()
+   chunk_texts = [chunk.content for chunk in contract_chunks]
+   embeddings = await asyncio.to_thread(generator.embed, chunk_texts)
+   ```
+
+3. **contract_chunks 테이블에 저장**
+   ```python
+   vector_store.bulk_upsert_contract_chunks(
+       contract_id=doc_id,
+       chunks=chunk_payload
+   )
+   ```
+
+**용도**: Dual RAG의 계약서 내부 검색에 사용
+
+**저장 위치**: `contract_chunks` 테이블
+
+---
+
+##### 5단계: Dual RAG 검색
+
+**위치**: `backend/core/legal_rag_service.py:128-155`
+
+**처리 내용**:
+
+**5-1. 쿼리 생성**
+```python
+query = self._build_query_from_contract(extracted_text, description)
+# 계약서 앞부분 2000자 또는 조항 제목만 사용
+```
+
+**5-2. 계약서 내부 검색** (contract_chunks)
+- `doc_id`가 있으면 계약서 내부 청크 검색
+- 벡터 유사도 검색 (top_k=5)
+- 조항 번호 기반 boosting 지원
+
+```python
+if doc_id:
+    contract_chunks = await self._search_contract_chunks(
+        doc_id=doc_id,
+        query=query,
+        top_k=5,
+        selected_issue=None
+    )
+```
+
+**5-3. 외부 법령 검색** (legal_chunks)
+- 법령/가이드/케이스 검색 (top_k=8)
+- source_type: `law`, `manual`, `case`, `standard_contract`
+- 타입 다양성 확보:
+  - 최소 1개: 법령 (law)
+  - 최소 1개: 가이드/표준계약 (manual, standard_contract)
+  - 있으면 1개: 판례/케이스 (case)
+  - 나머지는 유사도 순으로 채움
+
+```python
+legal_chunks = await self._search_legal_chunks(
+    query=query, 
+    top_k=8,
+    category=None,  # 전체 계약서 분석이므로 category 필터 없음
+    ensure_diversity=True,  # 타입 다양성 확보
+)
+```
+
+**검색 소스**:
+- `laws/`: 법령 (근로기준법, 최저임금법 등)
+- `manuals/`: 가이드/매뉴얼 (계약서 작성 가이드 등)
+- `cases/`: 유사 케이스 (시나리오 문서)
+- `standard_contract/`: 표준 계약서
+
+---
+
+##### 6단계: 위험 패턴 감지 (프리프로세싱)
+
+**위치**: `backend/core/legal_rag_service.py:157-167`
+
+**처리 내용**:
+- 법정 수당 청구권 포기 패턴 감지
+- 위험 힌트 생성하여 LLM에 전달
+
+**감지 패턴**:
+- "추가 수당을 사업주에게 청구하지 않기로 합의한다"
+- "법에서 정한 연장·야간·휴일근로 수당 등 법정 임금 청구권을 미리 포기"
+
+**코드**:
+```python
+if self._detect_wage_waiver_phrases(extracted_text):
+    risk_hint = (
+        f"{description or ''}\n\n"
+        "※ 시스템 힌트: 이 계약서에는 "
+        "'추가 수당을 사업주에게 청구하지 않기로 합의한다' 와 같이 "
+        "근로자가 법에서 정한 연장·야간·휴일근로 수당 등 법정 임금 청구권을 "
+        "미리 포기하는 취지의 문구가 포함되어 있습니다. "
+        "이 조항의 위법 가능성과 위험도를 반드시 별도의 이슈로 평가하세요."
+    ).strip()
+```
+
+---
+
+##### 7단계: LLM 위험 분석
+
+**위치**: `backend/core/legal_rag_service.py:1199-1507`
+
+**처리 내용**:
+
+**7-1. 프롬프트 생성**
+```python
+prompt = build_contract_analysis_prompt(
+    contract_text=contract_text or "",
+    grounding_chunks=grounding_chunks,  # 외부 법령 검색 결과
+    contract_chunks=contract_chunks,      # 계약서 내부 검색 결과
+    description=concerns or query,
+    clauses=clauses,                      # 조항 리스트
+    contract_type=contract_type,
+    user_role=user_role,
+    field=field,
+    concerns=concerns,
+)
+```
+
+**프롬프트 구조**:
+- 시스템 프롬프트: 한국 노동법 전문가 역할 정의
+- 분석 대상 계약서: 전체 텍스트 (3000자 이하) 또는 샘플링 (앞/중간/뒤)
+- 계약서 주요 조항: contract_chunks (상위 5개, 각 400자)
+- 참고 법령/가이드라인: grounding_chunks (8개, 각 200자)
+- JSON 형식 응답 요청
+
+**7-2. LLM 호출**
+- Groq 우선 사용 (환경변수 설정)
+- Ollama 대체 사용 (레거시)
+- 최대 토큰: 8192 (긴 JSON 응답 대응)
+
+**7-3. JSON 파싱**
+- 코드 블록 제거 (```json, ```)
+- 정규식으로 JSON 객체 추출
+- JSON 유효성 검사 및 파싱
+- 파싱 실패 시 복구 시도
+
+**출력 형식**:
+```json
+{
+    "risk_score": 65,
+    "risk_level": "medium",
+    "summary": "전체 위험도 요약",
+    "issues": [
+        {
+            "name": "이슈 이름",
+            "description": "위험 조항 설명",
+            "clause_id": "clause-1",
+            "original_text": "계약서 원문의 실제 텍스트",
+            "severity": "high",
+            "category": "wage",
+            "legal_basis": [
+                {
+                    "title": "근로기준법 제XX조",
+                    "snippet": "법령 조문...",
+                    "sourceType": "law"
+                }
+            ],
+            "suggested_text": "개선된 조항",
+            "rationale": "왜 위험한지",
+            "suggested_questions": ["협상 질문"]
+        }
+    ],
+    "recommendations": [...]
+}
+```
+
+**코드 위치**: `backend/core/prompts.py:848-1098` (프롬프트 빌더)
+
+---
+
+##### 8단계: 결과 변환 및 검증
+
+**위치**: `backend/api/routes_legal_v2.py:330-500`
+
+**처리 내용**:
+
+**8-1. clause_id 기반 original_text 매핑**
+```python
+clauses_by_id = {c["id"]: c for c in clauses}
+
+for issue in result.issues:
+    clause_id = getattr(issue, 'clause_id', None)
+    if clause_id and clause_id in clauses_by_id:
+        clause = clauses_by_id[clause_id]
+        original_text = clause.get("content", "")
+```
+
+**8-2. legal_basis 구조화**
+- `LegalBasisItemV2` 형식으로 변환
+- Dict 형식이면 구조화된 형식으로 변환
+
+**8-3. issues 배열 구성**
+- `clause_id`, `category`, `severity`, `description` 추출
+- `legal_basis` 배열 구조화
+- `original_text` 매핑
+
+---
+
+##### 9단계: DB 저장
+
+**위치**: `backend/api/routes_legal_v2.py:500-540`
+
+**처리 내용**:
+
+**9-1. contract_analyses 테이블 저장**
+```python
+await storage_service.save_contract_analysis(
+    doc_id=doc_id,
+    title=file.filename or "계약서",
+    risk_score=result.risk_score,
+    risk_level=result.risk_level,
+    summary=result.summary,
+    issues=issues,
+    user_id=user_id,
+    contract_text=extracted_text,
+    clauses=clauses,
+    sections=sections,
+    retrieved_contexts=retrieved_contexts,
+)
+```
+
+**저장 필드**:
+- `doc_id`: 고유 문서 ID (UUID)
+- `title`: 계약서 제목
+- `risk_score`: 위험도 점수 (0-100)
+- `risk_level`: 위험도 등급 ("low" | "medium" | "high")
+- `summary`: 분석 요약
+- `contract_text`: 계약서 원문 텍스트
+- `clauses`: 조항 목록 (JSONB)
+- `sections`: 영역별 점수 (JSONB)
+- `retrieved_contexts`: RAG 검색 결과 (JSONB)
+
+**9-2. contract_issues 테이블 저장** (선택적)
+- 각 이슈별로 별도 테이블에 저장 가능
+
+---
+
+##### 10단계: 응답 반환
+
+**위치**: `backend/api/routes_legal_v2.py:540-600`
+
+**응답 형식**: `ContractAnalysisResponseV2`
+
+**주요 필드**:
+- `docId`: 문서 ID
+- `contractText`: 계약서 원문 텍스트
+- `riskScore`: 위험도 점수 (0-100)
+- `riskLevel`: 위험도 등급
+- `summary`: 분석 요약
+- `issues`: 위험 이슈 목록
+- `clauses`: 조항 목록
+- `sections`: 영역별 점수
+- `retrievedContexts`: RAG 검색 결과
+
+---
+
+#### 🔧 주요 컴포넌트
+
+**1. 조항 추출기**
+- 파일: `backend/core/clause_extractor.py`
+- 함수: `extract_clauses()`
+- 내부: `LegalChunker.split_by_article()`
+
+**2. RAG 서비스**
+- 파일: `backend/core/legal_rag_service.py`
+- 클래스: `LegalRAGService`
+- 메서드: `analyze_contract()`, `_search_contract_chunks()`, `_search_legal_chunks()`
+
+**3. LLM 분석**
+- 파일: `backend/core/legal_rag_service.py`
+- 메서드: `_llm_summarize_risk()`
+- 프롬프트: `build_contract_analysis_prompt()` (`backend/core/prompts.py`)
+
+**4. 벡터 스토어**
+- 파일: `backend/core/supabase_vector_store.py`
+- 클래스: `SupabaseVectorStore`
+- 메서드: `bulk_upsert_contract_chunks()`, `search_similar_contract_chunks()`, `search_similar_legal_chunks()`
+
+**5. 문서 처리기**
+- 파일: `backend/core/document_processor_v2.py`
+- 클래스: `DocumentProcessor`
+- 메서드: `process_file()`, `to_contract_chunks()`
+
+---
+
+#### 📊 성능 최적화
+
+**1. 프롬프트 길이 최적화**
+- `legal_context`: 8개 × 300자 → 5개 × 200자
+- `contract_context`: 상위 5개만 사용 (각 400자)
+- 응답 규칙 간소화
+
+**2. 텍스트 샘플링**
+- 긴 계약서는 앞/중간/뒤 부분만 샘플링
+- 최대 9000자까지 전달 (3000자 × 3)
+
+**3. 비동기 처리**
+- 임베딩 생성: `asyncio.to_thread()`
+- contract_chunks 저장 후 분석 시작 (Race condition 방지)
+
+**4. 임베딩 캐싱**
+- LRU 캐시 사용 (`LRUEmbeddingCache`)
+- 최대 100개 항목 캐싱
+
+---
+
+#### ⚠️ 에러 처리
+
+**1. 텍스트 추출 실패**
+- `extracted_text`가 비어있으면 400 에러 반환
+
+**2. 조항 추출 실패**
+- `clauses`가 비어있으면 전체를 하나의 clause로 생성
+
+**3. contract_chunks 저장 실패**
+- 경고 로그만 남기고 분석 계속 진행
+- `doc_id=None`으로 전달하여 내부 검색 비활성화
+
+**4. LLM 호출 실패**
+- Groq 실패 시 Ollama로 fallback
+- JSON 파싱 실패 시 복구 시도
+
+**5. DB 저장 실패**
+- 경고 로그만 남기고 응답은 반환
+- 사용자는 결과를 볼 수 있음
+
+---
 
 **저장 위치**: `contract_analyses` 테이블
 

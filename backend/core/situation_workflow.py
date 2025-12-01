@@ -725,7 +725,7 @@ class SituationWorkflow:
             
             # refinedSnippet: LLM이 생성한 것을 우선 사용, 없으면 chunk의 snippet 사용
             final_refined_snippet = refined_snippet if refined_snippet else chunk_snippet
-                    
+            
             # source 정보 추가
             finding["source"] = {
                 "documentTitle": document_title,

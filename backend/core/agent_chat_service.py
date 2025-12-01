@@ -63,7 +63,17 @@ class AgentChatService:
         
         try:
             from config import settings
-            if settings.use_groq:
+            # LLM Provider에 따라 분기 처리
+            if settings.use_ollama:
+                # Ollama 사용
+                response_text = await self.generator.generate(
+                    prompt=prompt,
+                    system_role="너는 유능한 법률 AI야. 한국어로만 답변해주세요."
+                )
+                logger.info(f"[Agent Plain] 답변 생성 완료: 길이={len(response_text)}")
+                return response_text.strip(), legal_chunks
+            elif settings.use_groq:
+                # Groq 사용
                 from llm_api import ask_groq_with_messages
                 
                 messages = [
@@ -80,10 +90,10 @@ class AgentChatService:
                 logger.info(f"[Agent Plain] 답변 생성 완료: 길이={len(response_text)}")
                 return response_text.strip(), legal_chunks
             else:
-                # Ollama 등 다른 LLM 사용
-                response_text = await self.generator.generate_text(
+                # 기본값: generator 사용 (Ollama로 fallback)
+                response_text = await self.generator.generate(
                     prompt=prompt,
-                    max_tokens=2000,
+                    system_role="너는 유능한 법률 AI야. 한국어로만 답변해주세요."
                 )
                 logger.info(f"[Agent Plain] 답변 생성 완료: 길이={len(response_text)}")
                 return response_text.strip(), legal_chunks
@@ -137,7 +147,17 @@ class AgentChatService:
         
         try:
             from config import settings
-            if settings.use_groq:
+            # LLM Provider에 따라 분기 처리
+            if settings.use_ollama:
+                # Ollama 사용
+                response_text = await self.generator.generate(
+                    prompt=prompt,
+                    system_role="너는 유능한 법률 AI야. 한국어로만 답변해주세요."
+                )
+                logger.info(f"[Agent Contract] 답변 생성 완료: 길이={len(response_text)}")
+                return response_text.strip()
+            elif settings.use_groq:
+                # Groq 사용
                 from llm_api import ask_groq_with_messages
                 
                 messages = [
@@ -154,9 +174,10 @@ class AgentChatService:
                 logger.info(f"[Agent Contract] 답변 생성 완료: 길이={len(response_text)}")
                 return response_text.strip()
             else:
-                response_text = await self.generator.generate_text(
+                # 기본값: generator 사용 (Ollama로 fallback)
+                response_text = await self.generator.generate(
                     prompt=prompt,
-                    max_tokens=2000,
+                    system_role="너는 유능한 법률 AI야. 한국어로만 답변해주세요."
                 )
                 logger.info(f"[Agent Contract] 답변 생성 완료: 길이={len(response_text)}")
                 return response_text.strip()
@@ -209,7 +230,17 @@ class AgentChatService:
         
         try:
             from config import settings
-            if settings.use_groq:
+            # LLM Provider에 따라 분기 처리
+            if settings.use_ollama:
+                # Ollama 사용
+                response_text = await self.generator.generate(
+                    prompt=prompt,
+                    system_role="너는 유능한 법률 AI야. 한국어로만 답변해주세요."
+                )
+                logger.info(f"[Agent Situation] 답변 생성 완료: 길이={len(response_text)}")
+                return response_text.strip()
+            elif settings.use_groq:
+                # Groq 사용
                 from llm_api import ask_groq_with_messages
                 
                 messages = [
@@ -226,9 +257,10 @@ class AgentChatService:
                 logger.info(f"[Agent Situation] 답변 생성 완료: 길이={len(response_text)}")
                 return response_text.strip()
             else:
-                response_text = await self.generator.generate_text(
+                # 기본값: generator 사용 (Ollama로 fallback)
+                response_text = await self.generator.generate(
                     prompt=prompt,
-                    max_tokens=2000,
+                    system_role="너는 유능한 법률 AI야. 한국어로만 답변해주세요."
                 )
                 logger.info(f"[Agent Situation] 답변 생성 완료: 길이={len(response_text)}")
                 return response_text.strip()

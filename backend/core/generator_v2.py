@@ -11,6 +11,8 @@ from config import settings
 
 # langchain-community의 Ollama Deprecated 경고 무시
 warnings.filterwarnings("ignore", category=DeprecationWarning, module="langchain")
+warnings.filterwarnings("ignore", message=".*Ollama.*deprecated.*", category=DeprecationWarning)
+warnings.filterwarnings("ignore", message=".*LangChainDeprecationWarning.*")
 
 # 로컬 임베딩 모델 (선택사항)
 _local_embedding_model = None
@@ -184,43 +186,50 @@ def _get_ollama_llm():
     global _ollama_llm
     if _ollama_llm is None:
         # langchain-community를 우선 사용 (think 파라미터 에러 방지)
-        try:
-            from langchain_community.llms import Ollama
-            print(f"[연결] Ollama LLM: {settings.ollama_base_url} (모델: {settings.ollama_model})")
-            _ollama_llm = Ollama(
-                base_url=settings.ollama_base_url,
-                model=settings.ollama_model,
-                temperature=settings.llm_temperature
-            )
-            print("[완료] Ollama LLM 연결 완료 (langchain-community)")
-        except ImportError:
+        # Deprecation 경고는 이미 필터링됨
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=DeprecationWarning)
+            warnings.filterwarnings("ignore", message=".*Ollama.*deprecated.*")
             try:
-                # 대안: langchain-ollama 사용 (think 파라미터 에러 가능)
-                from langchain_ollama import OllamaLLM
+                from langchain_community.llms import Ollama
                 print(f"[연결] Ollama LLM: {settings.ollama_base_url} (모델: {settings.ollama_model})")
-                print("[경고] langchain-ollama 사용 중 - think 파라미터 에러가 발생할 수 있습니다.")
-                _ollama_llm = OllamaLLM(
+                _ollama_llm = Ollama(
                     base_url=settings.ollama_base_url,
                     model=settings.ollama_model,
                     temperature=settings.llm_temperature
                 )
-                print("[완료] Ollama LLM 연결 완료 (langchain-ollama)")
+                print("[완료] Ollama LLM 연결 완료 (langchain-community)")
             except ImportError:
-                raise ImportError("Ollama 지원이 설치되지 않았습니다. pip install langchain-community 또는 pip install langchain-ollama")
-            except Exception as e:
-                if "think" in str(e).lower():
-                    print("[경고] langchain-ollama에서 think 파라미터 에러 발생. langchain-community로 재시도...")
-                    from langchain_community.llms import Ollama
-                    _ollama_llm = Ollama(
+                try:
+                    # 대안: langchain-ollama 사용 (think 파라미터 에러 가능)
+                    from langchain_ollama import OllamaLLM
+                    print(f"[연결] Ollama LLM: {settings.ollama_base_url} (모델: {settings.ollama_model})")
+                    print("[경고] langchain-ollama 사용 중 - think 파라미터 에러가 발생할 수 있습니다.")
+                    _ollama_llm = OllamaLLM(
                         base_url=settings.ollama_base_url,
                         model=settings.ollama_model,
                         temperature=settings.llm_temperature
                     )
-                    print("[완료] Ollama LLM 연결 완료 (langchain-community, fallback)")
-                else:
-                    raise Exception(f"Ollama 연결 실패: {str(e)}\n[팁] Ollama가 실행 중인지 확인하세요: ollama serve")
-        except Exception as e:
-            raise Exception(f"Ollama 연결 실패: {str(e)}\n[팁] Ollama가 실행 중인지 확인하세요: ollama serve")
+                    print("[완료] Ollama LLM 연결 완료 (langchain-ollama)")
+                except ImportError:
+                    raise ImportError("Ollama 지원이 설치되지 않았습니다. pip install langchain-community 또는 pip install langchain-ollama")
+                except Exception as e:
+                    if "think" in str(e).lower():
+                        print("[경고] langchain-ollama에서 think 파라미터 에러 발생. langchain-community로 재시도...")
+                        with warnings.catch_warnings():
+                            warnings.filterwarnings("ignore", category=DeprecationWarning)
+                            warnings.filterwarnings("ignore", message=".*Ollama.*deprecated.*")
+                            from langchain_community.llms import Ollama
+                            _ollama_llm = Ollama(
+                                base_url=settings.ollama_base_url,
+                                model=settings.ollama_model,
+                                temperature=settings.llm_temperature
+                            )
+                        print("[완료] Ollama LLM 연결 완료 (langchain-community, fallback)")
+                    else:
+                        raise Exception(f"Ollama 연결 실패: {str(e)}\n[팁] Ollama가 실행 중인지 확인하세요: ollama serve")
+            except Exception as e:
+                raise Exception(f"Ollama 연결 실패: {str(e)}\n[팁] Ollama가 실행 중인지 확인하세요: ollama serve")
     return _ollama_llm
 
 
@@ -486,13 +495,48 @@ class LLMGenerator:
         if self.disable_llm:
             return "LLM이 비활성화되어 있습니다."
         
-        messages = [
-            {"role": "system", "content": system_role},
-            {"role": "user", "content": prompt}
-        ]
+        # Ollama 사용 시
+        if self.use_ollama:
+            import asyncio
+            from config import settings
+            
+            # Ollama LLM 가져오기 (지연 로드)
+            llm = _get_ollama_llm()
+            
+            # 시스템 프롬프트와 사용자 프롬프트 결합
+            full_prompt = f"{system_role}\n\n{prompt}" if system_role else prompt
+            
+            try:
+                # Ollama 호출을 비동기로 처리
+                response_text = await asyncio.wait_for(
+                    asyncio.to_thread(llm.invoke, full_prompt),
+                    timeout=settings.ollama_timeout
+                )
+                return response_text
+            except asyncio.TimeoutError:
+                raise TimeoutError(f"Ollama LLM 호출이 타임아웃되었습니다 ({settings.ollama_timeout}초 초과)")
+            except Exception as e:
+                raise RuntimeError(f"Ollama LLM 호출 실패: {str(e)}")
         
-        response = self.generate_content(messages=messages)
-        return self.get_text(response)
+        # Groq 사용 시
+        elif self.use_groq:
+            messages = [
+                {"role": "system", "content": system_role},
+                {"role": "user", "content": prompt}
+            ]
+            
+            response = self.generate_content(messages=messages)
+            return self.get_text(response)
+        
+        # 기본값: Groq로 fallback (하위 호환성)
+        else:
+            messages = [
+                {"role": "system", "content": system_role},
+                {"role": "user", "content": prompt}
+            ]
+            
+            response = self.generate_content(messages=messages)
+            return self.get_text(response)
     
     def analyze_announcement(
         self,
