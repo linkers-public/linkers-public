@@ -184,6 +184,49 @@ export function LegalReportCard({ analysisResult, onCopy }: LegalReportCardProps
            
            if (isDefaultText) return null
            
+           // 법적 판단 결론 배지 결정 로직
+           const getJudgmentBadge = () => {
+             // findings의 statusLabel 확인
+             if (analysisResult.findings && analysisResult.findings.length > 0) {
+               const firstFinding = analysisResult.findings[0]
+               const statusLabel = firstFinding.statusLabel || ''
+               
+               if (statusLabel.includes('충족') || statusLabel.includes('해당') || statusLabel.includes('위반')) {
+                 return {
+                   text: '위반 소지 높음',
+                   color: 'bg-red-500 text-white border-red-600',
+                   icon: '🚨'
+                 }
+               } else if (statusLabel.includes('부분') || statusLabel.includes('추가') || statusLabel.includes('주의')) {
+                 return {
+                   text: '주의 필요',
+                   color: 'bg-amber-500 text-white border-amber-600',
+                   icon: '⚠️'
+                 }
+               }
+             }
+             
+             // 텍스트에서 키워드 확인
+             const contentLower = legalJudgmentContent.toLowerCase()
+             if (contentLower.includes('위반') || contentLower.includes('부당') || contentLower.includes('불법')) {
+               return {
+                 text: '위반 소지 높음',
+                 color: 'bg-red-500 text-white border-red-600',
+                 icon: '🚨'
+               }
+             } else if (contentLower.includes('주의') || contentLower.includes('검토') || contentLower.includes('확인')) {
+               return {
+                 text: '주의 필요',
+                 color: 'bg-amber-500 text-white border-amber-600',
+                 icon: '⚠️'
+               }
+             }
+             
+             return null
+           }
+           
+           const judgmentBadge = getJudgmentBadge()
+           
            return (
              <div className="group relative rounded-lg border border-amber-200/60 bg-amber-50/30 p-4 transition-all hover:border-amber-300 hover:bg-amber-50/50">
                <div className="flex items-start gap-3">
@@ -191,9 +234,17 @@ export function LegalReportCard({ analysisResult, onCopy }: LegalReportCardProps
                    <span className="text-xl">{getEmojiFromTitle(legalJudgmentSection?.title, '⚖️')}</span>
                  </div>
                  <div className="flex-1 min-w-0">
-                   <h3 className="text-base font-semibold text-slate-900 mb-2">
-                     {legalJudgmentSection ? removeEmojiFromTitle(cleanSectionTitle(legalJudgmentSection.title)) : '법적 판단'}
-                   </h3>
+                   <div className="flex items-center justify-between mb-2">
+                     <h3 className="text-base font-semibold text-slate-900">
+                       {legalJudgmentSection ? removeEmojiFromTitle(cleanSectionTitle(legalJudgmentSection.title)) : '법적 판단'}
+                     </h3>
+                     {judgmentBadge && (
+                       <span className={`px-3 py-1 rounded-lg text-xs font-bold border shadow-sm flex items-center gap-1.5 flex-shrink-0 ${judgmentBadge.color}`}>
+                         <span>{judgmentBadge.icon}</span>
+                         <span>{judgmentBadge.text}</span>
+                       </span>
+                     )}
+                   </div>
                    <div className="prose prose-slate max-w-none text-sm leading-relaxed text-slate-700">
                      <RAGHighlightedMarkdown 
                        content={legalJudgmentContent}
@@ -363,15 +414,30 @@ export function LegalReportCard({ analysisResult, onCopy }: LegalReportCardProps
                             
                             {/* 참고 문서 정보 */}
                             <div className="mb-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
-                              <div className="flex items-center gap-2 mb-2 flex-wrap">
-                                <p className="text-xs font-semibold text-slate-600">참고 문서:</p>
-                                <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border flex-shrink-0 ${getSourceTypeColor(sourceType)}`}>
-                                  {getSourceTypeLabel(sourceType)}
-                                </span>
-                                {similarityScore > 0 && (
-                                  <span className="text-xs text-slate-500 flex-shrink-0">
-                                    유사도: {(similarityScore * 100).toFixed(1)}%
+                              <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <p className="text-xs font-semibold text-slate-600">참고 문서:</p>
+                                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border flex-shrink-0 ${getSourceTypeColor(sourceType)}`}>
+                                    {getSourceTypeLabel(sourceType)}
                                   </span>
+                                  {similarityScore > 0 && (
+                                    <span className="text-xs text-slate-500 flex-shrink-0">
+                                      유사도: {(similarityScore * 100).toFixed(1)}%
+                                    </span>
+                                  )}
+                                </div>
+                                {/* 문서보기 버튼 */}
+                                {fileUrl && fileUrl.trim() && (
+                                  <a
+                                    href={fileUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-sm transition-all hover:shadow-md flex-shrink-0"
+                                  >
+                                    <FileText className="w-3.5 h-3.5" />
+                                    <span>문서보기</span>
+                                    <ExternalLink className="w-3 h-3" />
+                                  </a>
                                 )}
                               </div>
                               <p className="text-sm font-medium text-slate-900 mb-2">{documentTitle}</p>
@@ -386,22 +452,6 @@ export function LegalReportCard({ analysisResult, onCopy }: LegalReportCardProps
                                 </div>
                               ) : null}
                             </div>
-                            
-                            {/* 문서보기 버튼 */}
-                            {fileUrl && (
-                              <div className="mt-3">
-                                <a
-                                  href={fileUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg shadow-sm transition-all hover:shadow-md"
-                                >
-                                  <FileText className="w-4 h-4" />
-                                  <span>문서보기</span>
-                                  <ExternalLink className="w-3 h-3" />
-                                </a>
-                              </div>
-                            )}
                           </div>
                         </div>
                       </div>

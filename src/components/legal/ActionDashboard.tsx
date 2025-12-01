@@ -976,7 +976,9 @@ export function ActionDashboard({ classifiedType, analysisId, onCopy, organizati
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="px-2 py-0.5 bg-red-500 text-white text-xs font-bold rounded-full">우선순위 1위</span>
+                    <span className="px-2 py-0.5 bg-red-500 text-white text-xs font-bold rounded-full">
+                      우선순위 {selectedOrgIndex + 1}위
+                    </span>
                     <h4 className="font-bold text-slate-900">{mainOrg.name}</h4>
                   </div>
                   <p className="text-xs text-slate-600 mb-3">{mainOrg.description}</p>
@@ -1107,6 +1109,9 @@ export function ActionDashboard({ classifiedType, analysisId, onCopy, organizati
                         className="flex items-center gap-2 p-2 cursor-pointer"
                     >
                       <OrgIcon className="w-4 h-4 text-blue-600" />
+                      <span className="px-1.5 py-0.5 bg-slate-200 text-slate-700 text-[10px] font-bold rounded">
+                        {index + 1}위
+                      </span>
                       <span className="flex-1 text-xs text-slate-700 font-medium">{org.name}</span>
                       {org.phone && (
                         <Button
