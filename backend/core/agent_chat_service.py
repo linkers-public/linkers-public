@@ -44,7 +44,7 @@ class AgentChatService:
         if not legal_chunks:
             legal_chunks = await self.legal_service._search_legal_chunks(
                 query=query,
-                top_k=5,  # 성능 개선: 8 → 5로 감소
+                top_k=3,  # 극한 최적화: 5 → 3으로 감소 (프롬프트 1000자 이내 목표)
                 category=None,
                 ensure_diversity=True,
             )

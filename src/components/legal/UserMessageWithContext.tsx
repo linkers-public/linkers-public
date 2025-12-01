@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Loader2, ClipboardList, FileText } from 'lucide-react'
 import { getSituationAnalysisByIdV2, getContractAnalysisV2 } from '@/apis/legal.service'
 
@@ -40,54 +40,106 @@ export function UserMessageWithContext({
 }: UserMessageWithContextProps) {
   const [isLoadingReport, setIsLoadingReport] = useState(false)
   const [reportInfo, setReportInfo] = useState<ReportInfo | null>(null)
+  // reportCache를 ref로 추적하여 최신 값을 읽을 수 있도록 함
+  const reportCacheRef = useRef(reportCache)
+  
+  // reportCache가 변경될 때마다 ref 업데이트
+  useEffect(() => {
+    reportCacheRef.current = reportCache
+  }, [reportCache])
 
   useEffect(() => {
+    let isCancelled = false
+
     const loadReportInfo = async () => {
       if (!message.context_id || !message.context_type || message.context_type === 'none') {
         return
       }
 
-      // 캐시에서 확인
-      const cached = reportCache.get(message.context_id)
+      // 캐시에서 확인 (ref를 통해 최신 값 읽기)
+      const cached = reportCacheRef.current.get(message.context_id)
       if (cached) {
-        setReportInfo(cached)
+        if (!isCancelled) {
+          setReportInfo(cached)
+        }
         return
       }
 
       // 리포트 정보 가져오기
-      setIsLoadingReport(true)
+      if (!isCancelled) {
+        setIsLoadingReport(true)
+      }
+      
       try {
         const userId = await getUserId()
 
+        if (isCancelled) return
+
         if (message.context_type === 'situation' && message.context_id) {
           const situation = await getSituationAnalysisByIdV2(message.context_id, userId)
+          
+          if (isCancelled) return
+          
           const situationSummary = situation.analysis?.summary || ''
           const info: ReportInfo = {
             title: situationSummary.substring(0, 50) || '상황 분석 리포트',
             summary: situationSummary,
             type: 'situation'
           }
-          setReportInfo(info)
-          setReportCache(prev => new Map(prev).set(message.context_id!, info))
+          
+          if (!isCancelled) {
+            setReportInfo(info)
+            setReportCache(prev => {
+              // 이미 캐시에 있으면 업데이트하지 않음 (중복 방지)
+              if (prev.has(message.context_id!)) {
+                return prev
+              }
+              return new Map(prev).set(message.context_id!, info)
+            })
+          }
         } else if (message.context_type === 'contract' && message.context_id) {
           const contract = await getContractAnalysisV2(message.context_id)
+          
+          if (isCancelled) return
+          
           const info: ReportInfo = {
             title: contract.summary?.substring(0, 50) || '계약서 분석 리포트',
             summary: contract.summary || '',
             type: 'contract'
           }
-          setReportInfo(info)
-          setReportCache(prev => new Map(prev).set(message.context_id!, info))
+          
+          if (!isCancelled) {
+            setReportInfo(info)
+            setReportCache(prev => {
+              // 이미 캐시에 있으면 업데이트하지 않음 (중복 방지)
+              if (prev.has(message.context_id!)) {
+                return prev
+              }
+              return new Map(prev).set(message.context_id!, info)
+            })
+          }
         }
       } catch (error) {
         // 로그 제거: 리포트 정보 로드 실패는 무시
+        if (!isCancelled) {
+          console.warn('리포트 정보 로드 실패:', error)
+        }
       } finally {
-        setIsLoadingReport(false)
+        if (!isCancelled) {
+          setIsLoadingReport(false)
+        }
       }
     }
 
     loadReportInfo()
-  }, [message.context_id, message.context_type, reportCache, setReportCache])
+    
+    // cleanup 함수: 컴포넌트 언마운트 시 비동기 작업 취소
+    return () => {
+      isCancelled = true
+    }
+    // reportCache를 의존성에서 제거하여 무한 루프 방지
+    // reportCacheRef를 통해 최신 값을 읽을 수 있음
+  }, [message.context_id, message.context_type])
 
   return (
     <div>
