@@ -10,7 +10,6 @@ import { useToast } from '../../../../hooks/use-toast'
 import { cn } from '../../../../lib/utils'
 import { MarkdownRenderer } from '../../../../components/rag/MarkdownRenderer'
 import { RAGHighlightedMarkdown, RAGHighlightedText } from '../../../../components/legal/RAGHighlightedText'
-import { SituationChat } from '../../../../components/legal/SituationChat'
 import { LegalReportCard } from '../../../../components/legal/LegalReportCard'
 import { ActionDashboard } from '../../../../components/legal/ActionDashboard'
 import { LegalEmailHelper } from '../../../../components/legal/LegalEmailHelper'
@@ -305,13 +304,6 @@ export default function SituationDetailPage() {
                   </div>
                 )}
               </div>
-
-              {/* 요약 설명 */}
-              {summaryText && (
-                <CardDescription className="text-center text-base text-slate-700">
-                  {summaryText}
-                </CardDescription>
-              )}
             </CardHeader>
           </Card>
 
@@ -407,14 +399,19 @@ export default function SituationDetailPage() {
                   )}
                 </div>
               )}
-
-              {/* 챗 컴포넌트 */}
-              <SituationChat 
-                analysisId={analysisId}
-                analysisResult={analysisResult}
-              />
             </CardContent>
           </Card>
+
+          {/* 즉시 상담으로 돌아가기 버튼 */}
+          <div className="flex justify-center mt-8 mb-8 px-4">
+            <Button
+              onClick={() => router.push('/legal/assist/quick')}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 text-sm font-semibold rounded-lg shadow-sm transition-all min-w-[200px] w-auto max-w-full"
+            >
+              <ArrowLeft className="w-4 h-4 mr-2 flex-shrink-0" />
+              <span className="whitespace-nowrap">즉시 상담으로 돌아가기</span>
+            </Button>
+          </div>
         </div>
       </div>
     </div>

@@ -436,17 +436,94 @@ export function RAGHighlightedMarkdown({ content, sources = [] }: RAGHighlighted
     return null
   }, [sources])
 
+  // 중요 키워드 자동 볼드 처리 (마크다운 파싱 전에 적용)
+  const highlightImportantKeywords = (text: string): string => {
+    let processed = text
+    
+    // 이미 **로 감싸진 텍스트는 제외하기 위한 마커
+    const alreadyBoldPattern = /\*\*[^*]+\*\*/g
+    const placeholders: { [key: string]: string } = {}
+    let placeholderIndex = 0
+    
+    // 이미 볼드 처리된 텍스트를 임시로 치환
+    processed = processed.replace(alreadyBoldPattern, (match) => {
+      const placeholder = `__BOLD_PLACEHOLDER_${placeholderIndex}__`
+      placeholders[placeholder] = match
+      placeholderIndex++
+      return placeholder
+    })
+    
+    // 법령명 + 조항 패턴 (예: "근로기준법 제26조", "근로기준법 제26조(해고의 예고)")
+    const lawPatterns = [
+      /([가-힣]+법)\s*(제\d+조(?:\([^)]+\))?)/g,
+      /(근로기준법|최저임금법|고용보험법|산업안전보건법|근로자퇴직급여보장법|근로자참여및협력증진에관한법률|근로자복지기본법|근로자직업능력개발법)\s*(제\d+조(?:\([^)]+\))?)/gi,
+    ]
+    
+    lawPatterns.forEach(pattern => {
+      processed = processed.replace(pattern, (match, p1, p2) => {
+        // 이미 **로 감싸져 있지 않은 경우만 처리
+        if (!match.includes('__BOLD_PLACEHOLDER_')) {
+          return `**${match}**`
+        }
+        return match
+      })
+    })
+    
+    // 핵심 법적 용어 패턴
+    const legalTerms = [
+      '해고예고수당', '자발적 퇴사', '부당해고', '임금체불', '무급 야근',
+      '해고예고', '퇴직금', '실업급여', '산재보험', '고용보험',
+      '최저임금', '연장근로', '휴게시간', '주휴일', '연차유급휴가',
+      '수습기간', '인턴', '프리랜서', '용역계약', '도급계약',
+      '경업금지', '비밀유지', '손해배상', '위약금', '해지통보',
+      '정당한 사유', '합리적 이유', '사전 통지', '예고 기간'
+    ]
+    
+    legalTerms.forEach(term => {
+      // 단어 경계를 고려한 정확한 매칭 (이미 **로 감싸지지 않은 경우만)
+      // lookbehind 대신 단순한 패턴 사용
+      const escapedTerm = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const regex = new RegExp(`(^|[^가-힣*])${escapedTerm}([^가-힣*]|$)`, 'g')
+      processed = processed.replace(regex, (match, before, after) => {
+        // 이미 **로 감싸져 있지 않은 경우만 처리
+        if (!match.includes('__BOLD_PLACEHOLDER_')) {
+          // 앞뒤 문자는 유지하고 키워드만 볼드 처리
+          return `${before}**${term}**${after}`
+        }
+        return match
+      })
+    })
+    
+    // 법적 조항 패턴 (예: "제26조", "제7조(임금지급시기)")
+    processed = processed.replace(/(^|[^가-힣*])(제\d+조(?:\([^)]+\))?)([^가-힣*]|$)/g, (match, before, clause, after) => {
+      // 이미 **로 감싸져 있지 않은 경우만 처리
+      if (!match.includes('__BOLD_PLACEHOLDER_')) {
+        return `${before}**${clause}**${after}`
+      }
+      return match
+    })
+    
+    // 임시로 치환한 볼드 텍스트 복원
+    Object.keys(placeholders).forEach(placeholder => {
+      processed = processed.replace(placeholder, placeholders[placeholder])
+    })
+    
+    return processed
+  }
+
   // 마크다운 파싱 (MarkdownRenderer와 유사한 로직)
   const parseMarkdown = (text: string) => {
     let html = text
+
+    // 볼드 마크다운 제거 (이상한 볼드 처리 방지)
+    html = html.replace(/\*\*/g, '')
 
     // 제목 처리
     html = html.replace(/^### (.*$)/gim, '<h3 class="text-sm font-bold mt-4 mb-2 text-gray-900">$1</h3>')
     html = html.replace(/^## (.*$)/gim, '<h2 class="text-base font-bold mt-5 mb-3 text-gray-900">$1</h2>')
     html = html.replace(/^# (.*$)/gim, '<h1 class="text-lg font-bold mt-6 mb-4 text-gray-900">$1</h1>')
 
-    // 강조 처리
-    html = html.replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-gray-900">$1</strong>')
+    // 이탤릭 처리만 유지 (볼드는 제거했으므로)
     html = html.replace(/\*(.*?)\*/g, '<em class="italic">$1</em>')
 
     // 코드 블록 처리
@@ -500,7 +577,7 @@ export function RAGHighlightedMarkdown({ content, sources = [] }: RAGHighlighted
     // 수평선 처리
     html = html.replace(/^---$/gim, '<hr class="my-6 border-gray-300" />')
 
-    // 줄바꿈 처리
+    // 줄바꿈 처리 및 문장 끝 '.' 뒤에 <br/> 추가
     const finalLines = html.split('\n')
     const finalProcessed: string[] = []
     let currentParagraph: string[] = []
@@ -510,7 +587,11 @@ export function RAGHighlightedMarkdown({ content, sources = [] }: RAGHighlighted
       
       if (trimmed.match(/^<[h|u|o|l|b|p|d|t|r|s]/) || trimmed === '') {
         if (currentParagraph.length > 0) {
-          finalProcessed.push(`<p class="mb-3 leading-relaxed text-sm text-gray-700">${currentParagraph.join(' ')}</p>`)
+          // 문장 끝 '.' 뒤에 <br/> 추가
+          let paragraphText = currentParagraph.join(' ')
+          // 문장 끝 '.' 뒤에 줄바꿈 추가 (HTML 태그 내부는 제외)
+          paragraphText = paragraphText.replace(/([^<>]\.)\s+/g, '$1<br/>')
+          finalProcessed.push(`<p class="mb-3 leading-relaxed text-sm text-gray-700">${paragraphText}</p>`)
           currentParagraph = []
         }
         if (trimmed) {
@@ -522,7 +603,11 @@ export function RAGHighlightedMarkdown({ content, sources = [] }: RAGHighlighted
     }
 
     if (currentParagraph.length > 0) {
-      finalProcessed.push(`<p class="mb-3 leading-relaxed text-sm text-gray-700">${currentParagraph.join(' ')}</p>`)
+      // 문장 끝 '.' 뒤에 <br/> 추가
+      let paragraphText = currentParagraph.join(' ')
+      // 문장 끝 '.' 뒤에 줄바꿈 추가 (HTML 태그 내부는 제외)
+      paragraphText = paragraphText.replace(/([^<>]\.)\s+/g, '$1<br/>')
+      finalProcessed.push(`<p class="mb-3 leading-relaxed text-sm text-gray-700">${paragraphText}</p>`)
     }
 
     html = finalProcessed.join('\n')
