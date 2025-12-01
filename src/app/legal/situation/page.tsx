@@ -33,9 +33,9 @@ const SITUATION_CATEGORIES: { value: SituationCategory; label: string }[] = [
   { value: 'unfair_dismissal', label: '정규직 해고·계약해지' },
   { value: 'unpaid_wage', label: '임금 체불·무급 야근' },
   { value: 'harassment', label: '직장 내 괴롭힘' },
-  { value: 'unknown', label: '프리랜서/용역' },
-  { value: 'unknown', label: '스톡옵션/성과급' },
-  { value: 'unknown', label: '기타/복합 상황' },
+  { value: 'freelancer', label: '프리랜서/용역' },
+  { value: 'stock_option', label: '스톡옵션/성과급' },
+  { value: 'other', label: '기타/복합 상황' },
 ]
 
 const EMPLOYMENT_TYPES: { value: EmploymentType; label: string }[] = [
@@ -138,6 +138,9 @@ const getRecommendedOrganizations = (category: SituationCategory): OrganizationI
     unfair_dismissal: ['moel', 'labor_attorney', 'comwel'],
     overtime: ['moel', 'labor_attorney', 'comwel'],
     probation: ['moel', 'labor_attorney', 'comwel'],
+    freelancer: ['labor_attorney', 'moel', 'comwel'],
+    stock_option: ['labor_attorney', 'moel', 'comwel'],
+    other: ['labor_attorney', 'moel', 'comwel'],
     unknown: ['labor_attorney', 'moel', 'comwel'],
   }
   
@@ -179,7 +182,7 @@ const SITUATION_TEMPLATES = [
   {
     title: '무급 야근·추가 근무',
     icon: Clock,
-    category: 'overtime' as SituationCategory,
+    category: 'unpaid_wage' as SituationCategory,
     employmentType: 'regular' as EmploymentType,
     summary: '야근은 매일인데 수당은 없어요',
     description: '연장근로 수당 없이 야근이나 추가 근무를 요구받는 경우',
@@ -225,7 +228,7 @@ const SITUATION_TEMPLATES = [
   {
     title: '프리랜서/용역 대금 미지급',
     icon: FileText,
-    category: 'unpaid_wage' as SituationCategory,
+    category: 'freelancer' as SituationCategory,
     employmentType: 'freelancer' as EmploymentType,
     summary: '프리랜서인데, 대금이 계속 밀려요',
     description: '프리랜서나 용역 계약에서 대금이 지급되지 않는 경우',
@@ -241,7 +244,7 @@ const SITUATION_TEMPLATES = [
   {
     title: '스톡옵션/성과급 관련 문제',
     icon: TrendingUp,
-    category: 'unknown' as SituationCategory,
+    category: 'stock_option' as SituationCategory,
     summary: '스톡옵션이나 성과급이 약속과 다르게 지급되지 않아요',
     description: '스톡옵션이나 성과급 관련 약속이 지켜지지 않는 경우',
     details: `[언제부터]
@@ -618,14 +621,11 @@ export default function SituationAnalysisPage() {
         classifiedType: (result?.tags?.[0] || 'unknown') as SituationCategory,
         riskScore: result?.riskScore ?? 0,
         summary: result?.analysis?.summary || '',
-        // criteria는 새로운 구조(documentTitle, fileUrl, sourceType, similarityScore, snippet, usageReason)를 그대로 사용
+        // criteria는 최상위 레벨(result.criteria) 또는 analysis 내부(result.analysis.criteria)에서 가져오기
         criteria: criteriaArray.map((criterion: any) => ({
-          documentTitle: criterion?.documentTitle || '',
-          fileUrl: criterion?.fileUrl || null,
-          sourceType: criterion?.sourceType || 'law',
-          similarityScore: criterion?.similarityScore || 0,
-          snippet: criterion?.snippet || '',
-          usageReason: criterion?.usageReason || '',
+          name: criterion?.name || '',
+          status: (criterion?.status || 'likely') as 'likely' | 'unclear' | 'unlikely',
+          reason: criterion?.reason || '',
         })),
         actionPlan: null,
         scripts: {
@@ -758,11 +758,14 @@ export default function SituationAnalysisPage() {
   const getCategoryDescription = (type: SituationCategory) => {
     const descriptions: Record<SituationCategory, string> = {
       harassment: '직장 내 괴롭힘, 모욕적 발언, 차별 대우 등',
-      unpaid_wage: '임금 체불, 연장근로 수당 미지급, 주휴수당 미지급 등',
+      unpaid_wage: '임금 체불, 연장근로 수당 미지급, 주휴수당 미지급, 무급 야근 등',
       unfair_dismissal: '부당 해고, 갑작스러운 계약 해지 등',
-      overtime: '무급 야근, 연장근로 수당 미지급 등',
+      overtime: '근로시간 위반, 휴게시간 미보장 등',
       probation: '수습/인턴 기간 중 부당 해고, 불공정 평가 등',
-      unknown: '기타 법적 문제 상황',
+      freelancer: '프리랜서/용역 대금 미지급, 계약 위반 등',
+      stock_option: '스톡옵션 미지급, 성과급 약속 불이행 등',
+      other: '기타 법적 문제 상황',
+      unknown: '잘 모르겠음',
     }
     return descriptions[type] || '법적 문제 상황'
   }

@@ -77,11 +77,14 @@ export interface ContractAnalysisResult {
 // 상황 기반 진단 타입
 export type SituationCategory = 
   | 'harassment'      // 직장 내 괴롭힘 / 모욕
-  | 'unpaid_wage'     // 임금체불 / 수당 미지급
+  | 'unpaid_wage'     // 임금체불 / 수당 미지급 / 무급 야근
   | 'unfair_dismissal' // 부당해고 / 계약해지
   | 'overtime'        // 근로시간 / 야근 / 휴게시간 문제
   | 'probation'       // 수습·인턴 관련 문제
-  | 'unknown'         // 기타 / 잘 모르겠음
+  | 'freelancer'      // 프리랜서/용역 관련 문제
+  | 'stock_option'    // 스톡옵션/성과급 관련 문제
+  | 'other'           // 기타/복합 상황
+  | 'unknown'         // 잘 모르겠음 (기본값)
 
 export type EmploymentType = 
   | 'regular'        // 정규직
@@ -131,12 +134,10 @@ export interface LegalBasisItem {
 }
 
 export interface CriteriaItem {
-  documentTitle: string // 문서 제목
-  fileUrl?: string | null // 문서 파일 URL (Signed URL)
-  sourceType: string // 출처 타입 (law, manual, case, standard_contract)
-  similarityScore: number // 유사도 점수 (0.0 ~ 1.0)
-  snippet: string // 관련 내용 스니펫
-  usageReason: string // 사용 이유 설명
+  name: string
+  status: 'likely' | 'unclear' | 'unlikely'
+  reason: string
+  legalBasis?: LegalBasisItem[] // 법적 근거 배열 (선택적)
 }
 
 export interface ActionStep {
