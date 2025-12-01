@@ -6,6 +6,7 @@ Agent 기반 통합 챗 서비스
 """
 
 import logging
+import time
 from typing import Optional, List, Dict, Any
 from models.schemas import LegalGroundingChunk
 
@@ -43,7 +44,7 @@ class AgentChatService:
         if not legal_chunks:
             legal_chunks = await self.legal_service._search_legal_chunks(
                 query=query,
-                top_k=8,
+                top_k=5,  # 성능 개선: 8 → 5로 감소
                 category=None,
                 ensure_diversity=True,
             )
@@ -56,6 +57,15 @@ class AgentChatService:
             history_messages=history_messages or [],
         )
         
+        # 프롬프트 길이 로깅 (성능 분석용)
+        prompt_length = len(prompt)
+        estimated_tokens = prompt_length // 2.5  # 한국어 기준: 1토큰 ≈ 2-3자
+        logger.info(
+            f"[Agent Plain] 프롬프트 구성 완료: "
+            f"길이={prompt_length}자, 추정 토큰={int(estimated_tokens)}토큰, "
+            f"legal_chunks={len(legal_chunks)}, history_messages={len(history_messages or [])}"
+        )
+        
         # LLM 호출
         if self.generator.disable_llm:
             answer = f"LLM 분석이 비활성화되어 있습니다. RAG 검색 결과는 {len(legal_chunks)}개 발견되었습니다."
@@ -63,6 +73,9 @@ class AgentChatService:
         
         try:
             from config import settings
+            # LLM 호출 시간 측정 시작
+            llm_start_time = time.time()
+            
             # LLM Provider에 따라 분기 처리
             if settings.use_ollama:
                 # Ollama 사용
@@ -70,7 +83,11 @@ class AgentChatService:
                     prompt=prompt,
                     system_role="너는 유능한 법률 AI야. 한국어로만 답변해주세요."
                 )
-                logger.info(f"[Agent Plain] 답변 생성 완료: 길이={len(response_text)}")
+                llm_elapsed = time.time() - llm_start_time
+                logger.info(
+                    f"[Agent Plain] 답변 생성 완료: "
+                    f"길이={len(response_text)}자, LLM 호출 시간={llm_elapsed:.2f}초"
+                )
                 return response_text.strip(), legal_chunks
             elif settings.use_groq:
                 # Groq 사용
@@ -86,8 +103,11 @@ class AgentChatService:
                     temperature=settings.llm_temperature,
                     model=settings.groq_model
                 )
-                
-                logger.info(f"[Agent Plain] 답변 생성 완료: 길이={len(response_text)}")
+                llm_elapsed = time.time() - llm_start_time
+                logger.info(
+                    f"[Agent Plain] 답변 생성 완료: "
+                    f"길이={len(response_text)}자, LLM 호출 시간={llm_elapsed:.2f}초"
+                )
                 return response_text.strip(), legal_chunks
             else:
                 # 기본값: generator 사용 (Ollama로 fallback)
@@ -95,7 +115,11 @@ class AgentChatService:
                     prompt=prompt,
                     system_role="너는 유능한 법률 AI야. 한국어로만 답변해주세요."
                 )
-                logger.info(f"[Agent Plain] 답변 생성 완료: 길이={len(response_text)}")
+                llm_elapsed = time.time() - llm_start_time
+                logger.info(
+                    f"[Agent Plain] 답변 생성 완료: "
+                    f"길이={len(response_text)}자, LLM 호출 시간={llm_elapsed:.2f}초"
+                )
                 return response_text.strip(), legal_chunks
         except Exception as e:
             logger.error(f"[Agent Plain] 답변 생성 실패: {str(e)}", exc_info=True)
