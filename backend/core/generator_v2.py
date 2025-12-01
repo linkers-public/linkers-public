@@ -197,6 +197,7 @@ def _get_ollama_llm():
                     base_url=settings.ollama_base_url,
                     model=settings.ollama_model,
                     temperature=settings.llm_temperature
+                    # model_kwargs는 langchain-community의 Ollama에서 지원하지 않음
                 )
                 print("[완료] Ollama LLM 연결 완료 (langchain-community)")
             except ImportError:
@@ -481,13 +482,14 @@ class LLMGenerator:
         """
         return response.choices[0].message.content
     
-    async def generate(self, prompt: str, system_role: str = "너는 유능한 법률 AI야.") -> str:
+    async def generate(self, prompt: str, system_role: str = "너는 유능한 법률 AI야.", max_output_tokens: Optional[int] = None) -> str:
         """
         간단한 프롬프트 생성 (기존 코드 호환성)
         
         Args:
             prompt: 사용자 프롬프트
             system_role: 시스템 역할
+            max_output_tokens: 최대 출력 토큰 수 (Plain 모드 최적화용, Ollama만 지원)
         
         Returns:
             생성된 텍스트
@@ -503,8 +505,15 @@ class LLMGenerator:
             # Ollama LLM 가져오기 (지연 로드)
             llm = _get_ollama_llm()
             
+            # Plain 모드 최적화: 출력 토큰 제한을 프롬프트에 명시
+            # (langchain-community의 Ollama는 model_kwargs를 지원하지 않으므로 프롬프트로 제한)
+            output_limit_note = ""
+            if max_output_tokens is not None:
+                # 약 200토큰 = 500자 정도로 제한
+                output_limit_note = f"\n\n⚠️ 중요: 답변은 반드시 {max_output_tokens}토큰 이내(약 {max_output_tokens * 2.5:.0f}자)로 매우 간결하게 작성하세요."
+            
             # 시스템 프롬프트와 사용자 프롬프트 결합
-            full_prompt = f"{system_role}\n\n{prompt}" if system_role else prompt
+            full_prompt = f"{system_role}{output_limit_note}\n\n{prompt}" if system_role else f"{prompt}{output_limit_note}"
             
             try:
                 # Ollama 호출을 비동기로 처리

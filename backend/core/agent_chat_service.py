@@ -60,10 +60,13 @@ class AgentChatService:
         # 프롬프트 길이 로깅 (성능 분석용)
         prompt_length = len(prompt)
         estimated_tokens = prompt_length // 2.5  # 한국어 기준: 1토큰 ≈ 2-3자
+        total_history = len(history_messages or [])
+        used_history = min(2, total_history)  # 실제 프롬프트에 포함된 히스토리 개수 (최근 2개)
         logger.info(
             f"[Agent Plain] 프롬프트 구성 완료: "
             f"길이={prompt_length}자, 추정 토큰={int(estimated_tokens)}토큰, "
-            f"legal_chunks={len(legal_chunks)}, history_messages={len(history_messages or [])}"
+            f"legal_chunks={len(legal_chunks)}, "
+            f"history_messages={used_history}/{total_history} (프롬프트 포함/전체)"
         )
         
         # LLM 호출
@@ -78,11 +81,13 @@ class AgentChatService:
             
             # LLM Provider에 따라 분기 처리
             if settings.use_ollama:
-                # Ollama 사용
+                # Ollama 사용 (해커톤 최적화: 출력 토큰 제한으로 속도 향상)
                 try:
+                    # Plain 모드에서 출력 토큰 제한 (약 200토큰 = 500자)
                     response_text = await self.generator.generate(
                         prompt=prompt,
-                        system_role="너는 유능한 법률 AI야. 한국어로만 답변해주세요."
+                        system_role="너는 유능한 법률 AI야. 한국어로만 답변해주세요.",
+                        max_output_tokens=200  # 해커톤 최적화: 짧은 답변으로 속도 향상
                     )
                     llm_elapsed = time.time() - llm_start_time
                     logger.info(

@@ -212,6 +212,13 @@ async def legal_chat_agent(
     - mode=contract: 계약서 파일 기반 분석 + 챗
     - mode=situation: 폼 기반 상황분석 + 유사케이스 + 챗
     """
+    import time
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    # 전체 API 실행 시간 측정 시작
+    api_start_time = time.time()
+    
     if not x_user_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -256,8 +263,15 @@ async def legal_chat_agent(
     
     # 2-1. 계약 모드
     if mode == LegalChatMode.contract:
+        # 해커톤 데모용: Contract 모드일 때 무조건 고정된 계약서 분석 ID 사용
+        contract_analysis_id = "062ce081-c218-424c-8102-45b9089fcea3"
+        logger.info(f"[Agent Chat] Contract 모드: 고정 계약서 분석 ID 사용 (파일/ID 무시): {contract_analysis_id}")
+        
+        # 파일이 있어도 새로 분석하지 않고 고정 ID 사용 (해커톤 데모용)
+        # 주석 처리: 파일 업로드 시 새로 분석하는 로직
+        """
         # 최초 요청: 파일 포함 → 분석 실행
-        if contract_analysis_id is None and file is not None:
+        if file is not None:
             # 기존 analyze_contract 엔드포인트 로직 재사용
             logger.info(f"[Agent Chat] 계약서 분석 시작: file={file.filename}")
             
@@ -457,8 +471,9 @@ async def legal_chat_agent(
                     logger.info(f"[Agent Chat] 임시 파일 삭제 완료: {temp_path}")
                 except Exception as cleanup_error:
                     logger.warning(f"[Agent Chat] 임시 파일 삭제 실패: {temp_path}, {str(cleanup_error)}")
+        """
         
-        # 후속 요청: 기존 분석 참고
+        # 후속 요청: 기존 분석 참고 (고정 ID 사용)
         if contract_analysis_id is not None and contract_analysis is None:
             saved_analysis = await storage_service.get_contract_analysis(contract_analysis_id, user_id)
             if saved_analysis:
@@ -869,6 +884,15 @@ async def legal_chat_agent(
     )
     
     # ---------- 6. 응답 ----------
+    # 전체 API 실행 시간 측정 완료
+    api_elapsed = time.time() - api_start_time
+    logger.info(
+        f"[Agent API] 전체 실행 완료: "
+        f"mode={mode.value}, "
+        f"전체 실행 시간={api_elapsed:.2f}초, "
+        f"답변 길이={len(answer_markdown)}자"
+    )
+    
     return LegalChatAgentResponse(
         sessionId=session_id,
         mode=mode,
