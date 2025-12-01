@@ -1300,9 +1300,6 @@ export default function QuickAssistPage() {
     setMessages(newMessages)
     setInputMessage('')
     setIsAnalyzing(true)
-    
-    // 에러 발생 시 재시도를 위한 메시지 백업
-    const messageToSend = trimmedMessage
 
     // 사용자 ID 가져오기 (세션 생성 및 메시지 저장에 필요)
     const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client')
