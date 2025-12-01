@@ -24,7 +24,32 @@ export function LegalReportCard({ analysisResult, onCopy }: LegalReportCardProps
   const summaryText = analysisResult.summary || ''
   const sections = parseSummary(summaryText)
   
-  // 각 섹션 추출
+  // 디버깅: 파싱된 섹션 확인
+  if (summaryText && sections.length === 0) {
+    console.warn('[LegalReportCard] summary가 있지만 파싱된 섹션이 없습니다:', summaryText.substring(0, 200))
+  }
+  
+  // 각 섹션 추출 (제목에서 ** 제거)
+  const cleanSectionTitle = (title: string) => title.replace(/\*\*/g, '').trim()
+  
+  // 이모지 추출 헬퍼 함수
+  const getEmojiFromTitle = (title: string | undefined, fallback: string): string => {
+    if (!title) return fallback
+    const firstChar = title.charAt(0)
+    const codePoint = firstChar.codePointAt(0) || 0
+    // 이모지 유니코드 범위 체크
+    if (
+      (codePoint >= 0x1F300 && codePoint <= 0x1F9FF) ||
+      (codePoint >= 0x2600 && codePoint <= 0x26FF) ||
+      (codePoint >= 0x2700 && codePoint <= 0x27BF) ||
+      (codePoint >= 0x1F600 && codePoint <= 0x1F64F) ||
+      (codePoint >= 0x1F900 && codePoint <= 0x1F9FF)
+    ) {
+      return firstChar
+    }
+    return fallback
+  }
+  
   const situationAnalysisSection = findSectionByEmoji(sections, '📊') || 
                                    sections.find(s => s.title.includes('상황 분석'))
   const legalJudgmentSection = findSectionByEmoji(sections, '⚖️') || 
@@ -38,6 +63,18 @@ export function LegalReportCard({ analysisResult, onCopy }: LegalReportCardProps
   const legalJudgmentContent = legalJudgmentSection?.content || ''
   const scenarioContent = scenarioSection?.content || ''
   const warningContent = warningSection?.content || ''
+  
+  // 디버깅: 각 섹션 내용 확인
+  if (summaryText) {
+    console.log('[LegalReportCard] 파싱 결과:', {
+      summaryLength: summaryText.length,
+      sectionsCount: sections.length,
+      situationAnalysis: !!situationAnalysisContent,
+      legalJudgment: !!legalJudgmentContent,
+      scenario: !!scenarioContent,
+      warning: !!warningContent,
+    })
+  }
 
   // 근거 자료 변환 (중복 제거 없이 모든 항목 표시)
   const evidenceSources = analysisResult.sources?.map((source) => ({
@@ -76,19 +113,19 @@ export function LegalReportCard({ analysisResult, onCopy }: LegalReportCardProps
       return []
     }
     
-    // criterion에 legalBasis가 있으면 사용
-    if (criterion.legalBasis && criterion.legalBasis.length > 0) {
-      return criterion.legalBasis.map((basis) => ({
-        docId: basis.docId,
-        docTitle: basis.docTitle,
-        docType: basis.docType,
+    // criterion에 legalBasis가 있으면 사용 (API 응답 구조: analysis.legalBasis가 criteria에 매핑됨)
+    if (criterion.legalBasis && Array.isArray(criterion.legalBasis) && criterion.legalBasis.length > 0) {
+      return criterion.legalBasis.map((basis: any) => ({
+        docId: basis.docId || '',
+        docTitle: basis.docTitle || basis.title || '',
+        docType: (basis.docType || basis.sourceType || 'law') as 'law' | 'manual' | 'case' | 'standard_contract',
         chunkIndex: basis.chunkIndex,
         article: basis.article,
-        snippet: basis.snippet,
+        snippet: basis.snippet || '',
         snippetHighlight: basis.snippetHighlight,
-        reason: basis.reason,
+        reason: basis.reason || basis.status || '',
         explanation: basis.explanation,
-        similarityScore: basis.similarityScore,
+        similarityScore: basis.similarityScore || 0,
         fileUrl: basis.fileUrl,
         externalId: basis.externalId,
       }))
@@ -121,90 +158,102 @@ export function LegalReportCard({ analysisResult, onCopy }: LegalReportCardProps
         </div>
       </CardHeader>
       
-      <CardContent className="p-6 space-y-6">
-        {/* 섹션 1: 상황 분석 */}
-        {situationAnalysisContent && (
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 mb-2">
-              <FileText className="w-5 h-5 text-blue-600" />
-              <h3 className="text-lg font-bold text-slate-900">
-                {situationAnalysisSection ? removeEmojiFromTitle(situationAnalysisSection.title) : '상황 분석'}
-              </h3>
-            </div>
-            <div className="prose prose-slate max-w-none text-sm leading-relaxed">
-              <RAGHighlightedMarkdown 
-                content={situationAnalysisContent}
-                sources={analysisResult.sources || []}
-              />
-            </div>
-            <hr className="border-gray-200" />
-          </div>
-        )}
+       <CardContent className="p-6 space-y-3">
+         {/* 섹션 1: 상황 분석 */}
+         {situationAnalysisContent && (
+           <div className="group relative rounded-lg border border-blue-200/60 bg-blue-50/30 p-4 transition-all hover:border-blue-300 hover:bg-blue-50/50">
+             <div className="flex items-start gap-3">
+               <div className="flex-shrink-0 pt-0.5">
+                 <span className="text-xl">{getEmojiFromTitle(situationAnalysisSection?.title, '📊')}</span>
+               </div>
+               <div className="flex-1 min-w-0">
+                 <h3 className="text-base font-semibold text-slate-900 mb-2">
+                   {situationAnalysisSection ? removeEmojiFromTitle(cleanSectionTitle(situationAnalysisSection.title)) : '상황 분석'}
+                 </h3>
+                 <div className="prose prose-slate max-w-none text-sm leading-relaxed text-slate-700">
+                   <RAGHighlightedMarkdown 
+                     content={situationAnalysisContent}
+                     sources={analysisResult.sources || []}
+                   />
+                 </div>
+               </div>
+             </div>
+           </div>
+         )}
 
-        {/* 섹션 2: 법적 판단 */}
-        {legalJudgmentContent && (() => {
-          // 기본값 텍스트 필터링
-          const isDefaultText = legalJudgmentContent === '해당 섹션 내용을 확인하는 중입니다.' || 
-                                legalJudgmentContent === '관련 법령을 확인하여 현재 상황을 법적으로 평가해야 합니다.'
-          
-          if (isDefaultText) return null
-          
-          return (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 mb-2">
-                <Scale className="w-5 h-5 text-amber-600" />
-                <h3 className="text-lg font-bold text-slate-900">
-                  {legalJudgmentSection ? removeEmojiFromTitle(legalJudgmentSection.title) : '법적 판단'}
-                </h3>
-              </div>
-              <div className="prose prose-slate max-w-none text-sm leading-relaxed">
-                <RAGHighlightedMarkdown 
-                  content={legalJudgmentContent}
-                  sources={analysisResult.sources || []}
-                />
-              </div>
-              <hr className="border-gray-200" />
-            </div>
-          )
-        })()}
+         {/* 섹션 2: 법적 판단 */}
+         {legalJudgmentContent && (() => {
+           // 기본값 텍스트 필터링
+           const isDefaultText = legalJudgmentContent === '해당 섹션 내용을 확인하는 중입니다.' || 
+                                 legalJudgmentContent === '관련 법령을 확인하여 현재 상황을 법적으로 평가해야 합니다.'
+           
+           if (isDefaultText) return null
+           
+           return (
+             <div className="group relative rounded-lg border border-amber-200/60 bg-amber-50/30 p-4 transition-all hover:border-amber-300 hover:bg-amber-50/50">
+               <div className="flex items-start gap-3">
+                 <div className="flex-shrink-0 pt-0.5">
+                   <span className="text-xl">{getEmojiFromTitle(legalJudgmentSection?.title, '⚖️')}</span>
+                 </div>
+                 <div className="flex-1 min-w-0">
+                   <h3 className="text-base font-semibold text-slate-900 mb-2">
+                     {legalJudgmentSection ? removeEmojiFromTitle(cleanSectionTitle(legalJudgmentSection.title)) : '법적 판단'}
+                   </h3>
+                   <div className="prose prose-slate max-w-none text-sm leading-relaxed text-slate-700">
+                     <RAGHighlightedMarkdown 
+                       content={legalJudgmentContent}
+                       sources={analysisResult.sources || []}
+                     />
+                   </div>
+                 </div>
+               </div>
+             </div>
+           )
+         })()}
 
-        {/* 섹션 3: 예상 시나리오 */}
-        {scenarioContent && (
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 mb-2">
-              <FileText className="w-5 h-5 text-purple-600" />
-              <h3 className="text-lg font-bold text-slate-900">
-                {scenarioSection ? removeEmojiFromTitle(scenarioSection.title) : '예상 시나리오'}
-              </h3>
-            </div>
-            <div className="prose prose-slate max-w-none text-sm leading-relaxed">
-              <RAGHighlightedMarkdown 
-                content={scenarioContent}
-                sources={analysisResult.sources || []}
-              />
-            </div>
-            <hr className="border-gray-200" />
-          </div>
-        )}
+         {/* 섹션 3: 예상 시나리오 */}
+         {scenarioContent && (
+           <div className="group relative rounded-lg border border-purple-200/60 bg-purple-50/30 p-4 transition-all hover:border-purple-300 hover:bg-purple-50/50">
+             <div className="flex items-start gap-3">
+               <div className="flex-shrink-0 pt-0.5">
+                 <span className="text-xl">{getEmojiFromTitle(scenarioSection?.title, '🔮')}</span>
+               </div>
+               <div className="flex-1 min-w-0">
+                 <h3 className="text-base font-semibold text-slate-900 mb-2">
+                   {scenarioSection ? removeEmojiFromTitle(cleanSectionTitle(scenarioSection.title)) : '예상 시나리오'}
+                 </h3>
+                 <div className="prose prose-slate max-w-none text-sm leading-relaxed text-slate-700">
+                   <RAGHighlightedMarkdown 
+                     content={scenarioContent}
+                     sources={analysisResult.sources || []}
+                   />
+                 </div>
+               </div>
+             </div>
+           </div>
+         )}
 
-        {/* 섹션 4: 주의사항 */}
-        {warningContent && (
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 mb-2">
-              <FileText className="w-5 h-5 text-red-600" />
-              <h3 className="text-lg font-bold text-slate-900">
-                {warningSection ? removeEmojiFromTitle(warningSection.title) : '주의사항'}
-              </h3>
-            </div>
-            <div className="prose prose-slate max-w-none text-sm leading-relaxed">
-              <RAGHighlightedMarkdown 
-                content={warningContent}
-                sources={analysisResult.sources || []}
-              />
-            </div>
-            <hr className="border-gray-200" />
-          </div>
-        )}
+         {/* 섹션 4: 주의사항 */}
+         {warningContent && (
+           <div className="group relative rounded-lg border border-red-200/60 bg-red-50/30 p-4 transition-all hover:border-red-300 hover:bg-red-50/50">
+             <div className="flex items-start gap-3">
+               <div className="flex-shrink-0 pt-0.5">
+                 <span className="text-xl">{getEmojiFromTitle(warningSection?.title, '💡')}</span>
+               </div>
+               <div className="flex-1 min-w-0">
+                 <h3 className="text-base font-semibold text-slate-900 mb-2">
+                   {warningSection ? removeEmojiFromTitle(cleanSectionTitle(warningSection.title)) : '주의사항'}
+                 </h3>
+                 <div className="prose prose-slate max-w-none text-sm leading-relaxed text-slate-700">
+                   <RAGHighlightedMarkdown 
+                     content={warningContent}
+                     sources={analysisResult.sources || []}
+                   />
+                 </div>
+               </div>
+             </div>
+           </div>
+         )}
 
         {/* 섹션 5: 법적 판단 기준 (새 API 형식) */}
         {analysisResult.criteria && analysisResult.criteria.length > 0 && (
@@ -488,9 +537,9 @@ export function LegalReportCard({ analysisResult, onCopy }: LegalReportCardProps
         <LegalBasisModal
           isOpen={selectedCriterionIndex !== null}
           onClose={() => setSelectedCriterionIndex(null)}
-          issueTitle={analysisResult.criteria[selectedCriterionIndex].name}
-          issueStatus={analysisResult.criteria[selectedCriterionIndex].status}
-          detailSummary={analysisResult.criteria[selectedCriterionIndex].reason}
+          issueTitle={analysisResult.criteria[selectedCriterionIndex].name || analysisResult.criteria[selectedCriterionIndex].documentTitle}
+          issueStatus={analysisResult.criteria[selectedCriterionIndex].status || 'unclear'}
+          detailSummary={analysisResult.criteria[selectedCriterionIndex].reason || analysisResult.criteria[selectedCriterionIndex].usageReason}
           legalBasis={getLegalBasisForCriterion(selectedCriterionIndex)}
         />
       )}

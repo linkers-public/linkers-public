@@ -68,9 +68,23 @@ export default function SituationDetailPage() {
       const { data: { user } } = await supabase.auth.getUser()
       const userId = user?.id || null
       
+      // DB에서 직접 answer 필드 조회
+      const { data: dbAnalysisRaw, error: dbError } = await supabase
+        .from('situation_analyses')
+        .select('answer, analysis, risk_score, classified_type')
+        .eq('id', situationId)
+        .maybeSingle()
+      
+      if (dbError) {
+        console.warn('DB 조회 오류:', dbError)
+      }
+      
+      // 타입 단언으로 변환
+      const dbAnalysis = dbAnalysisRaw as any
+      
       const analysis = await getSituationAnalysisByIdV2(situationId, userId) as any
       
-      if (!analysis) {
+      if (!analysis && !dbAnalysis) {
         setError('분석 결과를 찾을 수 없습니다')
         return
       }
@@ -78,7 +92,7 @@ export default function SituationDetailPage() {
       setAnalysisId(situationId)
       
       // v2 응답을 v1 형식으로 변환
-      const analysisData = analysis?.analysis || {}
+      const analysisData = analysis?.analysis || dbAnalysis?.analysis || {}
       
       // criteria 찾기
       const criteriaArray = (analysis?.criteria && Array.isArray(analysis.criteria) && analysis.criteria.length > 0)
@@ -86,6 +100,9 @@ export default function SituationDetailPage() {
         : (analysisData?.criteria && Array.isArray(analysisData.criteria) && analysisData.criteria.length > 0)
         ? analysisData.criteria
         : []
+      
+      // analysis.legalBasis를 criteria에 매핑 (API 응답 구조 지원)
+      const legalBasisArray = analysisData?.legalBasis || []
       
       // scripts 변환 - 이메일 템플릿 구조: {subject, body}
       const scriptsData = analysis?.scripts
@@ -107,19 +124,75 @@ export default function SituationDetailPage() {
             toAdvisor: undefined,
           }
       
+      // answer 필드를 summary로 사용 (DB에서 가져온 값 우선)
+      const summaryText = dbAnalysis?.answer || analysisData?.summary || analysis?.analysis?.summary || ''
+      
       const v1Format: SituationAnalysisResponse = {
-        classifiedType: (analysis?.tags?.[0] || analysisData?.classifiedType || 'unknown') as SituationCategory,
-        riskScore: analysis?.riskScore ?? analysisData?.riskScore ?? 0,
-        summary: analysisData?.summary || analysis?.analysis?.summary || '',
+        classifiedType: (analysis?.tags?.[0] || analysisData?.classifiedType || dbAnalysis?.classified_type || 'unknown') as SituationCategory,
+        riskScore: analysis?.riskScore ?? dbAnalysis?.risk_score ?? analysisData?.riskScore ?? 0,
+        summary: summaryText,
         // criteria는 새로운 RAG 기반 구조 (CriteriaItemV2) 그대로 사용
-        criteria: criteriaArray.map((criterion: any) => ({
-          documentTitle: criterion?.documentTitle || criterion?.name || '',
-          fileUrl: criterion?.fileUrl || null,
-          sourceType: criterion?.sourceType || 'law',
-          similarityScore: criterion?.similarityScore || 0,
-          snippet: criterion?.snippet || '',
-          usageReason: criterion?.usageReason || criterion?.reason || '',
-        })),
+        // analysis.legalBasis가 있으면 각 항목을 criterion으로 변환하고 legalBasis 매핑
+        criteria: criteriaArray.length > 0
+          ? criteriaArray.map((criterion: any) => {
+              // criterion에 해당하는 legalBasis 찾기 (title 또는 snippet으로 매칭)
+              const matchingLegalBasis = legalBasisArray.filter((basis: any) => {
+                const criterionTitle = criterion?.documentTitle || criterion?.name || ''
+                const basisTitle = basis?.title || ''
+                return criterionTitle.includes(basisTitle) || basisTitle.includes(criterionTitle) || 
+                       (criterion?.snippet && basis?.snippet && criterion.snippet.includes(basis.snippet))
+              })
+              
+              // legalBasis를 LegalBasisDetail 형식으로 변환
+              const legalBasis = matchingLegalBasis.map((basis: any) => ({
+                docId: basis?.docId || '',
+                docTitle: basis?.title || '',
+                docType: (basis?.sourceType || 'law') as 'law' | 'manual' | 'case' | 'standard_contract',
+                chunkIndex: basis?.chunkIndex,
+                article: basis?.article,
+                snippet: basis?.snippet || '',
+                snippetHighlight: basis?.snippetHighlight,
+                reason: basis?.reason || basis?.status || '',
+                explanation: basis?.explanation,
+                similarityScore: basis?.similarityScore || 0,
+                fileUrl: basis?.fileUrl,
+                externalId: basis?.externalId,
+              }))
+              
+              return {
+                documentTitle: criterion?.documentTitle || criterion?.name || '',
+                fileUrl: criterion?.fileUrl || null,
+                sourceType: criterion?.sourceType || 'law',
+                similarityScore: criterion?.similarityScore || 0,
+                snippet: criterion?.snippet || '',
+                usageReason: criterion?.usageReason || criterion?.reason || '',
+                legalBasis: legalBasis.length > 0 ? legalBasis : undefined,
+              }
+            })
+          : legalBasisArray.length > 0
+          ? legalBasisArray.map((basis: any) => ({
+              documentTitle: basis?.title || '',
+              fileUrl: null,
+              sourceType: basis?.sourceType || 'law',
+              similarityScore: 0,
+              snippet: basis?.snippet || '',
+              usageReason: basis?.status || '',
+              legalBasis: [{
+                docId: basis?.docId || '',
+                docTitle: basis?.title || '',
+                docType: (basis?.sourceType || 'law') as 'law' | 'manual' | 'case' | 'standard_contract',
+                chunkIndex: basis?.chunkIndex,
+                article: basis?.article,
+                snippet: basis?.snippet || '',
+                snippetHighlight: basis?.snippetHighlight,
+                reason: basis?.reason || basis?.status || '',
+                explanation: basis?.explanation,
+                similarityScore: basis?.similarityScore || 0,
+                fileUrl: basis?.fileUrl,
+                externalId: basis?.externalId,
+              }],
+            }))
+          : [],
 
         scripts: scripts,
         relatedCases: (analysis?.relatedCases || []).map((c: any) => {
@@ -269,7 +342,7 @@ export default function SituationDetailPage() {
                 {analysisResult.criteria && analysisResult.criteria.length > 0 && (
                   <div className="px-3 py-1.5 bg-gradient-to-r from-amber-500 to-orange-600 text-white rounded-lg shadow-md font-semibold text-sm flex items-center gap-2">
                     <span>📋</span>
-                    <span className="max-w-[200px] truncate">{analysisResult.criteria[0].documentTitle || analysisResult.criteria[0].name || '법적 근거'}</span>
+                    <span className="max-w-[200px] truncate">{analysisResult.criteria[0].documentTitle || '법적 근거'}</span>
                   </div>
                 )}
               </div>

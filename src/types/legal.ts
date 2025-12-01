@@ -211,6 +211,11 @@ export interface CriteriaItemV2 {
   similarityScore: number; // 유사도 점수 (0.0 ~ 1.0)
   snippet: string; // 관련 내용 스니펫
   usageReason: string; // 사용 이유 설명
+  legalBasis?: LegalBasisItem[]; // 법적 근거 배열 (API 응답 구조 지원)
+  // 하위 호환성을 위한 레거시 필드
+  name?: string; // 레거시: documentTitle 대체
+  status?: 'likely' | 'unclear' | 'unlikely'; // 레거시: 판단 상태
+  reason?: string; // 레거시: usageReason 대체
 }
 
 export interface SituationAnalysisResponse {
