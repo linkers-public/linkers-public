@@ -80,7 +80,7 @@ export function UserMessageWithContext({
           setReportCache(prev => new Map(prev).set(message.context_id!, info))
         }
       } catch (error) {
-        console.warn('리포트 정보 로드 실패:', error)
+        // 로그 제거: 리포트 정보 로드 실패는 무시
       } finally {
         setIsLoadingReport(false)
       }

@@ -75,7 +75,6 @@ export function ContextContractList({ onSelect, currentContextId }: ContextContr
         })))
       } catch (error: any) {
         if (isCancelled) return
-        console.error('계약서 분석 로드 실패:', error)
         setError(error?.message || '계약서 분석을 불러오는 중 오류가 발생했습니다')
         setContracts([])
       } finally {

@@ -175,7 +175,7 @@ export function ActionDashboard({ classifiedType, analysisId, onCopy, organizati
         try {
           setCheckedEvidence(new Set(JSON.parse(savedEvidence)))
         } catch (e) {
-          console.error('증거 자료 체크 상태 불러오기 실패:', e)
+          // 로그 제거: localStorage 로드 실패는 무시
         }
       }
     }
@@ -197,7 +197,6 @@ export function ActionDashboard({ classifiedType, analysisId, onCopy, organizati
       const files = await getSituationEvidences(analysisId)
       setUploadedFiles(files)
     } catch (error: any) {
-      console.error('파일 목록 불러오기 실패:', error)
       toast({
         title: '파일 목록 불러오기 실패',
         description: error.message || '업로드된 파일 목록을 불러올 수 없습니다.',
@@ -249,16 +248,7 @@ export function ActionDashboard({ classifiedType, analysisId, onCopy, organizati
     setUploadingFileId(uploadId)
 
     try {
-      console.log('[파일 업로드 시작]', {
-        fileName: file.name,
-        fileSize: file.size,
-        evidenceType,
-        analysisId
-      })
-      
-      const result = await uploadSituationEvidence(file, analysisId, evidenceType)
-      
-      console.log('[파일 업로드 성공]', result)
+      await uploadSituationEvidence(file, analysisId, evidenceType)
       
       toast({
         title: '업로드 완료',
@@ -273,13 +263,6 @@ export function ActionDashboard({ classifiedType, analysisId, onCopy, organizati
       newSet.add(evidenceType)
       setCheckedEvidence(newSet)
     } catch (error: any) {
-      console.error('[파일 업로드 실패]', {
-        error,
-        message: error?.message,
-        stack: error?.stack,
-        fileName: file.name
-      })
-      
       // 더 자세한 에러 메시지 추출
       let errorMessage = '파일 업로드 중 오류가 발생했습니다.'
       if (error?.message) {
@@ -326,7 +309,6 @@ export function ActionDashboard({ classifiedType, analysisId, onCopy, organizati
         setCheckedEvidence(newSet)
       }
     } catch (error: any) {
-      console.error('파일 삭제 실패:', error)
       toast({
         title: '삭제 실패',
         description: error.message || '파일 삭제 중 오류가 발생했습니다.',

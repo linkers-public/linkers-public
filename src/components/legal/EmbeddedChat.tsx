@@ -140,7 +140,6 @@ export function EmbeddedChat({
       
       return sessionResult.id
     } catch (error) {
-      console.error('챗 세션 생성/조회 실패:', error)
       throw error
     }
   }, [reportId])
@@ -180,15 +179,6 @@ export function EmbeddedChat({
           context_type: msg.context_type || 'none',
           context_id: msg.context_id || null,
         }
-        // 디버깅: assistant 메시지의 context_type 확인
-        if (message.role === 'assistant') {
-          console.log('[EmbeddedChat] 메시지 로드:', {
-            id: message.id,
-            context_type: message.context_type,
-            context_id: message.context_id,
-            content_preview: message.content.substring(0, 100),
-          })
-        }
         return message
       })
       
@@ -214,7 +204,6 @@ export function EmbeddedChat({
         onMessageCountChange?.(loadedMessages.length)
       }
     } catch (error) {
-      console.error('대화 내역 로드 실패:', error)
       // 에러가 발생하면 초기 메시지만 표시
       const initialMessage: Message = {
         id: `initial_${Date.now()}`,
@@ -247,8 +236,6 @@ export function EmbeddedChat({
           filter: `session_id=eq.${chatSessionId}`,
         },
         (payload) => {
-          console.log('Realtime 이벤트 수신:', payload)
-          
           if (payload.eventType === 'INSERT') {
             const newMsg = payload.new as any
             const newMessage: Message = {
@@ -442,7 +429,6 @@ export function EmbeddedChat({
         return [...updated, assistantMessage]
       })
     } catch (error) {
-      console.error('메시지 전송 실패:', error)
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',

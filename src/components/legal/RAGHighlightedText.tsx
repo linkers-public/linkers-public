@@ -380,7 +380,6 @@ export function RAGHighlightedText({ content, sources = [] }: RAGHighlightedText
                       window.URL.revokeObjectURL(url)
                       document.body.removeChild(a)
                     } catch (error) {
-                      console.error('파일 다운로드 오류:', error)
                       // 실패 시 새 탭에서 열기
                       if (hoveredSource.fileUrl) {
                         window.open(hoveredSource.fileUrl, '_blank')
@@ -537,10 +536,8 @@ export function RAGHighlightedMarkdown({ content, sources = [] }: RAGHighlighted
     let cleanContent = content
     // HTML 태그가 포함되어 있는지 확인하고 모든 HTML 태그 제거
     if (content.includes('<') && content.includes('>')) {
-      console.log('🔍 [RAGHighlightedMarkdown] HTML 태그가 포함된 content 감지:', content.substring(0, 200))
       // 모든 HTML 태그 제거 (텍스트만 추출)
       cleanContent = content.replace(/<[^>]+>/g, '')
-      console.log('🔍 [RAGHighlightedMarkdown] HTML 태그 제거 후:', cleanContent.substring(0, 200))
       // HTML 엔티티 디코딩
       cleanContent = cleanContent
         .replace(/&quot;/g, '"')

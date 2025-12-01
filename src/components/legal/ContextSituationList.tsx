@@ -57,8 +57,6 @@ export function ContextSituationList({ onSelect, currentContextId }: ContextSitu
           return
         }
 
-        console.log('[ContextSituationList] 상황 분석 로드 시작, userId:', userId)
-        
         // 타임아웃 추가 (30초)
         const timeoutPromise = new Promise((_, reject) => {
           setTimeout(() => reject(new Error('요청 시간이 초과되었습니다. 다시 시도해주세요.')), 30000)
@@ -69,9 +67,6 @@ export function ContextSituationList({ onSelect, currentContextId }: ContextSitu
         
         if (isCancelled) return
         
-        console.log('[ContextSituationList] 상황 분석 로드 성공, 개수:', history?.length || 0)
-        console.log('[ContextSituationList] 로드된 데이터:', history)
-        
         if (history && Array.isArray(history)) {
           // 데이터 형식 변환 (백엔드 응답 형식에 맞춤)
           const formattedSituations = history.map((item: any) => ({
@@ -79,15 +74,12 @@ export function ContextSituationList({ onSelect, currentContextId }: ContextSitu
             situation: item.situation || '',
             created_at: item.created_at || new Date().toISOString(),
           }))
-          console.log('[ContextSituationList] 변환된 데이터:', formattedSituations)
           setSituations(formattedSituations)
         } else {
-          console.warn('[ContextSituationList] 예상과 다른 데이터 형식:', history)
           setSituations([])
         }
       } catch (error: any) {
         if (isCancelled) return
-        console.error('[ContextSituationList] 상황 분석 로드 실패:', error)
         setError(error?.message || '상황 분석을 불러오는 중 오류가 발생했습니다')
         setSituations([])
       } finally {

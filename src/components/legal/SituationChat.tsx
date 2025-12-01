@@ -96,7 +96,7 @@ export function SituationChat({
         return loaded
       }
     } catch (error) {
-      console.error('메시지 로드 실패:', error)
+      // 로그 제거: localStorage 로드 실패는 무시
     }
     // 초기 메시지 반환
     return [{
@@ -113,7 +113,7 @@ export function SituationChat({
     try {
       localStorage.setItem(`situation_chat_${chatId}`, JSON.stringify(msgs))
     } catch (error) {
-      console.error('메시지 저장 실패:', error)
+      // 로그 제거: localStorage 저장 실패는 무시
     }
   }
 
@@ -218,7 +218,6 @@ export function SituationChat({
       }
       setMessages((prev) => [...prev, assistantMessage])
     } catch (error) {
-      console.error('메시지 전송 실패:', error)
       const errorMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',

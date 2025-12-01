@@ -84,7 +84,7 @@ export function LegalEmailHelper({
       setCopiedSubject(true)
       setTimeout(() => setCopiedSubject(false), 2000)
     } catch (err) {
-      console.error('복사 실패:', err)
+      // 로그 제거: 복사 실패는 무시
     }
   }
 
@@ -97,7 +97,7 @@ export function LegalEmailHelper({
       setCopiedBody(true)
       setTimeout(() => setCopiedBody(false), 2000)
     } catch (err) {
-      console.error('복사 실패:', err)
+      // 로그 제거: 복사 실패는 무시
     }
   }
 
