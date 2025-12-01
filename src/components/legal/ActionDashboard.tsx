@@ -197,11 +197,8 @@ export function ActionDashboard({ classifiedType, analysisId, onCopy, organizati
       const files = await getSituationEvidences(analysisId)
       setUploadedFiles(files)
     } catch (error: any) {
-      toast({
-        title: '파일 목록 불러오기 실패',
-        description: error.message || '업로드된 파일 목록을 불러올 수 없습니다.',
-        variant: 'destructive',
-      })
+      // evidence 불러오기 실패 시 조용히 처리 (토스트 표시 안 함)
+      console.warn('파일 목록 불러오기 실패:', error.message || '업로드된 파일 목록을 불러올 수 없습니다.')
     } finally {
       setIsLoadingFiles(false)
     }
