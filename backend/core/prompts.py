@@ -1335,19 +1335,45 @@ def build_situation_action_guide_prompt(
         user_info.append(f"4대보험: {social_insurance}")
     user_info_text = "\n".join(user_info) if user_info else "정보 없음"
     
-    prompt = f"""당신은 한국 노동법 전문가입니다. 사용자의 상황을 바탕으로 구체적인 행동 가이드를 생성하세요.
+    prompt = f"""당신은 대한민국 근로기준법과 표준근로계약서를 참고해 **청년 근로자의 상황을 이해하기 쉽게 설명하는 법률 안내 도우미**입니다.
+
+아래 입력 정보를 바탕으로, 사용자가 바로 읽을 수 있는 **마크다운 형식의 요약 리포트**를 작성하세요.
+
+---
+
+**[입력 정보]**
+
+- 사용자 질문: {situation_text}
+
+- 사용자 상황 요약(LLM 내부 분석): {classification.get('classified_type', 'unknown')} 유형, 위험도 {classification.get('risk_score', 50)}점
+
+- 참고한 법적 근거 목록(legalBases):
+{legal_basis_text}
+
+※ `legalBasis`는 다음과 같은 배열 형태입니다:
+- documentTitle: 문서 제목(예: 표준근로계약서, 표준하도급계약서 등)
+- fileUrl: 원문 파일 URL
+- sourceType: 문서 유형(standard_contract, labor_law 등)
+- similarityScore: 해당 문서가 현재 상황과 유사한 정도(0~1)
+- snippet: 실제로 참고한 문서 조항 발췌 내용
+- usageReason: 이 근거를 왜 사용했는지, 어떤 판단에 어떻게 활용했는지 설명
+
+---
+
+**[작성 목표]**
+
+- 사용자가 자신의 상황을 한 눈에 이해하고,
+- 어떤 법적 쟁점이 있는지,
+- 앞으로 벌어질 수 있는 흐름과 주의사항을 알 수 있게 도와주세요.
+- 단, **개인 맞춤형 법률 자문이 아니라 일반적인 정보 제공**이라는 톤을 유지하세요.
+
+---
 
 **사용자 정보:**
 {user_info_text}
 
-**분류 결과:**
-- 유형: {classification.get('classified_type', 'unknown')}
-- 위험도: {classification.get('risk_score', 50)}점
-
-**상황 설명:**
-{situation_text}
+**참고 법령/가이드라인:**
 {legal_context}
-{legal_basis_text}
 
 다음 JSON 형식으로 행동 가이드를 반환하세요:
 {{
@@ -1531,7 +1557,9 @@ def build_situation_action_guide_prompt(
 - summary는 마크다운 형식으로 작성하되, 각 섹션을 명확하게 구분하세요.
 - **JSON 형식만 반환하세요.**
 - **중요: summary 필드의 개행 문자는 반드시 `\\n`으로 이스케이프해야 합니다.**
-  예: `"summary": "## 제목\\n내용\\n\\n## 다음 제목"` (개행을 `\\n`으로 변환)
+  예: `"summary": "📊 **상황 분석**: \\"현재 사용자님은...\\"\\n\\n⚖️ **법적 판단**: \\"근로기준법 제26조...\\""` (개행을 `\\n`으로 변환)
+- **중요: summary 필드는 마크다운 텍스트만 포함해야 합니다. 코드 블록(```), JSON 형식, 설명 문구는 포함하지 마세요.**
+- **중요: summary 필드는 마크다운 텍스트만 포함해야 합니다. 코드 블록(```), JSON 형식, 설명 문구는 포함하지 마세요.**
 """
     return prompt
 
