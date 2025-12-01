@@ -1286,10 +1286,76 @@ export default function QuickAssistPage() {
       return
     }
 
+    // 사용자 메시지 생성: 파일이나 상황 분석 프리셋이 있으면 정보와 메시지를 모두 표시
+    let userMessageContent = messageToSend
+    
+    // 상황 분석 프리셋 정보 구성
+    let situationInfo = ''
+    if (selectedSituationPreset && !currentContext.id) {
+      const preset = selectedSituationPreset
+      const infoParts: string[] = []
+      infoParts.push(`📋 상황 분석: ${preset.title}`)
+      if (preset.category) {
+        const categoryMap: Record<string, string> = {
+          'probation': '수습/인턴',
+          'unpaid_wage': '임금 체불',
+          'freelancer': '프리랜서',
+          'harassment': '괴롭힘',
+          'stock_option': '스톡옵션',
+        }
+        infoParts.push(`카테고리: ${categoryMap[preset.category] || preset.category}`)
+      }
+      if (preset.employmentType) {
+        const employmentMap: Record<string, string> = {
+          'regular': '정규직',
+          'intern': '인턴/수습',
+          'freelancer': '프리랜서',
+          'part_time': '파트타임',
+        }
+        infoParts.push(`고용 형태: ${employmentMap[preset.employmentType] || preset.employmentType}`)
+      }
+      if (preset.workPeriod) {
+        infoParts.push(`근무 기간: ${preset.workPeriod}`)
+      }
+      if (preset.socialInsurance && preset.socialInsurance.length > 0) {
+        const insuranceMap: Record<string, string> = {
+          'health': '건강보험',
+          'employment': '고용보험',
+          'pension': '국민연금',
+          'industrial': '산재보험',
+        }
+        const insuranceNames = preset.socialInsurance.map(ins => insuranceMap[ins] || ins)
+        infoParts.push(`사회보험: ${insuranceNames.join(', ')}`)
+      }
+      situationInfo = infoParts.join('\n')
+    }
+    
+    // 파일 정보 구성
+    let fileInfo = ''
+    if (hasFile && selectedFile) {
+      fileInfo = `📎 파일: ${selectedFile.name} (${(selectedFile.size / 1024).toFixed(1)}KB)`
+    }
+    
+    // 모든 정보를 조합
+    const infoParts: string[] = []
+    if (situationInfo) infoParts.push(situationInfo)
+    if (fileInfo) infoParts.push(fileInfo)
+    
+    if (infoParts.length > 0) {
+      const combinedInfo = infoParts.join('\n\n')
+      if (messageToSend && messageToSend.trim()) {
+        // 정보와 메시지를 함께 표시
+        userMessageContent = `${combinedInfo}\n\n${messageToSend}`
+      } else {
+        // 정보만 표시
+        userMessageContent = combinedInfo
+      }
+    }
+    
     const userMessage: ChatMessage = {
       id: `msg-${Date.now()}`,
       role: 'user',
-      content: hasFile ? `파일 업로드: ${selectedFile?.name}` : messageToSend,
+      content: userMessageContent,
       timestamp: new Date(),
     }
 
@@ -2542,7 +2608,8 @@ export default function QuickAssistPage() {
                       })()}
                       
                       {/* 사용자 메시지의 리포트 카드 (버블 밖에 표시, 살짝 붙어있는 느낌) */}
-                      {message.role === 'user' && (
+                      {/* 파일 첨부 시 답변기준 정보는 표시하지 않음 */}
+                      {message.role === 'user' && message.context_type !== 'contract' && (
                         <div className="mt-1.5">
                           <UserMessageWithContext 
                             message={message}
