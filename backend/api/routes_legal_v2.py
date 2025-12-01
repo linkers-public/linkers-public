@@ -1322,55 +1322,72 @@ async def analyze_situation(
                     toAdvisor=to_advisor_template,
                 )
         
-        # relatedCases 변환: criteria를 문서 단위로 그룹핑하여 새 구조로 구성
+        # relatedCases 변환: grounding_chunks를 문서 단위로 그룹핑하여 새 구조로 구성
         from collections import defaultdict
         from core.file_utils import get_document_file_url
         
-        # criteria를 documentTitle 또는 externalId 기준으로 그룹핑
+        # grounding_chunks를 documentTitle 또는 externalId 기준으로 그룹핑
+        grounding_chunks = result.get("grounding_chunks", [])
         criteria_list = result.get("criteria", [])
+        
+        # criteria에서 usageReason 매핑 생성 (snippet 기반)
+        snippet_to_usage_reason = {}
+        for criterion in criteria_list:
+            snippet_text = criterion.get("snippet", "")
+            usage_reason = criterion.get("usageReason", "")
+            if snippet_text and usage_reason:
+                # snippet의 앞부분을 키로 사용 (유사도 매칭용)
+                snippet_key = snippet_text[:100].strip()
+                snippet_to_usage_reason[snippet_key] = usage_reason
+        
         grouped_by_document = defaultdict(list)
         
-        for criterion in criteria_list:
-            # documentTitle 또는 externalId를 키로 사용
-            document_title = criterion.get("documentTitle", "")
-            file_url = criterion.get("fileUrl", "")
-            # fileUrl에서 externalId 추출 시도 (없으면 documentTitle 사용)
-            external_id = None
-            if file_url:
-                # fileUrl에서 externalId 추출 (예: .../standard_contracts/{external_id}.pdf)
-                import re
-                match = re.search(r'/([^/]+)\.pdf', file_url)
-                if match:
-                    external_id = match.group(1)
+        # grounding_chunks를 기반으로 그룹핑
+        for chunk in grounding_chunks:
+            # chunk가 dict인지 객체인지 확인
+            if isinstance(chunk, dict):
+                title = chunk.get("title", "")
+                source_type = chunk.get("source_type", "law")
+                external_id = chunk.get("external_id") or chunk.get("externalId")
+                snippet = chunk.get("snippet", "")
+                score = chunk.get("score", 0.0)
+                source_id = chunk.get("source_id", "")
+            else:
+                title = getattr(chunk, "title", "")
+                source_type = getattr(chunk, "source_type", "law")
+                external_id = getattr(chunk, "external_id", None)
+                snippet = getattr(chunk, "snippet", "")
+                score = getattr(chunk, "score", 0.0)
+                source_id = getattr(chunk, "source_id", "")
             
-            # 키 결정: external_id가 있으면 사용, 없으면 document_title 사용
-            group_key = external_id if external_id else document_title
+            # 키 결정: external_id가 있으면 사용, 없으면 title 사용
+            group_key = external_id if external_id else title
             
             if group_key:
-                grouped_by_document[group_key].append(criterion)
+                grouped_by_document[group_key].append({
+                    "title": title,
+                    "source_type": source_type,
+                    "external_id": external_id,
+                    "snippet": snippet,
+                    "score": score,
+                    "source_id": source_id,
+                })
         
         # 그룹별로 relatedCase 구성
         related_cases = []
-        for group_key, criteria_items in list(grouped_by_document.items())[:5]:  # 최대 5개 문서
-            if not criteria_items:
+        for group_key, chunk_items in list(grouped_by_document.items())[:5]:  # 최대 5개 문서
+            if not chunk_items:
                 continue
             
-            # 첫 번째 criteria에서 공통 정보 추출
-            first_criterion = criteria_items[0]
-            document_title = first_criterion.get("documentTitle", "")
-            source_type = first_criterion.get("sourceType", "law")
-            file_url = first_criterion.get("fileUrl")
+            # 첫 번째 chunk에서 공통 정보 추출
+            first_chunk = chunk_items[0]
+            document_title = first_chunk.get("title", "")
+            source_type = first_chunk.get("source_type", "law")
+            external_id = first_chunk.get("external_id") or group_key
             
-            # externalId 추출 (fileUrl에서 또는 직접)
-            external_id = group_key
-            if file_url:
-                import re
-                match = re.search(r'/([^/]+)\.pdf', file_url)
-                if match:
-                    external_id = match.group(1)
-            
-            # fileUrl이 없으면 생성
-            if not file_url and external_id:
+            # fileUrl 생성
+            file_url = None
+            if external_id:
                 try:
                     file_url = get_document_file_url(
                         external_id=external_id,
@@ -1380,24 +1397,39 @@ async def analyze_situation(
                 except Exception as e:
                     _logger.warning(f"relatedCase fileUrl 생성 실패 (external_id={external_id}, sourceType={source_type}): {str(e)}")
             
-            # overallSimilarity 계산 (가장 높은 similarityScore 사용)
+            # overallSimilarity 계산 (가장 높은 score 사용)
             overall_similarity = max(
-                float(criterion.get("similarityScore", 0.0))
-                for criterion in criteria_items
+                float(chunk.get("score", 0.0))
+                for chunk in chunk_items
             )
             
-            # summary 생성 (첫 snippet 앞부분 100자 정도 잘라서 요약처럼 사용)
-            first_snippet = criteria_items[0].get("snippet", "")
-            summary = first_snippet[:100] + "..." if len(first_snippet) > 100 else first_snippet
-            if not summary:
-                summary = f"{document_title}의 내용을 참고하여 법적 판단 기준으로 사용했습니다."
+            # summary 생성 (문서 제목 기반으로 간단한 설명 생성)
+            # TODO: 나중에 LLM으로 더 나은 summary 생성 가능
+            if document_title:
+                # 문서 제목에서 요약 생성
+                if "표준" in document_title and "계약" in document_title:
+                    summary = f"{document_title}의 계약 조항을 참고하여 법적 판단 기준으로 사용했습니다."
+                elif "법" in document_title or "규칙" in document_title:
+                    summary = f"{document_title}의 법령 조항을 참고하여 법적 판단 기준으로 사용했습니다."
+                else:
+                    summary = f"{document_title}의 내용을 참고하여 법적 판단 기준으로 사용했습니다."
+            else:
+                summary = "관련 법령 및 표준 문서를 참고하여 법적 판단 기준으로 사용했습니다."
             
             # snippets 배열 구성
             snippets = []
-            for criterion in criteria_items:
-                snippet_text = criterion.get("snippet", "")
-                similarity_score = float(criterion.get("similarityScore", 0.0))
-                usage_reason = criterion.get("usageReason", "")
+            for chunk in chunk_items:
+                snippet_text = chunk.get("snippet", "")
+                similarity_score = float(chunk.get("score", 0.0))
+                
+                # usageReason 찾기 (criteria에서 매칭)
+                usage_reason = ""
+                snippet_key = snippet_text[:100].strip()
+                if snippet_key in snippet_to_usage_reason:
+                    usage_reason = snippet_to_usage_reason[snippet_key]
+                else:
+                    # 매칭 실패 시 기본 메시지
+                    usage_reason = f"{document_title}의 해당 조항을 현재 상황과 비교·판단하는 기준으로 사용했습니다."
                 
                 snippets.append({
                     "snippet": snippet_text[:500] if len(snippet_text) > 500 else snippet_text,
@@ -1415,7 +1447,7 @@ async def analyze_situation(
                 "snippets": snippets,
             })
         
-        _logger.info(f"relatedCases 문서 단위 그룹핑 완료: {len(related_cases)}개 문서 (원본 criteria: {len(criteria_list)}개)")
+        _logger.info(f"relatedCases 문서 단위 그룹핑 완료: {len(related_cases)}개 문서 (원본 grounding_chunks: {len(grounding_chunks)}개)")
         
         # tags 추출 (classified_type 기반)
         tags = [result.get("classified_type", "unknown")]
