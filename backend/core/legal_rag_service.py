@@ -1269,42 +1269,202 @@ class LegalRAGService:
                         logger.warning(f"[JSON 파싱] ❌ JSON 파싱 실패: {str(json_err)}")
                         logger.warning(f"[JSON 파싱] 에러 위치: line {json_err.lineno}, col {json_err.colno}")
                         logger.warning(f"[JSON 파싱] 문제가 있는 부분: {json_str[max(0, json_err.pos-50):json_err.pos+50]}")
-                        # 더 robust한 JSON 복구 시도
-                        # 1. 마지막 완전한 중괄호까지 찾기
-                        brace_count = 0
-                        last_valid_pos = -1
-                        for i, char in enumerate(json_str):
-                            if char == '{':
-                                brace_count += 1
-                            elif char == '}':
-                                brace_count -= 1
-                                if brace_count == 0:
-                                    last_valid_pos = i + 1
-                                    break
                         
-                        if last_valid_pos > 0:
-                            json_str_truncated = json_str[:last_valid_pos]
-                            try:
-                                analysis = json.loads(json_str_truncated)
-                                logger.warning(f"[JSON 파싱] ⚠️ JSON이 잘렸지만 복구 성공 (원본: {len(json_str)}자, 복구: {len(json_str_truncated)}자)")
-                            except:
-                                # 2. issues 배열의 마지막 항목까지 찾기
+                        # 더 robust한 JSON 복구 시도
+                        analysis = None
+                        recovery_attempted = False
+                        
+                        # 복구 방법 1: 중괄호와 대괄호를 모두 추적하여 완전한 구조 찾기 (에러 위치 이전까지)
+                        try:
+                            brace_count = 0
+                            bracket_count = 0
+                            in_string = False
+                            escape_next = False
+                            last_valid_pos = -1
+                            
+                            # 에러 위치 이전까지 전체 문자열 확인
+                            error_pos = min(json_err.pos, len(json_str))
+                            
+                            for i, char in enumerate(json_str[:error_pos]):
+                                if escape_next:
+                                    escape_next = False
+                                    continue
+                                
+                                if char == '\\':
+                                    escape_next = True
+                                    continue
+                                
+                                if char == '"' and not escape_next:
+                                    in_string = not in_string
+                                    continue
+                                
+                                if not in_string:
+                                    if char == '{':
+                                        brace_count += 1
+                                    elif char == '}':
+                                        brace_count -= 1
+                                        if brace_count == 0 and bracket_count == 0:
+                                            last_valid_pos = i + 1
+                                    elif char == '[':
+                                        bracket_count += 1
+                                    elif char == ']':
+                                        bracket_count -= 1
+                                        if brace_count == 0 and bracket_count == 0:
+                                            last_valid_pos = i + 1
+                            
+                            if last_valid_pos > 0:
+                                json_str_truncated = json_str[:last_valid_pos]
                                 try:
-                                    # issues 배열의 마지막 항목 찾기
-                                    issues_match = re.search(r'"issues"\s*:\s*\[([\s\S]*?)\]', json_str)
-                                    if issues_match:
-                                        # issues 배열을 닫고 나머지 필드 추가
-                                        json_str_fixed = json_str[:json_err.pos]
-                                        # 마지막 불완전한 객체 제거
-                                        json_str_fixed = re.sub(r',\s*\{[^}]*$', '', json_str_fixed)
-                                        json_str_fixed += '\n  ]\n}'
+                                    analysis = json.loads(json_str_truncated)
+                                    logger.warning(f"[JSON 파싱] ⚠️ 방법1: 중괄호/대괄호 매칭으로 복구 성공 (원본: {len(json_str)}자, 복구: {len(json_str_truncated)}자)")
+                                    recovery_attempted = True
+                                except Exception as parse_err:
+                                    logger.debug(f"[JSON 파싱] 방법1 복구 후 파싱 실패: {str(parse_err)}")
+                                    # 복구된 문자열이 여전히 유효하지 않으면 다음 방법 시도
+                                    pass
+                        except Exception as e:
+                            logger.debug(f"[JSON 파싱] 복구 방법1 실패: {str(e)}")
+                        
+                        # 복구 방법 2: 에러 위치 이전에서 완전한 issues 배열 찾기
+                        if analysis is None:
+                            try:
+                                # issues 배열의 시작 위치 찾기
+                                issues_start = json_str.find('"issues"')
+                                if issues_start != -1 and issues_start < json_err.pos:
+                                    # issues 배열 시작부터 에러 위치까지 추출
+                                    issues_section = json_str[issues_start:json_err.pos]
+                                    
+                                    # 완전한 issue 객체들을 찾기 (중괄호 매칭)
+                                    brace_count = 0
+                                    bracket_count = 0
+                                    in_string = False
+                                    escape_next = False
+                                    last_complete_issue_end = -1
+                                    
+                                    issue_start = issues_section.find('[')
+                                    if issue_start != -1:
+                                        bracket_count = 1
+                                        for i in range(issue_start + 1, len(issues_section)):
+                                            char = issues_section[i]
+                                            
+                                            if escape_next:
+                                                escape_next = False
+                                                continue
+                                            
+                                            if char == '\\':
+                                                escape_next = True
+                                                continue
+                                            
+                                            if char == '"' and not escape_next:
+                                                in_string = not in_string
+                                                continue
+                                            
+                                            if not in_string:
+                                                if char == '{':
+                                                    brace_count += 1
+                                                elif char == '}':
+                                                    brace_count -= 1
+                                                    if brace_count == 0:
+                                                        last_complete_issue_end = i + 1
+                                                elif char == '[':
+                                                    bracket_count += 1
+                                                elif char == ']':
+                                                    bracket_count -= 1
+                                        
+                                        if last_complete_issue_end > 0:
+                                            # issues 배열을 닫고 나머지 필드 추가
+                                            json_str_fixed = json_str[:issues_start + issue_start + last_complete_issue_end]
+                                            # 마지막 불완전한 객체 제거
+                                            json_str_fixed = re.sub(r',\s*\{[^}]*$', '', json_str_fixed)
+                                            json_str_fixed += '\n  ]\n}'
+                                            
+                                            try:
+                                                analysis = json.loads(json_str_fixed)
+                                                logger.warning(f"[JSON 파싱] ⚠️ 방법2: issues 배열 복구로 JSON 파싱 성공")
+                                                recovery_attempted = True
+                                            except:
+                                                pass
+                            except Exception as e:
+                                logger.debug(f"[JSON 파싱] 복구 방법2 실패: {str(e)}")
+                        
+                        # 복구 방법 3: 에러 위치 이전의 완전한 구조만 사용하고 나머지 필드 추가
+                        if analysis is None:
+                            try:
+                                # 에러 위치 이전에서 완전한 필드들만 추출
+                                error_pos = json_err.pos
+                                
+                                # 마지막 완전한 필드 찾기 (쉼표로 구분)
+                                last_comma = json_str.rfind(',', 0, error_pos)
+                                if last_comma > 0:
+                                    # 마지막 쉼표 이전까지가 완전한 구조
+                                    json_str_fixed = json_str[:last_comma]
+                                    
+                                    # issues 배열이 열려있으면 닫기
+                                    if '"issues"' in json_str_fixed:
+                                        issues_start = json_str_fixed.find('"issues"')
+                                        issues_array_start = json_str_fixed.find('[', issues_start)
+                                        if issues_array_start != -1:
+                                            # issues 배열 닫기
+                                            json_str_fixed = json_str_fixed[:issues_array_start]
+                                            # 완전한 issues 항목들 찾기
+                                            issues_match = re.search(r'"issues"\s*:\s*\[([\s\S]*?)\]', json_str[:error_pos])
+                                            if issues_match:
+                                                json_str_fixed += f'\n  "issues": [{issues_match.group(1)}]\n'
+                                            else:
+                                                json_str_fixed += '\n  "issues": []\n'
+                                    
+                                    json_str_fixed += '}'
+                                    
+                                    try:
                                         analysis = json.loads(json_str_fixed)
-                                        logger.warning(f"[JSON 파싱] ⚠️ issues 배열 복구로 JSON 파싱 성공")
-                                    else:
-                                        raise json_err
-                                except:
-                                    raise json_err
-                        else:
+                                        logger.warning(f"[JSON 파싱] ⚠️ 방법3: 마지막 완전한 필드까지 복구 성공")
+                                        recovery_attempted = True
+                                    except:
+                                        pass
+                            except Exception as e:
+                                logger.debug(f"[JSON 파싱] 복구 방법3 실패: {str(e)}")
+                        
+                        # 복구 방법 4: 최소한의 필수 필드만 포함하여 복구
+                        if analysis is None:
+                            try:
+                                # 필수 필드만 추출
+                                risk_score_match = re.search(r'"risk_score"\s*:\s*(\d+)', json_str)
+                                risk_level_match = re.search(r'"risk_level"\s*:\s*"([^"]+)"', json_str)
+                                summary_match = re.search(r'"summary"\s*:\s*"([^"]*)"', json_str, re.DOTALL)
+                                
+                                if risk_score_match and risk_level_match and summary_match:
+                                    json_str_fixed = '{\n'
+                                    json_str_fixed += f'  "risk_score": {risk_score_match.group(1)},\n'
+                                    json_str_fixed += f'  "risk_level": "{risk_level_match.group(1)}",\n'
+                                    # summary는 이스케이프 처리
+                                    summary_text = summary_match.group(1).replace('\\', '\\\\').replace('"', '\\"').replace('\n', '\\n')
+                                    json_str_fixed += f'  "summary": "{summary_text}",\n'
+                                    json_str_fixed += '  "issues": []\n'
+                                    json_str_fixed += '}'
+                                    
+                                    try:
+                                        analysis = json.loads(json_str_fixed)
+                                        logger.warning(f"[JSON 파싱] ⚠️ 방법4: 필수 필드만 추출하여 복구 성공 (issues는 빈 배열)")
+                                        recovery_attempted = True
+                                    except:
+                                        pass
+                            except Exception as e:
+                                logger.debug(f"[JSON 파싱] 복구 방법4 실패: {str(e)}")
+                        
+                        # 모든 복구 시도 실패
+                        if analysis is None:
+                            logger.error(f"[JSON 파싱] ❌ 모든 JSON 복구 시도 실패")
+                            logger.error(f"[JSON 파싱] LLM 응답 원문 전체 길이: {len(response_text)}자")
+                            logger.error(f"[JSON 파싱] LLM 응답 원문 (처음 2000자): {response_text[:2000] if response_text else 'None'}")
+                            if response_text and len(response_text) > 2000:
+                                logger.error(f"[JSON 파싱] LLM 응답 원문 (마지막 1000자): ...{response_text[-1000:]}")
+                            
+                            # 발견된 JSON 객체 개수 확인 (디버깅용)
+                            json_objects = re.findall(r'\{[^{}]*\}', json_str)
+                            logger.error(f"[JSON 파싱] 발견된 JSON 객체 개수: {len(json_objects)}")
+                            if json_objects:
+                                logger.error(f"[JSON 파싱] 첫 번째 JSON 객체 (처음 500자): {json_objects[0][:500]}")
+                            
                             raise json_err
                     risk_score = analysis.get("risk_score", 50)
                     risk_level = analysis.get("risk_level", "medium")

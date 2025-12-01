@@ -275,7 +275,7 @@ class SituationWorkflow:
             "summary_report": normalized_result.get("summary", ""),  # 4개 섹션 마크다운
             "action_plan": normalized_result.get("action_plan", {"steps": []}),  # steps 구조
             "scripts": normalized_result.get("scripts", {}),  # toCompany, toAdvisor
-            "criteria": normalized_result.get("criteria", []),  # name, status, reason
+            "criteria": normalized_result.get("criteria", []),  # RAG 기반 구조 (merge_output에서 재구성됨)
             "organizations": normalized_result.get("organizations", []),  # 추천 기관 목록
         }
     
@@ -333,50 +333,82 @@ class SituationWorkflow:
             for chunk in grounding_chunks[:8]  # 최대 8개
         ]
         
-        # criteria에 legalBasis 추가
-        # 각 criterion에 대해 관련된 legalBasis를 매핑
-        # 현재는 모든 sources를 각 criterion에 할당 (나중에 LLM이 criterion별로 관련 sources를 명시하도록 개선 가능)
-        criteria_with_legal_basis = []
-        for criterion in criteria:
-            criterion_dict = criterion.copy() if isinstance(criterion, dict) else {
-                "name": getattr(criterion, "name", ""),
-                "status": getattr(criterion, "status", "unclear"),
-                "reason": getattr(criterion, "reason", ""),
-            }
-            
-            # 각 criterion에 legalBasis 배열 추가
-            # TODO: 나중에 LLM이 criterion별로 관련 sources를 명시하도록 프롬프트 개선
-            # 현재는 모든 sources를 할당 (또는 criterion의 name/reason과 유사한 sources만 필터링)
-            legal_basis_list = []
-            for source in formatted_sources:
-                legal_basis_item = {
-                    "docId": source.get("source_id", ""),
-                    "docTitle": source.get("title", ""),
-                    "docType": source.get("source_type", "law"),
-                    "snippet": source.get("snippet", ""),
-                    "similarityScore": source.get("score", 0.0),
-                    "externalId": source.get("external_id"),
-                    "fileUrl": source.get("file_url"),
-                }
-                # chunk_index가 있으면 추가
-                chunk_idx = None
-                for chunk in grounding_chunks:
-                    if chunk.source_id == source.get("source_id"):
-                        chunk_idx = getattr(chunk, 'chunk_index', None)
-                        break
-                if chunk_idx is not None:
-                    legal_basis_item["chunkIndex"] = chunk_idx
+        # criteria를 RAG 검색 결과(grounding_chunks) 기반으로 직접 구성
+        # 새로운 구조: documentTitle, fileUrl, sourceType, similarityScore, snippet, usageReason
+        from core.file_utils import get_document_file_url
+        
+        criteria_from_rag = []
+        for chunk in grounding_chunks[:5]:  # 상위 5개만 criteria로 사용
+            try:
+                # external_id 가져오기
+                external_id = getattr(chunk, 'external_id', None)
+                if not external_id:
+                    # DB에서 조회 시도
+                    chunk_info = self.vector_store.get_legal_chunk_by_id(chunk.source_id)
+                    if chunk_info:
+                        external_id = chunk_info.get("external_id")
                 
-                legal_basis_list.append(legal_basis_item)
-            
-            criterion_dict["legalBasis"] = legal_basis_list
-            criteria_with_legal_basis.append(criterion_dict)
+                # fileUrl 생성
+                file_url = None
+                if external_id:
+                    try:
+                        file_url = get_document_file_url(
+                            external_id=external_id,
+                            source_type=chunk.source_type,
+                            expires_in=3600
+                        )
+                    except Exception as e:
+                        logger.warning(f"[워크플로우] criteria fileUrl 생성 실패 (external_id={external_id}, source_type={chunk.source_type}): {str(e)}")
+                
+                # usageReason 생성 (간단한 템플릿, 나중에 LLM으로 개선 가능)
+                usage_reason = f"현재 상황과 관련된 {chunk.title}의 내용을 참고하여 법적 판단 기준으로 사용했습니다."
+                
+                # 상황에 맞는 usageReason 생성 (더 구체적으로)
+                situation_text = state.get("situation_text", "")
+                if situation_text:
+                    # 간단한 키워드 매칭으로 usageReason 개선
+                    if "임금" in situation_text or "급여" in situation_text or "체불" in situation_text:
+                        if chunk.source_type == "standard_contract":
+                            usage_reason = f"현재 계약서의 임금 지급 관련 규정이 불명확한 부분이 있어, {chunk.title}의 임금 지급 및 지연 배상 규정을 비교 기준으로 사용했습니다."
+                        else:
+                            usage_reason = f"임금 체불 상황과 관련하여 {chunk.title}의 임금 지급 의무 및 지연 배상 규정을 판단 기준으로 사용했습니다."
+                    elif "해고" in situation_text or "계약해지" in situation_text:
+                        usage_reason = f"해고 또는 계약해지 관련 상황에서 {chunk.title}의 해고 제한 및 정당한 사유 규정을 판단 기준으로 사용했습니다."
+                    elif "근로시간" in situation_text or "야근" in situation_text or "연장근로" in situation_text:
+                        usage_reason = f"근로시간 관련 문제에서 {chunk.title}의 근로시간 규제 및 가산임금 규정을 판단 기준으로 사용했습니다."
+                    elif "수습" in situation_text or "인턴" in situation_text:
+                        usage_reason = f"수습 또는 인턴 관련 상황에서 {chunk.title}의 수습기간 및 계약 조건 규정을 판단 기준으로 사용했습니다."
+                    elif "괴롭힘" in situation_text or "모욕" in situation_text:
+                        usage_reason = f"직장 내 괴롭힘 관련 상황에서 {chunk.title}의 괴롭힘 정의 및 예방 규정을 판단 기준으로 사용했습니다."
+                
+                criteria_item = {
+                    "documentTitle": chunk.title,
+                    "fileUrl": file_url,
+                    "sourceType": chunk.source_type,
+                    "similarityScore": float(chunk.score),
+                    "snippet": chunk.snippet[:500] if len(chunk.snippet) > 500 else chunk.snippet,  # 최대 500자
+                    "usageReason": usage_reason,
+                }
+                
+                # criteria 내부 내용 로그 출력
+                logger.info(f"[워크플로우] criteria[{len(criteria_from_rag)}] 생성 완료:")
+                logger.info(f"  documentTitle: {criteria_item['documentTitle']}")
+                logger.info(f"  fileUrl: {criteria_item['fileUrl']}")
+                logger.info(f"  sourceType: {criteria_item['sourceType']}")
+                logger.info(f"  similarityScore: {criteria_item['similarityScore']:.4f}")
+                logger.info(f"  snippet: {criteria_item['snippet'][:100]}..." if len(criteria_item['snippet']) > 100 else f"  snippet: {criteria_item['snippet']}")
+                logger.info(f"  usageReason: {criteria_item['usageReason']}")
+                
+                criteria_from_rag.append(criteria_item)
+            except Exception as e:
+                logger.warning(f"[워크플로우] criteria 항목 생성 실패 (chunk_id={chunk.source_id}): {str(e)}", exc_info=True)
+                continue
         
         final_output = {
             "classified_type": classification.get("classified_type", "unknown"),
             "risk_score": classification.get("risk_score", 50),
             "summary": summary_report,  # generate_action_guide에서 생성된 4개 섹션 마크다운
-            "criteria": criteria_with_legal_basis,  # legalBasis 포함
+            "criteria": criteria_from_rag,  # RAG 검색 결과 기반 criteria (새로운 구조)
             "action_plan": action_plan,  # steps 구조
             "scripts": scripts,  # toCompany, toAdvisor
             "related_cases": formatted_related_cases,

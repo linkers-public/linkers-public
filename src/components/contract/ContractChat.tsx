@@ -551,7 +551,11 @@ export function ContractChat({
                           )}
                         </>
                       ) : (
-                        <p className="whitespace-pre-wrap text-sm leading-relaxed text-white">{message.content}</p>
+                        // Contract 페이지용 사용자 메시지 - 단순 텍스트만 표시
+                        // (Quick 상담 페이지와 달리 컨텍스트 정보 없이 깔끔하게)
+                        <p className="whitespace-pre-wrap text-sm leading-relaxed text-white font-medium">
+                          {message.content}
+                        </p>
                       )}
                     </div>
                     <p className={cn(

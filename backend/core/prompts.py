@@ -779,7 +779,7 @@ interface SituationChatResponse {{
 5. **conversationExamples**: 사용자와 AI의 대화 예시. 사용자의 질문과 AI의 답변을 포함하세요.
 
 **응답 형식 예시:**
-```json
+
 {{
   "reportTitle": "상황 분석의 결과",
   "legalPerspective": {{
@@ -816,7 +816,7 @@ interface SituationChatResponse {{
     }}
   ]
 }}
-```
+
 
 **⚠️ 중요:** 위 예시처럼 반드시 ```json으로 시작하고 ```로 끝나는 코드 블록 형식으로 응답하세요.
 

@@ -1670,58 +1670,48 @@ export default function QuickAssistPage() {
                   <div
                     key={message.id}
                     className={cn(
-                      "flex gap-3 sm:gap-4 animate-in fade-in slide-in-from-bottom-3 duration-500",
+                      "group flex gap-3 sm:gap-4 animate-in fade-in slide-in-from-bottom-3 duration-500",
                       message.role === 'user' ? 'justify-end' : 'justify-start',
                       index === 0 && "mt-2"
                     )}
                     style={{ animationDelay: `${index * 50}ms` }}
                   >
+                    {/* 왼쪽 아바타 (assistant일 때만) */}
                     {message.role === 'assistant' && (
                       <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg ring-2 ring-white/50">
                         <Bot className="w-5 h-5 text-white" />
                       </div>
                     )}
                     
+                    {/* 버블 + 타임스탬프/액션 */}
                     <div className={cn(
                       "flex flex-col gap-2 max-w-[85%] sm:max-w-[75%]",
                       message.role === 'user' ? 'items-end' : 'items-start'
                     )}>
+                      {/* 말풍선 */}
                       <div
                         className={cn(
-                          "relative rounded-2xl px-5 py-3.5 shadow-md transition-all duration-200",
-                          "hover:shadow-lg",
+                          "relative rounded-2xl px-5 py-3.5 shadow-md transition-all duration-200 hover:shadow-lg",
                           message.role === 'user'
                             ? "bg-gradient-to-br from-blue-600 to-indigo-600 text-white rounded-br-sm"
                             : "bg-white border border-slate-200/80 text-slate-900 rounded-bl-sm"
                         )}
                       >
                         {message.role === 'assistant' ? (
-                          // 메시지의 context_type에 따라 다른 컴포넌트 사용
-                          // 최종 구분 구조:
-                          // 1. 상황 분석 (context_type === 'situation') -> SituationChatMessage (구조화된 카드 UI)
-                          // 2. 계약서 (context_type === 'contract') -> LegalChatMessage (Contract 페이지와 동일한 구조화된 탭 UI)
-                          // 3. 일반 (context_type === 'none' 또는 없음) -> QuickChatMessage (마크다운 렌더링)
-                          (() => {
-                            const contextType = message.context_type || 'none'
-                            if (contextType === 'situation') {
-                              return (
-                                <SituationChatMessage 
-                                  content={message.content} 
-                                  contextId={message.context_id || null}
-                                />
-                              )
-                            } else if (contextType === 'contract') {
-                              return (
-                                <LegalChatMessage content={message.content} />
-                              )
-                            } else {
-                              // 'none' 또는 undefined
-                              return (
-                                <QuickChatMessage content={message.content} />
-                              )
-                            }
-                          })()
+                          // Assistant 버블 내용
+                          // 상황 컨텍스트 있는 경우 자동으로 리포트 안내 섹션 노출
+                          message.context_type === 'situation' ? (
+                            <SituationChatMessage 
+                              content={message.content} 
+                              contextId={message.context_id || null}
+                            />
+                          ) : message.context_type === 'contract' ? (
+                            <LegalChatMessage content={message.content} />
+                          ) : (
+                            <QuickChatMessage content={message.content} />
+                          )
                         ) : (
+                          // User 버블 내용
                           <UserMessageWithContext 
                             message={message}
                             reportCache={reportCache}
@@ -1751,9 +1741,11 @@ export default function QuickAssistPage() {
                         ) : null
                       })()}
                       
-                      <div className="flex items-center gap-2 px-1">
+                      {/* 하단 타임스탬프 + 액션 버튼 */}
+                      <div className="flex items-center gap-2 px-1 text-xs">
+                        {/* 공통 시간 표시 */}
                         <span className={cn(
-                          "text-xs font-medium",
+                          "font-medium",
                           message.role === 'user' ? 'text-slate-500' : 'text-slate-400'
                         )}>
                           {message.timestamp.toLocaleTimeString('ko-KR', {
@@ -1761,6 +1753,7 @@ export default function QuickAssistPage() {
                             minute: '2-digit',
                           })}
                         </span>
+                        {/* User 메시지 전용 액션 버튼 (수정 / 복사) - group-hover일 때만 보이게 */}
                         {message.role === 'user' && (
                           <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <Button
@@ -1783,7 +1776,7 @@ export default function QuickAssistPage() {
                             </Button>
                           </div>
                         )}
-                        {/* 기존 reportId 기반 리포트 보기 버튼 (컨텍스트 링크가 없을 때만 표시) */}
+                        {/* 리포트 버튼 (옛 방식 - 컨텍스트 링크가 없고 reportId만 있는 예전 메시지에 대해) */}
                         {message.role === 'assistant' && message.reportId && !getContextLink(message) && (
                           <Button
                             variant="outline"
@@ -1798,6 +1791,7 @@ export default function QuickAssistPage() {
                       </div>
                     </div>
 
+                    {/* 오른쪽 아바타 (user일 때만) */}
                     {message.role === 'user' && (
                       <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-slate-400 to-slate-500 flex items-center justify-center shadow-lg ring-2 ring-white/50">
                         <User className="w-5 h-5 text-white" />
@@ -1806,13 +1800,17 @@ export default function QuickAssistPage() {
                   </div>
                 ))}
                 
+                {/* 로딩 버블 - AI가 답변 생성 중일 때 */}
                 {isAnalyzing && (
                   <div className="flex gap-3 sm:gap-4 justify-start animate-in fade-in slide-in-from-bottom-3" role="status" aria-live="polite">
+                    {/* 왼쪽 아바타 */}
                     <div className="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg ring-2 ring-white/50 animate-pulse">
                       <Bot className="w-5 h-5 text-white" />
                     </div>
+                    {/* 로딩 말풍선 */}
                     <div className="bg-white border border-slate-200/80 rounded-2xl rounded-bl-sm px-5 py-3.5 shadow-md">
                       <div className="flex items-center gap-3">
+                        {/* 점 3개 바운스 애니메이션 */}
                         <div className="flex gap-1.5" aria-hidden="true">
                           <div className="w-2.5 h-2.5 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
                           <div className="w-2.5 h-2.5 bg-blue-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>

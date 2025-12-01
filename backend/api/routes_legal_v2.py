@@ -1268,50 +1268,14 @@ async def analyze_situation(
         elif result["risk_score"] >= 40:
             risk_level = "medium"
         
-        # legalBasis 변환 (status 필드 보존)
+        # legalBasis는 더 이상 criteria에서 추출하지 않음
+        # criteria가 이미 RAG 검색 결과 기반 구조이므로 legalBasis는 빈 배열로 설정
+        # (하위 호환성을 위해 유지하되, 실제로는 criteria를 사용)
         legal_basis = []
-        for criteria in result.get("criteria", []):
-            legal_basis.append({
-                "title": criteria.get("name", ""),
-                "snippet": criteria.get("reason", ""),
-                "sourceType": "law",
-                "status": criteria.get("status", "likely"),  # status 필드 보존
-            })
         
-        # action_plan.steps에서 checklist와 recommendations 구분
-        action_plan = result.get("action_plan", {})
-        steps = action_plan.get("steps", [])
-        
-        # action_plan이 비어있으면 summary에서 "지금 당장 할 수 있는 행동" 섹션 파싱
-        if len(steps) == 0:
-            summary_text = result.get("summary", "")
-            # "## 지금 당장 할 수 있는 행동" 섹션 추출
-            action_section_match = re.search(
-                r'##\s*지금\s*당장\s*할\s*수\s*있는\s*행동\s*\n(.*?)(?=##|$)',
-                summary_text,
-                re.DOTALL | re.IGNORECASE
-            )
-            if action_section_match:
-                action_content = action_section_match.group(1).strip()
-                # "- " 또는 "* "로 시작하는 리스트 항목 추출
-                action_items = re.findall(r'[-*]\s*(.+?)(?=\n[-*]|\n##|$)', action_content, re.MULTILINE)
-                action_items = [item.strip() for item in action_items if item.strip()]
-                if action_items:
-                    # 첫 번째 step으로 추가
-                    steps = [{
-                        "title": "즉시 조치",
-                        "items": action_items[:5]  # 최대 5개
-                    }]
-        
-        # checklist: 첫 번째 step의 items만 사용
+        # action_plan, checklist, recommendations는 더 이상 사용하지 않음
         checklist = []
-        if len(steps) > 0:
-            checklist = steps[0].get("items", [])
-        
-        # recommendations: 나머지 steps의 items 병합
         recommendations = []
-        for step in steps[1:]:
-            recommendations.extend(step.get("items", []))
         
         # scripts 변환
         scripts_data = result.get("scripts", {})
@@ -1497,35 +1461,42 @@ async def analyze_situation(
         # v2 응답 생성 (DB 저장 후 ID 포함)
         # Pydantic 모델에 없는 필드는 dict로 변환 후 추가
         
-        # criteria 확인 및 로깅
+        # criteria 확인 및 로깅 (새로운 구조: RAG 검색 결과 기반)
         criteria_from_result = result.get("criteria", [])
         _logger.info(f"[analyze-situation] result에서 criteria 가져옴: 개수={len(criteria_from_result) if isinstance(criteria_from_result, list) else 0}")
-        if criteria_from_result:
-            _logger.info(f"[analyze-situation] criteria 첫 번째 항목: {criteria_from_result[0] if isinstance(criteria_from_result, list) and len(criteria_from_result) > 0 else 'N/A'}")
         
-        # criteria를 CriteriaItem 모델 리스트로 변환
+        # criteria는 이미 RAG 검색 결과 기반 구조 (documentTitle, fileUrl, sourceType, similarityScore, snippet, usageReason)
+        # CriteriaItem 모델을 사용하지 않고 dict로 직접 사용
         criteria_items = []
         if isinstance(criteria_from_result, list) and len(criteria_from_result) > 0:
             for idx, criterion in enumerate(criteria_from_result):
                 if isinstance(criterion, dict):
-                    # 디버깅: criterion의 reason 필드 확인
-                    _logger.info(f"[analyze-situation] criterion[{idx}] 원본: name={criterion.get('name', '')}, reason={criterion.get('reason', '')[:100] if criterion.get('reason') else 'None'}...")
-                    # reason 필드가 없거나 비어있으면 경고
-                    if not criterion.get('reason') or not criterion.get('reason', '').strip():
-                        _logger.warning(f"[analyze-situation] criterion[{idx}]에 reason 필드가 없거나 비어있습니다: {criterion}")
-                    criteria_items.append(CriteriaItem(**criterion))
+                    # 새로운 구조 검증 및 변환
+                    criteria_item = {
+                        "documentTitle": criterion.get("documentTitle", ""),
+                        "fileUrl": criterion.get("fileUrl"),
+                        "sourceType": criterion.get("sourceType", "law"),
+                        "similarityScore": float(criterion.get("similarityScore", 0.0)),
+                        "snippet": criterion.get("snippet", ""),
+                        "usageReason": criterion.get("usageReason", ""),
+                    }
+                    criteria_items.append(criteria_item)
+                    
+                    # criteria 내부 내용 상세 로그 출력
+                    _logger.info(f"[analyze-situation] criteria[{idx}] 내부 내용:")
+                    _logger.info(f"  documentTitle: {criteria_item['documentTitle']}")
+                    _logger.info(f"  fileUrl: {criteria_item['fileUrl']}")
+                    _logger.info(f"  sourceType: {criteria_item['sourceType']}")
+                    _logger.info(f"  similarityScore: {criteria_item['similarityScore']:.4f}")
+                    snippet_preview = criteria_item['snippet'][:100] + "..." if len(criteria_item['snippet']) > 100 else criteria_item['snippet']
+                    _logger.info(f"  snippet: {snippet_preview}")
+                    _logger.info(f"  usageReason: {criteria_item['usageReason']}")
                 else:
+                    # 이미 올바른 형식인 경우 그대로 사용
                     criteria_items.append(criterion)
         
-        # actionPlan을 ActionPlan 모델로 변환
-        action_plan_dict = result.get("action_plan", {})
+        # actionPlan은 더 이상 사용하지 않음
         action_plan_model = None
-        if action_plan_dict and isinstance(action_plan_dict, dict) and action_plan_dict.get("steps"):
-            try:
-                action_plan_model = ActionPlan(**action_plan_dict)
-            except Exception as e:
-                _logger.warning(f"[analyze-situation] actionPlan 변환 실패: {str(e)}, 원본 사용: {action_plan_dict}")
-                action_plan_model = None
         
         response_dict = {
             "id": situation_analysis_id,  # DB 저장 후 ID 포함
@@ -1535,15 +1506,15 @@ async def analyze_situation(
             "analysis": {
                 "summary": result.get("summary", ""),
                 "legalBasis": legal_basis,
-                "recommendations": recommendations[:5],  # 최대 5개
+                "recommendations": [],  # 더 이상 사용하지 않음
             },
-            "checklist": checklist,
+            "checklist": [],  # 더 이상 사용하지 않음
             "scripts": scripts,
             "relatedCases": related_cases,
             "sources": sources,  # RAG 검색 출처
             # 프론트엔드가 기대하는 추가 필드들 (이제 모델에 포함됨)
-            "criteria": criteria_items,  # 법적 판단 기준
-            "actionPlan": action_plan_model,  # 행동 계획
+            "criteria": criteria_items,  # 법적 판단 기준 (RAG 검색 결과 기반)
+            "actionPlan": None,  # 더 이상 사용하지 않음
             "organizations": result.get("organizations", []),  # 추천 기관 목록
         }
         response = SituationResponseV2(**response_dict)
