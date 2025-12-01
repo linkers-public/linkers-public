@@ -40,8 +40,6 @@ from models.schemas import (
     ConversationRequestV2,
     CreateChatSessionRequest,
     ChatMessageRequest,
-    ActionPlan,
-    CriteriaItem,
 )
 from core.legal_rag_service import LegalRAGService
 from core.document_processor_v2 import DocumentProcessor
@@ -1258,6 +1256,9 @@ async def analyze_situation(
         
         # 디버깅: 워크플로우 결과 확인
         _logger.info(f"[analyze-situation] 워크플로우 결과 키: {list(result.keys()) if isinstance(result, dict) else 'Not a dict'}")
+        _logger.info(f"[analyze-situation] 워크플로우 결과 summary 존재: {bool(result.get('summary'))}, 길이: {len(result.get('summary', ''))}자")
+        _logger.info(f"[analyze-situation] 워크플로우 결과 summary (처음 200자): {result.get('summary', '')[:200]}")
+        _logger.info(f"[analyze-situation] 워크플로우 결과 findings 존재: {bool(result.get('findings'))}, 개수: {len(result.get('findings', []))}개")
         _logger.info(f"[analyze-situation] 워크플로우 결과 criteria: {result.get('criteria', 'NOT FOUND')}")
         _logger.info(f"[analyze-situation] 워크플로우 결과 criteria 타입: {type(result.get('criteria', []))}")
         _logger.info(f"[analyze-situation] 워크플로우 결과 criteria 길이: {len(result.get('criteria', [])) if isinstance(result.get('criteria', []), list) else 'Not a list'}")
@@ -1269,9 +1270,8 @@ async def analyze_situation(
         elif result["risk_score"] >= 40:
             risk_level = "medium"
         
-        # action_plan, checklist, recommendations는 더 이상 사용하지 않음
+        # action_plan, checklist, recommendations는 더 이상 사용하지 않음 (레거시 호환을 위해 빈 배열로 DB 저장)
         checklist = []
-        recommendations = []
         
         # scripts 변환 (이메일 템플릿 구조: {subject, body})
         scripts_data = result.get("scripts", {})
@@ -1484,9 +1484,6 @@ async def analyze_situation(
         
         _logger.info(f"relatedCases 문서 단위 그룹핑 완료: {len(related_cases)}개 문서 (원본 grounding_chunks: {len(grounding_chunks)}개)")
         
-        # tags 추출 (classified_type 기반)
-        tags = [result.get("classified_type", "unknown")]
-        
         # sources 변환 (RAG 검색 출처)
         sources = []
         grounding_chunks = result.get("grounding_chunks", [])
@@ -1603,56 +1600,63 @@ async def analyze_situation(
         criteria_from_result = result.get("criteria", [])
         _logger.info(f"[analyze-situation] result에서 criteria 가져옴: 개수={len(criteria_from_result) if isinstance(criteria_from_result, list) else 0}")
         
-        # criteria는 이미 RAG 검색 결과 기반 구조 (documentTitle, fileUrl, sourceType, similarityScore, snippet, usageReason)
-        # CriteriaItem 모델을 사용하지 않고 dict로 직접 사용
-        criteria_items = []
+        # criteria는 이미 RAG 검색 결과 기반 구조로 워크플로우에서 생성됨
+        # 로그 출력 (디버깅용)
         if isinstance(criteria_from_result, list) and len(criteria_from_result) > 0:
-            for idx, criterion in enumerate(criteria_from_result):
+            for idx, criterion in enumerate(criteria_from_result[:3]):  # 처음 3개만 로그
                 if isinstance(criterion, dict):
-                    # 새로운 구조 검증 및 변환
-                    criteria_item = {
-                        "documentTitle": criterion.get("documentTitle", ""),
-                        "fileUrl": criterion.get("fileUrl"),
-                        "sourceType": criterion.get("sourceType", "law"),
-                        "similarityScore": float(criterion.get("similarityScore", 0.0)),
-                        "snippet": criterion.get("snippet", ""),
-                        "usageReason": criterion.get("usageReason", ""),
+                    _logger.info(f"[analyze-situation] criteria[{idx}] 요약: documentTitle={criterion.get('documentTitle', '')[:30]}, sourceType={criterion.get('sourceType', '')}")
+        
+        # scripts를 dict로 변환 (Pydantic 모델이면 model_dump 사용)
+        scripts_dict = None
+        if scripts:
+            if hasattr(scripts, 'model_dump'):
+                scripts_dict = scripts.model_dump()
+            elif isinstance(scripts, dict):
+                scripts_dict = scripts
+            else:
+                # 기본 구조로 변환
+                scripts_dict = {
+                    "toCompany": {
+                        "subject": getattr(scripts, 'toCompany', {}).get('subject', '') if hasattr(scripts, 'toCompany') else '',
+                        "body": getattr(scripts, 'toCompany', {}).get('body', '') if hasattr(scripts, 'toCompany') else ''
+                    },
+                    "toAdvisor": {
+                        "subject": getattr(scripts, 'toAdvisor', {}).get('subject', '') if hasattr(scripts, 'toAdvisor') else '',
+                        "body": getattr(scripts, 'toAdvisor', {}).get('body', '') if hasattr(scripts, 'toAdvisor') else ''
                     }
-                    criteria_items.append(criteria_item)
-                    
-                    # criteria 내부 내용 상세 로그 출력
-                    _logger.info(f"[analyze-situation] criteria[{idx}] 내부 내용:")
-                    _logger.info(f"  documentTitle: {criteria_item['documentTitle']}")
-                    _logger.info(f"  fileUrl: {criteria_item['fileUrl']}")
-                    _logger.info(f"  sourceType: {criteria_item['sourceType']}")
-                    _logger.info(f"  similarityScore: {criteria_item['similarityScore']:.4f}")
-                    snippet_preview = criteria_item['snippet'][:100] + "..." if len(criteria_item['snippet']) > 100 else criteria_item['snippet']
-                    _logger.info(f"  snippet: {snippet_preview}")
-                    _logger.info(f"  usageReason: {criteria_item['usageReason']}")
-                else:
-                    # 이미 올바른 형식인 경우 그대로 사용
-                    criteria_items.append(criterion)
+                }
         
-        # actionPlan은 더 이상 사용하지 않음
-        action_plan_model = None
+        # tags 추출 (classified_type 기반)
+        tags = [result.get("classified_type", "unknown")]
         
-        # 최종 응답: summary, findings, relatedCases, scripts만 포함
+        # 최종 응답: id, riskScore, riskLevel, tags + summary, findings, relatedCases, scripts, organizations 포함
         response_dict_final = {
-            "summary": result.get("summary", ""),
+            "id": situation_analysis_id,  # DB 저장 후 생성된 ID
+            "riskScore": float(result.get("risk_score", 0)),  # 위험도 점수
+            "riskLevel": risk_level,  # 위험도 레벨 (low/medium/high)
+            "tags": tags,  # 분류 태그 (classified_type 기반)
+            "summary": result.get("summary") or result.get("summary_report") or "## 📊 상황 분석의 결과\n\n상황을 분석했습니다. 아래 법적 관점과 행동 가이드를 참고하세요.\n\n## ⚖️ 법적 관점에서 본 현재 상황\n\n관련 법령을 확인하는 중입니다.\n\n## 🎯 지금 당장 할 수 있는 행동\n\n- 상황을 다시 확인해주세요\n- 잠시 후 다시 시도해주세요\n\n## 💬 이렇게 말해보세요\n\n상담 기관에 문의하시기 바랍니다.",
             "findings": result.get("findings", []),  # 법적 쟁점 발견 항목
             "relatedCases": related_cases,  # 법적 문서 (문서 단위 그룹핑)
-            "scripts": scripts,  # 이메일 템플릿 (to_company, to_advisor)
+            "scripts": scripts_dict or {
+                "toCompany": {"subject": "", "body": ""},
+                "toAdvisor": {"subject": "", "body": ""}
+            },  # 이메일 템플릿 (to_company, to_advisor)
+            "organizations": result.get("organizations", []),  # 추천 기관 목록
         }
         
         _logger.info(f"[analyze-situation] 최종 응답 생성:")
+        _logger.info(f"  - id: {response_dict_final.get('id')}")
+        _logger.info(f"  - riskScore: {response_dict_final.get('riskScore')}")
+        _logger.info(f"  - riskLevel: {response_dict_final.get('riskLevel')}")
+        _logger.info(f"  - tags: {response_dict_final.get('tags')}")
         _logger.info(f"  - summary 길이: {len(response_dict_final.get('summary', ''))}자")
         _logger.info(f"  - findings 개수: {len(response_dict_final.get('findings', []))}개")
         _logger.info(f"  - relatedCases 개수: {len(response_dict_final.get('relatedCases', []))}개")
         _logger.info(f"  - scripts 존재: {bool(response_dict_final.get('scripts'))}")
         
         return response_dict_final
-        
-        return response
     except Exception as e:
         _logger.error(f"상황 분석 중 오류 발생: {str(e)}", exc_info=True)
         raise HTTPException(

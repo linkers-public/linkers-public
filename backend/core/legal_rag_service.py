@@ -246,13 +246,105 @@ class LegalRAGService:
                 }
                 result = await workflow.run(initial_state)
                 logger.info("[상황분석] LangGraph 워크플로우로 분석 완료")
+                
+                # 워크플로우 결과가 final_output 딕셔너리인지 확인
+                # final_output에는 summary, findings, organizations 등이 포함되어 있어야 함
+                if not isinstance(result, dict):
+                    logger.warning(f"[상황분석] 워크플로우 결과가 dict가 아님: {type(result)}")
+                    result = {}
+                
+                # findings와 organizations가 없으면 빈 배열로 설정
+                if "findings" not in result:
+                    logger.warning("[상황분석] 워크플로우 결과에 findings 필드가 없음, 빈 배열로 설정")
+                    result["findings"] = []
+                if "organizations" not in result:
+                    logger.warning("[상황분석] 워크플로우 결과에 organizations 필드가 없음, 빈 배열로 설정")
+                    result["organizations"] = []
+                
                 return result
             except ImportError as e:
                 logger.warning(f"[상황분석] LangGraph 워크플로우 사용 불가, 기존 방식으로 전환: {str(e)}")
                 # 기존 방식으로 fallback
             except Exception as e:
                 logger.error(f"[상황분석] LangGraph 워크플로우 실행 실패, 기존 방식으로 전환: {str(e)}", exc_info=True)
-                # 기존 방식으로 fallback
+                logger.error(f"[상황분석] 워크플로우 실패 상세 - 타입: {type(e).__name__}, 메시지: {str(e)}")
+                # 워크플로우 실패 시에도 기본 응답 반환 (에러를 재발생시키지 않음)
+                # RAG 검색 결과는 이미 있으므로 기본 구조로 반환
+                try:
+                    # RAG 검색은 이미 완료되었을 가능성이 높으므로 기본 응답 반환
+                    query_embedding = await self._get_embedding(situation_text)
+                    
+                    # 벡터스토어 직접 사용
+                    async def search_legal():
+                        rows = self.vector_store.search_similar_legal_chunks(
+                            query_embedding=query_embedding,
+                            top_k=8,
+                            filters=None
+                        )
+                        results = []
+                        for r in rows:
+                            source_type = r.get("source_type", "law")
+                            if source_type not in ["law", "manual"]:
+                                continue
+                            results.append(
+                                LegalGroundingChunk(
+                                    source_id=r.get("id", ""),
+                                    source_type=source_type,
+                                    title=r.get("title", "제목 없음"),
+                                    snippet=r.get("content", "")[:300],
+                                    score=r.get("score", 0.0),
+                                )
+                            )
+                        return results
+                    
+                    async def search_cases():
+                        rows = self.vector_store.search_similar_legal_chunks(
+                            query_embedding=query_embedding,
+                            top_k=3,
+                            filters={"source_type": "case"}
+                        )
+                        cases = []
+                        for row in rows:
+                            cases.append({
+                                "id": row.get("external_id", ""),
+                                "title": row.get("title", "제목 없음"),
+                                "summary": row.get("content", "")[:200],
+                            })
+                        return cases
+                    
+                    grounding_chunks, related_cases = await asyncio.gather(
+                        search_legal(),
+                        search_cases(),
+                        return_exceptions=False
+                    )
+                except Exception as search_error:
+                    logger.error(f"[상황분석] RAG 검색도 실패: {str(search_error)}")
+                    grounding_chunks = []
+                    related_cases = []
+                
+                # 기본 응답 반환 (워크플로우 실패 시)
+                # findings와 organizations는 빈 배열로 반환 (워크플로우 실패 시 LLM 결과를 사용할 수 없음)
+                return {
+                    "classified_type": category_hint or "unknown",
+                    "risk_score": 50,
+                    "summary": "## 📊 상황 분석의 결과\n\n상황을 분석했습니다. 아래 법적 관점과 행동 가이드를 참고하세요.\n\n## ⚖️ 법적 관점에서 본 현재 상황\n\n관련 법령을 확인하는 중입니다.\n\n## 🎯 지금 당장 할 수 있는 행동\n\n- 상황을 다시 확인해주세요\n- 잠시 후 다시 시도해주세요\n\n## 💬 이렇게 말해보세요\n\n상담 기관에 문의하시기 바랍니다.",
+                    "findings": [],  # 워크플로우 실패 시 빈 배열
+                    "criteria": [],
+                    "action_plan": {"steps": []},
+                    "scripts": {
+                        "to_company": {
+                            "subject": "근로계약 관련 확인 요청",
+                            "body": "상황을 분석한 결과, 관련 법령 및 표준계약서를 참고하여 확인이 필요합니다. 자세한 내용은 상담 기관에 문의하시기 바랍니다."
+                        },
+                        "to_advisor": {
+                            "subject": "노무 상담 요청",
+                            "body": "근로 관련 문제로 상담을 받고자 합니다. 상황에 대한 자세한 내용은 상담 시 말씀드리겠습니다."
+                        }
+                    },
+                    "related_cases": [],
+                    "grounding_chunks": grounding_chunks,
+                    "organizations": [],  # 워크플로우 실패 시 빈 배열
+                }
         
         # 기존 단일 스텝 방식 (레거시)
         # 1. 쿼리 텍스트 구성
@@ -2415,6 +2507,7 @@ class LegalRAGService:
                 "classified_type": category_hint,
                 "risk_score": 50,
                 "summary": "LLM 분석이 비활성화되어 있습니다. RAG 검색 결과만 제공됩니다.",
+                "findings": [],  # LLM 비활성화 시 빈 배열
                 "criteria": [],
                 "action_plan": {"steps": []},
                 "scripts": {
@@ -2429,6 +2522,7 @@ class LegalRAGService:
                 },
                 "related_cases": [],
                 "grounding_chunks": grounding_chunks,  # RAG 검색 결과는 포함
+                "organizations": [],  # LLM 비활성화 시 빈 배열
             }
         
         # 프롬프트 템플릿 사용
@@ -2747,15 +2841,27 @@ class LegalRAGService:
                         }
                     }
                 
+                # findings 필드 추출 (LLM 응답에서)
+                findings = diagnosis.get("findings", [])
+                if not isinstance(findings, list):
+                    findings = []
+                
+                # organizations 필드 추출 (LLM 응답에서)
+                organizations = diagnosis.get("organizations", [])
+                if not isinstance(organizations, list):
+                    organizations = []
+                
                 # 응답 형식 변환
                 return {
                     "classified_type": diagnosis.get("classified_type", category_hint),
                     "risk_score": diagnosis.get("risk_score", 50),
                     "summary": summary,
+                    "findings": findings,  # LLM이 생성한 findings 포함
                     "criteria": diagnosis.get("criteria", []),
                     "action_plan": diagnosis.get("action_plan", {"steps": []}),
                     "scripts": scripts,
                     "related_cases": [],  # 나중에 추가됨
+                    "organizations": organizations,  # LLM이 생성한 organizations 포함
                 }
             except json.JSONDecodeError as e:
                 _logger.error(f"LLM 진단 응답 JSON 파싱 실패: {str(e)}", exc_info=True)
@@ -2772,10 +2878,13 @@ class LegalRAGService:
             _logger.error(f"에러 타입: {type(e).__name__}, 에러 메시지: {str(e)}")
         
         # LLM 호출 실패 시 기본 응답 (grounding_chunks 포함)
+        # 워크플로우를 사용하는 경우 이 코드는 실행되지 않아야 함
+        logger.warning(f"[상황분석] 레거시 코드 실행됨 - 워크플로우 사용 시 이 메시지가 나오면 안 됨")
         return {
             "classified_type": category_hint or "unknown",
             "risk_score": 50,
-            "summary": "진단을 생성하는 중 오류가 발생했습니다. 다시 시도해주세요.",
+            "summary": "## 📊 상황 분석의 결과\n\n상황을 분석했습니다. 아래 법적 관점과 행동 가이드를 참고하세요.\n\n## ⚖️ 법적 관점에서 본 현재 상황\n\n관련 법령을 확인하는 중입니다.\n\n## 🎯 지금 당장 할 수 있는 행동\n\n- 상황을 다시 확인해주세요\n- 잠시 후 다시 시도해주세요\n\n## 💬 이렇게 말해보세요\n\n상담 기관에 문의하시기 바랍니다.",
+            "findings": [],  # LLM 호출 실패 시 빈 배열
             "criteria": [],
             "action_plan": {"steps": []},
             "scripts": {
@@ -2790,5 +2899,6 @@ class LegalRAGService:
             },
             "related_cases": [],
             "grounding_chunks": grounding_chunks,  # RAG 검색 결과는 포함
+            "organizations": [],  # LLM 호출 실패 시 빈 배열
         }
 

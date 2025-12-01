@@ -816,7 +816,11 @@ class SupabaseVectorStore:
                 'standard_contract': 'standard_contracts',
             }
             bucket_folder = bucket_map.get(source_type, 'laws')
-            file_path = f"{bucket_folder}/{external_id}.pdf"
+            # external_id에 이미 .pdf가 포함되어 있으면 추가하지 않음
+            if external_id.lower().endswith('.pdf'):
+                file_path = f"{bucket_folder}/{external_id}"
+            else:
+                file_path = f"{bucket_folder}/{external_id}.pdf"
         
         try:
             # 방법 1: Supabase Python SDK의 get_public_url 메서드 사용 시도

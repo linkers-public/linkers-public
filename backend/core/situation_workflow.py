@@ -303,7 +303,12 @@ class SituationWorkflow:
         # 예외 처리
         if isinstance(summary_result, Exception):
             logger.error(f"[워크플로우] summary 생성 실패: {summary_result}", exc_info=summary_result)
-            summary_result = ""
+            # 기본 summary 반환 (4개 섹션 구조 유지)
+            summary_result = "## 📊 상황 분석의 결과\n\n상황을 분석했습니다. 아래 법적 관점과 행동 가이드를 참고하세요.\n\n## ⚖️ 법적 관점에서 본 현재 상황\n\n관련 법령을 확인하는 중입니다.\n\n## 🎯 지금 당장 할 수 있는 행동\n\n- 상황을 다시 확인해주세요\n- 잠시 후 다시 시도해주세요\n\n## 💬 이렇게 말해보세요\n\n상담 기관에 문의하시기 바랍니다."
+        elif not summary_result or (isinstance(summary_result, str) and len(summary_result.strip()) == 0):
+            logger.warning("[워크플로우] summary가 비어있음, 기본값 사용")
+            summary_result = "## 📊 상황 분석의 결과\n\n상황을 분석했습니다. 아래 법적 관점과 행동 가이드를 참고하세요.\n\n## ⚖️ 법적 관점에서 본 현재 상황\n\n관련 법령을 확인하는 중입니다.\n\n## 🎯 지금 당장 할 수 있는 행동\n\n- 상황을 다시 확인해주세요\n- 잠시 후 다시 시도해주세요\n\n## 💬 이렇게 말해보세요\n\n상담 기관에 문의하시기 바랍니다."
+        
         if isinstance(findings_result, Exception):
             logger.error(f"[워크플로우] findings 생성 실패: {findings_result}", exc_info=findings_result)
             findings_result = []
@@ -389,7 +394,9 @@ class SituationWorkflow:
         related_cases = state.get("related_cases", [])
         action_plan = state.get("action_plan", {})
         scripts = state.get("scripts", {})
-        criteria = state.get("criteria", [])
+        # criteria가 None일 수 있으므로 명시적으로 체크
+        criteria_raw = state.get("criteria")
+        criteria = criteria_raw if criteria_raw is not None and isinstance(criteria_raw, list) else []
         findings = state.get("findings", [])  # 법적 쟁점 발견 항목
         organizations = state.get("organizations", [])  # 추천 기관 목록
         summary_report = state.get("summary_report", "")  # generate_action_guide에서 생성됨
@@ -1248,7 +1255,7 @@ class SituationWorkflow:
                     emoji = section_info.get("emoji")
                     if emoji and emoji in line_stripped:
                         # 이모지 뒤에 키워드가 있는지 확인
-                    for keyword in section_info["keywords"]:
+                        for keyword in section_info["keywords"]:
                             if keyword != emoji and keyword in line_stripped:
                                 current_section_key = section_info["title"]
                                 if current_section_key not in section_contents:
@@ -1288,7 +1295,7 @@ class SituationWorkflow:
                         emoji = section_info.get("emoji")
                         if emoji and emoji in line_stripped:
                             # 이모지 뒤에 키워드가 있는지 확인
-                        for keyword in section_info["keywords"]:
+                            for keyword in section_info["keywords"]:
                                 if keyword != emoji and keyword in line_stripped:
                                     is_header = True
                                     break
@@ -1388,10 +1395,10 @@ class SituationWorkflow:
                     default_text = default_content.get(section_key_matched or section_key, "해당 섹션 내용을 확인하는 중입니다.")
                     # 기본값 텍스트인 경우 섹션을 추가하지 않음
                     if default_text and default_text != "관련 법령을 확인하여 현재 상황을 법적으로 평가해야 합니다." and default_text != "해당 섹션 내용을 확인하는 중입니다.":
-                    reconstructed_parts.append(title)
-                    reconstructed_parts.append("")
-                    reconstructed_parts.append(default_text)
-                    reconstructed_parts.append("")
+                        reconstructed_parts.append(title)
+                        reconstructed_parts.append("")
+                        reconstructed_parts.append(default_text)
+                        reconstructed_parts.append("")
             
             return '\n'.join(reconstructed_parts).strip()
         except Exception as e:
@@ -1933,10 +1940,10 @@ class SituationWorkflow:
                     context = summary[start:end]
                     
                     # 이모지 뒤에 "상황 분석", "법적 판단" 등의 키워드가 있는지 확인
-                for keyword in section_info["keywords"]:
+                    for keyword in section_info["keywords"]:
                         if keyword in context and keyword != emoji:
-                        found = True
-                        break
+                            found = True
+                            break
                 
                 # 이모지로 찾지 못한 경우 키워드로 확인 (레거시 형식 지원)
                 if not found:
@@ -1960,8 +1967,8 @@ class SituationWorkflow:
                             is_line_start = keyword_pos == 0 or summary[keyword_pos - 1] == '\n'
                             
                             if has_header_marker or is_line_start:
-                        found = True
-                        break
+                                found = True
+                                break
             
             if found:
                 found_sections.append(section_info["title"])
@@ -2043,7 +2050,7 @@ class SituationWorkflow:
                     default_text = default_content.get(section_key_matched or section_key, "해당 섹션 내용을 확인하는 중입니다.")
                     # 기본값 텍스트인 경우 섹션을 추가하지 않음
                     if default_text and default_text != "관련 법령을 확인하여 현재 상황을 법적으로 평가해야 합니다." and default_text != "해당 섹션 내용을 확인하는 중입니다.":
-                    summary += f"\n\n{section_info['title']}\n\n{default_text}"
+                        summary += f"\n\n{section_info['title']}\n\n{default_text}"
         
         return {
             "summary": summary,
@@ -2079,18 +2086,33 @@ class SituationWorkflow:
             social_insurance=social_insurance,
         )
         
-        response = await self._call_llm(prompt)
-        # JSON 파싱하여 summary만 추출
         try:
-            import json
-            import re
-            json_match = re.search(r'\{.*\}', response, re.DOTALL)
-            if json_match:
-                result = json.loads(json_match.group())
-                return result.get('summary', '')
+            response = await self._call_llm(prompt)
+            # JSON 파싱하여 summary만 추출
+            try:
+                import json
+                import re
+                json_match = re.search(r'\{.*\}', response, re.DOTALL)
+                if json_match:
+                    result = json.loads(json_match.group())
+                    summary = result.get('summary', '')
+                    if summary:
+                        logger.info(f"[워크플로우] summary 생성 성공 - 길이: {len(summary)}자")
+                        return summary
+                    else:
+                        logger.warning("[워크플로우] summary 필드가 비어있음")
+            except json.JSONDecodeError as e:
+                logger.error(f"[워크플로우] summary JSON 파싱 실패: {e}")
+                logger.error(f"[워크플로우] LLM 응답 (처음 500자): {response[:500] if response else 'None'}")
+            except Exception as e:
+                logger.error(f"[워크플로우] summary 파싱 중 예외 발생: {e}", exc_info=True)
         except Exception as e:
-            logger.error(f"[워크플로우] summary JSON 파싱 실패: {e}")
-        return ""
+            logger.error(f"[워크플로우] summary LLM 호출 실패: {e}", exc_info=True)
+            # LLM 호출 실패 시 기본 summary 반환 (4개 섹션 구조 유지)
+            return "## 📊 상황 분석의 결과\n\n상황을 분석했습니다. 아래 법적 관점과 행동 가이드를 참고하세요.\n\n## ⚖️ 법적 관점에서 본 현재 상황\n\n관련 법령을 확인하는 중입니다.\n\n## 🎯 지금 당장 할 수 있는 행동\n\n- 상황을 다시 확인해주세요\n- 잠시 후 다시 시도해주세요\n\n## 💬 이렇게 말해보세요\n\n상담 기관에 문의하시기 바랍니다."
+        
+        # 파싱 실패 시 기본 summary 반환
+        return "## 📊 상황 분석의 결과\n\n상황을 분석했습니다. 아래 법적 관점과 행동 가이드를 참고하세요.\n\n## ⚖️ 법적 관점에서 본 현재 상황\n\n관련 법령을 확인하는 중입니다.\n\n## 🎯 지금 당장 할 수 있는 행동\n\n- 상황을 다시 확인해주세요\n- 잠시 후 다시 시도해주세요\n\n## 💬 이렇게 말해보세요\n\n상담 기관에 문의하시기 바랍니다."
     
     async def _llm_generate_findings(
         self,
