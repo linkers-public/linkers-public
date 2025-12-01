@@ -294,9 +294,12 @@ export interface SourceItemV2 {
 }
 
 export interface CriteriaItemV2 {
-  name: string;
-  status: 'likely' | 'unclear' | 'unlikely';
-  reason: string;
+  documentTitle: string; // 문서 제목
+  fileUrl?: string | null; // 문서 파일 URL (Signed URL)
+  sourceType: string; // 출처 타입 (law, manual, case, standard_contract)
+  similarityScore: number; // 유사도 점수 (0.0 ~ 1.0)
+  snippet: string; // 관련 내용 스니펫
+  usageReason: string; // 사용 이유 설명
 }
 
 export interface SituationResponseV2 {

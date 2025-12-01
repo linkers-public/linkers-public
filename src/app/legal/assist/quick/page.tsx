@@ -1095,7 +1095,7 @@ export default function QuickAssistPage() {
         // 법적 관점 내용을 컨텍스트로 변환
         const legalContext = situationAnalysis.criteria
           .map((criterion, index) => {
-            const reason = criterion.reason || `${criterion.name}: ${criterion.status}`
+            const reason = criterion.usageReason || `${criterion.documentTitle}: ${criterion.sourceType}`
             return `${index + 1}. ${reason}`
           })
           .join('\n')
