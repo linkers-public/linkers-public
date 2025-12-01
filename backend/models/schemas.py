@@ -196,11 +196,13 @@ class SituationAnalysisRequest(BaseModel):
 
 
 class CriteriaItem(BaseModel):
-    """판단 기준 항목"""
-    name: str = Field(..., description="기준명")
-    status: str = Field(..., description="충족 여부 (likely, unclear, unlikely)")
-    reason: str = Field(..., description="판단 이유")
-    legalBasis: Optional[List[Dict[str, Any]]] = Field(default=None, description="법적 근거 배열 (선택적)")
+    """판단 기준 항목 (RAG 검색 결과 기반)"""
+    documentTitle: str = Field(..., description="법적 근거로 사용한 문서의 제목(파일명)")
+    fileUrl: Optional[str] = Field(None, description="해당 문서를 바로 열 수 있는 파일 URL")
+    sourceType: str = Field(..., description="문서의 종류를 나타내는 타입 값 (예: standard_contract, statute, internal_regulation 등)")
+    similarityScore: float = Field(..., description="현재 상황/쟁점과 이 문서 내용이 얼마나 유사한지 나타내는 점수(0~1 사이 실수)")
+    snippet: str = Field(..., description="실제로 참고한 문서의 일부분(조항/문단) 발췌 텍스트")
+    usageReason: str = Field(..., description="이 문서를 어떤 기준·비교·판단 목적으로 사용했는지에 대한 자연어 설명")
 
 
 class ActionStep(BaseModel):
