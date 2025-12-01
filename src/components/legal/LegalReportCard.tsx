@@ -251,17 +251,20 @@ export function LegalReportCard({ analysisResult, onCopy }: LegalReportCardProps
                           </div>
                         ) : null}
                         
-                        {/* 파일 다운로드 버튼 */}
+                        {/* 문서보기 버튼 */}
                         {fileUrl && (
-                          <a
-                            href={fileUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 hover:underline transition-colors"
-                          >
-                            <span>원본 문서 보기</span>
-                            <ExternalLink className="w-3 h-3" />
-                          </a>
+                          <div className="mt-3">
+                            <a
+                              href={fileUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg shadow-sm transition-all hover:shadow-md"
+                            >
+                              <FileText className="w-4 h-4" />
+                              <span>문서보기</span>
+                              <ExternalLink className="w-3 h-3" />
+                            </a>
+                          </div>
                         )}
                       </div>
                     </div>

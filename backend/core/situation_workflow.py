@@ -569,6 +569,28 @@ class SituationWorkflow:
             title = r.get("title", "제목 없음")
             content = r.get("content", "")
             score = r.get("score", 0.0)
+            file_path = r.get("file_path", None)
+            external_id = r.get("external_id", None)
+            chunk_index = r.get("chunk_index", None)
+            
+            # file_path가 없으면 external_id로 생성
+            if not file_path and external_id:
+                from core.legal_rag_service import LegalRAGService
+                service = LegalRAGService()
+                file_path = service._build_file_path(source_type, external_id)
+            
+            # 스토리지 파일 URL 생성
+            file_url = None
+            if external_id:
+                try:
+                    file_url = self.vector_store.get_storage_file_url(
+                        external_id=external_id,
+                        source_type=source_type,
+                        expires_in=3600  # 1시간
+                    )
+                except Exception as e:
+                    logger.warning(f"[워크플로우] 스토리지 URL 생성 실패 (external_id={external_id}, source_type={source_type}): {str(e)}")
+            
             results.append(
                 LegalGroundingChunk(
                     source_id=r.get("id", ""),
@@ -576,6 +598,10 @@ class SituationWorkflow:
                     title=title,
                     snippet=content[:300],
                     score=score,
+                    file_path=file_path,
+                    external_id=external_id,
+                    chunk_index=chunk_index,
+                    file_url=file_url,  # 파일 URL 추가
                 )
             )
         return results
