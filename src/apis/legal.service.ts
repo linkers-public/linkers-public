@@ -155,7 +155,6 @@ export const analyzeSituationDetailed = async (
       classifiedType: backendData.classified_type,
       riskScore: backendData.risk_score,
       summary: backendData.summary,
-      criteria: backendData.criteria || [],
       actionPlan: {
         steps: (backendData.action_plan?.steps || []).map((step: any) => ({
           title: step.title,
@@ -1832,7 +1831,6 @@ export const uploadSituationEvidence = async (
           // 권한 에러나 다른 에러도 기록하고 다음 버킷 시도
           console.error(`[${bucketName}] 업로드 에러 상세:`, {
             message: error?.message,
-            statusCode: error?.statusCode,
             error: error
           })
           continue
@@ -1897,8 +1895,9 @@ export const uploadSituationEvidence = async (
       evidence_type: evidenceType
     })
     
-    const { data: evidenceData, error: dbError } = await supabase
-      .from('situation_evidences')
+    // 타입 단언: situation_evidences 테이블이 Supabase 타입에 없을 수 있음
+    const { data: evidenceData, error: dbError } = await (supabase
+      .from('situation_evidences' as any)
       .insert({
         analysis_id: analysisId,
         user_id: userId,
@@ -1909,7 +1908,7 @@ export const uploadSituationEvidence = async (
         evidence_type: evidenceType,
       })
       .select()
-      .single()
+      .single()) as { data: { id: string } | null; error: any }
 
     if (dbError) {
       console.error('[DB 저장 실패]', {
@@ -1941,6 +1940,10 @@ export const uploadSituationEvidence = async (
       }
       
       throw new Error(errorMsg)
+    }
+    
+    if (!evidenceData || !evidenceData.id) {
+      throw new Error('DB 저장 후 데이터를 가져올 수 없습니다.')
     }
     
     console.log('[DB 저장 성공]', evidenceData)
@@ -1976,11 +1979,24 @@ export const getSituationEvidences = async (
     const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client')
     const supabase = createSupabaseBrowserClient()
     
-    const { data, error } = await supabase
-      .from('situation_evidences')
-      .select('id, file_name, file_size, mime_type, evidence_type, file_path, created_at')
+    // 타입 단언: situation_evidences 테이블이 Supabase 타입에 없을 수 있음
+    const { data, error } = await (supabase
+      .from('situation_evidences' as any)
+      .select('id, file_name, file_size, mime_type, evidence_type, description, file_path, created_at')
       .eq('analysis_id', analysisId)
-      .order('created_at', { ascending: false })
+      .order('created_at', { ascending: false })) as { 
+        data: Array<{
+          id: string
+          file_name: string
+          file_size: number | null
+          mime_type: string | null
+          evidence_type: string
+          description: string | null
+          file_path: string
+          created_at: string
+        }> | null
+        error: any
+      }
 
     if (error) {
       throw new Error(`증거 파일 목록 조회 실패: ${error.message}`)
@@ -2032,13 +2048,17 @@ export const deleteSituationEvidence = async (
     const supabase = createSupabaseBrowserClient()
     
     // 먼저 파일 정보 가져오기
-    const { data: evidence, error: fetchError } = await supabase
-      .from('situation_evidences')
+    // 타입 단언: situation_evidences 테이블이 Supabase 타입에 없을 수 있음
+    const { data: evidence, error: fetchError } = await (supabase
+      .from('situation_evidences' as any)
       .select('file_path')
       .eq('id', evidenceId)
-      .single()
+      .single()) as { 
+        data: { file_path: string } | null
+        error: any
+      }
 
-    if (fetchError || !evidence) {
+    if (fetchError || !evidence || !evidence.file_path) {
       throw new Error('증거 파일을 찾을 수 없습니다.')
     }
 
@@ -2059,10 +2079,11 @@ export const deleteSituationEvidence = async (
     }
 
     // DB에서 레코드 삭제
-    const { error: dbError } = await supabase
-      .from('situation_evidences')
+    // 타입 단언: situation_evidences 테이블이 Supabase 타입에 없을 수 있음
+    const { error: dbError } = await (supabase
+      .from('situation_evidences' as any)
       .delete()
-      .eq('id', evidenceId)
+      .eq('id', evidenceId)) as { error: any }
 
     if (dbError) {
       throw new Error(`DB 삭제 실패: ${dbError.message}`)
@@ -2155,7 +2176,29 @@ export const chatWithAgent = async (
     // FormData 생성
     const formData = new FormData()
     formData.append('mode', request.mode)
-    formData.append('message', request.message)
+    
+    // message 처리: 빈 값일 때 기본값 설정
+    let messageToSend = request.message?.trim() || ''
+    
+    // situation 모드 첫 요청일 때 message가 빈 값이면 situationForm.situation 사용
+    if (request.mode === 'situation' && !messageToSend && request.situationForm?.situation) {
+      messageToSend = request.situationForm.situation.trim()
+      console.log('⚠️ [Agent 챗] situation 모드에서 message가 빈 값이어서 situationForm.situation을 사용합니다:', messageToSend)
+    }
+    
+    // message가 여전히 빈 값이면 기본 메시지 사용
+    if (!messageToSend) {
+      if (request.mode === 'situation') {
+        messageToSend = '상황에 대해 분석해주세요.'
+      } else if (request.mode === 'contract') {
+        messageToSend = '계약서에 대해 질문드립니다.'
+      } else {
+        messageToSend = '질문드립니다.'
+      }
+      console.log('⚠️ [Agent 챗] message가 빈 값이어서 기본 메시지를 사용합니다:', messageToSend)
+    }
+    
+    formData.append('message', messageToSend)
     
     if (request.sessionId) {
       formData.append('sessionId', request.sessionId)
@@ -2190,6 +2233,30 @@ export const chatWithAgent = async (
       }
     }
     
+    // 📤 요청 데이터 로그 출력
+    console.group('📤 [Agent 챗] 요청 데이터')
+    console.log('URL:', url)
+    console.log('Mode:', request.mode)
+    console.log('원본 Message:', request.message || '(없음)')
+    console.log('전송할 Message:', messageToSend)
+    console.log('SessionId:', request.sessionId || '(없음)')
+    console.log('UserId:', userId || '(없음)')
+    
+    // 모드별 상세 정보
+    if (request.mode === 'contract') {
+      console.log('Contract 모드 상세:')
+      console.log('  - File:', request.file ? `${request.file.name} (${request.file.size} bytes)` : '(없음)')
+      console.log('  - ContractAnalysisId:', request.contractAnalysisId || '(없음)')
+    } else if (request.mode === 'situation') {
+      console.log('Situation 모드 상세:')
+      console.log('  - SituationTemplateKey:', request.situationTemplateKey || '(없음)')
+      console.log('  - SituationForm:', request.situationForm ? JSON.stringify(request.situationForm, null, 2) : '(없음)')
+      console.log('  - SituationAnalysisId:', request.situationAnalysisId || '(없음)')
+    } else {
+      console.log('Plain 모드 (추가 파라미터 없음)')
+    }
+    console.groupEnd()
+    
     // FormData 전송 시 Content-Type은 브라우저가 자동으로 설정하므로 제거
     const headersForFormData: Record<string, string> = {
       ...(authHeaders as Record<string, string>),
@@ -2201,6 +2268,12 @@ export const chatWithAgent = async (
       headersForFormData['X-User-Id'] = userId
     }
     
+    // 헤더 정보 로그 (민감한 정보는 마스킹)
+    console.log('📋 [Agent 챗] 요청 헤더:', {
+      ...headersForFormData,
+      Authorization: headersForFormData['Authorization'] ? 'Bearer ***' : '(없음)',
+    })
+    
     const response = await fetch(url, {
       method: 'POST',
       headers: headersForFormData,
@@ -2209,10 +2282,41 @@ export const chatWithAgent = async (
     
     if (!response.ok) {
       const errorText = await response.text()
+      console.error('❌ [Agent 챗] 응답 에러:', {
+        status: response.status,
+        statusText: response.statusText,
+        errorText,
+      })
       throw new Error(`Agent 챗 실패: ${response.status} - ${errorText}`)
     }
     
     const data: AgentChatResponse = await response.json()
+    
+    // 📥 응답 데이터 로그 출력
+    console.group('📥 [Agent 챗] 응답 데이터')
+    console.log('SessionId:', data.sessionId)
+    console.log('Mode:', data.mode)
+    console.log('ContractAnalysisId:', data.contractAnalysisId || '(없음)')
+    console.log('SituationAnalysisId:', data.situationAnalysisId || '(없음)')
+    console.log('AnswerMarkdown 길이:', data.answerMarkdown?.length || 0, '자')
+    console.log('AnswerMarkdown 미리보기:', data.answerMarkdown?.substring(0, 200) || '(없음)', '...')
+    console.log('UsedReports 개수:', data.usedReports?.length || 0)
+    if (data.usedReports && data.usedReports.length > 0) {
+      console.log('UsedReports 상세:', JSON.stringify(data.usedReports, null, 2))
+    }
+    console.log('UsedSources 개수:', data.usedSources?.length || 0)
+    if (data.usedSources && data.usedSources.length > 0) {
+      console.log('UsedSources 상세:', JSON.stringify(data.usedSources, null, 2))
+    }
+    if (data.contractAnalysis) {
+      console.log('ContractAnalysis:', JSON.stringify(data.contractAnalysis, null, 2))
+    }
+    if (data.situationAnalysis) {
+      console.log('SituationAnalysis:', JSON.stringify(data.situationAnalysis, null, 2))
+    }
+    console.log('전체 응답 객체:', JSON.stringify(data, null, 2))
+    console.groupEnd()
+    
     return data
   } catch (error) {
     console.error('Agent 챗 오류:', error)
