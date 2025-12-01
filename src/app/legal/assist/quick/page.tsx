@@ -904,6 +904,11 @@ export default function QuickAssistPage() {
     // 세션이 변경될 때 분석 상태 초기화 (다른 세션으로 전환 시 이전 세션의 상태가 유지되지 않도록)
     setIsAnalyzing(false)
     
+    // 분석 중일 때는 메시지를 다시 로드하지 않음 (사용자가 보낸 메시지가 사라지는 것을 방지)
+    if (isAnalyzing) {
+      return
+    }
+    
     if (selectedConversationId) {
       const conversation = conversations.find(c => c.id === selectedConversationId)
       if (conversation) {
@@ -962,6 +967,22 @@ export default function QuickAssistPage() {
               
               if (isCancelled) return
               
+              // 현재 표시 중인 메시지와 병합 (아직 DB에 저장되지 않은 사용자 메시지 보존)
+              setMessages((currentMessages) => {
+                // DB에서 가져온 메시지에 있는 ID 목록
+                const dbMessageIds = new Set(chatMessages.map(m => m.id))
+                
+                // 현재 메시지 중 DB에 없는 메시지 (아직 저장되지 않은 사용자 메시지 등)
+                const unsavedMessages = currentMessages.filter(m => !dbMessageIds.has(m.id))
+                
+                // DB 메시지와 저장되지 않은 메시지를 병합 (시간순 정렬)
+                const mergedMessages = [...chatMessages, ...unsavedMessages].sort((a, b) => 
+                  a.timestamp.getTime() - b.timestamp.getTime()
+                )
+                
+                return mergedMessages
+              })
+              
               setConversations((prev) => 
                 prev.map((c) => 
                   c.id === selectedConversationId
@@ -970,7 +991,6 @@ export default function QuickAssistPage() {
                 )
               )
               
-              setMessages(chatMessages)
               setHasInitialGreeting(true)
             } else {
               // 세션이 없거나 사용자 ID가 없으면 기존 메시지 사용 (이미 표시됨)
@@ -1003,7 +1023,7 @@ export default function QuickAssistPage() {
       setMessages([])
       setHasInitialGreeting(false)
     }
-  }, [selectedConversationId, conversations])
+  }, [selectedConversationId, conversations, isAnalyzing])
 
   // 초기 인사말 추가 (상황 분석 결과가 있으면 리포트 표시)
   useEffect(() => {
