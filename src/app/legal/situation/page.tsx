@@ -307,7 +307,7 @@ export default function SituationAnalysisPage() {
         try {
           setCheckedItems(new Set(JSON.parse(saved)))
         } catch (e) {
-          console.error('체크박스 상태 불러오기 실패:', e)
+          // 체크박스 상태 불러오기 실패 (무시)
         }
       }
       
@@ -317,7 +317,7 @@ export default function SituationAnalysisPage() {
         try {
           setCheckedEvidence(new Set(JSON.parse(savedEvidence)))
         } catch (e) {
-          console.error('증거 자료 체크 상태 불러오기 실패:', e)
+          // 증거 자료 체크 상태 불러오기 실패 (무시)
         }
       }
     }
@@ -358,45 +358,25 @@ export default function SituationAnalysisPage() {
       // analysis JSONB 필드에서 직접 데이터 추출
       const analysisData = analysis?.analysis || {}
       
-      // 디버깅: criteria 데이터 확인
-      console.log('🔍 [loadAnalysisById] 원본 analysis 객체:', analysis)
-      console.log('🔍 [loadAnalysisById] analysis.criteria:', analysis?.criteria)
-      console.log('🔍 [loadAnalysisById] analysis.analysis:', analysis?.analysis)
-      console.log('🔍 [loadAnalysisById] analysisData:', analysisData)
-      console.log('🔍 [loadAnalysisById] analysisData.criteria:', analysisData?.criteria)
-      
       // 여러 경로에서 criteria 찾기 (우선순위: 최상위 > analysis.analysis > analysisData)
       const criteriaFromTop = analysis?.criteria
       const criteriaFromNestedAnalysis = analysis?.analysis?.criteria
       const criteriaFromAnalysis = analysisData?.criteria
       
-      console.log('🔍 [loadAnalysisById] criteriaFromTop:', criteriaFromTop)
-      console.log('🔍 [loadAnalysisById] criteriaFromNestedAnalysis:', criteriaFromNestedAnalysis)
-      console.log('🔍 [loadAnalysisById] criteriaFromAnalysis:', criteriaFromAnalysis)
-      
       // 우선순위에 따라 criteria 선택
       let criteriaRaw = null
       if (criteriaFromTop && Array.isArray(criteriaFromTop) && criteriaFromTop.length > 0) {
         criteriaRaw = criteriaFromTop
-        console.log('🔍 [loadAnalysisById] criteriaFromTop 사용')
       } else if (criteriaFromNestedAnalysis && Array.isArray(criteriaFromNestedAnalysis) && criteriaFromNestedAnalysis.length > 0) {
         criteriaRaw = criteriaFromNestedAnalysis
-        console.log('🔍 [loadAnalysisById] criteriaFromNestedAnalysis 사용')
       } else if (criteriaFromAnalysis && Array.isArray(criteriaFromAnalysis) && criteriaFromAnalysis.length > 0) {
         criteriaRaw = criteriaFromAnalysis
-        console.log('🔍 [loadAnalysisById] criteriaFromAnalysis 사용')
       } else {
         criteriaRaw = []
-        console.log('🔍 [loadAnalysisById] criteria를 찾을 수 없음, 빈 배열 사용')
       }
-      
-      console.log('🔍 [loadAnalysisById] 최종 criteriaRaw:', criteriaRaw)
-      console.log('🔍 [loadAnalysisById] criteriaRaw 타입:', typeof criteriaRaw, Array.isArray(criteriaRaw))
-      console.log('🔍 [loadAnalysisById] criteriaRaw 길이:', Array.isArray(criteriaRaw) ? criteriaRaw.length : 0)
       
       // criteria가 배열이 아니거나 비어있으면 빈 배열로 설정
       const criteriaArray = Array.isArray(criteriaRaw) ? criteriaRaw : []
-      console.log('🔍 [loadAnalysisById] 최종 criteriaArray:', criteriaArray)
       
       const v1Format: SituationAnalysisResponse = {
         classifiedType: (analysis?.tags?.[0] || analysisData?.classifiedType || 'unknown') as SituationCategory,
@@ -422,17 +402,37 @@ export default function SituationAnalysisPage() {
           toCompany: undefined,
           toAdvisor: undefined,
         },
-        relatedCases: (analysis?.relatedCases || []).map((c: any) => ({
-          id: c?.id || '',
-          title: c?.title || '',
-          summary: c?.summary || '',
-        })),
+        relatedCases: (analysis?.relatedCases || []).map((c: any) => {
+          // 새 구조 (documentTitle, fileUrl, sourceType, externalId, overallSimilarity, summary, snippets)
+          if (c?.documentTitle && c?.snippets) {
+            return {
+              documentTitle: c.documentTitle,
+              fileUrl: c.fileUrl,
+              sourceType: c.sourceType || 'law',
+              externalId: c.externalId || '',
+              overallSimilarity: c.overallSimilarity || 0,
+              summary: c.summary || '',
+              snippets: c.snippets || [],
+            };
+          }
+          // 레거시 구조 (id, title, summary) - 하위 호환성
+          return {
+            documentTitle: c?.title || c?.documentTitle || '',
+            fileUrl: c?.fileUrl,
+            sourceType: c?.sourceType || 'law',
+            externalId: c?.externalId || c?.id || '',
+            overallSimilarity: c?.overallSimilarity || 0,
+            summary: c?.summary || '',
+            snippets: [{
+              snippet: c?.summary || '',
+              similarityScore: 0,
+              usageReason: '',
+            }],
+          };
+        }),
         organizations: analysis?.organizations || analysisData?.organizations || [],
       }
       
-      console.log('🔍 [loadAnalysisById 변환된 리포트] criteria 개수:', v1Format.criteria?.length || 0)
-      console.log('🔍 [loadAnalysisById 변환된 리포트] criteria 내용:', v1Format.criteria)
-      console.log('🔍 [loadAnalysisById 변환된 리포트] 전체 v1Format:', JSON.stringify(v1Format, null, 2))
       setAnalysisResult(v1Format)
       
       // 원본 상황 텍스트도 표시
@@ -459,7 +459,6 @@ export default function SituationAnalysisPage() {
         }
       }, 100)
     } catch (error: any) {
-      console.error('분석 결과 로드 오류:', error)
       toast({
         title: '오류',
         description: error?.message || '분석 결과를 불러오는 중 오류가 발생했습니다.',
@@ -608,24 +607,10 @@ export default function SituationAnalysisPage() {
       
       const result = await analyzeSituationV2(request, userId)
       
-      console.log('분석 결과:', result)
-      console.log('summary 필드:', result.analysis.summary)
-      console.log('🔍 [handleAnalyze] 전체 응답 구조:', JSON.stringify(result, null, 2))
-      console.log('🔍 [handleAnalyze] result.criteria:', result?.criteria)
-      console.log('🔍 [handleAnalyze] result.criteria 타입:', typeof result?.criteria)
-      console.log('🔍 [handleAnalyze] result.criteria 배열 여부:', Array.isArray(result?.criteria))
-      
       // 백엔드에서 criteria를 최상위 레벨에 반환하므로 result.criteria 사용
       const criteriaArray = (result?.criteria && Array.isArray(result.criteria) && result.criteria.length > 0)
         ? result.criteria
         : []
-      
-      console.log('✅ [handleAnalyze] criteria 개수:', criteriaArray.length)
-      if (criteriaArray.length > 0) {
-        console.log('✅ [handleAnalyze] criteria 첫 번째 항목:', criteriaArray[0])
-      } else {
-        console.warn('⚠️ [handleAnalyze] criteria가 비어있습니다. 백엔드 응답 확인 필요.')
-      }
       
       // v2 응답을 v1 형식으로 변환 (기존 UI 호환성)
       // 안전성 검사: 모든 필드에 기본값 제공
@@ -644,17 +629,45 @@ export default function SituationAnalysisPage() {
         })),
         actionPlan: null,
         scripts: {
-          toCompany: result?.scripts?.toCompany || undefined,
-          toAdvisor: result?.scripts?.toAdvisor || undefined,
+          toCompany: result?.scripts?.toCompany 
+            ? (typeof result.scripts.toCompany === 'string'
+              ? { subject: '근로계약 관련 확인 요청', body: result.scripts.toCompany }
+              : result.scripts.toCompany)
+            : undefined,
+          toAdvisor: result?.scripts?.toAdvisor
+            ? (typeof result.scripts.toAdvisor === 'string'
+              ? { subject: '노무 상담 요청', body: result.scripts.toAdvisor }
+              : result.scripts.toAdvisor)
+            : undefined,
         },
-        relatedCases: (result?.relatedCases || []).map(c => ({
-          id: c?.id || '',
-          title: c?.title || '',
-          summary: c?.summary || '',
-          link: c?.link,
-          externalId: c?.externalId || c?.id, // id와 동일
-          fileUrl: c?.fileUrl,
-        })),
+        relatedCases: (result?.relatedCases || []).map((c: any) => {
+          // 새 구조 (documentTitle, fileUrl, sourceType, externalId, overallSimilarity, summary, snippets)
+          if (c?.documentTitle && c?.snippets) {
+            return {
+              documentTitle: c.documentTitle,
+              fileUrl: c.fileUrl,
+              sourceType: c.sourceType || 'law',
+              externalId: c.externalId || '',
+              overallSimilarity: c.overallSimilarity || 0,
+              summary: c.summary || '',
+              snippets: c.snippets || [],
+            };
+          }
+          // 레거시 구조 (id, title, summary) - 하위 호환성
+          return {
+            documentTitle: c?.title || c?.documentTitle || '',
+            fileUrl: c?.fileUrl,
+            sourceType: c?.sourceType || 'law',
+            externalId: c?.externalId || c?.id || '',
+            overallSimilarity: c?.overallSimilarity || 0,
+            summary: c?.summary || '',
+            snippets: [{
+              snippet: c?.summary || '',
+              similarityScore: 0,
+              usageReason: '',
+            }],
+          };
+        }),
         sources: (result?.sources || []).map((source: any) => ({
           sourceId: source.sourceId || source.source_id || '',
           sourceType: (source.sourceType || source.source_type || 'law') as 'law' | 'manual' | 'case' | 'standard_contract',
@@ -667,10 +680,6 @@ export default function SituationAnalysisPage() {
         organizations: result?.organizations || [],
       }
       
-      console.log('변환된 리포트:', v1Format)
-      console.log('🔍 [변환된 리포트] criteria 개수:', v1Format.criteria?.length || 0)
-      console.log('🔍 [변환된 리포트] criteria 내용:', v1Format.criteria)
-      console.log('🔍 [변환된 리포트] 전체 v1Format:', JSON.stringify(v1Format, null, 2))
       setAnalysisResult(v1Format)
       
       // 분석 결과 ID 저장
@@ -702,7 +711,6 @@ export default function SituationAnalysisPage() {
       // 리포트는 백엔드에서 자동으로 situation_analyses 테이블에 저장됨
       // 중복 저장 방지를 위해 프론트엔드에서는 저장하지 않음
     } catch (error: any) {
-      console.error('분석 오류:', error)
       toast({
         title: '분석 실패',
         description: error.message || '분석 중 오류가 발생했습니다.',
@@ -1401,12 +1409,26 @@ export default function SituationAnalysisPage() {
                 {analysisResult.criteria && analysisResult.criteria.length > 0 && (
                   <>
                     {analysisResult.criteria.slice(0, 3).map((criterion, idx) => {
-                      // criterion.name에서 키워드 추출하여 태그 생성
-                      const tagEmoji = criterion.status === 'likely' ? '🌙' : criterion.status === 'unclear' ? '📉' : '⚠️'
-                      const tagText = criterion.name.length > 20 ? criterion.name.substring(0, 20) + '...' : criterion.name
+                      // 새로운 구조: documentTitle 사용
+                      const documentTitle = criterion.documentTitle || ''
+                      const sourceType = criterion.sourceType || 'law'
+                      
+                      // sourceType에 따른 이모지
+                      const sourceTypeEmoji = {
+                        'law': '📜',
+                        'manual': '📘',
+                        'case': '⚖️',
+                        'standard_contract': '📄',
+                      }[sourceType] || '📋'
+                      
+                      // documentTitle에서 태그 텍스트 추출
+                      const tagText = documentTitle.length > 20 
+                        ? documentTitle.substring(0, 20) + '...' 
+                        : documentTitle || '법적 근거'
+                      
                       return (
                         <div key={idx} className="px-5 py-3 bg-gradient-to-r from-amber-500 to-orange-600 text-white rounded-xl shadow-lg font-bold text-base flex items-center gap-2">
-                          <span>{tagEmoji}</span>
+                          <span>{sourceTypeEmoji}</span>
                           <span>{tagText}</span>
                         </div>
                       )
@@ -1435,20 +1457,38 @@ export default function SituationAnalysisPage() {
                     {analysisResult.scripts.toCompany && (
                       <div className="bg-white border-2 border-indigo-200 rounded-xl p-5 shadow-sm">
                         <div className="flex items-center justify-between mb-3">
-                          <h3 className="text-lg font-bold text-indigo-900">내부 보고</h3>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleCopy(analysisResult.scripts!.toCompany!, '내부 보고 템플릿이 복사되었습니다')}
-                            className="border-indigo-300 hover:bg-indigo-50 hover:border-indigo-400 text-indigo-700"
-                          >
-                            <Copy className="w-4 h-4 mr-2" />
-                            복사
-                          </Button>
+                          <h3 className="text-lg font-bold text-indigo-900">회사에 보내는 메일</h3>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleCopy(analysisResult.scripts!.toCompany!.subject, '제목이 복사되었습니다')}
+                              className="border-indigo-300 hover:bg-indigo-50 hover:border-indigo-400 text-indigo-700"
+                            >
+                              <Copy className="w-4 h-4 mr-2" />
+                              제목 복사
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleCopy(analysisResult.scripts!.toCompany!.body, '본문이 복사되었습니다')}
+                              className="border-indigo-300 hover:bg-indigo-50 hover:border-indigo-400 text-indigo-700"
+                            >
+                              <Copy className="w-4 h-4 mr-2" />
+                              본문 복사
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="mb-3 rounded-lg bg-blue-50 border border-blue-100 p-3">
+                          <div className="text-xs font-semibold text-blue-700 mb-1">제목</div>
+                          <div className="text-sm text-gray-900 font-medium">
+                            {analysisResult.scripts.toCompany.subject}
+                          </div>
                         </div>
                         <div className="prose prose-slate max-w-none text-sm">
+                          <div className="text-xs font-semibold text-gray-700 mb-2">본문</div>
                           <RAGHighlightedMarkdown 
-                            content={analysisResult.scripts.toCompany}
+                            content={analysisResult.scripts.toCompany.body}
                             sources={analysisResult.sources || []}
                           />
                         </div>
@@ -1457,20 +1497,38 @@ export default function SituationAnalysisPage() {
                     {analysisResult.scripts.toAdvisor && (
                       <div className="bg-white border-2 border-indigo-200 rounded-xl p-5 shadow-sm">
                         <div className="flex items-center justify-between mb-3">
-                          <h3 className="text-lg font-bold text-indigo-900">외부 상담</h3>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleCopy(analysisResult.scripts!.toAdvisor!, '외부 상담 템플릿이 복사되었습니다')}
-                            className="border-indigo-300 hover:bg-indigo-50 hover:border-indigo-400 text-indigo-700"
-                          >
-                            <Copy className="w-4 h-4 mr-2" />
-                            복사
-                          </Button>
+                          <h3 className="text-lg font-bold text-indigo-900">노무사/상담 기관에 보내는 메일</h3>
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleCopy(analysisResult.scripts!.toAdvisor!.subject, '제목이 복사되었습니다')}
+                              className="border-indigo-300 hover:bg-indigo-50 hover:border-indigo-400 text-indigo-700"
+                            >
+                              <Copy className="w-4 h-4 mr-2" />
+                              제목 복사
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleCopy(analysisResult.scripts!.toAdvisor!.body, '본문이 복사되었습니다')}
+                              className="border-indigo-300 hover:bg-indigo-50 hover:border-indigo-400 text-indigo-700"
+                            >
+                              <Copy className="w-4 h-4 mr-2" />
+                              본문 복사
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="mb-3 rounded-lg bg-blue-50 border border-blue-100 p-3">
+                          <div className="text-xs font-semibold text-blue-700 mb-1">제목</div>
+                          <div className="text-sm text-gray-900 font-medium">
+                            {analysisResult.scripts.toAdvisor.subject}
+                          </div>
                         </div>
                         <div className="prose prose-slate max-w-none text-sm">
+                          <div className="text-xs font-semibold text-gray-700 mb-2">본문</div>
                           <RAGHighlightedMarkdown 
-                            content={analysisResult.scripts.toAdvisor}
+                            content={analysisResult.scripts.toAdvisor.body}
                             sources={analysisResult.sources || []}
                           />
                         </div>

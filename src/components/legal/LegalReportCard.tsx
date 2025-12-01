@@ -15,12 +15,6 @@ interface LegalReportCardProps {
 }
 
 export function LegalReportCard({ analysisResult, onCopy }: LegalReportCardProps) {
-  // 디버깅: criteria 확인
-  console.log('🔍 [LegalReportCard] analysisResult:', analysisResult)
-  console.log('🔍 [LegalReportCard] criteria:', analysisResult.criteria)
-  console.log('🔍 [LegalReportCard] criteria 존재 여부:', !!analysisResult.criteria)
-  console.log('🔍 [LegalReportCard] criteria 길이:', analysisResult.criteria?.length || 0)
-  
   const [isDrawerOpen, setIsDrawerOpen] = useState(false)
   const [selectedCriterionIndex, setSelectedCriterionIndex] = useState<number | null>(null)
   const [isSourcesExpanded, setIsSourcesExpanded] = useState(false)
@@ -283,25 +277,6 @@ export function LegalReportCard({ analysisResult, onCopy }: LegalReportCardProps
         {((analysisResult.relatedCases && analysisResult.relatedCases.length > 0) || evidenceSources.length > 0) && (
           <div className="space-y-4">
             {(() => {
-              // 참고 문헌 및 관련 사례 섹션 데이터 로그
-              console.log('📚 [LegalReportCard] 참고 문헌 및 관련 사례 섹션 데이터:')
-              console.log('📚 [LegalReportCard] relatedCases:', analysisResult.relatedCases)
-              console.log('📚 [LegalReportCard] relatedCases 개수:', analysisResult.relatedCases?.length || 0)
-              console.log('📚 [LegalReportCard] evidenceSources:', evidenceSources)
-              console.log('📚 [LegalReportCard] evidenceSources 개수:', evidenceSources.length)
-              if (analysisResult.relatedCases && analysisResult.relatedCases.length > 0) {
-                console.log('📚 [LegalReportCard] 대표 근거 케이스 (relatedCases[0]):', analysisResult.relatedCases[0])
-              }
-              evidenceSources.forEach((source, idx) => {
-                console.log(`📚 [LegalReportCard] evidenceSources[${idx}]:`, {
-                  sourceId: source.sourceId,
-                  title: source.title,
-                  sourceType: source.sourceType,
-                  score: source.score,
-                  fileUrl: source.fileUrl,
-                  snippet: source.snippet?.substring(0, 100) + '...',
-                })
-              })
               return null
             })()}
             <div className="flex items-center justify-between mb-4">
@@ -324,35 +299,35 @@ export function LegalReportCard({ analysisResult, onCopy }: LegalReportCardProps
             {analysisResult.relatedCases && analysisResult.relatedCases.length > 0 && (
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                 {analysisResult.relatedCases.slice(0, 3).map((relatedCase, idx) => {
-                  const analyzed = relatedCase.summaryAnalyzed
                   return (
                     <div key={idx} className="bg-gradient-to-br from-purple-50 to-pink-50 border-2 border-purple-200 rounded-lg p-4 hover:shadow-md transition-shadow">
                       <div className="flex items-center gap-2 mb-2">
                         <span className="px-2 py-1 bg-purple-600 text-white text-xs font-semibold rounded">
                           대표 근거 케이스
                         </span>
+                        {relatedCase.overallSimilarity > 0 && (
+                          <span className="text-xs text-purple-600">
+                            관련도: {(relatedCase.overallSimilarity * 100).toFixed(0)}%
+                          </span>
+                        )}
                       </div>
-                      <h4 className="font-semibold text-slate-900 mb-2 text-sm line-clamp-2">{relatedCase.title}</h4>
+                      <h4 className="font-semibold text-slate-900 mb-2 text-sm line-clamp-2">{relatedCase.documentTitle}</h4>
                       
-                      {/* 분석된 결과가 있으면 표시, 없으면 원본 summary */}
-                      {analyzed ? (
+                      {/* summary 표시 */}
+                      <p className="text-xs text-slate-700 mb-3 line-clamp-2">{relatedCase.summary}</p>
+                      
+                      {/* snippets 표시 */}
+                      {relatedCase.snippets && relatedCase.snippets.length > 0 && (
                         <div className="space-y-2 mb-3">
-                          {analyzed.core_clause && (
-                            <div className="text-xs font-semibold text-purple-700">
-                              📌 {analyzed.core_clause}
+                          {relatedCase.snippets.slice(0, 2).map((snippet: any, snippetIdx: number) => (
+                            <div key={snippetIdx} className="bg-white rounded p-2 border border-purple-100">
+                              <p className="text-xs text-slate-600 mb-1 line-clamp-2">{snippet.snippet}</p>
+                              {snippet.usageReason && (
+                                <p className="text-xs text-purple-600 italic">{snippet.usageReason}</p>
+                              )}
                             </div>
-                          )}
-                          <p className="text-xs text-slate-700 leading-relaxed">
-                            {analyzed.easy_summary}
-                          </p>
-                          {analyzed.action_tip && (
-                            <div className="text-xs text-amber-700 bg-amber-50 px-2 py-1 rounded border border-amber-200">
-                              💡 {analyzed.action_tip}
-                            </div>
-                          )}
+                          ))}
                         </div>
-                      ) : (
-                        <p className="text-xs text-slate-700 mb-3 line-clamp-3">{relatedCase.summary}</p>
                       )}
                       
                       {relatedCase.fileUrl && (

@@ -216,10 +216,16 @@ class ActionPlan(BaseModel):
     steps: List[ActionStep] = Field(..., description="단계 목록")
 
 
+class EmailTemplate(BaseModel):
+    """이메일 템플릿 (제목 + 본문)"""
+    subject: str = Field(..., description="이메일 제목")
+    body: str = Field(..., description="이메일 본문 (마크다운 또는 일반 텍스트)")
+
+
 class Scripts(BaseModel):
     """스크립트/템플릿"""
-    to_company: Optional[str] = Field(None, description="회사에 보낼 메시지 초안")
-    to_advisor: Optional[str] = Field(None, description="상담 시 쓸 설명 템플릿")
+    to_company: Optional[EmailTemplate] = Field(None, description="회사에 보낼 이메일 템플릿")
+    to_advisor: Optional[EmailTemplate] = Field(None, description="노무사/기관에 보낼 이메일 템플릿")
 
 
 class RelatedCase(BaseModel):
@@ -293,21 +299,34 @@ class SnippetAnalyzed(BaseModel):
     action_tip: Optional[str] = Field(None, description="사용자가 주의해야 할 점 1줄 (선택사항)")
 
 
+class RelatedCaseSnippet(BaseModel):
+    """관련 사례의 스니펫 (청크 단위)"""
+    snippet: str = Field(..., description="벡터 검색에서 가져온 원문 일부(청크 텍스트)")
+    similarityScore: float = Field(..., description="이 청크가 현재 상황/질문과 얼마나 유사한지 점수")
+    usageReason: str = Field(..., description="왜 이 청크를 근거로 사용했는지의 설명")
+
+
 class RelatedCaseV2(BaseModel):
-    """유사 사례 (v2)"""
-    id: str
-    title: str
-    summary: str  # 원본 snippet (하위 호환성)
-    summaryAnalyzed: Optional[SnippetAnalyzed] = Field(None, description="분석된 결과")
-    link: Optional[str] = None
-    externalId: Optional[str] = Field(None, description="파일 ID (스토리지 경로 생성용, id와 동일)")
-    fileUrl: Optional[str] = Field(None, description="스토리지 Signed URL (파일 다운로드용)")
+    """유사 사례 (v2) - 문서 단위 그룹핑"""
+    documentTitle: str = Field(..., description="해당 문서의 파일명 또는 제목")
+    fileUrl: Optional[str] = Field(None, description="Supabase Storage 등에 저장된 원문 파일 다운로드/뷰어 URL")
+    sourceType: str = Field(..., description="문서 유형 구분값 (예: standard_contract, labor_law, case_law)")
+    externalId: str = Field(..., description="백엔드/DB에서 이 문서를 식별하는 키")
+    overallSimilarity: float = Field(..., description="이 문서가 이번 상황분석과 전반적으로 얼마나 관련 있는지 나타내는 대표 점수")
+    summary: str = Field(..., description="이 문서가 어떤 문서인지 한 줄로 설명하는 짧은 요약")
+    snippets: List[RelatedCaseSnippet] = Field(default_factory=list, description="이 문서에서 이번 분석에 실제로 사용된 청크 목록")
+
+
+class EmailTemplateV2(BaseModel):
+    """이메일 템플릿 (제목 + 본문) (v2)"""
+    subject: str = Field(..., description="이메일 제목")
+    body: str = Field(..., description="이메일 본문 (마크다운 또는 일반 텍스트)")
 
 
 class ScriptsV2(BaseModel):
     """스크립트/템플릿 (v2)"""
-    toCompany: Optional[str] = Field(None, description="회사에 보낼 메시지 초안")
-    toAdvisor: Optional[str] = Field(None, description="상담 시 쓸 설명 템플릿")
+    toCompany: Optional[EmailTemplateV2] = Field(None, description="회사에 보낼 이메일 템플릿")
+    toAdvisor: Optional[EmailTemplateV2] = Field(None, description="노무사/기관에 보낼 이메일 템플릿")
 
 
 class SourceItemV2(BaseModel):

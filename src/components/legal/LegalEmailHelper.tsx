@@ -4,6 +4,14 @@ import React, { useState } from 'react'
 import { Mail, Copy, Check, ExternalLink } from 'lucide-react'
 
 /**
+ * 이메일 템플릿 구조
+ */
+export interface EmailTemplate {
+  subject: string  // 이메일 제목
+  body: string     // 이메일 본문
+}
+
+/**
  * 법률 상담 메일 작성 도우미 Props
  */
 interface LegalEmailHelperProps {
@@ -11,14 +19,16 @@ interface LegalEmailHelperProps {
   toEmail?: string
   /** 받는 사람 이름/설명 (예: "노무사", "노동청") */
   recipientName?: string
-  /** 기본 제목 */
-  defaultSubject?: string
-  /** 메일 본문 텍스트 */
-  suggestionText: string
+  /** 이메일 템플릿 (제목 + 본문) */
+  emailTemplate: EmailTemplate
   /** 카드 제목 (선택적) */
   title?: string
   /** 추가 설명 (선택적) */
   description?: string
+  /** 레거시 호환: suggestionText (문자열) - 이 경우 subject는 defaultSubject 사용 */
+  suggestionText?: string
+  /** 레거시 호환: 기본 제목 */
+  defaultSubject?: string
 }
 
 /**
@@ -28,12 +38,21 @@ interface LegalEmailHelperProps {
 export function LegalEmailHelper({
   toEmail = '',
   recipientName = '상담 기관',
-  defaultSubject = '[상담 요청] 근로 관련 문의',
-  suggestionText,
+  emailTemplate,
   title = '이렇게 말해보세요',
   description,
+  // 레거시 호환
+  suggestionText,
+  defaultSubject = '[상담 요청] 근로 관련 문의',
 }: LegalEmailHelperProps) {
-  const [copied, setCopied] = useState(false)
+  const [copiedSubject, setCopiedSubject] = useState(false)
+  const [copiedBody, setCopiedBody] = useState(false)
+
+  // 레거시 호환: suggestionText가 있으면 emailTemplate로 변환
+  const template: EmailTemplate = emailTemplate || {
+    subject: defaultSubject || '[상담 요청] 근로 관련 문의',
+    body: suggestionText || '',
+  }
 
   /**
    * Gmail 새 메일 작성 URL 생성
@@ -41,14 +60,14 @@ export function LegalEmailHelper({
   const handleSendMail = () => {
     if (!toEmail) {
       // 이메일이 없으면 mailto: 사용
-      const mailtoUrl = `mailto:?subject=${encodeURIComponent(defaultSubject)}&body=${encodeURIComponent(suggestionText)}`
+      const mailtoUrl = `mailto:?subject=${encodeURIComponent(template.subject)}&body=${encodeURIComponent(template.body)}`
       window.open(mailtoUrl, '_blank', 'noopener,noreferrer')
       return
     }
 
     const to = encodeURIComponent(toEmail)
-    const subject = encodeURIComponent(defaultSubject)
-    const body = encodeURIComponent(suggestionText)
+    const subject = encodeURIComponent(template.subject)
+    const body = encodeURIComponent(template.body)
 
     const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${to}&su=${subject}&body=${body}`
 
@@ -57,13 +76,26 @@ export function LegalEmailHelper({
   }
 
   /**
-   * 텍스트 복사
+   * 제목 복사
    */
-  const handleCopy = async () => {
+  const handleCopySubject = async () => {
     try {
-      await navigator.clipboard.writeText(suggestionText)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+      await navigator.clipboard.writeText(template.subject)
+      setCopiedSubject(true)
+      setTimeout(() => setCopiedSubject(false), 2000)
+    } catch (err) {
+      console.error('복사 실패:', err)
+    }
+  }
+
+  /**
+   * 본문 복사
+   */
+  const handleCopyBody = async () => {
+    try {
+      await navigator.clipboard.writeText(template.body)
+      setCopiedBody(true)
+      setTimeout(() => setCopiedBody(false), 2000)
     } catch (err) {
       console.error('복사 실패:', err)
     }
@@ -99,22 +131,31 @@ export function LegalEmailHelper({
         )}
       </div>
 
+      {/* 예시 메일 제목 */}
+      <div className="mt-3 rounded-xl bg-blue-50 border border-blue-100 p-3">
+        <div className="text-xs font-semibold text-blue-700 mb-1">제목</div>
+        <div className="text-sm text-gray-900 font-medium">
+          {template.subject}
+        </div>
+      </div>
+
       {/* 예시 메일 본문 */}
       <div className="mt-3 rounded-xl bg-gray-50 border border-gray-100 p-4">
+        <div className="text-xs font-semibold text-gray-700 mb-2">본문</div>
         <div className="text-sm text-gray-800 whitespace-pre-line leading-relaxed">
-          {suggestionText}
+          {template.body}
         </div>
       </div>
 
       {/* 액션 버튼 */}
-      <div className="mt-4 flex items-center justify-end gap-2">
-        {/* 복사 버튼 */}
+      <div className="mt-4 flex items-center justify-end gap-2 flex-wrap">
+        {/* 제목 복사 버튼 */}
         <button
           type="button"
-          onClick={handleCopy}
-          className="flex items-center gap-1.5 rounded-xl border border-gray-300 bg-white px-4 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+          onClick={handleCopySubject}
+          className="flex items-center gap-1.5 rounded-xl border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"
         >
-          {copied ? (
+          {copiedSubject ? (
             <>
               <Check className="w-3.5 h-3.5 text-green-600" />
               <span className="text-green-600">복사됨</span>
@@ -122,7 +163,26 @@ export function LegalEmailHelper({
           ) : (
             <>
               <Copy className="w-3.5 h-3.5" />
-              <span>내용 복사하기</span>
+              <span>제목 복사</span>
+            </>
+          )}
+        </button>
+
+        {/* 본문 복사 버튼 */}
+        <button
+          type="button"
+          onClick={handleCopyBody}
+          className="flex items-center gap-1.5 rounded-xl border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+        >
+          {copiedBody ? (
+            <>
+              <Check className="w-3.5 h-3.5 text-green-600" />
+              <span className="text-green-600">복사됨</span>
+            </>
+          ) : (
+            <>
+              <Copy className="w-3.5 h-3.5" />
+              <span>본문 복사</span>
             </>
           )}
         </button>

@@ -72,12 +72,6 @@ export default function SituationDetailPage() {
         return
       }
       
-      // 디버깅: scripts 확인
-      console.log('🔍 [상황분석 상세] analysis 객체:', analysis)
-      console.log('🔍 [상황분석 상세] analysis.scripts:', analysis?.scripts)
-      console.log('🔍 [상황분석 상세] analysis.scripts?.toCompany:', analysis?.scripts?.toCompany)
-      console.log('🔍 [상황분석 상세] analysis.scripts?.toAdvisor:', analysis?.scripts?.toAdvisor)
-      
       setAnalysisId(situationId)
       
       // v2 응답을 v1 형식으로 변환
@@ -90,21 +84,25 @@ export default function SituationDetailPage() {
         ? analysisData.criteria
         : []
       
-      // scripts 변환 - 명시적으로 처리
+      // scripts 변환 - 이메일 템플릿 구조: {subject, body}
       const scriptsData = analysis?.scripts
       const scripts = scriptsData
         ? {
-            toCompany: scriptsData.toCompany || undefined,
-            toAdvisor: scriptsData.toAdvisor || undefined,
+            toCompany: scriptsData.toCompany 
+              ? (typeof scriptsData.toCompany === 'string'
+                ? { subject: '근로계약 관련 확인 요청', body: scriptsData.toCompany }
+                : scriptsData.toCompany)
+              : undefined,
+            toAdvisor: scriptsData.toAdvisor
+              ? (typeof scriptsData.toAdvisor === 'string'
+                ? { subject: '노무 상담 요청', body: scriptsData.toAdvisor }
+                : scriptsData.toAdvisor)
+              : undefined,
           }
         : {
             toCompany: undefined,
             toAdvisor: undefined,
           }
-      
-      console.log('🔍 [상황분석 상세] 변환된 scripts:', scripts)
-      console.log('🔍 [상황분석 상세] 변환된 scripts.toCompany:', scripts.toCompany)
-      console.log('🔍 [상황분석 상세] 변환된 scripts.toAdvisor:', scripts.toAdvisor)
       
       const v1Format: SituationAnalysisResponse = {
         classifiedType: (analysis?.tags?.[0] || analysisData?.classifiedType || 'unknown') as SituationCategory,
@@ -121,11 +119,34 @@ export default function SituationDetailPage() {
         })),
 
         scripts: scripts,
-        relatedCases: (analysis?.relatedCases || []).map((c: any) => ({
-          id: c?.id || '',
-          title: c?.title || '',
-          summary: c?.summary || '',
-        })),
+        relatedCases: (analysis?.relatedCases || []).map((c: any) => {
+          // 새 구조 (documentTitle, fileUrl, sourceType, externalId, overallSimilarity, summary, snippets)
+          if (c?.documentTitle && c?.snippets) {
+            return {
+              documentTitle: c.documentTitle,
+              fileUrl: c.fileUrl,
+              sourceType: c.sourceType || 'law',
+              externalId: c.externalId || '',
+              overallSimilarity: c.overallSimilarity || 0,
+              summary: c.summary || '',
+              snippets: c.snippets || [],
+            };
+          }
+          // 레거시 구조 (id, title, summary) - 하위 호환성
+          return {
+            documentTitle: c?.title || c?.documentTitle || '',
+            fileUrl: c?.fileUrl,
+            sourceType: c?.sourceType || 'law',
+            externalId: c?.externalId || c?.id || '',
+            overallSimilarity: c?.overallSimilarity || 0,
+            summary: c?.summary || '',
+            snippets: [{
+              snippet: c?.summary || '',
+              similarityScore: 0,
+              usageReason: '',
+            }],
+          };
+        }),
         sources: (analysis?.sources || []).map((source: any) => ({
           sourceId: source.sourceId || source.source_id || '',
           sourceType: (source.sourceType || source.source_type || 'law') as 'law' | 'manual' | 'case' | 'standard_contract',
@@ -138,14 +159,8 @@ export default function SituationDetailPage() {
         organizations: analysis?.organizations || [],
       }
       
-      // 디버깅: 최종 변환된 scripts 확인
-      console.log('🔍 [상황분석 상세] v1Format.scripts:', v1Format.scripts)
-      console.log('🔍 [상황분석 상세] v1Format.scripts?.toCompany:', v1Format.scripts?.toCompany)
-      console.log('🔍 [상황분석 상세] v1Format.scripts?.toAdvisor:', v1Format.scripts?.toAdvisor)
-      
       setAnalysisResult(v1Format)
     } catch (err: any) {
-      console.error('분석 결과 로드 오류:', err)
       setError(err.message || '분석 결과를 불러오는 중 오류가 발생했습니다.')
       toast({
         title: '오류',
@@ -220,17 +235,6 @@ export default function SituationDetailPage() {
 
   // 요약 텍스트 추출 (첫 줄만)
   const summaryText = summarySection?.content?.split('\n')[0] || summarySection?.content || ''
-  
-  // 디버깅: 렌더링 시점 scripts 확인
-  console.log('🔍 [상황분석 상세] 렌더링 시점 analysisResult.scripts:', analysisResult.scripts)
-  console.log('🔍 [상황분석 상세] 렌더링 시점 analysisResult.scripts?.toCompany:', analysisResult.scripts?.toCompany)
-  console.log('🔍 [상황분석 상세] 렌더링 시점 analysisResult.scripts?.toAdvisor:', analysisResult.scripts?.toAdvisor)
-  console.log('🔍 [상황분석 상세] 조건 체크:', {
-    speakSection: !!speakSection,
-    toCompany: !!analysisResult.scripts?.toCompany,
-    toAdvisor: !!analysisResult.scripts?.toAdvisor,
-    shouldShow: !!(speakSection || analysisResult.scripts?.toCompany || analysisResult.scripts?.toAdvisor)
-  })
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 py-12">
@@ -350,8 +354,7 @@ export default function SituationDetailPage() {
                     <LegalEmailHelper
                       toEmail=""
                       recipientName="회사"
-                      defaultSubject="[문의] 근로 관련 사안에 대한 확인 요청"
-                      suggestionText={analysisResult.scripts.toCompany}
+                      emailTemplate={analysisResult.scripts.toCompany}
                       title="회사에 이렇게 말해보세요"
                       description="아래 내용을 복사하거나 Gmail로 바로 보낼 수 있습니다."
                     />
@@ -362,8 +365,7 @@ export default function SituationDetailPage() {
                     <LegalEmailHelper
                       toEmail=""
                       recipientName="노무사/상담 기관"
-                      defaultSubject="[상담 요청] 근로 관련 문의"
-                      suggestionText={analysisResult.scripts.toAdvisor}
+                      emailTemplate={analysisResult.scripts.toAdvisor}
                       title="노무사/상담 기관에 이렇게 말해보세요"
                       description="아래 내용을 복사하거나 Gmail로 바로 보낼 수 있습니다."
                     />

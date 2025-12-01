@@ -148,9 +148,14 @@ export interface ActionPlan {
   steps: ActionStep[]
 }
 
+export interface EmailTemplate {
+  subject: string  // 이메일 제목
+  body: string     // 이메일 본문 (마크다운 또는 일반 텍스트)
+}
+
 export interface Scripts {
-  toCompany?: string
-  toAdvisor?: string
+  toCompany?: EmailTemplate  // 회사에 보낼 이메일 템플릿
+  toAdvisor?: EmailTemplate  // 노무사/기관에 보낼 이메일 템플릿
 }
 
 export interface SnippetAnalyzed {
@@ -159,14 +164,20 @@ export interface SnippetAnalyzed {
   action_tip?: string  // 사용자가 주의해야 할 점 1줄 (선택사항)
 }
 
+export interface RelatedCaseSnippet {
+  snippet: string  // 벡터 검색에서 가져온 원문 일부(청크 텍스트)
+  similarityScore: number  // 이 청크가 현재 상황/질문과 얼마나 유사한지 점수
+  usageReason: string  // 왜 이 청크를 근거로 사용했는지의 설명
+}
+
 export interface RelatedCase {
-  id: string
-  title: string
-  summary: string  // 원본 snippet (하위 호환성)
-  summaryAnalyzed?: SnippetAnalyzed  // 분석된 결과
-  link?: string
-  externalId?: string  // 파일 ID (스토리지 경로 생성용, id와 동일)
-  fileUrl?: string  // 스토리지 Signed URL (파일 다운로드용)
+  documentTitle: string  // 해당 문서의 파일명 또는 제목
+  fileUrl?: string  // Supabase Storage 등에 저장된 원문 파일 다운로드/뷰어 URL
+  sourceType: string  // 문서 유형 구분값 (예: standard_contract, labor_law, case_law)
+  externalId: string  // 백엔드/DB에서 이 문서를 식별하는 키
+  overallSimilarity: number  // 이 문서가 이번 상황분석과 전반적으로 얼마나 관련 있는지 나타내는 대표 점수
+  summary: string  // 이 문서가 어떤 문서인지 한 줄로 설명하는 짧은 요약
+  snippets: RelatedCaseSnippet[]  // 이 문서에서 이번 분석에 실제로 사용된 청크 목록
 }
 
 export interface SourceItem {

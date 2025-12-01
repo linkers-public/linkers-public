@@ -1324,14 +1324,52 @@ class SituationWorkflow:
         
         action_plan = {"steps": validated_steps}
         
-        # 3. scripts 검증
+        # 3. scripts 검증 (이메일 템플릿 구조: {subject, body})
         scripts = result.get("scripts", {})
         if not isinstance(scripts, dict):
             scripts = {}
         
+        # to_company 검증
+        to_company_raw = scripts.get("to_company", {})
+        if isinstance(to_company_raw, str):
+            # 레거시 형식 (문자열)인 경우 기본 구조로 변환
+            to_company = {
+                "subject": "근로계약 관련 확인 요청",
+                "body": to_company_raw[:200] if len(to_company_raw) > 200 else to_company_raw
+            }
+        elif isinstance(to_company_raw, dict):
+            to_company = {
+                "subject": to_company_raw.get("subject", "근로계약 관련 확인 요청"),
+                "body": to_company_raw.get("body", "")[:200] if len(to_company_raw.get("body", "")) > 200 else to_company_raw.get("body", "")
+            }
+        else:
+            to_company = {
+                "subject": "근로계약 관련 확인 요청",
+                "body": ""
+            }
+        
+        # to_advisor 검증
+        to_advisor_raw = scripts.get("to_advisor", {})
+        if isinstance(to_advisor_raw, str):
+            # 레거시 형식 (문자열)인 경우 기본 구조로 변환
+            to_advisor = {
+                "subject": "노무 상담 요청",
+                "body": to_advisor_raw[:200] if len(to_advisor_raw) > 200 else to_advisor_raw
+            }
+        elif isinstance(to_advisor_raw, dict):
+            to_advisor = {
+                "subject": to_advisor_raw.get("subject", "노무 상담 요청"),
+                "body": to_advisor_raw.get("body", "")[:200] if len(to_advisor_raw.get("body", "")) > 200 else to_advisor_raw.get("body", "")
+            }
+        else:
+            to_advisor = {
+                "subject": "노무 상담 요청",
+                "body": ""
+            }
+        
         validated_scripts = {
-            "to_company": scripts.get("to_company", "") if isinstance(scripts.get("to_company"), str) else "",
-            "to_advisor": scripts.get("to_advisor", "") if isinstance(scripts.get("to_advisor"), str) else "",
+            "to_company": to_company,
+            "to_advisor": to_advisor,
         }
         
         result["criteria"] = criteria

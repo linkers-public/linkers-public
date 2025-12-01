@@ -567,7 +567,10 @@ export default function QuickAssistPage() {
               summary: analysis.analysis.summary || '',
               criteria: analysis.criteria || [],
               actionPlan: undefined, // 더 이상 사용하지 않음
-              scripts: analysis.scripts || { toCompany: '', toAdvisor: '' },
+              scripts: analysis.scripts || { 
+                toCompany: undefined, 
+                toAdvisor: undefined 
+              },
               relatedCases: analysis.relatedCases || [],
               sources: analysis.sources || [],
               organizations: analysis.organizations || [],
