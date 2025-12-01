@@ -47,6 +47,7 @@ from core.legal_rag_service import LegalRAGService
 from core.document_processor_v2 import DocumentProcessor
 from core.contract_storage import ContractStorageService
 from core.tools import ClauseLabelingTool, HighlightTool, RewriteTool
+from core.snippet_analyzer import analyze_snippet
 from core.dependencies import (
     get_legal_service_dep,
     get_processor_dep,
@@ -1277,75 +1278,144 @@ async def analyze_situation(
         checklist = []
         recommendations = []
         
-        # scripts 변환
+        # scripts 변환 (이메일 템플릿 구조: {subject, body})
         scripts_data = result.get("scripts", {})
         scripts = None
         if scripts_data:
-            scripts = ScriptsV2(
-                toCompany=scripts_data.get("to_company"),
-                toAdvisor=scripts_data.get("to_advisor"),
-            )
-        
-        # relatedCases 변환 (externalId와 fileUrl 추가)
-        related_cases = []
-        seen_case_ids = set()  # 중복 제거를 위한 id 추적
-        # 공통 유틸 함수 사용 (fileUrl 생성용)
-        from core.file_utils import get_document_file_url
-        from core.snippet_analyzer import analyze_snippet
-        
-        for case in result.get("related_cases", []):
-            case_id = case.get("id", "")
+            # to_company 변환
+            to_company_raw = scripts_data.get("to_company", {})
+            to_company_template = None
+            if isinstance(to_company_raw, dict) and "subject" in to_company_raw and "body" in to_company_raw:
+                from models.schemas import EmailTemplateV2
+                to_company_template = EmailTemplateV2(
+                    subject=to_company_raw.get("subject", ""),
+                    body=to_company_raw.get("body", "")
+                )
+            elif isinstance(to_company_raw, str):
+                # 레거시 형식 (문자열)인 경우 기본 구조로 변환
+                from models.schemas import EmailTemplateV2
+                to_company_template = EmailTemplateV2(
+                    subject="근로계약 관련 확인 요청",
+                    body=to_company_raw[:200] if len(to_company_raw) > 200 else to_company_raw
+                )
             
-            # id가 없거나 이미 추가된 경우 건너뛰기
-            if not case_id or case_id in seen_case_ids:
-                if case_id:
-                    _logger.debug(f"relatedCase 중복 제거: id={case_id}, title={case.get('title', '')}")
+            # to_advisor 변환
+            to_advisor_raw = scripts_data.get("to_advisor", {})
+            to_advisor_template = None
+            if isinstance(to_advisor_raw, dict) and "subject" in to_advisor_raw and "body" in to_advisor_raw:
+                from models.schemas import EmailTemplateV2
+                to_advisor_template = EmailTemplateV2(
+                    subject=to_advisor_raw.get("subject", ""),
+                    body=to_advisor_raw.get("body", "")
+                )
+            elif isinstance(to_advisor_raw, str):
+                # 레거시 형식 (문자열)인 경우 기본 구조로 변환
+                from models.schemas import EmailTemplateV2
+                to_advisor_template = EmailTemplateV2(
+                    subject="노무 상담 요청",
+                    body=to_advisor_raw[:200] if len(to_advisor_raw) > 200 else to_advisor_raw
+                )
+            
+            if to_company_template or to_advisor_template:
+                scripts = ScriptsV2(
+                    toCompany=to_company_template,
+                    toAdvisor=to_advisor_template,
+                )
+        
+        # relatedCases 변환: criteria를 문서 단위로 그룹핑하여 새 구조로 구성
+        from collections import defaultdict
+        from core.file_utils import get_document_file_url
+        
+        # criteria를 documentTitle 또는 externalId 기준으로 그룹핑
+        criteria_list = result.get("criteria", [])
+        grouped_by_document = defaultdict(list)
+        
+        for criterion in criteria_list:
+            # documentTitle 또는 externalId를 키로 사용
+            document_title = criterion.get("documentTitle", "")
+            file_url = criterion.get("fileUrl", "")
+            # fileUrl에서 externalId 추출 시도 (없으면 documentTitle 사용)
+            external_id = None
+            if file_url:
+                # fileUrl에서 externalId 추출 (예: .../standard_contracts/{external_id}.pdf)
+                import re
+                match = re.search(r'/([^/]+)\.pdf', file_url)
+                if match:
+                    external_id = match.group(1)
+            
+            # 키 결정: external_id가 있으면 사용, 없으면 document_title 사용
+            group_key = external_id if external_id else document_title
+            
+            if group_key:
+                grouped_by_document[group_key].append(criterion)
+        
+        # 그룹별로 relatedCase 구성
+        related_cases = []
+        for group_key, criteria_items in list(grouped_by_document.items())[:5]:  # 최대 5개 문서
+            if not criteria_items:
                 continue
             
-            # id를 추적 세트에 추가
-            seen_case_ids.add(case_id)
+            # 첫 번째 criteria에서 공통 정보 추출
+            first_criterion = criteria_items[0]
+            document_title = first_criterion.get("documentTitle", "")
+            source_type = first_criterion.get("sourceType", "law")
+            file_url = first_criterion.get("fileUrl")
             
-            # relatedCases의 id는 이미 external_id입니다
-            external_id = case_id
-            # source_type 가져오기 (grounding_chunks에서 제공된 경우)
-            case_source_type = case.get("source_type", "case")  # 기본값: case
+            # externalId 추출 (fileUrl에서 또는 직접)
+            external_id = group_key
+            if file_url:
+                import re
+                match = re.search(r'/([^/]+)\.pdf', file_url)
+                if match:
+                    external_id = match.group(1)
             
-            # fileUrl 생성 (공통 유틸 함수 사용, 실제 source_type 사용)
-            file_url = None
-            if external_id:
+            # fileUrl이 없으면 생성
+            if not file_url and external_id:
                 try:
                     file_url = get_document_file_url(
                         external_id=external_id,
-                        source_type=case_source_type,  # 실제 source_type 사용 (case 또는 standard_contract)
+                        source_type=source_type,
                         expires_in=3600
                     )
                 except Exception as e:
-                    _logger.warning(f"relatedCase fileUrl 생성 실패 (id={case_id}, sourceType={case_source_type}): {str(e)}")
+                    _logger.warning(f"relatedCase fileUrl 생성 실패 (external_id={external_id}, sourceType={source_type}): {str(e)}")
             
-            # snippet 분석 (원본 summary를 분석하여 변환)
-            original_summary = case.get("summary", "")
-            analyzed_summary = None
-            try:
-                _logger.info(f"[analyze-situation] relatedCase snippet 분석 시작 (id={case_id}, summary 길이={len(original_summary)})")
-                analyzed_summary = await analyze_snippet(original_summary)
-                if analyzed_summary:
-                    _logger.info(f"[analyze-situation] relatedCase snippet 분석 성공 (id={case_id}): core_clause={analyzed_summary.get('core_clause', '')[:50]}")
-                else:
-                    _logger.warning(f"[analyze-situation] relatedCase snippet 분석 결과 None (id={case_id})")
-            except Exception as e:
-                _logger.error(f"relatedCase snippet 분석 실패 (id={case_id}): {str(e)}", exc_info=True)
+            # overallSimilarity 계산 (가장 높은 similarityScore 사용)
+            overall_similarity = max(
+                float(criterion.get("similarityScore", 0.0))
+                for criterion in criteria_items
+            )
+            
+            # summary 생성 (첫 snippet 앞부분 100자 정도 잘라서 요약처럼 사용)
+            first_snippet = criteria_items[0].get("snippet", "")
+            summary = first_snippet[:100] + "..." if len(first_snippet) > 100 else first_snippet
+            if not summary:
+                summary = f"{document_title}의 내용을 참고하여 법적 판단 기준으로 사용했습니다."
+            
+            # snippets 배열 구성
+            snippets = []
+            for criterion in criteria_items:
+                snippet_text = criterion.get("snippet", "")
+                similarity_score = float(criterion.get("similarityScore", 0.0))
+                usage_reason = criterion.get("usageReason", "")
+                
+                snippets.append({
+                    "snippet": snippet_text[:500] if len(snippet_text) > 500 else snippet_text,
+                    "similarityScore": similarity_score,
+                    "usageReason": usage_reason,
+                })
             
             related_cases.append({
-                "id": case_id,  # external_id
-                "title": case.get("title", ""),
-                "summary": original_summary,  # 원본 유지 (하위 호환성)
-                "summaryAnalyzed": analyzed_summary,  # 분석된 결과 추가
-                "link": None,
-                "externalId": external_id,  # id와 동일 (이미 external_id)
-                "fileUrl": file_url,  # 스토리지 Signed URL (공통 유틸 함수 사용, 실제 source_type 사용)
+                "documentTitle": document_title,
+                "fileUrl": file_url,
+                "sourceType": source_type,
+                "externalId": external_id,
+                "overallSimilarity": overall_similarity,
+                "summary": summary,
+                "snippets": snippets,
             })
         
-        _logger.info(f"relatedCases 중복 제거 후: {len(related_cases)}개 (원본: {len(result.get('related_cases', []))}개)")
+        _logger.info(f"relatedCases 문서 단위 그룹핑 완료: {len(related_cases)}개 문서 (원본 criteria: {len(criteria_list)}개)")
         
         # tags 추출 (classified_type 기반)
         tags = [result.get("classified_type", "unknown")]

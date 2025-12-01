@@ -163,17 +163,49 @@ export const analyzeSituationDetailed = async (
         })),
       },
       scripts: {
-        toCompany: backendData.scripts?.to_company,
-        toAdvisor: backendData.scripts?.to_advisor,
+        toCompany: backendData.scripts?.to_company 
+          ? (typeof backendData.scripts.to_company === 'string' 
+            ? { subject: '근로계약 관련 확인 요청', body: backendData.scripts.to_company }
+            : backendData.scripts.to_company)
+          : undefined,
+        toAdvisor: backendData.scripts?.to_advisor
+          ? (typeof backendData.scripts.to_advisor === 'string'
+            ? { subject: '노무 상담 요청', body: backendData.scripts.to_advisor }
+            : backendData.scripts.to_advisor)
+          : undefined,
       },
-      relatedCases: (backendData.related_cases || []).map((caseItem: any) => ({
-        id: caseItem.id,
-        title: caseItem.title,
-        summary: caseItem.summary,
-        link: caseItem.link,
-        externalId: caseItem.externalId || caseItem.external_id || caseItem.id, // id와 동일
-        fileUrl: caseItem.fileUrl || caseItem.file_url,
-      })),
+      relatedCases: (backendData.related_cases || []).map((caseItem: any) => {
+        // 새 구조 (documentTitle, fileUrl, sourceType, externalId, overallSimilarity, summary, snippets)
+        if (caseItem.documentTitle && caseItem.snippets) {
+          return {
+            documentTitle: caseItem.documentTitle,
+            fileUrl: caseItem.fileUrl,
+            sourceType: caseItem.sourceType || 'law',
+            externalId: caseItem.externalId || '',
+            overallSimilarity: caseItem.overallSimilarity || 0,
+            summary: caseItem.summary || '',
+            snippets: (caseItem.snippets || []).map((snippet: any) => ({
+              snippet: snippet.snippet || '',
+              similarityScore: snippet.similarityScore || 0,
+              usageReason: snippet.usageReason || '',
+            })),
+          };
+        }
+        // 레거시 구조 (id, title, summary) - 하위 호환성
+        return {
+          documentTitle: caseItem.title || caseItem.documentTitle || '',
+          fileUrl: caseItem.fileUrl || caseItem.file_url,
+          sourceType: caseItem.sourceType || 'law',
+          externalId: caseItem.externalId || caseItem.external_id || caseItem.id || '',
+          overallSimilarity: caseItem.overallSimilarity || 0,
+          summary: caseItem.summary || '',
+          snippets: [{
+            snippet: caseItem.summary || '',
+            similarityScore: 0,
+            usageReason: '',
+          }],
+        };
+      }),
       sources: (backendData.sources || []).map((source: any) => ({
         sourceId: source.source_id || source.sourceId,
         sourceType: (source.source_type || source.sourceType || 'law') as 'law' | 'manual' | 'case' | 'standard_contract',
@@ -269,18 +301,30 @@ export interface SituationAnalysisV2 {
   recommendations: string[];
 }
 
+export interface RelatedCaseSnippetV2 {
+  snippet: string;  // 벡터 검색에서 가져온 원문 일부(청크 텍스트)
+  similarityScore: number;  // 이 청크가 현재 상황/질문과 얼마나 유사한지 점수
+  usageReason: string;  // 왜 이 청크를 근거로 사용했는지의 설명
+}
+
 export interface RelatedCaseV2 {
-  id: string;
-  title: string;
-  summary: string;
-  link?: string;
-  externalId?: string; // 파일 ID (스토리지 경로 생성용, id와 동일)
-  fileUrl?: string; // 스토리지 Signed URL (파일 다운로드용)
+  documentTitle: string;  // 해당 문서의 파일명 또는 제목
+  fileUrl?: string;  // Supabase Storage 등에 저장된 원문 파일 다운로드/뷰어 URL
+  sourceType: string;  // 문서 유형 구분값 (예: standard_contract, labor_law, case_law)
+  externalId: string;  // 백엔드/DB에서 이 문서를 식별하는 키
+  overallSimilarity: number;  // 이 문서가 이번 상황분석과 전반적으로 얼마나 관련 있는지 나타내는 대표 점수
+  summary: string;  // 이 문서가 어떤 문서인지 한 줄로 설명하는 짧은 요약
+  snippets: RelatedCaseSnippetV2[];  // 이 문서에서 이번 분석에 실제로 사용된 청크 목록
+}
+
+export interface EmailTemplateV2 {
+  subject: string;  // 이메일 제목
+  body: string;     // 이메일 본문 (마크다운 또는 일반 텍스트)
 }
 
 export interface ScriptsV2 {
-  toCompany?: string;
-  toAdvisor?: string;
+  toCompany?: EmailTemplateV2;  // 회사에 보낼 이메일 템플릿
+  toAdvisor?: EmailTemplateV2;  // 노무사/기관에 보낼 이메일 템플릿
 }
 
 export interface SourceItemV2 {
@@ -294,9 +338,12 @@ export interface SourceItemV2 {
 }
 
 export interface CriteriaItemV2 {
-  name: string;
-  status: 'likely' | 'unclear' | 'unlikely';
-  reason: string;
+  documentTitle: string; // 문서 제목
+  fileUrl?: string | null; // 문서 파일 URL (Signed URL)
+  sourceType: string; // 출처 타입 (law, manual, case, standard_contract)
+  similarityScore: number; // 유사도 점수 (0.0 ~ 1.0)
+  snippet: string; // 관련 내용 스니펫
+  usageReason: string; // 사용 이유 설명
 }
 
 export interface SituationResponseV2 {

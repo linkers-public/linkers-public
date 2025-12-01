@@ -567,7 +567,10 @@ export default function QuickAssistPage() {
               summary: analysis.analysis.summary || '',
               criteria: analysis.criteria || [],
               actionPlan: undefined, // 더 이상 사용하지 않음
-              scripts: analysis.scripts || { toCompany: '', toAdvisor: '' },
+              scripts: analysis.scripts || { 
+                toCompany: undefined, 
+                toAdvisor: undefined 
+              },
               relatedCases: analysis.relatedCases || [],
               sources: analysis.sources || [],
               organizations: analysis.organizations || [],
@@ -1095,7 +1098,7 @@ export default function QuickAssistPage() {
         // 법적 관점 내용을 컨텍스트로 변환
         const legalContext = situationAnalysis.criteria
           .map((criterion, index) => {
-            const reason = criterion.reason || `${criterion.name}: ${criterion.status}`
+            const reason = criterion.usageReason || `${criterion.documentTitle}: ${criterion.sourceType}`
             return `${index + 1}. ${reason}`
           })
           .join('\n')

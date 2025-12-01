@@ -708,12 +708,44 @@ class ContractStorageService:
             criteria = analysis_data.get("criteria", [])
             action_plan = analysis_data.get("actionPlan", {})
             scripts_raw = analysis_data.get("scripts", {})
-            # scripts를 camelCase로 변환 (to_company -> toCompany, to_advisor -> toAdvisor)
+            # scripts를 camelCase로 변환 (이메일 템플릿 구조: {subject, body})
             scripts = {}
             if isinstance(scripts_raw, dict):
+                # to_company 변환
+                to_company_raw = scripts_raw.get("to_company") or scripts_raw.get("toCompany")
+                if isinstance(to_company_raw, dict):
+                    to_company = {
+                        "subject": to_company_raw.get("subject", ""),
+                        "body": to_company_raw.get("body", "")
+                    }
+                elif isinstance(to_company_raw, str):
+                    # 레거시 형식 (문자열)인 경우 기본 구조로 변환
+                    to_company = {
+                        "subject": "근로계약 관련 확인 요청",
+                        "body": to_company_raw[:200] if len(to_company_raw) > 200 else to_company_raw
+                    }
+                else:
+                    to_company = None
+                
+                # to_advisor 변환
+                to_advisor_raw = scripts_raw.get("to_advisor") or scripts_raw.get("toAdvisor")
+                if isinstance(to_advisor_raw, dict):
+                    to_advisor = {
+                        "subject": to_advisor_raw.get("subject", ""),
+                        "body": to_advisor_raw.get("body", "")
+                    }
+                elif isinstance(to_advisor_raw, str):
+                    # 레거시 형식 (문자열)인 경우 기본 구조로 변환
+                    to_advisor = {
+                        "subject": "노무 상담 요청",
+                        "body": to_advisor_raw[:200] if len(to_advisor_raw) > 200 else to_advisor_raw
+                    }
+                else:
+                    to_advisor = None
+                
                 scripts = {
-                    "toCompany": scripts_raw.get("to_company") or scripts_raw.get("toCompany"),
-                    "toAdvisor": scripts_raw.get("to_advisor") or scripts_raw.get("toAdvisor"),
+                    "toCompany": to_company,
+                    "toAdvisor": to_advisor,
                 }
             classified_type = analysis_data.get("classifiedType", analysis.get("classified_type", "unknown"))
             risk_score = analysis_data.get("riskScore", float(analysis.get("risk_score", 0)))
