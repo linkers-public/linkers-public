@@ -7,6 +7,7 @@ import { FileText, Scale, ChevronRight, ExternalLink, BookOpen } from 'lucide-re
 import { RAGHighlightedMarkdown } from '@/components/legal/RAGHighlightedText'
 import { EvidenceDrawer } from '@/components/legal/LegalEvidenceSection'
 import { LegalBasisModal, type LegalBasisDetail } from '@/components/legal/LegalBasisModal'
+import { parseSummary, findSectionByEmoji, removeEmojiFromTitle } from '@/utils/parseSummary'
 import type { SituationAnalysisResponse } from '@/types/legal'
 
 interface LegalReportCardProps {
@@ -19,13 +20,24 @@ export function LegalReportCard({ analysisResult, onCopy }: LegalReportCardProps
   const [selectedCriterionIndex, setSelectedCriterionIndex] = useState<number | null>(null)
   const [isSourcesExpanded, setIsSourcesExpanded] = useState(false)
   
-  // summary에서 "## 상황 분석의 결과" 섹션만 추출
+  // summary를 섹션별로 파싱
   const summaryText = analysisResult.summary || ''
-  const sectionMatch = summaryText.match(/##\s*📊\s*상황\s*분석의\s*결과\s*\n([\s\S]*?)(?=##|$)/i) ||
-                       summaryText.match(/##\s*상황\s*분석의\s*결과\s*\n([\s\S]*?)(?=##|$)/i) ||
-                       summaryText.match(/상황\s*분석의\s*결과\s*\n([\s\S]*?)(?=##|$)/i)
+  const sections = parseSummary(summaryText)
   
-  const situationAnalysisContent = sectionMatch ? sectionMatch[1].trim() : summaryText
+  // 각 섹션 추출
+  const situationAnalysisSection = findSectionByEmoji(sections, '📊') || 
+                                   sections.find(s => s.title.includes('상황 분석'))
+  const legalJudgmentSection = findSectionByEmoji(sections, '⚖️') || 
+                               sections.find(s => s.title.includes('법적 판단') || s.title.includes('법적 관점'))
+  const scenarioSection = findSectionByEmoji(sections, '🔮') || 
+                         sections.find(s => s.title.includes('예상 시나리오') || s.title.includes('시나리오'))
+  const warningSection = findSectionByEmoji(sections, '💡') || 
+                        sections.find(s => s.title.includes('주의사항') || s.title.includes('주의'))
+  
+  const situationAnalysisContent = situationAnalysisSection?.content || ''
+  const legalJudgmentContent = legalJudgmentSection?.content || ''
+  const scenarioContent = scenarioSection?.content || ''
+  const warningContent = warningSection?.content || ''
 
   // 근거 자료 변환 (중복 제거 없이 모든 항목 표시)
   const evidenceSources = analysisResult.sources?.map((source) => ({
@@ -115,7 +127,9 @@ export function LegalReportCard({ analysisResult, onCopy }: LegalReportCardProps
           <div className="space-y-3">
             <div className="flex items-center gap-2 mb-2">
               <FileText className="w-5 h-5 text-blue-600" />
-              <h3 className="text-lg font-bold text-slate-900">상황 분석</h3>
+              <h3 className="text-lg font-bold text-slate-900">
+                {situationAnalysisSection ? removeEmojiFromTitle(situationAnalysisSection.title) : '상황 분석'}
+              </h3>
             </div>
             <div className="prose prose-slate max-w-none text-sm leading-relaxed">
               <RAGHighlightedMarkdown 
@@ -127,39 +141,72 @@ export function LegalReportCard({ analysisResult, onCopy }: LegalReportCardProps
           </div>
         )}
 
-        {/* 섹션 2: 법적 관점 (summary의 ⚖️ 섹션) */}
-        {(() => {
-          // summary에서 "## ⚖️ 법적 관점에서 본 현재상황" 섹션 추출
-          const legalSectionMatch = summaryText.match(/##\s*⚖️\s*법적\s*관점에서\s*본\s*현재상황\s*\n([\s\S]*?)(?=##|$)/i) ||
-                                   summaryText.match(/##\s*⚖️\s*법적\s*관점\s*\n([\s\S]*?)(?=##|$)/i) ||
-                                   summaryText.match(/##\s*법적\s*관점에서\s*본\s*현재상황\s*\n([\s\S]*?)(?=##|$)/i)
-          const legalViewContent = legalSectionMatch ? legalSectionMatch[1].trim() : null
-          
+        {/* 섹션 2: 법적 판단 */}
+        {legalJudgmentContent && (() => {
           // 기본값 텍스트 필터링
-          const isDefaultText = legalViewContent === '해당 섹션 내용을 확인하는 중입니다.' || 
-                                legalViewContent === '관련 법령을 확인하여 현재 상황을 법적으로 평가해야 합니다.'
+          const isDefaultText = legalJudgmentContent === '해당 섹션 내용을 확인하는 중입니다.' || 
+                                legalJudgmentContent === '관련 법령을 확인하여 현재 상황을 법적으로 평가해야 합니다.'
           
-          if (legalViewContent && !isDefaultText) {
-            return (
-              <div className="space-y-3">
-                <div className="flex items-center gap-2 mb-2">
-                  <Scale className="w-5 h-5 text-amber-600" />
-                  <h3 className="text-lg font-bold text-slate-900">법적 관점에서 본 현재 상황</h3>
-                </div>
-                <div className="prose prose-slate max-w-none text-sm leading-relaxed">
-                  <RAGHighlightedMarkdown 
-                    content={legalViewContent}
-                    sources={analysisResult.sources || []}
-                  />
-                </div>
-                <hr className="border-gray-200" />
+          if (isDefaultText) return null
+          
+          return (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 mb-2">
+                <Scale className="w-5 h-5 text-amber-600" />
+                <h3 className="text-lg font-bold text-slate-900">
+                  {legalJudgmentSection ? removeEmojiFromTitle(legalJudgmentSection.title) : '법적 판단'}
+                </h3>
               </div>
-            )
-          }
-          return null
+              <div className="prose prose-slate max-w-none text-sm leading-relaxed">
+                <RAGHighlightedMarkdown 
+                  content={legalJudgmentContent}
+                  sources={analysisResult.sources || []}
+                />
+              </div>
+              <hr className="border-gray-200" />
+            </div>
+          )
         })()}
 
-        {/* 섹션 3: 법적 판단 기준 (새 API 형식) */}
+        {/* 섹션 3: 예상 시나리오 */}
+        {scenarioContent && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 mb-2">
+              <FileText className="w-5 h-5 text-purple-600" />
+              <h3 className="text-lg font-bold text-slate-900">
+                {scenarioSection ? removeEmojiFromTitle(scenarioSection.title) : '예상 시나리오'}
+              </h3>
+            </div>
+            <div className="prose prose-slate max-w-none text-sm leading-relaxed">
+              <RAGHighlightedMarkdown 
+                content={scenarioContent}
+                sources={analysisResult.sources || []}
+              />
+            </div>
+            <hr className="border-gray-200" />
+          </div>
+        )}
+
+        {/* 섹션 4: 주의사항 */}
+        {warningContent && (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 mb-2">
+              <FileText className="w-5 h-5 text-red-600" />
+              <h3 className="text-lg font-bold text-slate-900">
+                {warningSection ? removeEmojiFromTitle(warningSection.title) : '주의사항'}
+              </h3>
+            </div>
+            <div className="prose prose-slate max-w-none text-sm leading-relaxed">
+              <RAGHighlightedMarkdown 
+                content={warningContent}
+                sources={analysisResult.sources || []}
+              />
+            </div>
+            <hr className="border-gray-200" />
+          </div>
+        )}
+
+        {/* 섹션 5: 법적 판단 기준 (새 API 형식) */}
         {analysisResult.criteria && analysisResult.criteria.length > 0 && (
           <div className="space-y-4">
             <div className="flex items-center gap-2 mb-2">
@@ -276,7 +323,7 @@ export function LegalReportCard({ analysisResult, onCopy }: LegalReportCardProps
           </div>
         )}
 
-        {/* 섹션 4: 참고 문헌 및 관련 사례 */}
+        {/* 섹션 6: 참고 문헌 및 관련 사례 */}
         {((analysisResult.relatedCases && analysisResult.relatedCases.length > 0) || evidenceSources.length > 0) && (
           <div className="space-y-4">
             {(() => {
