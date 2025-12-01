@@ -289,6 +289,13 @@ function UserMessageWithContext({
 }) {
   const [isLoadingReport, setIsLoadingReport] = useState(false)
   const [reportInfo, setReportInfo] = useState<{ title: string; summary: string; type: 'situation' | 'contract' } | null>(null)
+  // reportCache를 ref로 추적하여 최신 값을 읽을 수 있도록 함
+  const reportCacheRef = useRef(reportCache)
+  
+  // reportCache가 변경될 때마다 ref 업데이트
+  useEffect(() => {
+    reportCacheRef.current = reportCache
+  }, [reportCache])
 
   // 리포트 요약 텍스트 추출 유틸 함수
   const extractSummary = (text: string, maxLength: number = 100): string => {
@@ -330,14 +337,14 @@ function UserMessageWithContext({
         return
       }
 
-      // 캐시에서 확인
-      const cached = reportCache.get(message.context_id)
+      // 캐시에서 확인 (ref를 통해 최신 값 읽기)
+      const cached = reportCacheRef.current.get(message.context_id!)
       if (cached) {
         setReportInfo(cached)
         return
       }
 
-      // 리포트 정보 가져오기
+      // 캐시가 없으면 리포트 정보 가져오기
       setIsLoadingReport(true)
       try {
         const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client')
@@ -355,7 +362,13 @@ function UserMessageWithContext({
 
         if (info) {
           setReportInfo(info)
-          setReportCache(prev => new Map(prev).set(message.context_id!, info))
+          setReportCache(prev => {
+            // 이미 캐시에 있으면 업데이트하지 않음 (중복 방지)
+            if (prev.has(message.context_id!)) {
+              return prev
+            }
+            return new Map(prev).set(message.context_id!, info)
+          })
         }
       } catch (error) {
         console.warn('리포트 정보 로드 실패:', error)
@@ -366,7 +379,9 @@ function UserMessageWithContext({
     }
 
     loadReportInfo()
-  }, [message.context_id, message.context_type, reportCache, setReportCache])
+    // reportCache를 의존성에서 제거하여 무한 루프 방지
+    // reportCacheRef를 통해 최신 값을 읽을 수 있음
+  }, [message.context_id, message.context_type])
 
   const reportUrl = getContextReportUrl(message.context_type, message.context_id)
 
