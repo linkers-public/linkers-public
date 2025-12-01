@@ -777,13 +777,11 @@ class ContractStorageService:
             if not isinstance(organizations, list):
                 organizations = []
             
-            # 디버깅: criteria 확인
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.info(f"[get_situation_analysis] analysis_data 키: {list(analysis_data.keys()) if isinstance(analysis_data, dict) else 'Not a dict'}")
-            logger.info(f"[get_situation_analysis] criteria 개수: {len(criteria) if isinstance(criteria, list) else 0}")
-            logger.info(f"[get_situation_analysis] findings 개수: {len(findings) if isinstance(findings, list) else 0}")
-            logger.info(f"[get_situation_analysis] organizations 개수: {len(organizations) if isinstance(organizations, list) else 0}")
+            # 디버깅: criteria 확인 (DEBUG 레벨로 변경하여 불필요한 로그 감소)
+            # logger.debug(f"[get_situation_analysis] analysis_data 키: {list(analysis_data.keys()) if isinstance(analysis_data, dict) else 'Not a dict'}")
+            # logger.debug(f"[get_situation_analysis] criteria 개수: {len(criteria) if isinstance(criteria, list) else 0}")
+            # logger.debug(f"[get_situation_analysis] findings 개수: {len(findings) if isinstance(findings, list) else 0}")
+            # logger.debug(f"[get_situation_analysis] organizations 개수: {len(organizations) if isinstance(organizations, list) else 0}")
             
             # recommendations는 actionPlan에서 추출 (레거시 호환성)
             recommendations = []
