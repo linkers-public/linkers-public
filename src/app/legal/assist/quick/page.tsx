@@ -778,7 +778,7 @@ export default function QuickAssistPage() {
             classifiedType: analysis.tags?.[0] as any || 'unknown',
             riskScore: analysis.riskScore,
             summary: analysis.analysis?.summary || '',
-            criteria: analysis.criteria || [],
+            findings: analysis.findings || [], // findings 필드 사용
             scripts: analysis.scripts || { toCompany: { subject: '', body: '' }, toAdvisor: { subject: '', body: '' } },
             relatedCases: analysis.relatedCases || [],
             sources: analysis.sources,
@@ -825,6 +825,9 @@ export default function QuickAssistPage() {
 
   // 선택된 대화의 메시지 로드 (DB에서 최신 메시지 가져오기)
   useEffect(() => {
+    // 세션이 변경될 때 분석 상태 초기화 (다른 세션으로 전환 시 이전 세션의 상태가 유지되지 않도록)
+    setIsAnalyzing(false)
+    
     if (selectedConversationId) {
       const conversation = conversations.find(c => c.id === selectedConversationId)
       if (conversation) {
@@ -1374,6 +1377,8 @@ export default function QuickAssistPage() {
     const userId = user?.id || null
 
     // 현재 대화 세션 업데이트 또는 생성
+    // API 호출 전에 세션 ID를 저장하여, 응답 시 세션이 변경되었는지 확인
+    const sessionIdAtRequestStart = selectedConversationId
     let currentSession: ConversationSession
     let chatSessionId: string | null = null  // legal_chat_sessions의 ID
     
@@ -1452,7 +1457,7 @@ export default function QuickAssistPage() {
           chatResult = await chatWithAgent({
             mode: 'contract',
             message: messageToSend,
-            contractAnalysisId: currentContext.id,
+            contractAnalysisId: currentContext.id || undefined, // null을 undefined로 변환
             ...(selectedConversationId && chatSessionId ? { sessionId: chatSessionId } : {}),
           }, userId)
           
@@ -1526,12 +1531,19 @@ export default function QuickAssistPage() {
       }
       // 상황 분석 결과가 있으면 chatWithContractV2 사용 (컨텍스트 포함)
       else if (situationAnalysis && situationContext) {
-        // 법적 관점 내용을 컨텍스트로 변환 (새로운 CriteriaItemV2 구조 사용)
-        const legalContext = situationAnalysis.criteria
-          .map((criterion, index) => {
-            // CriteriaItemV2 구조: documentTitle, usageReason, snippet 등
-            const reason = criterion.usageReason || `${criterion.documentTitle}: ${criterion.snippet.substring(0, 50)}`
-            return `${index + 1}. ${reason}`
+        // 법적 관점 내용을 컨텍스트로 변환 (findings 사용)
+        const legalContext = (situationAnalysis.findings || [])
+          .map((finding: any, index: number) => {
+            // Finding 구조 또는 CriteriaItemV2 구조 지원
+            if (finding.usageReason || finding.documentTitle) {
+              // CriteriaItemV2 구조
+              const reason = finding.usageReason || `${finding.documentTitle}: ${finding.snippet?.substring(0, 50) || ''}`
+              return `${index + 1}. ${reason}`
+            } else if (finding.basisText || finding.title) {
+              // Finding 구조
+              return `${index + 1}. ${finding.basisText || finding.title}`
+            }
+            return `${index + 1}. ${JSON.stringify(finding)}`
           })
           .join('\n')
         
@@ -1543,7 +1555,7 @@ export default function QuickAssistPage() {
           docIds: [], // 상황 분석은 docId 없음
           analysisSummary: analysisSummary,
           riskScore: situationAnalysis.riskScore,
-          totalIssues: situationAnalysis.criteria?.length || 0,
+          totalIssues: situationAnalysis.findings?.length || 0,
           topK: 8,
           contextType: currentContext.type,
           contextId: currentContext.id,
@@ -1762,7 +1774,7 @@ export default function QuickAssistPage() {
           const chatResult = await chatWithAgent({
             mode: 'contract',
             message: messageToSend,
-            contractAnalysisId: currentContext.id, // 계약서 분석 ID
+            contractAnalysisId: currentContext.id || undefined, // null을 undefined로 변환
             ...(selectedConversationId && chatSessionId ? { sessionId: chatSessionId } : {}),
           }, userId)
           
@@ -1896,7 +1908,7 @@ export default function QuickAssistPage() {
           assistantMessage = {
             id: `msg-${Date.now()}-assistant`,
             role: 'assistant',
-            content: result.analysis.summary,
+            content: result.analysis?.summary || '분석 결과를 불러올 수 없습니다.',
             timestamp: new Date(),
             context_type: result.id ? 'situation' : 'none',
             context_id: result.id || null,
@@ -1924,9 +1936,9 @@ export default function QuickAssistPage() {
             const report: Report = {
               id: result.id,
               question: inputMessage.trim(),
-              answer: result.analysis.summary,
-              legalBasis: result.analysis.legalBasis?.map((b: any) => b.snippet) || [],
-              recommendations: result.analysis.recommendations || [],
+              answer: result.analysis?.summary || '',
+              legalBasis: result.analysis?.legalBasis?.map((b: any) => b.snippet) || [],
+              recommendations: result.analysis?.recommendations || [],
               riskScore: result.riskScore,
               tags: result.tags || [],
               createdAt: new Date(),
@@ -1936,6 +1948,91 @@ export default function QuickAssistPage() {
             setReports(updatedReports)
           }
         }
+      }
+
+      // API 응답 후 세션이 변경되었는지 확인
+      // 세션이 변경되었다면 (새 대화를 시작했다면) 응답을 무시
+      const currentSessionId = selectedConversationId
+      const sessionChanged = sessionIdAtRequestStart !== currentSessionId
+      
+      if (sessionChanged) {
+        // 세션이 변경되었으므로 응답을 무시하고 DB에만 저장 (나중에 확인 가능)
+        console.log('세션이 변경되어 응답을 무시합니다. 원래 세션:', sessionIdAtRequestStart, '현재 세션:', currentSessionId)
+        
+        // DB에는 저장 (나중에 해당 세션을 선택하면 볼 수 있음)
+        if (userId && chatSessionId) {
+          try {
+            const dbMessages = await getChatMessages(chatSessionId, userId)
+            const maxSequenceNumber = dbMessages.length > 0 
+              ? Math.max(...dbMessages.map(m => m.sequence_number))
+              : -1
+            
+            const nextSequenceNumber = maxSequenceNumber + 1
+            
+            // 사용자 메시지 저장
+            await saveChatMessage(
+              chatSessionId,
+              {
+                sender_type: 'user',
+                message: userMessage.content,
+                sequence_number: nextSequenceNumber,
+                context_type: userMessage.context_type || 'none',
+                context_id: userMessage.context_id || null,
+              },
+              userId
+            )
+            
+            // AI 응답 메시지 저장
+            await saveChatMessage(
+              chatSessionId,
+              {
+                sender_type: 'assistant',
+                message: assistantMessage.content,
+                sequence_number: nextSequenceNumber + 1,
+                context_type: assistantMessage.context_type || 'none',
+                context_id: assistantMessage.context_id || null,
+              },
+              userId
+            )
+          } catch (dbError) {
+            console.warn('세션 변경 후 메시지 저장 실패:', dbError)
+          }
+        }
+        
+        // 현재 세션의 대화 목록은 업데이트하지 않음 (이미 다른 세션으로 전환됨)
+        // 하지만 원래 세션의 대화 목록은 업데이트해야 함 (나중에 선택하면 볼 수 있도록)
+        if (sessionIdAtRequestStart) {
+          setConversations(prevConversations => {
+            const originalSession = prevConversations.find(c => c.id === sessionIdAtRequestStart)
+            if (originalSession) {
+              // userMessage가 이미 포함되어 있는지 확인 (중복 방지)
+              const hasUserMessage = originalSession.messages.some(m => 
+                m.id === userMessage.id || 
+                (m.role === 'user' && m.content === userMessage.content && 
+                 Math.abs(m.timestamp.getTime() - userMessage.timestamp.getTime()) < 1000)
+              )
+              
+              const messagesToAdd = hasUserMessage 
+                ? [assistantMessage] 
+                : [userMessage, assistantMessage]
+              
+              const finalMessages = [...originalSession.messages, ...messagesToAdd]
+              const updatedSession = {
+                ...originalSession,
+                messages: finalMessages,
+                updatedAt: new Date(),
+              }
+              const updatedConversations = prevConversations.map(c => 
+                c.id === sessionIdAtRequestStart ? updatedSession : c
+              )
+              saveConversations(updatedConversations)
+              return updatedConversations
+            }
+            return prevConversations
+          })
+        }
+        
+        return // 세션이 변경되었으므로 더 이상 진행하지 않음
       }
 
       const finalMessages = [...newMessages, assistantMessage]
@@ -2023,6 +2120,7 @@ export default function QuickAssistPage() {
     setHasInitialGreeting(false)
     setCurrentContext({ type: 'none', id: null })
     setInputMessage('')
+    setIsAnalyzing(false) // 분석 상태 초기화 (다른 세션의 상태가 유지되지 않도록)
     // 새 대화를 시작할 때는 상황 분석 결과도 초기화
     // (URL 파라미터에서 온 경우는 페이지 로드 시 다시 설정됨)
     setSituationAnalysis(null)
@@ -2058,10 +2156,10 @@ export default function QuickAssistPage() {
   }, [])
 
   // 상황 템플릿 선택 - 카드 클릭 시 입력창에 예시 문장 자동 채우기
-  const handleSituationSelect = (situation: typeof COMMON_SITUATIONS[0]) => {
+  const handleSituationSelect = (situation: typeof SITUATION_PRESETS[0]) => {
     // 카드 클릭 시 입력창에 예시 문장 자동 채우기
     // 예: "인턴인데 수습 기간 중에 회사가 일방적으로 계약 해지를 통보했습니다."
-    const exampleText = situation.text
+    const exampleText = situation.details || situation.summary || ''
     setInputMessage(exampleText)
     // 입력창으로 포커스 이동
     setTimeout(() => {
@@ -2790,7 +2888,7 @@ export default function QuickAssistPage() {
                   <button
                     type="button"
                     onClick={handleSendMessage}
-                    disabled={!inputMessage.trim() || isAnalyzing}
+                    disabled={(!inputMessage.trim() && !selectedFile) || isAnalyzing}
                     className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-r from-indigo-400 to-violet-400 text-white shadow-md disabled:opacity-40 disabled:cursor-not-allowed hover:shadow-lg transition-all"
                   >
                     {isAnalyzing ? (
