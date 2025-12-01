@@ -3,6 +3,7 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any, Union
 from datetime import datetime
+from enum import Enum
 
 
 class AnnouncementAnalysis(BaseModel):
@@ -569,3 +570,58 @@ class LegalChatResponseV2(BaseModel):
     markdown: Optional[str] = Field(None, description="마크다운 형식 답변")
     query: str = Field(..., description="원본 질문")
     usedChunks: Optional[UsedChunksV2] = Field(None, description="사용된 RAG 청크 (Dual RAG)")
+
+
+# ========== Agent 기반 통합 챗 API 스키마 ==========
+
+class LegalChatMode(str, Enum):
+    """법률 챗 모드"""
+    plain = "plain"
+    contract = "contract"
+    situation = "situation"
+
+
+class UsedReportMeta(BaseModel):
+    """사용된 리포트 메타데이터"""
+    type: str = Field(..., description="리포트 타입: 'contract' | 'situation'")
+    analysisId: str = Field(..., description="분석 ID (UUID)")
+    findingsIds: Optional[List[str]] = Field(None, description="발견된 이슈 ID 목록")
+
+
+class UsedSourceMeta(BaseModel):
+    """사용된 소스 메타데이터"""
+    documentTitle: str = Field(..., description="문서 제목")
+    fileUrl: Optional[str] = Field(None, description="파일 URL")
+    sourceType: str = Field(..., description="소스 타입: 'law' | 'case' | 'standard_contract' | ...")
+    similarityScore: Optional[float] = Field(None, description="유사도 점수")
+
+
+class ContractAnalysisSummary(BaseModel):
+    """계약서 분석 요약"""
+    id: str = Field(..., description="분석 ID")
+    title: Optional[str] = Field(None, description="계약서 제목")
+    riskScore: Optional[int] = Field(None, description="위험도 점수")
+    riskLevel: Optional[str] = Field(None, description="위험도 레벨")
+    summary: Optional[str] = Field(None, description="요약")
+
+
+class SituationAnalysisSummary(BaseModel):
+    """상황 분석 요약"""
+    id: str = Field(..., description="분석 ID")
+    title: Optional[str] = Field(None, description="상황 제목")
+    riskScore: Optional[int] = Field(None, description="위험도 점수")
+    riskLevel: Optional[str] = Field(None, description="위험도 레벨")
+    summary: Optional[str] = Field(None, description="요약")
+
+
+class LegalChatAgentResponse(BaseModel):
+    """Agent 기반 법률 챗 응답"""
+    sessionId: str = Field(..., description="legal_chat_sessions.id")
+    mode: LegalChatMode = Field(..., description="챗 모드")
+    contractAnalysisId: Optional[str] = Field(None, description="계약서 분석 ID")
+    situationAnalysisId: Optional[str] = Field(None, description="상황 분석 ID")
+    answerMarkdown: str = Field(..., description="AI 답변 (마크다운)")
+    usedReports: List[UsedReportMeta] = Field(default_factory=list, description="사용된 리포트 목록")
+    usedSources: List[UsedSourceMeta] = Field(default_factory=list, description="사용된 소스 목록")
+    contractAnalysis: Optional[ContractAnalysisSummary] = Field(None, description="계약서 분석 요약")
+    situationAnalysis: Optional[SituationAnalysisSummary] = Field(None, description="상황 분석 요약")

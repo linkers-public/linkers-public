@@ -319,6 +319,12 @@ class SituationWorkflow:
             logger.error(f"[워크플로우] organizations 생성 실패: {organizations_result}", exc_info=organizations_result)
             organizations_result = []
         
+        # findings 생성 후 chunk 기반으로 source 정보 매핑
+        if isinstance(findings_result, list) and findings_result and grounding_chunks:
+            logger.info(f"[워크플로우] findings에 chunk 기반 source 정보 매핑 시작: {len(findings_result)}개")
+            findings_result = self._map_findings_to_chunks(findings_result, grounding_chunks)
+            logger.info(f"[워크플로우] findings source 정보 매핑 완료")
+        
         return {
             **state,
             "summary_report": summary_result if isinstance(summary_result, str) else "",
@@ -577,61 +583,12 @@ class SituationWorkflow:
             }
             criteria_items.append(criteria_item)
         
-        # findings 처리: LLM이 생성한 findings를 그대로 사용하되, source 정보 보완
-        findings_processed = []
-        if findings:
-            logger.info(f"[워크플로우] findings 처리 시작: {len(findings)}개")
-            for idx, finding in enumerate(findings):
-                if not isinstance(finding, dict):
-                    logger.warning(f"[워크플로우] finding[{idx}]이 dict가 아님: {type(finding)}")
-                    continue
-                
-                # source 정보 보완 (fileUrl이 없으면 생성)
-                source = finding.get("source", {})
-                if not isinstance(source, dict):
-                    logger.warning(f"[워크플로우] finding[{idx}] source가 dict가 아님: {type(source)}")
-                    source = {}
-                
-                document_title = source.get("documentTitle", "").strip()
-                source_type = source.get("sourceType", "law")
-                external_id = None
-                
-                # grounding_chunks에서 해당 문서 찾아서 external_id 및 fileUrl 보완
-                for chunk in grounding_chunks:
-                    if document_title and (chunk.title == document_title or document_title in chunk.title):
-                        external_id = getattr(chunk, 'external_id', None)
-                        source_type = chunk.source_type  # grounding_chunks의 source_type 사용
-                        if not source.get("fileUrl") and external_id:
-                            try:
-                                from core.file_utils import get_document_file_url
-                                file_url = get_document_file_url(
-                                    external_id=external_id,
-                                    source_type=source_type,
-                                    expires_in=3600
-                                )
-                                source["fileUrl"] = file_url
-                                logger.debug(f"[워크플로우] finding[{idx}] fileUrl 생성: {file_url[:50]}...")
-                            except Exception as e:
-                                logger.warning(f"[워크플로우] finding[{idx}] source fileUrl 생성 실패: {str(e)}")
-                        # similarityScore가 없으면 chunk.score 사용
-                        if not source.get("similarityScore"):
-                            source["similarityScore"] = float(chunk.score)
-                        # refinedSnippet이 없으면 chunk.snippet 사용 (다듬지 않은 원문)
-                        if not source.get("refinedSnippet"):
-                            source["refinedSnippet"] = chunk.snippet
-                        break
-                
-                # sourceType 매핑 (guideline -> manual, statute -> law)
-                if source.get("sourceType") == "guideline":
-                    source["sourceType"] = "manual"
-                elif source.get("sourceType") == "statute":
-                    source["sourceType"] = "law"
-                
-                # source 정보 업데이트
-                finding["source"] = source
-                findings_processed.append(finding)
-            
-            logger.info(f"[워크플로우] findings 처리 완료: {len(findings_processed)}개")
+        # findings는 이미 generate_all_fields_node에서 chunk 기반으로 source 정보가 매핑되어 있음
+        # 여기서는 그대로 사용 (추가 처리 불필요)
+        findings_processed = findings if findings else []
+        
+        if findings_processed:
+            logger.info(f"[워크플로우] findings 사용 (이미 source 정보 매핑됨): {len(findings_processed)}개")
         else:
             logger.warning("[워크플로우] findings가 비어있거나 None입니다.")
         
@@ -654,6 +611,157 @@ class SituationWorkflow:
         }
     
     # ==================== 내부 헬퍼 함수들 ====================
+    
+    def _map_findings_to_chunks(
+        self,
+        findings: List[Dict[str, Any]],
+        grounding_chunks: List[Any]
+    ) -> List[Dict[str, Any]]:
+        """findings를 grounding_chunks와 매핑하여 source 정보 추가"""
+        from core.file_utils import get_document_file_url
+        
+        findings_mapped = []
+        for finding in findings:
+            if not isinstance(finding, dict):
+                findings_mapped.append(finding)
+                continue
+            
+            document_title = finding.get("documentTitle", "").strip()
+            refined_snippet = finding.get("refinedSnippet", "").strip()  # LLM이 생성한 refinedSnippet
+            
+            if not document_title:
+                logger.warning(f"[워크플로우] finding에 documentTitle이 없음: {finding.get('title', 'unknown')}")
+                findings_mapped.append(finding)
+                continue
+            
+            # grounding_chunks에서 매칭되는 chunk 찾기
+            matched_chunk = None
+            best_match_score = 0.0
+            
+            for chunk in grounding_chunks:
+                chunk_title = getattr(chunk, 'title', '').strip() if hasattr(chunk, 'title') else ''
+                
+                # 정확한 제목 매칭
+                if chunk_title == document_title:
+                    matched_chunk = chunk
+                    break
+                
+                # 부분 제목 매칭 (양방향) - 더 유연한 매칭
+                if document_title in chunk_title or chunk_title in document_title:
+                    match_score = min(len(document_title), len(chunk_title)) / max(len(document_title), len(chunk_title))
+                    if match_score > best_match_score:
+                        best_match_score = match_score
+                        matched_chunk = chunk
+                
+                # 핵심 키워드 매칭 (제목에서 핵심 단어 추출)
+                # 예: "직장 내 괴롭힘 판단 및 예방 대응 매뉴얼.pdf" -> "직장 내 괴롭힘", "매뉴얼"
+                doc_keywords = self._extract_title_keywords(document_title)
+                chunk_keywords = self._extract_title_keywords(chunk_title)
+                
+                if doc_keywords and chunk_keywords:
+                    # 공통 키워드가 2개 이상이면 매칭
+                    common_keywords = set(doc_keywords) & set(chunk_keywords)
+                    if len(common_keywords) >= 2:
+                        keyword_match_score = len(common_keywords) / max(len(doc_keywords), len(chunk_keywords))
+                        if keyword_match_score > best_match_score:
+                            best_match_score = keyword_match_score
+                            matched_chunk = chunk
+            
+            # chunk에서 source 정보 가져오기
+            external_id = None
+            source_type = 'law'
+            chunk_score = 0.0
+            chunk_snippet = ''
+            
+            if matched_chunk:
+                external_id = getattr(matched_chunk, 'external_id', None)
+                source_type = getattr(matched_chunk, 'source_type', 'law')
+                chunk_score = float(getattr(matched_chunk, 'score', 0.0))
+                chunk_snippet = getattr(matched_chunk, 'snippet', '')
+                chunk_title_attr = getattr(matched_chunk, 'title', '')
+                logger.info(f"[워크플로우] finding '{finding.get('title', 'unknown')}' chunk 매칭 성공: documentTitle='{document_title}', chunkTitle='{chunk_title_attr}'")
+            else:
+                # 매칭 실패 시 DB에서 title로 검색
+                logger.warning(f"[워크플로우] finding '{finding.get('title', 'unknown')}' chunk 매칭 실패, DB에서 검색 시도: documentTitle='{document_title}'")
+                try:
+                    db_chunk = self.vector_store.get_legal_chunk_by_title(document_title)
+                    if db_chunk:
+                        external_id = db_chunk.get('external_id')
+                        source_type = db_chunk.get('source_type', 'law')
+                        logger.info(f"[워크플로우] DB에서 문서 찾음: external_id={external_id}, source_type={source_type}, title='{db_chunk.get('title', '')}'")
+                    else:
+                        logger.warning(f"[워크플로우] DB에서도 문서를 찾지 못함: documentTitle='{document_title}'")
+                except Exception as e:
+                    logger.error(f"[워크플로우] DB 조회 실패: {str(e)}", exc_info=True)
+            
+            # fileUrl 생성
+            file_url = None
+            if matched_chunk:
+                chunk_file_url = getattr(matched_chunk, 'file_url', None)
+                if chunk_file_url and chunk_file_url.strip():
+                    file_url = chunk_file_url
+                    logger.debug(f"[워크플로우] finding fileUrl을 chunk.file_url에서 가져옴: {file_url[:50]}...")
+            
+            if not file_url and external_id:
+                try:
+                    file_url = get_document_file_url(
+                        external_id=external_id,
+                        source_type=source_type,
+                        expires_in=3600
+                    )
+                    if file_url:
+                        logger.info(f"[워크플로우] finding fileUrl 생성 성공: external_id={external_id}, source_type={source_type}")
+                    else:
+                        logger.warning(f"[워크플로우] finding fileUrl 생성 결과 None: external_id={external_id}, source_type={source_type}")
+                except Exception as e:
+                    logger.warning(f"[워크플로우] finding fileUrl 생성 실패 (external_id={external_id}): {str(e)}")
+            
+            # sourceType 매핑 (guideline -> manual, statute -> law)
+            mapped_source_type = source_type
+            if source_type == "guideline":
+                mapped_source_type = "manual"
+            elif source_type == "statute":
+                mapped_source_type = "law"
+            
+            # refinedSnippet: LLM이 생성한 것을 우선 사용, 없으면 chunk의 snippet 사용
+            final_refined_snippet = refined_snippet if refined_snippet else chunk_snippet
+            
+            # source 정보 추가
+            finding["source"] = {
+                "documentTitle": document_title,
+                "fileUrl": file_url or "",
+                "sourceType": mapped_source_type,
+                "refinedSnippet": final_refined_snippet,  # LLM이 생성한 refinedSnippet 우선 사용
+                "similarityScore": chunk_score,
+            }
+            
+            file_url_status = '있음' if file_url else '없음'
+            logger.info(f"[워크플로우] finding '{finding.get('title', 'unknown')}' source 정보 설정 완료: fileUrl={file_url_status}, sourceType={mapped_source_type}, similarityScore={chunk_score}")
+            
+            findings_mapped.append(finding)
+        
+        return findings_mapped
+    
+    def _extract_title_keywords(self, title: str) -> List[str]:
+        """제목에서 핵심 키워드 추출 (매칭용)"""
+        if not title:
+            return []
+        
+        # 제목 정리 (확장자 제거, 특수문자 제거)
+        import re
+        title_clean = re.sub(r'\.(pdf|hwp|hwpx|docx?)$', '', title, flags=re.IGNORECASE)
+        title_clean = re.sub(r'[^\w\s가-힣]', ' ', title_clean)
+        
+        # 불용어 제거
+        stopwords = ['및', '의', '과', '와', '을', '를', '에', '에서', '로', '으로', '가', '이', '은', '는', '도', '만', '까지', '부터']
+        
+        # 단어 추출 (2글자 이상)
+        words = [w.strip() for w in title_clean.split() if len(w.strip()) >= 2 and w.strip() not in stopwords]
+        
+        # 핵심 키워드만 선택 (긴 단어 우선)
+        keywords = sorted(set(words), key=lambda x: -len(x))[:5]  # 최대 5개
+        
+        return keywords
     
     async def _get_embedding(self, text: str) -> List[float]:
         """임베딩 생성 (캐싱 지원)"""
@@ -2088,30 +2196,64 @@ class SituationWorkflow:
         
         try:
             response = await self._call_llm(prompt)
-            # JSON 파싱하여 summary만 추출
-            try:
-                import json
+            
+            # 프롬프트는 마크다운 텍스트만 반환하도록 지시하므로, JSON 파싱 없이 응답을 그대로 사용
+            if response:
+                # 코드 블록 제거 (```markdown, ``` 등)
                 import re
-                json_match = re.search(r'\{.*\}', response, re.DOTALL)
+                response_clean = response.strip()
+                
+                # 마크다운 코드 블록 제거
+                if response_clean.startswith("```markdown"):
+                    response_clean = response_clean[11:]  # ```markdown 제거
+                elif response_clean.startswith("```"):
+                    response_clean = response_clean[3:]  # ``` 제거
+                
+                if response_clean.endswith("```"):
+                    response_clean = response_clean[:-3]  # 끝의 ``` 제거
+                
+                response_clean = response_clean.strip()
+                
+                # JSON 형식으로 잘못 반환된 경우 처리 (혹시 모를 경우 대비)
+                json_match = re.search(r'\{.*"summary".*\}', response_clean, re.DOTALL)
                 if json_match:
-                    result = json.loads(json_match.group())
-                    summary = result.get('summary', '')
-                    if summary:
-                        logger.info(f"[워크플로우] summary 생성 성공 - 길이: {len(summary)}자")
-                        return summary
+                    try:
+                        import json
+                        result = json.loads(json_match.group())
+                        summary = result.get('summary', '')
+                        if summary:
+                            logger.info(f"[워크플로우] summary JSON에서 추출 성공 - 길이: {len(summary)}자")
+                            return summary
+                    except json.JSONDecodeError:
+                        # JSON 파싱 실패 시 원본 응답 사용
+                        pass
+                
+                # 마크다운 텍스트로 반환 (기본 케이스)
+                if response_clean:
+                    # 4개 섹션이 모두 있는지 확인
+                    has_situation = "📊" in response_clean or "상황 분석" in response_clean
+                    has_legal = "⚖️" in response_clean or "법적 판단" in response_clean or "법적 관점" in response_clean
+                    has_scenario = "🔮" in response_clean or "예상 시나리오" in response_clean
+                    has_warning = "💡" in response_clean or "주의사항" in response_clean
+                    
+                    if has_situation and has_legal and (has_scenario or has_warning):
+                        logger.info(f"[워크플로우] summary 생성 성공 (마크다운) - 길이: {len(response_clean)}자")
+                        return response_clean
                     else:
-                        logger.warning("[워크플로우] summary 필드가 비어있음")
-            except json.JSONDecodeError as e:
-                logger.error(f"[워크플로우] summary JSON 파싱 실패: {e}")
-                logger.error(f"[워크플로우] LLM 응답 (처음 500자): {response[:500] if response else 'None'}")
-            except Exception as e:
-                logger.error(f"[워크플로우] summary 파싱 중 예외 발생: {e}", exc_info=True)
+                        logger.warning(f"[워크플로우] summary에 필수 섹션이 누락됨 - 상황: {has_situation}, 법적: {has_legal}, 시나리오: {has_scenario}, 주의: {has_warning}")
+                        logger.warning(f"[워크플로우] 응답 (처음 500자): {response_clean[:500]}")
+                else:
+                    logger.warning("[워크플로우] summary 응답이 비어있음")
+            else:
+                logger.warning("[워크플로우] LLM 응답이 None")
+                
         except Exception as e:
             logger.error(f"[워크플로우] summary LLM 호출 실패: {e}", exc_info=True)
             # LLM 호출 실패 시 기본 summary 반환 (4개 섹션 구조 유지)
             return "## 📊 상황 분석의 결과\n\n상황을 분석했습니다. 아래 법적 관점과 행동 가이드를 참고하세요.\n\n## ⚖️ 법적 관점에서 본 현재 상황\n\n관련 법령을 확인하는 중입니다.\n\n## 🎯 지금 당장 할 수 있는 행동\n\n- 상황을 다시 확인해주세요\n- 잠시 후 다시 시도해주세요\n\n## 💬 이렇게 말해보세요\n\n상담 기관에 문의하시기 바랍니다."
         
         # 파싱 실패 시 기본 summary 반환
+        logger.warning("[워크플로우] summary 생성 실패, 기본값 반환")
         return "## 📊 상황 분석의 결과\n\n상황을 분석했습니다. 아래 법적 관점과 행동 가이드를 참고하세요.\n\n## ⚖️ 법적 관점에서 본 현재 상황\n\n관련 법령을 확인하는 중입니다.\n\n## 🎯 지금 당장 할 수 있는 행동\n\n- 상황을 다시 확인해주세요\n- 잠시 후 다시 시도해주세요\n\n## 💬 이렇게 말해보세요\n\n상담 기관에 문의하시기 바랍니다."
     
     async def _llm_generate_findings(
@@ -2160,6 +2302,10 @@ class SituationWorkflow:
                 logger.info(f"[워크플로우] findings 파싱 성공: {len(findings)}개")
                 if findings:
                     logger.debug(f"[워크플로우] 첫 번째 finding 예시: {findings[0] if len(findings) > 0 else '없음'}")
+                    # documentTitle 확인 (source 없이 생성되었는지 확인)
+                    for idx, finding in enumerate(findings):
+                        if isinstance(finding, dict) and "documentTitle" not in finding:
+                            logger.warning(f"[워크플로우] finding[{idx}]에 documentTitle이 없음: {finding.get('title', 'unknown')}")
                 return findings
             else:
                 logger.warning(f"[워크플로우] findings JSON 패턴을 찾을 수 없음. 응답: {response[:200]}")

@@ -619,6 +619,53 @@ class SupabaseVectorStore:
             logger.warning(f"legal_chunk 조회 실패 (id={chunk_id}): {str(e)}")
             return None
     
+    def get_legal_chunk_by_title(self, title: str) -> Optional[Dict[str, Any]]:
+        """
+        legal_chunks 테이블에서 title로 문서 정보 조회 (첫 번째 매칭되는 문서)
+        
+        Args:
+            title: 문서 제목 (부분 매칭 가능)
+            
+        Returns:
+            {
+                "external_id": str,
+                "source_type": str,
+                "title": str,
+                ...
+            } 또는 None
+        """
+        self._ensure_initialized()
+        if not title:
+            return None
+        
+        try:
+            # 정확한 제목 매칭 시도
+            result = self.sb.table("legal_chunks")\
+                .select("external_id, source_type, title")\
+                .eq("title", title)\
+                .limit(1)\
+                .execute()
+            
+            if result.data and len(result.data) > 0:
+                return result.data[0]
+            
+            # 부분 매칭 시도 (ILIKE 사용)
+            result = self.sb.table("legal_chunks")\
+                .select("external_id, source_type, title")\
+                .ilike("title", f"%{title}%")\
+                .limit(1)\
+                .execute()
+            
+            if result.data and len(result.data) > 0:
+                return result.data[0]
+            
+            return None
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"legal_chunk title 조회 실패 (title={title}): {str(e)}")
+            return None
+    
     def bulk_upsert_legal_chunks(
         self,
         chunks: List[Dict[str, Any]]
