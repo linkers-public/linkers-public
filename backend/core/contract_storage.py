@@ -683,11 +683,8 @@ class ContractStorageService:
         self._ensure_initialized()
         
         try:
+            # user_id 필터링 제거: 모든 사용자의 분석 결과 조회 가능
             query = self.sb.table("situation_analyses").select("*").eq("id", situation_id)
-            
-            # user_id가 제공된 경우 권한 확인
-            if user_id:
-                query = query.eq("user_id", user_id)
             
             result = query.execute()
             
