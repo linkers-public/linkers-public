@@ -2158,6 +2158,7 @@ export interface AgentChatResponse {
   usedSources: UsedSourceMeta[]
   contractAnalysis?: ContractAnalysisSummary
   situationAnalysis?: SituationAnalysisSummary
+  cases?: LegalCasePreview[]
 }
 
 /**

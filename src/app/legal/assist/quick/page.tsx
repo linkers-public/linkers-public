@@ -902,9 +902,12 @@ export default function QuickAssistPage() {
   // 선택된 대화의 메시지 로드 (DB에서 최신 메시지 가져오기)
   useEffect(() => {
     // 세션이 변경될 때 분석 상태 초기화 (다른 세션으로 전환 시 이전 세션의 상태가 유지되지 않도록)
-    setIsAnalyzing(false)
+    // 단, 분석 중이 아닐 때만 초기화 (분석 중에는 사용자가 보낸 메시지를 보존해야 함)
+    if (!isAnalyzing) {
+      setIsAnalyzing(false)
+    }
     
-    // 분석 중일 때는 메시지를 다시 로드하지 않음 (사용자가 보낸 메시지가 사라지는 것을 방지)
+    // 분석 중일 때는 메시지를 다시 로드하거나 초기화하지 않음 (사용자가 보낸 메시지가 사라지는 것을 방지)
     if (isAnalyzing) {
       return
     }
@@ -1020,8 +1023,11 @@ export default function QuickAssistPage() {
         }
       }
     } else {
-      setMessages([])
-      setHasInitialGreeting(false)
+      // selectedConversationId가 없을 때도 분석 중이면 메시지를 초기화하지 않음
+      if (!isAnalyzing) {
+        setMessages([])
+        setHasInitialGreeting(false)
+      }
     }
   }, [selectedConversationId, conversations, isAnalyzing])
 
