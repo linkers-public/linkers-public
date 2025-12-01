@@ -108,10 +108,10 @@ def build_agent_plain_prompt(
     rag_context = ""
     if legal_chunks:
         rag_context = "## 참고 법령/가이드라인\n\n"
-        for idx, chunk in enumerate(legal_chunks[:8], 1):  # 상위 8개
+        for idx, chunk in enumerate(legal_chunks[:5], 1):  # 성능 개선: 상위 5개로 감소 (8 → 5)
             source_type = getattr(chunk, "source_type", "law")
             title = getattr(chunk, "title", "제목 없음")
-            snippet = getattr(chunk, "snippet", "")[:300]  # 300자로 제한
+            snippet = getattr(chunk, "snippet", "")[:200]  # 성능 개선: 200자로 제한 (300 → 200)
 
             # source_type 한글 변환
             source_type_kr = {
@@ -137,8 +137,8 @@ def build_agent_plain_prompt(
     history_context = ""
     if history_messages and len(history_messages) > 0:
         history_context = "## 대화 히스토리\n\n"
-        # 최근 5개 메시지만 사용 (너무 길어지지 않도록)
-        recent_messages = history_messages[-5:]
+        # 성능 개선: 최근 3개 메시지만 사용 (5 → 3으로 감소)
+        recent_messages = history_messages[-3:]
         for msg in recent_messages:
             role = msg.get("sender_type", "user")
             content = msg.get("message", "")[:200]  # 200자로 제한

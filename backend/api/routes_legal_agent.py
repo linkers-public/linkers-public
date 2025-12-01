@@ -22,6 +22,10 @@ from models.schemas import (
     SituationAnalysisSummary,
     SituationRequestV2,
     ContractAnalysisResponseV2,
+    ContractIssueV2,
+    LegalIssue,
+    LegalBasisItemV2,
+    ToxicClauseDetail,
 )
 from core.legal_rag_service import LegalRAGService
 from core.document_processor_v2 import DocumentProcessor
@@ -45,6 +49,144 @@ TEMP_DIR = "./data/temp"
 os.makedirs(TEMP_DIR, exist_ok=True)
 
 logger = get_logger(__name__)
+
+
+def convert_legal_issue_to_contract_issue_v2(
+    legal_issue: LegalIssue,
+    clauses_by_id: Optional[Dict[str, Dict]] = None,
+    idx: int = 0,
+) -> ContractIssueV2:
+    """
+    LegalIssue를 ContractIssueV2로 변환하는 헬퍼 함수
+    
+    Args:
+        legal_issue: 변환할 LegalIssue 객체
+        clauses_by_id: clause_id로 조회할 수 있는 딕셔너리 (optional)
+        idx: 이슈 인덱스 (로깅용)
+    
+    Returns:
+        ContractIssueV2 객체
+    """
+    try:
+        # clause_id 기반으로 original_text 채우기
+        clause_id = getattr(legal_issue, 'clause_id', None)
+        original_text = ""
+        
+        if clause_id and clauses_by_id and clause_id in clauses_by_id:
+            clause = clauses_by_id[clause_id]
+            original_text = clause.get("content", "")
+        else:
+            # clause_id가 없거나 매칭되지 않는 경우
+            if hasattr(legal_issue, 'original_text') and legal_issue.original_text:
+                original_text = legal_issue.original_text
+            elif hasattr(legal_issue, 'description') and legal_issue.description:
+                original_text = legal_issue.description[:200]
+            else:
+                original_text = ""
+        
+        # issue_id 추출
+        issue_id = getattr(legal_issue, 'name', None) or getattr(legal_issue, 'issue_id', None) or f"issue-{idx+1}"
+        
+        # category 추출
+        category = getattr(legal_issue, 'category', None) or "unknown"
+        
+        # severity 추출
+        severity = getattr(legal_issue, 'severity', 'medium')
+        
+        # description/summary 추출
+        description = getattr(legal_issue, 'description', '') or getattr(legal_issue, 'summary', '')
+        summary = getattr(legal_issue, 'summary', None) or description
+        
+        # legal_basis 추출 및 구조화
+        legal_basis_raw = getattr(legal_issue, 'legal_basis', []) or []
+        legal_basis = []
+        
+        if legal_basis_raw:
+            first_item = legal_basis_raw[0] if legal_basis_raw else None
+            if isinstance(first_item, LegalBasisItemV2):
+                legal_basis = legal_basis_raw
+            elif isinstance(first_item, dict):
+                for item in legal_basis_raw:
+                    if isinstance(item, dict):
+                        legal_basis.append(
+                            LegalBasisItemV2(
+                                title=item.get("title", ""),
+                                snippet=item.get("snippet", ""),
+                                sourceType=item.get("sourceType", item.get("source_type", "law")),
+                                status=item.get("status"),
+                                filePath=item.get("filePath", item.get("file_path")),
+                                similarityScore=item.get("similarityScore", item.get("similarity_score")),
+                                chunkIndex=item.get("chunkIndex", item.get("chunk_index")),
+                                externalId=item.get("externalId", item.get("external_id")),
+                                reason=item.get("reason"),
+                            )
+                        )
+                    else:
+                        legal_basis.append(item)
+            else:
+                # 문자열 배열인 경우 그대로 사용
+                legal_basis = legal_basis_raw
+        
+        # rationale 추출
+        rationale = getattr(legal_issue, 'rationale', None) or getattr(legal_issue, 'reason', None) or description
+        
+        # suggested_text 추출
+        suggested_text = getattr(legal_issue, 'suggested_text', None) or getattr(legal_issue, 'suggested_revision', None) or ""
+        
+        # start_index, end_index 추출
+        start_index = getattr(legal_issue, 'start_index', None)
+        end_index = getattr(legal_issue, 'end_index', None)
+        
+        # toxic_clause_detail 추출
+        toxic_clause_detail = getattr(legal_issue, 'toxic_clause_detail', None)
+        toxic_clause_detail_v2 = None
+        if toxic_clause_detail:
+            try:
+                if isinstance(toxic_clause_detail, ToxicClauseDetail):
+                    toxic_clause_detail_v2 = toxic_clause_detail
+                elif isinstance(toxic_clause_detail, dict):
+                    toxic_clause_detail_v2 = ToxicClauseDetail(
+                        clauseLocation=toxic_clause_detail.get("clause_location", ""),
+                        contentSummary=toxic_clause_detail.get("content_summary", ""),
+                        whyRisky=toxic_clause_detail.get("why_risky", ""),
+                        realWorldProblems=toxic_clause_detail.get("real_world_problems", ""),
+                        suggestedRevisionLight=toxic_clause_detail.get("suggested_revision_light", ""),
+                        suggestedRevisionFormal=toxic_clause_detail.get("suggested_revision_formal", ""),
+                    )
+            except Exception as toxic_err:
+                logger.warning(f"[LegalIssue 변환] toxic_clause_detail 변환 실패: {str(toxic_err)}")
+        
+        return ContractIssueV2(
+            id=issue_id,
+            category=category,
+            severity=severity,
+            summary=summary,
+            originalText=original_text,
+            legalBasis=legal_basis,
+            explanation=rationale,
+            suggestedRevision=suggested_text,
+            clauseId=clause_id,
+            startIndex=start_index,
+            endIndex=end_index,
+            toxicClauseDetail=toxic_clause_detail_v2,
+        )
+    except Exception as e:
+        logger.error(f"[LegalIssue 변환] 이슈 변환 실패: {str(e)}", exc_info=True)
+        # 최소한의 ContractIssueV2 객체라도 반환
+        return ContractIssueV2(
+            id=getattr(legal_issue, 'name', f"issue-{idx+1}"),
+            category=getattr(legal_issue, 'category', 'unknown'),
+            severity=getattr(legal_issue, 'severity', 'medium'),
+            summary=getattr(legal_issue, 'summary', '') or getattr(legal_issue, 'description', ''),
+            originalText=getattr(legal_issue, 'original_text', ''),
+            legalBasis=getattr(legal_issue, 'legal_basis', []),
+            explanation=getattr(legal_issue, 'description', ''),
+            suggestedRevision=getattr(legal_issue, 'suggested_text', ''),
+            clauseId=getattr(legal_issue, 'clause_id', None),
+            startIndex=getattr(legal_issue, 'start_index', None),
+            endIndex=getattr(legal_issue, 'end_index', None),
+            toxicClauseDetail=None,
+        )
 
 
 @router.post(
@@ -119,34 +261,101 @@ async def legal_chat_agent(
             # 기존 analyze_contract 엔드포인트 로직 재사용
             logger.info(f"[Agent Chat] 계약서 분석 시작: file={file.filename}")
             
-            # 임시 파일 저장
-            suffix = Path(file.filename).suffix if file.filename else ".tmp"
-            temp_file = tempfile.NamedTemporaryFile(
-                delete=False,
-                suffix=suffix,
-                dir=TEMP_DIR
-            )
-            temp_path = temp_file.name
-            
-            content = await file.read()
-            temp_file.write(content)
-            temp_file.close()
-            
-            # 텍스트 추출
-            processor = get_processor()
-            extracted_text, _ = processor.process_file(
-                temp_path,
-                file_type=None,
-                mode="contract"
-            )
-            
-            if not extracted_text or extracted_text.strip() == "":
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="업로드된 파일에서 텍스트를 추출할 수 없습니다.",
+            temp_path = None
+            extracted_text = None
+            try:
+                # 파일 유효성 검사
+                if not file.filename:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="파일명이 없습니다.",
+                    )
+                
+                # 파일 크기 제한 체크 (10MB)
+                file_size = 0
+                content = None
+                try:
+                    # 파일 포인터를 처음으로 이동
+                    await file.seek(0)
+                    content = await file.read()
+                    file_size = len(content)
+                    
+                    # 파일 크기 제한 (10MB)
+                    MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+                    if file_size > MAX_FILE_SIZE:
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail=f"파일 크기는 10MB를 초과할 수 없습니다. (현재: {file_size / 1024 / 1024:.2f}MB)",
+                        )
+                    
+                    # 파일이 비어있는지 체크
+                    if file_size == 0:
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="업로드된 파일이 비어있습니다.",
+                        )
+                    
+                except HTTPException:
+                    raise
+                except Exception as read_error:
+                    logger.error(f"[Agent Chat] 파일 읽기 실패: {str(read_error)}", exc_info=True)
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"파일을 읽는 중 오류가 발생했습니다: {str(read_error)}",
+                    )
+                
+                # 임시 파일 저장
+                suffix = Path(file.filename).suffix if file.filename else ".tmp"
+                temp_file = tempfile.NamedTemporaryFile(
+                    delete=False,
+                    suffix=suffix,
+                    dir=TEMP_DIR
                 )
+                temp_path = temp_file.name
+                
+                # 파일 내용을 임시 파일에 쓰기
+                temp_file.write(content)
+                temp_file.close()
+                
+                logger.info(f"[Agent Chat] 임시 파일 저장 완료: {temp_path}, 크기={file_size} bytes")
+                
+                # 텍스트 추출
+                processor = get_processor()
+                extracted_text, _ = processor.process_file(
+                    temp_path,
+                    file_type=None,
+                    mode="contract"
+                )
+                
+                if not extracted_text or extracted_text.strip() == "":
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="업로드된 파일에서 텍스트를 추출할 수 없습니다.",
+                    )
+                
+                logger.info(f"[Agent Chat] 텍스트 추출 완료: 길이={len(extracted_text)}")
+                
+            except HTTPException:
+                # HTTPException은 그대로 전파 (임시 파일은 finally에서 정리)
+                raise
+            except Exception as e:
+                logger.error(f"[Agent Chat] 계약서 파일 처리 중 오류: {str(e)}", exc_info=True)
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"파일 처리 중 오류가 발생했습니다: {str(e)}",
+                )
+            finally:
+                # 텍스트 추출이 완료된 후에만 임시 파일 삭제
+                # (분석 중에는 파일이 필요할 수 있으므로 여기서는 삭제하지 않음)
+                # 대신 분석 완료 후 삭제하도록 함
+                pass
             
-            # 계약서 분석 실행
+            # 계약서 분석 실행 (extracted_text가 None이면 에러 발생)
+            if not extracted_text:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="텍스트 추출에 실패했습니다.",
+                )
             doc_id = str(uuid.uuid4())
             clauses = extract_clauses(extracted_text)
             
@@ -157,6 +366,39 @@ async def legal_chat_agent(
                 clauses=clauses,
             )
             
+            # clauses를 딕셔너리로 변환 (clause_id로 조회 가능하도록)
+            clauses_by_id = {}
+            if clauses:
+                for clause in clauses:
+                    if isinstance(clause, dict):
+                        clause_id = clause.get("id")
+                        if clause_id:
+                            clauses_by_id[clause_id] = clause
+                    else:
+                        clause_id = getattr(clause, 'id', None)
+                        if clause_id:
+                            clauses_by_id[clause_id] = {
+                                "id": clause_id,
+                                "content": getattr(clause, 'content', ''),
+                                "title": getattr(clause, 'title', ''),
+                            }
+            
+            # LegalIssue를 ContractIssueV2로 변환
+            issues_v2 = []
+            if result.issues:
+                for idx, legal_issue in enumerate(result.issues):
+                    try:
+                        issue_v2 = convert_legal_issue_to_contract_issue_v2(
+                            legal_issue=legal_issue,
+                            clauses_by_id=clauses_by_id,
+                            idx=idx,
+                        )
+                        issues_v2.append(issue_v2)
+                    except Exception as issue_error:
+                        logger.error(f"[Agent Chat] 이슈 변환 실패 (idx={idx}): {str(issue_error)}", exc_info=True)
+                        # 변환 실패해도 계속 진행
+                        continue
+            
             # DB에 저장
             analysis_result = ContractAnalysisResponseV2(
                 docId=doc_id,
@@ -164,7 +406,7 @@ async def legal_chat_agent(
                 riskScore=result.risk_score,
                 riskLevel=result.risk_level,
                 sections={},
-                issues=result.issues,
+                issues=issues_v2,
                 summary=result.summary,
                 retrievedContexts=[],
                 contractText=extracted_text,
@@ -208,11 +450,13 @@ async def legal_chat_agent(
                 title=None,
             )
             
-            # 임시 파일 삭제
-            try:
-                os.unlink(temp_path)
-            except:
-                pass
+            # 임시 파일 삭제 (모든 작업 완료 후)
+            if temp_path and os.path.exists(temp_path):
+                try:
+                    os.unlink(temp_path)
+                    logger.info(f"[Agent Chat] 임시 파일 삭제 완료: {temp_path}")
+                except Exception as cleanup_error:
+                    logger.warning(f"[Agent Chat] 임시 파일 삭제 실패: {temp_path}, {str(cleanup_error)}")
         
         # 후속 요청: 기존 분석 참고
         if contract_analysis_id is not None and contract_analysis is None:
