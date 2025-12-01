@@ -703,7 +703,20 @@ class ContractStorageService:
             summary = analysis_data.get("summary", analysis.get("answer", ""))
             sources = analysis_data.get("sources", [])
             criteria = analysis_data.get("criteria", [])
-            related_cases = analysis_data.get("relatedCases", analysis.get("related_cases", []))  # analysis JSONB 또는 별도 필드에서 가져오기
+            # relatedCases는 analyze_situation과 동일한 구조로 변환 (문서 단위 그룹핑)
+            related_cases_raw = analysis_data.get("relatedCases", analysis.get("related_cases", []))
+            # relatedCases가 이미 문서 단위로 그룹핑된 구조인지 확인
+            if related_cases_raw and isinstance(related_cases_raw, list) and len(related_cases_raw) > 0:
+                # 첫 번째 항목이 문서 단위 구조인지 확인 (documentTitle, snippets 등이 있는지)
+                first_case = related_cases_raw[0]
+                if isinstance(first_case, dict) and "documentTitle" in first_case:
+                    # 이미 문서 단위로 그룹핑된 구조
+                    related_cases = related_cases_raw
+                else:
+                    # 레거시 구조면 빈 배열로 설정 (analyze_situation과 동일하게 처리)
+                    related_cases = []
+            else:
+                related_cases = []
             action_plan = analysis_data.get("actionPlan", {})
             scripts_raw = analysis_data.get("scripts", {})
             # scripts를 camelCase로 변환 (이메일 템플릿 구조: {subject, body})
@@ -780,12 +793,27 @@ class ContractStorageService:
             elif analysis_data.get("recommendations"):
                 recommendations = analysis_data.get("recommendations", [])
             
-            # 분석 API와 동일한 구조로 반환: summary, findings, relatedCases, scripts만 포함
+            # riskLevel 계산
+            risk_level = "low"
+            if risk_score >= 70:
+                risk_level = "high"
+            elif risk_score >= 40:
+                risk_level = "medium"
+            
+            # tags 생성 (classified_type 기반)
+            tags = [classified_type] if classified_type and classified_type != "unknown" else []
+            
+            # 분석 API와 동일한 구조로 반환: id, riskScore, riskLevel, tags + summary, findings, relatedCases, scripts, organizations 포함
             return {
+                "id": analysis.get("id"),  # 상황 분석 ID
+                "riskScore": float(risk_score),  # 위험도 점수
+                "riskLevel": risk_level,  # 위험도 레벨 (low/medium/high)
+                "tags": tags,  # 분류 태그 (classified_type 기반)
                 "summary": summary,
                 "findings": findings if isinstance(findings, list) else [],  # 법적 쟁점 발견 항목
                 "relatedCases": related_cases,  # 법적 문서 (문서 단위 그룹핑)
                 "scripts": scripts,  # 이메일 템플릿 (to_company, to_advisor)
+                "organizations": organizations if isinstance(organizations, list) else [],  # 추천 기관 목록
             }
         except Exception as e:
             logger.error(f"상황 분석 조회 중 오류: {str(e)}", exc_info=True)
