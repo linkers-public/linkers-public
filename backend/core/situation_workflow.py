@@ -356,9 +356,10 @@ class SituationWorkflow:
                     logger.warning(f"[워크플로우] fileUrl 생성 실패 (external_id={external_id}, source_type={source_type}): {str(e)}")
                     file_url = None
             
-            # usageReason 생성 (우선순위: LLM criteria reason > legal_basis 기반 생성 > 기본 메시지)
+            # usageReason 생성 (우선순위: LLM criteria reason > snippet 기반 구체적 생성 > 기본 메시지)
             usage_reason = ""
             chunk_snippet_prefix = chunk.snippet[:50].strip() if chunk.snippet else ""
+            chunk_snippet = chunk.snippet[:200].strip() if chunk.snippet else ""
             
             # 1. LLM이 생성한 criteria에서 해당 문서와 관련된 reason 찾기
             for criterion in criteria:
@@ -369,9 +370,13 @@ class SituationWorkflow:
                     
                     # 문서 제목 매칭
                     if chunk.title in criterion_name or criterion_name in chunk.title:
-                        # reason이 너무 길면 (snippet 전체가 들어간 경우) 기본 메시지 사용
+                        # reason이 너무 길면 (snippet 전체가 들어간 경우) 다음 단계로
                         if len(criterion_reason) > 200:
-                            break  # 다음 단계로 넘어감
+                            break
+                        # 일반적인 템플릿 문장인지 확인 ("현재 상황과 관련하여", "법적 판단 기준으로 사용했습니다" 등)
+                        elif "현재 상황과 관련하여" in criterion_reason and "법적 판단 기준으로 사용했습니다" in criterion_reason:
+                            # 일반적인 문장이면 snippet 기반으로 구체적 생성 시도
+                            break
                         else:
                             usage_reason = criterion_reason
                             break
@@ -383,40 +388,68 @@ class SituationWorkflow:
                                 basis_snippet = basis.get("snippet", "")
                                 if chunk_snippet_prefix and basis_snippet:
                                     if chunk_snippet_prefix[:30] in basis_snippet[:100] or basis_snippet[:30] in chunk_snippet_prefix[:100]:
-                                        usage_reason = criterion_reason if len(criterion_reason) <= 200 else ""
-                                        break
+                                        # 일반적인 템플릿 문장인지 확인
+                                        if "현재 상황과 관련하여" in criterion_reason and "법적 판단 기준으로 사용했습니다" in criterion_reason:
+                                            break
+                                        else:
+                                            usage_reason = criterion_reason if len(criterion_reason) <= 200 else ""
+                                            break
                         if usage_reason:
                             break
                 else:
                     criterion_name = getattr(criterion, "name", "")
                     criterion_reason = getattr(criterion, "reason", "")
                     if chunk.title in criterion_name or criterion_name in chunk.title:
+                        # 일반적인 템플릿 문장인지 확인
+                        if "현재 상황과 관련하여" in criterion_reason and "법적 판단 기준으로 사용했습니다" in criterion_reason:
+                            break
                         usage_reason = criterion_reason if len(criterion_reason) <= 200 else ""
                         if usage_reason:
                             break
             
-            # 2. legal_basis에서 해당 문서 찾아서 usageReason 생성
-            if not usage_reason and legal_basis:
-                for basis in legal_basis:
-                    if isinstance(basis, dict):
-                        basis_title = basis.get("title", "")
-                        basis_snippet = basis.get("snippet", "")
-                        # 문서 제목 매칭
-                        if chunk.title in basis_title or basis_title in chunk.title:
-                            # snippet 기반으로 의미있는 usageReason 생성
-                            if basis_snippet and chunk_snippet_prefix:
-                                # snippet이 일치하면 구체적인 usageReason 생성
-                                if chunk_snippet_prefix[:30] in basis_snippet[:100] or basis_snippet[:30] in chunk_snippet_prefix[:100]:
-                                    # 문서 타입에 따른 usageReason 생성
-                                    if "표준" in chunk.title and "계약" in chunk.title:
-                                        usage_reason = f"현재 계약서의 관련 조항이 불명확한 부분이 있어, {chunk.title}의 규정을 비교 기준으로 사용했습니다."
-                                    elif "법" in chunk.title or "규칙" in chunk.title:
-                                        usage_reason = f"현재 상황과 관련하여 {chunk.title}의 법령 조항을 판단 기준으로 사용했습니다."
-                                    else:
-                                        usage_reason = f"현재 상황과 관련하여 {chunk.title}의 내용을 법적 판단 기준으로 사용했습니다."
-                                    break
+            # 2. snippet 기반으로 구체적인 usageReason 생성 (LLM reason이 없거나 일반적인 경우)
+            if not usage_reason and chunk_snippet:
+                # snippet에서 핵심 쟁점 키워드 추출
+                issue_keywords = []
+                if any(kw in chunk_snippet for kw in ["행사기간", "행사 기간", "행사기한"]):
+                    issue_keywords.append("행사기간")
+                if any(kw in chunk_snippet for kw in ["재직", "재임", "근무기간"]):
+                    issue_keywords.append("재직요건")
+                if any(kw in chunk_snippet for kw in ["해고", "계약해지", "해지"]):
+                    issue_keywords.append("해고 예고")
+                if any(kw in chunk_snippet for kw in ["선급금", "선금", "계약금"]):
+                    issue_keywords.append("선급금")
+                if any(kw in chunk_snippet for kw in ["지연", "배상", "이자"]):
+                    issue_keywords.append("지연배상")
+                if any(kw in chunk_snippet for kw in ["임금", "급여", "지급일"]):
+                    issue_keywords.append("임금지급일")
+                if any(kw in chunk_snippet for kw in ["수습", "수습기간"]):
+                    issue_keywords.append("수습기간")
+                if any(kw in chunk_snippet for kw in ["연장근로", "야간근로", "휴일근로"]):
+                    issue_keywords.append("연장근로수당")
+                
+                # snippet 핵심 내용 요약 (첫 100자)
+                snippet_summary = chunk_snippet[:100].replace("\n", " ").strip()
+                
+                # 문서 타입에 따른 판단 포인트
+                if issue_keywords:
+                    issue_text = ", ".join(issue_keywords[:2])  # 최대 2개만
+                    if "표준" in chunk.title and "계약" in chunk.title:
+                        usage_reason = f"이 조항은 {issue_text}에 대한 규정을 포함하고 있어, 현재 사용자 계약서의 해당 조항이 불명확하거나 과도하게 설정되어 있는지 비교·판단하는 기준으로 사용했습니다."
+                    elif "법" in chunk.title or "규칙" in chunk.title:
+                        usage_reason = f"이 조항은 {issue_text}에 대한 법적 요건을 규정하고 있어, 현재 상황에서 해당 요건이 충족되었는지 판단하는 근거로 활용했습니다."
+                    else:
+                        usage_reason = f"이 조항은 {issue_text}에 대한 내용을 다루고 있어, 현재 사용자 상황/계약서에서 해당 부분을 평가하는 기준으로 사용했습니다."
+                else:
+                    # 키워드가 없으면 snippet 요약 기반으로 생성
+                    if "표준" in chunk.title and "계약" in chunk.title:
+                        usage_reason = f"이 조항은 '{snippet_summary}...'의 내용을 규정하고 있어, 현재 계약서의 관련 조항과 비교하여 적절성을 판단하는 기준으로 사용했습니다."
+                    elif "법" in chunk.title or "규칙" in chunk.title:
+                        usage_reason = f"이 조항은 '{snippet_summary}...'의 법적 요건을 명시하고 있어, 현재 상황에서 해당 요건 충족 여부를 판단하는 근거로 활용했습니다."
+                    else:
+                        usage_reason = f"이 조항은 '{snippet_summary}...'의 내용을 포함하고 있어, 현재 사용자 상황과 비교하여 평가하는 기준으로 사용했습니다."
             
-            # 3. usageReason이 없으면 기본 메시지 생성
+            # 3. usageReason이 없으면 기본 메시지 생성 (최후의 수단)
             if not usage_reason:
                 if "표준" in chunk.title and "계약" in chunk.title:
                     usage_reason = f"현재 계약서의 관련 조항이 불명확한 부분이 있어, {chunk.title}의 규정을 비교 기준으로 사용했습니다."

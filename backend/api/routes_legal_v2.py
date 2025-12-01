@@ -1428,8 +1428,48 @@ async def analyze_situation(
                 if snippet_key in snippet_to_usage_reason:
                     usage_reason = snippet_to_usage_reason[snippet_key]
                 else:
-                    # 매칭 실패 시 기본 메시지
-                    usage_reason = f"{document_title}의 해당 조항을 현재 상황과 비교·판단하는 기준으로 사용했습니다."
+                    # 매칭 실패 시 snippet 기반으로 구체적인 usageReason 생성
+                    snippet_prefix = snippet_text[:200].strip() if snippet_text else ""
+                    
+                    # snippet에서 핵심 쟁점 키워드 추출
+                    issue_keywords = []
+                    if any(kw in snippet_prefix for kw in ["행사기간", "행사 기간", "행사기한"]):
+                        issue_keywords.append("행사기간")
+                    if any(kw in snippet_prefix for kw in ["재직", "재임", "근무기간"]):
+                        issue_keywords.append("재직요건")
+                    if any(kw in snippet_prefix for kw in ["해고", "계약해지", "해지"]):
+                        issue_keywords.append("해고 예고")
+                    if any(kw in snippet_prefix for kw in ["선급금", "선금", "계약금"]):
+                        issue_keywords.append("선급금")
+                    if any(kw in snippet_prefix for kw in ["지연", "배상", "이자"]):
+                        issue_keywords.append("지연배상")
+                    if any(kw in snippet_prefix for kw in ["임금", "급여", "지급일"]):
+                        issue_keywords.append("임금지급일")
+                    if any(kw in snippet_prefix for kw in ["수습", "수습기간"]):
+                        issue_keywords.append("수습기간")
+                    if any(kw in snippet_prefix for kw in ["연장근로", "야간근로", "휴일근로"]):
+                        issue_keywords.append("연장근로수당")
+                    
+                    # snippet 핵심 내용 요약 (첫 100자)
+                    snippet_summary = snippet_prefix[:100].replace("\n", " ").strip()
+                    
+                    # 문서 타입에 따른 판단 포인트
+                    if issue_keywords:
+                        issue_text = ", ".join(issue_keywords[:2])  # 최대 2개만
+                        if "표준" in document_title and "계약" in document_title:
+                            usage_reason = f"이 조항은 {issue_text}에 대한 규정을 포함하고 있어, 현재 사용자 계약서의 해당 조항이 불명확하거나 과도하게 설정되어 있는지 비교·판단하는 기준으로 사용했습니다."
+                        elif "법" in document_title or "규칙" in document_title:
+                            usage_reason = f"이 조항은 {issue_text}에 대한 법적 요건을 규정하고 있어, 현재 상황에서 해당 요건이 충족되었는지 판단하는 근거로 활용했습니다."
+                        else:
+                            usage_reason = f"이 조항은 {issue_text}에 대한 내용을 다루고 있어, 현재 사용자 상황/계약서에서 해당 부분을 평가하는 기준으로 사용했습니다."
+                    else:
+                        # 키워드가 없으면 snippet 요약 기반으로 생성
+                        if "표준" in document_title and "계약" in document_title:
+                            usage_reason = f"이 조항은 '{snippet_summary}...'의 내용을 규정하고 있어, 현재 계약서의 관련 조항과 비교하여 적절성을 판단하는 기준으로 사용했습니다."
+                        elif "법" in document_title or "규칙" in document_title:
+                            usage_reason = f"이 조항은 '{snippet_summary}...'의 법적 요건을 명시하고 있어, 현재 상황에서 해당 요건 충족 여부를 판단하는 근거로 활용했습니다."
+                        else:
+                            usage_reason = f"이 조항은 '{snippet_summary}...'의 내용을 포함하고 있어, 현재 사용자 상황과 비교하여 평가하는 기준으로 사용했습니다."
                 
                 snippets.append({
                     "snippet": snippet_text[:500] if len(snippet_text) > 500 else snippet_text,
@@ -1523,6 +1563,7 @@ async def analyze_situation(
                 "sources": sources,  # RAG 검색 출처
                 "criteria": result.get("criteria", []),  # 법적 판단 기준
                 "scripts": result.get("scripts", {}),  # 말하기 템플릿
+                "relatedCases": related_cases,  # 관련 사례 (문서 단위로 그룹핑됨)
                 "classifiedType": result.get("classified_type", "unknown"),  # 분류 유형
                 "riskScore": float(result.get("risk_score", 0)),  # 위험도 점수
                 "organizations": result.get("organizations", []),  # 추천 기관 목록

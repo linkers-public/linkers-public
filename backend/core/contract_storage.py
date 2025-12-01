@@ -706,6 +706,7 @@ class ContractStorageService:
             summary = analysis_data.get("summary", analysis.get("answer", ""))
             sources = analysis_data.get("sources", [])
             criteria = analysis_data.get("criteria", [])
+            related_cases = analysis_data.get("relatedCases", analysis.get("related_cases", []))  # analysis JSONB 또는 별도 필드에서 가져오기
             action_plan = analysis_data.get("actionPlan", {})
             scripts_raw = analysis_data.get("scripts", {})
             # scripts를 camelCase로 변환 (이메일 템플릿 구조: {subject, body})
@@ -802,7 +803,7 @@ class ContractStorageService:
                 "actionPlan": action_plan,  # 최상위 레벨에 actionPlan 추가
                 "sources": sources,  # 최상위 레벨에 sources 추가
                 "checklist": analysis.get("checklist", []),
-                "relatedCases": analysis.get("related_cases", []),
+                "relatedCases": related_cases,  # analysis JSONB 또는 별도 필드에서 가져온 값
                 "scripts": scripts,  # scripts 추가
                 "created_at": analysis.get("created_at"),
             }
