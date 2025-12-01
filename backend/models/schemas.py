@@ -306,8 +306,8 @@ class LegalBasisItem(BaseModel):
 class SituationAnalysisV2(BaseModel):
     """상황 분석 결과 (v2)"""
     summary: str
-    legalBasis: List[LegalBasisItem]
-    recommendations: List[str]
+    legalBasis: List[LegalBasisItem] = Field(default_factory=list, description="법적 근거 (더 이상 사용하지 않음, 호환성을 위해 유지)")
+    recommendations: List[str] = Field(default_factory=list, description="권고사항 (더 이상 사용하지 않음, 호환성을 위해 유지)")
 
 
 class SnippetAnalyzed(BaseModel):

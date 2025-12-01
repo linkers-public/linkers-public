@@ -1227,7 +1227,7 @@ async def get_contract_analysis(
     )
 
 
-@router.post("/analyze-situation", response_model=SituationResponseV2)
+@router.post("/analyze-situation", response_model=dict)
 async def analyze_situation(
     payload: SituationRequestV2,
     x_user_id: Optional[str] = Header(None, alias="X-User-Id", description="사용자 ID"),
@@ -1636,29 +1636,20 @@ async def analyze_situation(
         # actionPlan은 더 이상 사용하지 않음
         action_plan_model = None
         
-        response_dict = {
-            "id": situation_analysis_id,  # DB 저장 후 ID 포함
-            "riskScore": float(result["risk_score"]),
-            "riskLevel": risk_level,
-            "tags": tags,
-            "analysis": {
-                "summary": result.get("summary", ""),
-                "recommendations": [],  # 더 이상 사용하지 않음
-            },
-            "checklist": [],  # 더 이상 사용하지 않음
-            "scripts": scripts,
-            "relatedCases": related_cases,
-            "sources": sources,  # RAG 검색 출처
-            # 프론트엔드가 기대하는 추가 필드들 (이제 모델에 포함됨)
-            "criteria": criteria_items,  # 법적 판단 기준 (RAG 검색 결과 기반)
+        # 최종 응답: summary, findings, relatedCases, scripts만 포함
+        response_dict_final = {
+            "summary": result.get("summary", ""),
             "findings": result.get("findings", []),  # 법적 쟁점 발견 항목
-            "actionPlan": None,  # 더 이상 사용하지 않음
-            "organizations": result.get("organizations", []),  # 추천 기관 목록
+            "relatedCases": related_cases,  # 법적 문서 (문서 단위 그룹핑)
+            "scripts": scripts,  # 이메일 템플릿 (to_company, to_advisor)
         }
-        response = SituationResponseV2(**response_dict)
-        response_dict_final = response.model_dump()
         
-        _logger.info(f"[analyze-situation] 최종 응답에 criteria 포함: 개수={len(response_dict_final.get('criteria', []))}")
+        _logger.info(f"[analyze-situation] 최종 응답 생성:")
+        _logger.info(f"  - summary 길이: {len(response_dict_final.get('summary', ''))}자")
+        _logger.info(f"  - findings 개수: {len(response_dict_final.get('findings', []))}개")
+        _logger.info(f"  - relatedCases 개수: {len(response_dict_final.get('relatedCases', []))}개")
+        _logger.info(f"  - scripts 존재: {bool(response_dict_final.get('scripts'))}")
+        
         return response_dict_final
         
         return response

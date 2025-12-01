@@ -780,28 +780,12 @@ class ContractStorageService:
             elif analysis_data.get("recommendations"):
                 recommendations = analysis_data.get("recommendations", [])
             
+            # 분석 API와 동일한 구조로 반환: summary, findings, relatedCases, scripts만 포함
             return {
-                "id": analysis["id"],
-                "situation": analysis.get("situation", ""),
-                "category": analysis.get("category", "unknown"),
-                "risk_score": float(risk_score),
-                "riskScore": float(risk_score),  # camelCase 추가
-                "riskLevel": analysis.get("risk_level", "low"),
-                "risk_level": analysis.get("risk_level", "low"),
-                "tags": [classified_type or analysis.get("category", "unknown")],
-                "analysis": {
-                    "summary": summary,
-                    "recommendations": recommendations,
-                },
-                "criteria": criteria,  # 최상위 레벨에 criteria 추가 (프론트엔드가 기대하는 구조)
-                "findings": findings,  # 최상위 레벨에 findings 추가
-                "actionPlan": action_plan,  # 최상위 레벨에 actionPlan 추가
-                "sources": sources,  # 최상위 레벨에 sources 추가
-                "checklist": analysis.get("checklist", []),
-                "relatedCases": related_cases,  # analysis JSONB 또는 별도 필드에서 가져온 값
-                "scripts": scripts,  # scripts 추가
-                "organizations": organizations,  # 최상위 레벨에 organizations 추가
-                "created_at": analysis.get("created_at"),
+                "summary": summary,
+                "findings": findings if isinstance(findings, list) else [],  # 법적 쟁점 발견 항목
+                "relatedCases": related_cases,  # 법적 문서 (문서 단위 그룹핑)
+                "scripts": scripts,  # 이메일 템플릿 (to_company, to_advisor)
             }
         except Exception as e:
             logger.error(f"상황 분석 조회 중 오류: {str(e)}", exc_info=True)
