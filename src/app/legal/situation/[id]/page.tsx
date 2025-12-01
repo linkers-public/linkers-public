@@ -115,18 +115,7 @@ export default function SituationDetailPage() {
           status: (criterion?.status || 'likely') as 'likely' | 'unclear' | 'unlikely',
           reason: criterion?.reason || '',
         })),
-        actionPlan: analysisData?.actionPlan || analysis?.actionPlan || {
-          steps: [
-            {
-              title: '즉시 조치',
-              items: analysis?.checklist?.slice(0, 3) || [],
-            },
-            {
-              title: '권고사항',
-              items: analysisData?.recommendations || analysis?.analysis?.recommendations || [],
-            },
-          ],
-        },
+
         scripts: scripts,
         relatedCases: (analysis?.relatedCases || []).map((c: any) => ({
           id: c?.id || '',

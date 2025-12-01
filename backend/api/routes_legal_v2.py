@@ -1420,7 +1420,6 @@ async def analyze_situation(
                 "summary": analysis_summary,
                 "sources": sources,  # RAG 검색 출처
                 "criteria": result.get("criteria", []),  # 법적 판단 기준
-                "actionPlan": result.get("action_plan", {}),  # 행동 계획
                 "scripts": result.get("scripts", {}),  # 말하기 템플릿
                 "classifiedType": result.get("classified_type", "unknown"),  # 분류 유형
                 "riskScore": float(result.get("risk_score", 0)),  # 위험도 점수

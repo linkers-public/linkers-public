@@ -566,7 +566,7 @@ export default function QuickAssistPage() {
               riskScore: analysis.riskScore || 0,
               summary: analysis.analysis.summary || '',
               criteria: analysis.criteria || [],
-              actionPlan: analysis.actionPlan || { steps: [] },
+              actionPlan: null,
               scripts: analysis.scripts || { toCompany: '', toAdvisor: '' },
               relatedCases: analysis.relatedCases || [],
               sources: analysis.sources || [],

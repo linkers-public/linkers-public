@@ -141,7 +141,11 @@ export function LegalReportCard({ analysisResult, onCopy }: LegalReportCardProps
                                    summaryText.match(/##\s*법적\s*관점에서\s*본\s*현재상황\s*\n([\s\S]*?)(?=##|$)/i)
           const legalViewContent = legalSectionMatch ? legalSectionMatch[1].trim() : null
           
-          if (legalViewContent && legalViewContent !== '해당 섹션 내용을 확인하는 중입니다.') {
+          // 기본값 텍스트 필터링
+          const isDefaultText = legalViewContent === '해당 섹션 내용을 확인하는 중입니다.' || 
+                                legalViewContent === '관련 법령을 확인하여 현재 상황을 법적으로 평가해야 합니다.'
+          
+          if (legalViewContent && !isDefaultText) {
             return (
               <div className="space-y-3">
                 <div className="flex items-center gap-2 mb-2">
@@ -161,7 +165,7 @@ export function LegalReportCard({ analysisResult, onCopy }: LegalReportCardProps
           return null
         })()}
 
-        {/* 섹션 3: 법적 판단 기준 (criteria 카드 버전) */}
+        {/* 섹션 3: 법적 판단 기준 (새 API 형식) */}
         {analysisResult.criteria && analysisResult.criteria.length > 0 && (
           <div className="space-y-4">
             <div className="flex items-center gap-2 mb-2">
@@ -169,46 +173,45 @@ export function LegalReportCard({ analysisResult, onCopy }: LegalReportCardProps
               <h3 className="text-lg font-bold text-slate-900">법적 판단 기준</h3>
             </div>
             <div className="space-y-3">
-              {analysisResult.criteria.map((criterion, idx) => {
-                const statusEmoji = criterion.status === 'likely' ? '✅' : criterion.status === 'unclear' ? '⚠️' : '❌'
-                const statusLabel = criterion.status === 'likely' ? '준수' : criterion.status === 'unclear' ? '불명확' : '불충분'
-                const statusClass = criterion.status === 'likely' 
-                  ? 'bg-green-100 text-green-800 border-green-300' 
-                  : criterion.status === 'unclear'
-                  ? 'bg-yellow-100 text-yellow-800 border-yellow-300'
-                  : 'bg-red-100 text-red-800 border-red-300'
+              {analysisResult.criteria.map((criterion: any, idx: number) => {
+                // 새로운 API 형식: documentTitle, fileUrl, sourceType, similarityScore, snippet, usageReason
+                const documentTitle = criterion.documentTitle || criterion.name || '문서 제목 없음'
+                const fileUrl = criterion.fileUrl || null
+                const sourceType = criterion.sourceType || 'law'
+                const similarityScore = criterion.similarityScore || 0
+                const snippet = criterion.snippet || ''
+                const usageReason = criterion.usageReason || criterion.reason || ''
                 
-                // 디버깅: criterion.reason 확인
-                console.log(`🔍 [LegalReportCard] criterion[${idx}]:`, {
-                  name: criterion.name,
-                  status: criterion.status,
-                  reason: criterion.reason,
-                  reasonLength: criterion.reason?.length || 0,
-                  reasonType: typeof criterion.reason,
-                })
+                // sourceType에 따른 라벨 및 아이콘
+                const getSourceTypeLabel = (type: string) => {
+                  switch (type) {
+                    case 'standard_contract':
+                      return '표준 계약서'
+                    case 'law':
+                      return '법령'
+                    case 'manual':
+                      return '가이드라인'
+                    case 'case':
+                      return '판례'
+                    default:
+                      return type
+                  }
+                }
                 
-                // reason 필드 추출
-                const reasonText = criterion.reason || ''
-                
-                // 한 줄 요약 추출 (reason의 첫 줄 또는 첫 문장)
-                // reason이 비어있으면 기본 메시지 표시
-                const oneLineSummary = reasonText && reasonText.trim()
-                  ? (() => {
-                      // 첫 줄 추출
-                      const firstLine = reasonText.split('\n')[0].trim()
-                      // 첫 두 문장 추출 (마침표 기준)
-                      const sentences = firstLine.split('.').filter((s: string) => s.trim())
-                      if (sentences.length >= 2) {
-                        return (sentences.slice(0, 2).join('.') + '.').trim()
-                      } else if (firstLine.length > 100) {
-                        return firstLine.substring(0, 100) + '...'
-                      } else {
-                        return firstLine
-                      }
-                    })()
-                  : '법적 근거를 확인하는 중입니다.'
-                
-                const legalBasisCount = getLegalBasisForCriterion(idx).length
+                const getSourceTypeColor = (type: string) => {
+                  switch (type) {
+                    case 'standard_contract':
+                      return 'bg-blue-100 text-blue-800 border-blue-300'
+                    case 'law':
+                      return 'bg-purple-100 text-purple-800 border-purple-300'
+                    case 'manual':
+                      return 'bg-green-100 text-green-800 border-green-300'
+                    case 'case':
+                      return 'bg-orange-100 text-orange-800 border-orange-300'
+                    default:
+                      return 'bg-slate-100 text-slate-800 border-slate-300'
+                  }
+                }
                 
                 return (
                   <div key={idx} className="bg-white border border-slate-200 rounded-lg p-4 hover:shadow-md transition-shadow">
@@ -219,34 +222,52 @@ export function LegalReportCard({ analysisResult, onCopy }: LegalReportCardProps
                       </div>
                       
                       <div className="flex-1 min-w-0">
-                        {/* 항목명 + 상태 배지 */}
+                        {/* 문서 제목 + 소스 타입 배지 */}
                         <div className="flex items-center gap-2 mb-2 flex-wrap">
-                          <h4 className="font-semibold text-slate-900">{criterion.name}</h4>
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border ${statusClass}`}>
-                            {statusEmoji} {statusLabel}
+                          <h4 className="font-semibold text-slate-900 flex-1 min-w-0 break-words">
+                            {documentTitle}
+                          </h4>
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border flex-shrink-0 ${getSourceTypeColor(sourceType)}`}>
+                            {getSourceTypeLabel(sourceType)}
                           </span>
+                          {similarityScore > 0 && (
+                            <span className="text-xs text-slate-500 flex-shrink-0">
+                              유사도: {(similarityScore * 100).toFixed(1)}%
+                            </span>
+                          )}
                         </div>
                         
-                        {/* 한 줄 설명 - reason 필드 표시 */}
-                        {reasonText && reasonText.trim() ? (
-                          <p className="text-sm text-slate-700 mb-2 leading-relaxed line-clamp-2">
-                            {oneLineSummary}
-                          </p>
-                        ) : (
-                          <p className="text-sm text-slate-500 mb-2 leading-relaxed italic">
-                            법적 근거를 확인하는 중입니다.
-                          </p>
-                        )}
+                        {/* 사용 이유 (usageReason) */}
+                        {usageReason && usageReason.trim() ? (
+                          <div className="mb-3">
+                            <p className="text-xs font-semibold text-slate-600 mb-1">판단 근거:</p>
+                            <p className="text-sm text-slate-700 leading-relaxed">
+                              {usageReason}
+                            </p>
+                          </div>
+                        ) : null}
                         
-                        {/* 법적 근거 보기 버튼 */}
-                        {legalBasisCount > 0 && (
-                          <button
-                            onClick={() => setSelectedCriterionIndex(idx)}
-                            className="text-xs text-blue-600 hover:text-blue-700 hover:underline flex items-center gap-1 transition-colors"
+                        {/* 스니펫 (snippet) */}
+                        {snippet && snippet.trim() ? (
+                          <div className="mb-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                            <p className="text-xs font-semibold text-slate-600 mb-1">관련 조항:</p>
+                            <p className="text-sm text-slate-700 leading-relaxed line-clamp-3">
+                              {snippet}
+                            </p>
+                          </div>
+                        ) : null}
+                        
+                        {/* 파일 다운로드 버튼 */}
+                        {fileUrl && (
+                          <a
+                            href={fileUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 hover:underline transition-colors"
                           >
-                            <span>법적 근거 보기 ({legalBasisCount})</span>
-                            <ChevronRight className="w-3 h-3" />
-                          </button>
+                            <span>원본 문서 보기</span>
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
                         )}
                       </div>
                     </div>
