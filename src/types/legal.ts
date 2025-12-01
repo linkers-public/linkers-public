@@ -203,11 +203,21 @@ export interface OrganizationInfo {
   phone?: string
 }
 
+// CriteriaItemV2 타입 정의 (RAG 기반 구조)
+export interface CriteriaItemV2 {
+  documentTitle: string; // 문서 제목
+  fileUrl?: string | null; // 문서 파일 URL (Signed URL)
+  sourceType: string; // 출처 타입 (law, manual, case, standard_contract)
+  similarityScore: number; // 유사도 점수 (0.0 ~ 1.0)
+  snippet: string; // 관련 내용 스니펫
+  usageReason: string; // 사용 이유 설명
+}
+
 export interface SituationAnalysisResponse {
   classifiedType: SituationCategory
   riskScore: number // 0~100
   summary: string
-  criteria: CriteriaItem[]
+  criteria: CriteriaItemV2[] // 새로운 RAG 기반 구조 사용
   actionPlan?: ActionPlan // 선택적 필드 (더 이상 사용하지 않음)
   scripts: Scripts
   relatedCases: RelatedCase[]

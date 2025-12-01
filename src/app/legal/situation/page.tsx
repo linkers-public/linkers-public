@@ -385,11 +385,14 @@ export default function SituationAnalysisPage() {
         classifiedType: (analysis?.tags?.[0] || analysisData?.classifiedType || 'unknown') as SituationCategory,
         riskScore: analysis?.riskScore ?? analysis?.risk_score ?? analysisData?.riskScore ?? 0,
         summary: analysisData?.summary || analysis?.analysis?.summary || '',
-        // criteria는 최상위 레벨(analysis.criteria) 또는 analysis JSONB 내부(analysisData.criteria)에서 가져오기
+        // criteria는 새로운 RAG 기반 구조 (CriteriaItemV2) 그대로 사용
         criteria: criteriaArray.map((criterion: any) => ({
-          name: criterion?.name || '',
-          status: (criterion?.status || 'likely') as 'likely' | 'unclear' | 'unlikely',
-          reason: criterion?.reason || '',
+          documentTitle: criterion?.documentTitle || criterion?.name || '',
+          fileUrl: criterion?.fileUrl || null,
+          sourceType: criterion?.sourceType || 'law',
+          similarityScore: criterion?.similarityScore || 0,
+          snippet: criterion?.snippet || '',
+          usageReason: criterion?.usageReason || criterion?.reason || '',
         })),
         sources: (analysis?.sources || analysisData?.sources || []).map((source: any) => ({
           sourceId: source.sourceId || source.source_id || '',
@@ -621,11 +624,14 @@ export default function SituationAnalysisPage() {
         classifiedType: (result?.tags?.[0] || 'unknown') as SituationCategory,
         riskScore: result?.riskScore ?? 0,
         summary: result?.analysis?.summary || '',
-        // criteria는 최상위 레벨(result.criteria) 또는 analysis 내부(result.analysis.criteria)에서 가져오기
+        // criteria는 새로운 RAG 기반 구조 (CriteriaItemV2) 그대로 사용
         criteria: criteriaArray.map((criterion: any) => ({
-          name: criterion?.name || '',
-          status: (criterion?.status || 'likely') as 'likely' | 'unclear' | 'unlikely',
-          reason: criterion?.reason || '',
+          documentTitle: criterion?.documentTitle || criterion?.name || '',
+          fileUrl: criterion?.fileUrl || null,
+          sourceType: criterion?.sourceType || 'law',
+          similarityScore: criterion?.similarityScore || 0,
+          snippet: criterion?.snippet || '',
+          usageReason: criterion?.usageReason || criterion?.reason || '',
         })),
         actionPlan: null,
         scripts: {

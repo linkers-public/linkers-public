@@ -111,10 +111,14 @@ export default function SituationDetailPage() {
         classifiedType: (analysis?.tags?.[0] || analysisData?.classifiedType || 'unknown') as SituationCategory,
         riskScore: analysis?.riskScore ?? analysisData?.riskScore ?? 0,
         summary: analysisData?.summary || analysis?.analysis?.summary || '',
+        // criteria는 새로운 RAG 기반 구조 (CriteriaItemV2) 그대로 사용
         criteria: criteriaArray.map((criterion: any) => ({
-          name: criterion?.name || '',
-          status: (criterion?.status || 'likely') as 'likely' | 'unclear' | 'unlikely',
-          reason: criterion?.reason || '',
+          documentTitle: criterion?.documentTitle || criterion?.name || '',
+          fileUrl: criterion?.fileUrl || null,
+          sourceType: criterion?.sourceType || 'law',
+          similarityScore: criterion?.similarityScore || 0,
+          snippet: criterion?.snippet || '',
+          usageReason: criterion?.usageReason || criterion?.reason || '',
         })),
 
         scripts: scripts,
@@ -264,8 +268,8 @@ export default function SituationDetailPage() {
                 {/* criteria 첫 번째 항목 배지 */}
                 {analysisResult.criteria && analysisResult.criteria.length > 0 && (
                   <div className="px-3 py-1.5 bg-gradient-to-r from-amber-500 to-orange-600 text-white rounded-lg shadow-md font-semibold text-sm flex items-center gap-2">
-                    <span>{analysisResult.criteria[0].status === 'likely' ? '🌙' : analysisResult.criteria[0].status === 'unclear' ? '📉' : '⚠️'}</span>
-                    <span className="max-w-[200px] truncate">{analysisResult.criteria[0].name}</span>
+                    <span>📋</span>
+                    <span className="max-w-[200px] truncate">{analysisResult.criteria[0].documentTitle || analysisResult.criteria[0].name || '법적 근거'}</span>
                   </div>
                 )}
               </div>

@@ -291,6 +291,7 @@ class SituationWorkflow:
         criteria = state.get("criteria", [])
         organizations = state.get("organizations", [])  # 추천 기관 목록
         summary_report = state.get("summary_report", "")  # generate_action_guide에서 생성됨
+        legal_basis = state.get("legal_basis", [])  # legal_basis 정보 가져오기
         
         # grounding_chunks 가져오기
         grounding_chunks = state.get("grounding_chunks", [])
@@ -343,38 +344,86 @@ class SituationWorkflow:
             source_type = chunk.source_type
             file_url = getattr(chunk, 'file_url', None)
             
-            # file_url이 없으면 생성
+            # file_url이 없으면 생성 (external_id가 있는 경우)
             if not file_url and external_id:
                 try:
                     file_url = get_document_file_url(
                         external_id=external_id,
-                        source_type=source_type
+                        source_type=source_type,
+                        expires_in=3600
                     )
                 except Exception as e:
-                    logger.warning(f"[워크플로우] fileUrl 생성 실패 (external_id={external_id}): {str(e)}")
+                    logger.warning(f"[워크플로우] fileUrl 생성 실패 (external_id={external_id}, source_type={source_type}): {str(e)}")
                     file_url = None
             
-            # usageReason 생성 (LLM이 생성한 criteria의 reason을 사용하거나, 기본 메시지 생성)
+            # usageReason 생성 (우선순위: LLM criteria reason > legal_basis 기반 생성 > 기본 메시지)
             usage_reason = ""
-            # LLM이 생성한 criteria에서 해당 문서와 관련된 reason 찾기
+            chunk_snippet_prefix = chunk.snippet[:50].strip() if chunk.snippet else ""
+            
+            # 1. LLM이 생성한 criteria에서 해당 문서와 관련된 reason 찾기
             for criterion in criteria:
                 if isinstance(criterion, dict):
                     criterion_name = criterion.get("name", "")
                     criterion_reason = criterion.get("reason", "")
-                    # 문서 제목이 criterion name에 포함되어 있으면 reason 사용
+                    criterion_legal_basis = criterion.get("legalBasis", [])
+                    
+                    # 문서 제목 매칭
                     if chunk.title in criterion_name or criterion_name in chunk.title:
-                        usage_reason = criterion_reason
-                        break
+                        # reason이 너무 길면 (snippet 전체가 들어간 경우) 기본 메시지 사용
+                        if len(criterion_reason) > 200:
+                            break  # 다음 단계로 넘어감
+                        else:
+                            usage_reason = criterion_reason
+                            break
+                    
+                    # legalBasis에서 snippet 매칭 시도
+                    if criterion_legal_basis and isinstance(criterion_legal_basis, list):
+                        for basis in criterion_legal_basis:
+                            if isinstance(basis, dict):
+                                basis_snippet = basis.get("snippet", "")
+                                if chunk_snippet_prefix and basis_snippet:
+                                    if chunk_snippet_prefix[:30] in basis_snippet[:100] or basis_snippet[:30] in chunk_snippet_prefix[:100]:
+                                        usage_reason = criterion_reason if len(criterion_reason) <= 200 else ""
+                                        break
+                        if usage_reason:
+                            break
                 else:
                     criterion_name = getattr(criterion, "name", "")
                     criterion_reason = getattr(criterion, "reason", "")
                     if chunk.title in criterion_name or criterion_name in chunk.title:
-                        usage_reason = criterion_reason
-                        break
+                        usage_reason = criterion_reason if len(criterion_reason) <= 200 else ""
+                        if usage_reason:
+                            break
             
-            # usageReason이 없으면 기본 메시지 생성
+            # 2. legal_basis에서 해당 문서 찾아서 usageReason 생성
+            if not usage_reason and legal_basis:
+                for basis in legal_basis:
+                    if isinstance(basis, dict):
+                        basis_title = basis.get("title", "")
+                        basis_snippet = basis.get("snippet", "")
+                        # 문서 제목 매칭
+                        if chunk.title in basis_title or basis_title in chunk.title:
+                            # snippet 기반으로 의미있는 usageReason 생성
+                            if basis_snippet and chunk_snippet_prefix:
+                                # snippet이 일치하면 구체적인 usageReason 생성
+                                if chunk_snippet_prefix[:30] in basis_snippet[:100] or basis_snippet[:30] in chunk_snippet_prefix[:100]:
+                                    # 문서 타입에 따른 usageReason 생성
+                                    if "표준" in chunk.title and "계약" in chunk.title:
+                                        usage_reason = f"현재 계약서의 관련 조항이 불명확한 부분이 있어, {chunk.title}의 규정을 비교 기준으로 사용했습니다."
+                                    elif "법" in chunk.title or "규칙" in chunk.title:
+                                        usage_reason = f"현재 상황과 관련하여 {chunk.title}의 법령 조항을 판단 기준으로 사용했습니다."
+                                    else:
+                                        usage_reason = f"현재 상황과 관련하여 {chunk.title}의 내용을 법적 판단 기준으로 사용했습니다."
+                                    break
+            
+            # 3. usageReason이 없으면 기본 메시지 생성
             if not usage_reason:
-                usage_reason = f"현재 상황과 관련하여 {chunk.title}의 내용을 법적 판단 기준으로 사용했습니다."
+                if "표준" in chunk.title and "계약" in chunk.title:
+                    usage_reason = f"현재 계약서의 관련 조항이 불명확한 부분이 있어, {chunk.title}의 규정을 비교 기준으로 사용했습니다."
+                elif "법" in chunk.title or "규칙" in chunk.title:
+                    usage_reason = f"현재 상황과 관련하여 {chunk.title}의 법령 조항을 판단 기준으로 사용했습니다."
+                else:
+                    usage_reason = f"현재 상황과 관련하여 {chunk.title}의 내용을 법적 판단 기준으로 사용했습니다."
             
             criteria_item = {
                 "documentTitle": chunk.title,
