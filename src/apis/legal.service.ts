@@ -351,12 +351,13 @@ export interface SituationResponseV2 {
   riskScore: number;
   riskLevel: 'low' | 'medium' | 'high';
   tags: string[];
-  analysis: SituationAnalysisV2;
+  analysis?: SituationAnalysisV2;
   checklist: string[];
   scripts?: ScriptsV2;
   relatedCases: RelatedCaseV2[];
   sources?: SourceItemV2[]; // RAG 검색 출처
-  criteria?: CriteriaItemV2[]; // 법적 판단 기준 (백엔드에서 최상위 레벨에 반환)
+  findings?: any[]; // 법적 판단 기준 (findings API 구조, 백엔드에서 최상위 레벨에 반환)
+  criteria?: CriteriaItemV2[]; // 레거시 호환성 (더 이상 사용하지 않음)
   actionPlan?: {
     steps: Array<{
       title: string;

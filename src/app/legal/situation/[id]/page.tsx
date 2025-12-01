@@ -94,15 +94,24 @@ export default function SituationDetailPage() {
       // v2 응답을 v1 형식으로 변환
       const analysisData = analysis?.analysis || dbAnalysis?.analysis || {}
       
-      // criteria 찾기
-      const criteriaArray = (analysis?.criteria && Array.isArray(analysis.criteria) && analysis.criteria.length > 0)
-        ? analysis.criteria
-        : (analysisData?.criteria && Array.isArray(analysisData.criteria) && analysisData.criteria.length > 0)
-        ? analysisData.criteria
+      // findings 찾기 (최상위 레벨 우선, 그 다음 analysis 내부, 마지막으로 dbAnalysis)
+      const findingsArray = (analysis?.findings && Array.isArray(analysis.findings) && analysis.findings.length > 0)
+        ? analysis.findings
+        : (analysisData?.findings && Array.isArray(analysisData.findings) && analysisData.findings.length > 0)
+        ? analysisData.findings
+        : (dbAnalysis?.analysis?.findings && Array.isArray(dbAnalysis.analysis.findings) && dbAnalysis.analysis.findings.length > 0)
+        ? dbAnalysis.analysis.findings
         : []
       
-      // analysis.legalBasis를 criteria에 매핑 (API 응답 구조 지원)
-      const legalBasisArray = analysisData?.legalBasis || []
+      // 디버깅: findings 데이터 확인
+      console.log('[page.tsx] findings 데이터 확인:', {
+        'analysis?.findings': analysis?.findings,
+        'analysisData?.findings': analysisData?.findings,
+        'dbAnalysis?.analysis?.findings': dbAnalysis?.analysis?.findings,
+        'findingsArray': findingsArray,
+        'findingsArray.length': findingsArray.length,
+        'analysis 전체': analysis
+      })
       
       // scripts 변환 - 이메일 템플릿 구조: {subject, body}
       const scriptsData = analysis?.scripts
@@ -131,68 +140,8 @@ export default function SituationDetailPage() {
         classifiedType: (analysis?.tags?.[0] || analysisData?.classifiedType || dbAnalysis?.classified_type || 'unknown') as SituationCategory,
         riskScore: analysis?.riskScore ?? dbAnalysis?.risk_score ?? analysisData?.riskScore ?? 0,
         summary: summaryText,
-        // criteria는 새로운 RAG 기반 구조 (CriteriaItemV2) 그대로 사용
-        // analysis.legalBasis가 있으면 각 항목을 criterion으로 변환하고 legalBasis 매핑
-        criteria: criteriaArray.length > 0
-          ? criteriaArray.map((criterion: any) => {
-              // criterion에 해당하는 legalBasis 찾기 (title 또는 snippet으로 매칭)
-              const matchingLegalBasis = legalBasisArray.filter((basis: any) => {
-                const criterionTitle = criterion?.documentTitle || criterion?.name || ''
-                const basisTitle = basis?.title || ''
-                return criterionTitle.includes(basisTitle) || basisTitle.includes(criterionTitle) || 
-                       (criterion?.snippet && basis?.snippet && criterion.snippet.includes(basis.snippet))
-              })
-              
-              // legalBasis를 LegalBasisDetail 형식으로 변환
-              const legalBasis = matchingLegalBasis.map((basis: any) => ({
-                docId: basis?.docId || '',
-                docTitle: basis?.title || '',
-                docType: (basis?.sourceType || 'law') as 'law' | 'manual' | 'case' | 'standard_contract',
-                chunkIndex: basis?.chunkIndex,
-                article: basis?.article,
-                snippet: basis?.snippet || '',
-                snippetHighlight: basis?.snippetHighlight,
-                reason: basis?.reason || basis?.status || '',
-                explanation: basis?.explanation,
-                similarityScore: basis?.similarityScore || 0,
-                fileUrl: basis?.fileUrl,
-                externalId: basis?.externalId,
-              }))
-              
-              return {
-                documentTitle: criterion?.documentTitle || criterion?.name || '',
-                fileUrl: criterion?.fileUrl || null,
-                sourceType: criterion?.sourceType || 'law',
-                similarityScore: criterion?.similarityScore || 0,
-                snippet: criterion?.snippet || '',
-                usageReason: criterion?.usageReason || criterion?.reason || '',
-                legalBasis: legalBasis.length > 0 ? legalBasis : undefined,
-              }
-            })
-          : legalBasisArray.length > 0
-          ? legalBasisArray.map((basis: any) => ({
-              documentTitle: basis?.title || '',
-              fileUrl: null,
-              sourceType: basis?.sourceType || 'law',
-              similarityScore: 0,
-              snippet: basis?.snippet || '',
-              usageReason: basis?.status || '',
-              legalBasis: [{
-                docId: basis?.docId || '',
-                docTitle: basis?.title || '',
-                docType: (basis?.sourceType || 'law') as 'law' | 'manual' | 'case' | 'standard_contract',
-                chunkIndex: basis?.chunkIndex,
-                article: basis?.article,
-                snippet: basis?.snippet || '',
-                snippetHighlight: basis?.snippetHighlight,
-                reason: basis?.reason || basis?.status || '',
-                explanation: basis?.explanation,
-                similarityScore: basis?.similarityScore || 0,
-                fileUrl: basis?.fileUrl,
-                externalId: basis?.externalId,
-              }],
-            }))
-          : [],
+        // findings 사용 (최상위 레벨에 위치)
+        findings: findingsArray,
 
         scripts: scripts,
         relatedCases: (analysis?.relatedCases || []).map((c: any) => {
@@ -256,6 +205,16 @@ export default function SituationDetailPage() {
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }, [situationId])
+
+  // 분석 결과가 로드된 후 상단으로 스크롤
+  useEffect(() => {
+    if (!loading && analysisResult) {
+      // 렌더링 완료를 위해 약간의 지연 후 스크롤
+      setTimeout(() => {
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+      }, 100)
+    }
+  }, [loading, analysisResult])
 
   const handleCopy = (text: string, description: string) => {
     navigator.clipboard.writeText(text)
@@ -338,11 +297,11 @@ export default function SituationDetailPage() {
                   <span>위험도 {analysisResult.riskScore}</span>
                 </div>
                 
-                {/* criteria 첫 번째 항목 배지 */}
-                {analysisResult.criteria && analysisResult.criteria.length > 0 && (
+                {/* findings 첫 번째 항목 배지 */}
+                {analysisResult.findings && analysisResult.findings.length > 0 && (
                   <div className="px-3 py-1.5 bg-gradient-to-r from-amber-500 to-orange-600 text-white rounded-lg shadow-md font-semibold text-sm flex items-center gap-2">
                     <span>📋</span>
-                    <span className="max-w-[200px] truncate">{analysisResult.criteria[0].documentTitle || '법적 근거'}</span>
+                    <span className="max-w-[200px] truncate">{analysisResult.findings[0].title || '법적 근거'}</span>
                   </div>
                 )}
               </div>
