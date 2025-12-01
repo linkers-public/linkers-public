@@ -230,6 +230,24 @@ JSON만 출력하고 다른 설명은 하지 마세요.
         
         # JSON 파싱
         try:
+            # JSON 객체 추출 (중괄호 매칭)
+            json_match = re.search(r'\{.*\}', response_clean, re.DOTALL)
+            if json_match:
+                response_clean = json_match.group(0)
+                # 중괄호 매칭으로 유효한 JSON만 추출
+                brace_count = 0
+                last_valid_pos = -1
+                for i, char in enumerate(response_clean):
+                    if char == '{':
+                        brace_count += 1
+                    elif char == '}':
+                        brace_count -= 1
+                        if brace_count == 0:
+                            last_valid_pos = i + 1
+                            break
+                if last_valid_pos > 0:
+                    response_clean = response_clean[:last_valid_pos]
+            
             result = json.loads(response_clean)
             
             # 필수 필드 검증

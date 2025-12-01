@@ -633,11 +633,14 @@ export default function SituationAnalysisPage() {
         classifiedType: (result?.tags?.[0] || 'unknown') as SituationCategory,
         riskScore: result?.riskScore ?? 0,
         summary: result?.analysis?.summary || '',
-        // criteria는 최상위 레벨(result.criteria) 또는 analysis 내부(result.analysis.criteria)에서 가져오기
+        // criteria는 새로운 구조(documentTitle, fileUrl, sourceType, similarityScore, snippet, usageReason)를 그대로 사용
         criteria: criteriaArray.map((criterion: any) => ({
-          name: criterion?.name || '',
-          status: (criterion?.status || 'likely') as 'likely' | 'unclear' | 'unlikely',
-          reason: criterion?.reason || '',
+          documentTitle: criterion?.documentTitle || '',
+          fileUrl: criterion?.fileUrl || null,
+          sourceType: criterion?.sourceType || 'law',
+          similarityScore: criterion?.similarityScore || 0,
+          snippet: criterion?.snippet || '',
+          usageReason: criterion?.usageReason || '',
         })),
         actionPlan: null,
         scripts: {
