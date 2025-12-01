@@ -622,10 +622,10 @@ class SituationWorkflow:
         
         findings_mapped = []
         for finding in findings:
-            if not isinstance(finding, dict):
+                if not isinstance(finding, dict):
                 findings_mapped.append(finding)
-                continue
-            
+                    continue
+                
             document_title = finding.get("documentTitle", "").strip()
             refined_snippet = finding.get("refinedSnippet", "").strip()  # LLM이 생성한 refinedSnippet
             
@@ -635,23 +635,23 @@ class SituationWorkflow:
                 continue
             
             # grounding_chunks에서 매칭되는 chunk 찾기
-            matched_chunk = None
+                matched_chunk = None
             best_match_score = 0.0
-            
-            for chunk in grounding_chunks:
-                chunk_title = getattr(chunk, 'title', '').strip() if hasattr(chunk, 'title') else ''
                 
+                for chunk in grounding_chunks:
+                chunk_title = getattr(chunk, 'title', '').strip() if hasattr(chunk, 'title') else ''
+                    
                 # 정확한 제목 매칭
                 if chunk_title == document_title:
-                    matched_chunk = chunk
-                    break
-                
+                        matched_chunk = chunk
+                        break
+                    
                 # 부분 제목 매칭 (양방향) - 더 유연한 매칭
-                if document_title in chunk_title or chunk_title in document_title:
+                        if document_title in chunk_title or chunk_title in document_title:
                     match_score = min(len(document_title), len(chunk_title)) / max(len(document_title), len(chunk_title))
                     if match_score > best_match_score:
                         best_match_score = match_score
-                        matched_chunk = chunk
+                            matched_chunk = chunk
                 
                 # 핵심 키워드 매칭 (제목에서 핵심 단어 추출)
                 # 예: "직장 내 괴롭힘 판단 및 예방 대응 매뉴얼.pdf" -> "직장 내 괴롭힘", "매뉴얼"
@@ -665,7 +665,7 @@ class SituationWorkflow:
                         keyword_match_score = len(common_keywords) / max(len(doc_keywords), len(chunk_keywords))
                         if keyword_match_score > best_match_score:
                             best_match_score = keyword_match_score
-                            matched_chunk = chunk
+                                matched_chunk = chunk
             
             # chunk에서 source 정보 가져오기
             external_id = None
@@ -673,8 +673,8 @@ class SituationWorkflow:
             chunk_score = 0.0
             chunk_snippet = ''
             
-            if matched_chunk:
-                external_id = getattr(matched_chunk, 'external_id', None)
+                if matched_chunk:
+                    external_id = getattr(matched_chunk, 'external_id', None)
                 source_type = getattr(matched_chunk, 'source_type', 'law')
                 chunk_score = float(getattr(matched_chunk, 'score', 0.0))
                 chunk_snippet = getattr(matched_chunk, 'snippet', '')
@@ -697,23 +697,23 @@ class SituationWorkflow:
             # fileUrl 생성
             file_url = None
             if matched_chunk:
-                chunk_file_url = getattr(matched_chunk, 'file_url', None)
-                if chunk_file_url and chunk_file_url.strip():
+                        chunk_file_url = getattr(matched_chunk, 'file_url', None)
+                        if chunk_file_url and chunk_file_url.strip():
                     file_url = chunk_file_url
                     logger.debug(f"[워크플로우] finding fileUrl을 chunk.file_url에서 가져옴: {file_url[:50]}...")
             
             if not file_url and external_id:
-                try:
-                    file_url = get_document_file_url(
-                        external_id=external_id,
-                        source_type=source_type,
-                        expires_in=3600
-                    )
-                    if file_url:
+                            try:
+                                file_url = get_document_file_url(
+                                    external_id=external_id,
+                                    source_type=source_type,
+                                    expires_in=3600
+                                )
+                                if file_url:
                         logger.info(f"[워크플로우] finding fileUrl 생성 성공: external_id={external_id}, source_type={source_type}")
-                    else:
+                                else:
                         logger.warning(f"[워크플로우] finding fileUrl 생성 결과 None: external_id={external_id}, source_type={source_type}")
-                except Exception as e:
+                            except Exception as e:
                     logger.warning(f"[워크플로우] finding fileUrl 생성 실패 (external_id={external_id}): {str(e)}")
             
             # sourceType 매핑 (guideline -> manual, statute -> law)
@@ -725,7 +725,7 @@ class SituationWorkflow:
             
             # refinedSnippet: LLM이 생성한 것을 우선 사용, 없으면 chunk의 snippet 사용
             final_refined_snippet = refined_snippet if refined_snippet else chunk_snippet
-            
+                    
             # source 정보 추가
             finding["source"] = {
                 "documentTitle": document_title,

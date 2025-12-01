@@ -2642,21 +2642,144 @@ async def legal_chat_agent(
                 "analysis": saved_analysis,
             }
     
-    # RAG 검색 및 답변 생성
-    chat_result = await legal_service.chat_with_context(
-        query=message,
-        doc_ids=[contract_analysis.id] if contract_analysis else [],
-        selected_issue_id=None,
-        selected_issue=None,
-        analysis_summary=contract_analysis.summary if contract_analysis else (situation_analysis.summary if situation_analysis else None),
-        risk_score=contract_analysis.riskScore if contract_analysis else (situation_analysis.riskScore if situation_analysis else None),
-        total_issues=None,
-        top_k=8,
-        context_type=context_type,
-        context_data=context_data,
-    )
+    # RAG 검색 및 답변 생성 (Agent 서비스 사용)
+    from core.agent_chat_service import AgentChatService
+    agent_service = AgentChatService()
     
-    answer_markdown = chat_result.get("answer", "")
+    # 히스토리 메시지 변환 (storage 형식 → agent 형식)
+    history_for_agent = []
+    if history_messages:
+        for msg in history_messages:
+            history_for_agent.append({
+                "sender_type": msg.get("sender_type", "user"),
+                "message": msg.get("message", ""),
+            })
+    
+    if mode == LegalChatMode.plain:
+        # Plain 모드: RAG 기반 일반 법률 상담
+        answer_markdown, used_legal_chunks = await agent_service.chat_plain(
+            query=message,
+            legal_chunks=None,  # 자동 검색
+            history_messages=history_for_agent,
+        )
+        
+        # used_sources 구성
+        for chunk in used_legal_chunks:
+            used_sources.append(
+                UsedSourceMeta(
+                    documentTitle=getattr(chunk, 'title', ''),
+                    fileUrl=getattr(chunk, 'file_url', None),
+                    sourceType=getattr(chunk, 'source_type', 'law'),
+                    similarityScore=getattr(chunk, 'score', 0.0),
+                )
+            )
+    elif mode == LegalChatMode.contract and contract_analysis:
+        # Contract 모드: 계약서 분석 결과 기반
+        saved_analysis = await storage_service.get_contract_analysis(contract_analysis.id, user_id)
+        if saved_analysis:
+            answer_markdown = await agent_service.chat_contract(
+                query=message,
+                contract_analysis=saved_analysis,
+                legal_chunks=None,  # 자동 검색
+                history_messages=history_for_agent,
+            )
+        else:
+            # 분석 결과가 없으면 Plain 모드로 fallback
+            answer_markdown, used_legal_chunks = await agent_service.chat_plain(
+                query=message,
+                legal_chunks=None,
+                history_messages=history_for_agent,
+            )
+            # used_sources 구성
+            for chunk in used_legal_chunks:
+                used_sources.append(
+                    UsedSourceMeta(
+                        documentTitle=getattr(chunk, 'title', ''),
+                        fileUrl=getattr(chunk, 'file_url', None),
+                        sourceType=getattr(chunk, 'source_type', 'law'),
+                        similarityScore=getattr(chunk, 'score', 0.0),
+                    )
+                )
+    elif mode == LegalChatMode.situation and situation_analysis:
+        # Situation 모드: 상황 분석 결과 기반
+        saved_analysis = await storage_service.get_situation_analysis(situation_analysis.id, user_id)
+        if saved_analysis:
+            # 상황 분석 결과를 dict 형식으로 변환
+            analysis_dict = {
+                "risk_score": saved_analysis.get("risk_score") or saved_analysis.get("riskScore", 0),
+                "risk_level": saved_analysis.get("risk_level") or saved_analysis.get("riskLevel", "unknown"),
+                "summary": saved_analysis.get("summary") or saved_analysis.get("answer", ""),
+                "criteria": saved_analysis.get("criteria", []),
+                "findings": saved_analysis.get("findings", []),
+            }
+            answer_markdown = await agent_service.chat_situation(
+                query=message,
+                situation_analysis=analysis_dict,
+                legal_chunks=None,  # 자동 검색
+                history_messages=history_for_agent,
+            )
+        else:
+            # 분석 결과가 없으면 Plain 모드로 fallback
+            answer_markdown, used_legal_chunks = await agent_service.chat_plain(
+                query=message,
+                legal_chunks=None,
+                history_messages=history_for_agent,
+            )
+            # used_sources 구성
+            for chunk in used_legal_chunks:
+                used_sources.append(
+                    UsedSourceMeta(
+                        documentTitle=getattr(chunk, 'title', ''),
+                        fileUrl=getattr(chunk, 'file_url', None),
+                        sourceType=getattr(chunk, 'source_type', 'law'),
+                        similarityScore=getattr(chunk, 'score', 0.0),
+                    )
+                )
+    else:
+        # Fallback: Plain 모드
+        answer_markdown, used_legal_chunks = await agent_service.chat_plain(
+            query=message,
+            legal_chunks=None,
+            history_messages=history_for_agent,
+        )
+        # used_sources 구성
+        for chunk in used_legal_chunks:
+            used_sources.append(
+                UsedSourceMeta(
+                    documentTitle=getattr(chunk, 'title', ''),
+                    fileUrl=getattr(chunk, 'file_url', None),
+                    sourceType=getattr(chunk, 'source_type', 'law'),
+                    similarityScore=getattr(chunk, 'score', 0.0),
+                )
+            )
+    
+    # used_sources 구성 (Contract/Situation 모드는 기존 방식 유지)
+    if mode != LegalChatMode.plain:
+        # Contract/Situation 모드는 기존 방식 유지
+        chat_result = await legal_service.chat_with_context(
+            query=message,
+            doc_ids=[contract_analysis.id] if contract_analysis else [],
+            selected_issue_id=None,
+            selected_issue=None,
+            analysis_summary=contract_analysis.summary if contract_analysis else (situation_analysis.summary if situation_analysis else None),
+            risk_score=contract_analysis.riskScore if contract_analysis else (situation_analysis.riskScore if situation_analysis else None),
+            total_issues=None,
+            top_k=8,
+            context_type=context_type,
+            context_data=context_data,
+        )
+        
+        # used_sources 변환
+        used_chunks = chat_result.get("used_chunks", {})
+        for chunk in used_chunks.get("legal", []):
+            used_sources.append(
+                UsedSourceMeta(
+                    documentTitle=chunk.get("title", ""),
+                    fileUrl=None,
+                    sourceType=chunk.get("source_type", "law"),
+                    similarityScore=chunk.get("score"),
+                )
+            )
     
     # used_sources 변환
     used_chunks = chat_result.get("used_chunks", {})
