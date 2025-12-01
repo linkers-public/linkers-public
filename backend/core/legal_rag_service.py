@@ -549,16 +549,23 @@ class LegalRAGService:
             search_legal_with_embedding(),
             return_exceptions=False
         )
-        legal_chunks = [
-            {
+        # legal_chunks_raw는 LegalGroundingChunk 객체이므로 metadata 포함
+        legal_chunks = []
+        for chunk in legal_chunks_raw:
+            chunk_dict = {
                 "id": chunk.source_id,
                 "source_type": chunk.source_type,
                 "title": chunk.title,
                 "content": chunk.snippet,
+                "snippet": chunk.snippet,
                 "score": chunk.score,
+                "external_id": getattr(chunk, "external_id", None),
+                "externalId": getattr(chunk, "external_id", None),
             }
-            for chunk in legal_chunks_raw
-        ]
+            # metadata 추가 (LegalGroundingChunk 객체에 metadata 필드가 있으면 사용)
+            if hasattr(chunk, "metadata") and chunk.metadata:
+                chunk_dict["metadata"] = chunk.metadata
+            legal_chunks.append(chunk_dict)
         
         # 2. LLM으로 답변 생성 (컨텍스트 포함)
         answer = await self._llm_chat_response(
@@ -1089,6 +1096,10 @@ class LegalRAGService:
                 except Exception as e:
                     logger.warning(f"스토리지 URL 생성 실패 (external_id={external_id}): {str(e)}")
             
+            # metadata 추출
+            metadata = r.get("metadata", {}) or {}
+            
+            # LegalGroundingChunk 객체 생성 (metadata 포함)
             results.append(
                 LegalGroundingChunk(
                     source_id=r.get("id", ""),
@@ -1099,7 +1110,8 @@ class LegalRAGService:
                     file_path=file_path,
                     external_id=external_id,
                     chunk_index=chunk_index,
-                    file_url=file_url,  # 파일 URL 추가
+                    file_url=file_url,
+                    metadata=metadata,
                 )
             )
         

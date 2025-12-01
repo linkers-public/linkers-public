@@ -29,6 +29,7 @@ interface Message {
   dbId?: string // DB에 저장된 메시지 ID
   context_type?: 'none' | 'situation' | 'contract'
   context_id?: string | null
+  metadata?: any // 메시지 metadata (cases 포함 가능)
 }
 
 interface EmbeddedChatProps {
@@ -178,6 +179,7 @@ export function EmbeddedChat({
           timestamp: new Date(msg.created_at),
           context_type: msg.context_type || 'none',
           context_id: msg.context_id || null,
+          metadata: msg.metadata || null,
         }
         return message
       })
@@ -246,6 +248,7 @@ export function EmbeddedChat({
               timestamp: new Date(newMsg.created_at),
               context_type: newMsg.context_type || 'none',
               context_id: newMsg.context_id || null,
+              metadata: newMsg.metadata || null,
             }
             
             setMessages((prev) => {
@@ -590,7 +593,11 @@ export function EmbeddedChat({
                 ) : message.role === 'assistant' ? (
                   // assistant 메시지는 context_type에 따라 다른 컴포넌트 사용
                   message.context_type === 'situation' ? (
-                    <SituationChatMessage content={message.content} />
+                    <SituationChatMessage 
+                      content={message.content} 
+                      contextId={message.context_id || null}
+                      metadata={message.metadata}
+                    />
                   ) : (
                     <ChatAiMessage content={message.content} />
                   )

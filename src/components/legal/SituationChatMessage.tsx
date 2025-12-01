@@ -1,13 +1,29 @@
 'use client'
 
 import { useState } from 'react'
-import { CheckCircle2, FileText, MessageSquare, ChevronRight, ChevronDown, ExternalLink } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { CheckCircle2, FileText, MessageSquare, ChevronRight, ChevronDown, ExternalLink, BookOpen } from 'lucide-react'
+import { Card, CardContent } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { MarkdownRenderer } from '@/components/rag/MarkdownRenderer'
 
 /**
  * 상황분석 메시지 페이로드 타입
  */
+export interface CaseCard {
+  id: string
+  title: string
+  situation: string
+  main_issues: string[]
+  category?: 'all' | 'intern' | 'wage' | 'stock' | 'freelancer' | 'harassment'
+  severity?: 'low' | 'medium' | 'high'
+  keywords?: string[]
+  legalIssues?: string[]
+  learnings?: string[]
+  actions?: string[]
+}
+
 export interface SituationAnalysisMessagePayload {
   reportTitle: string
   legalPerspective: {
@@ -21,6 +37,7 @@ export interface SituationAnalysisMessagePayload {
     key: string
     description: string
   }>
+  cases?: CaseCard[]
   conversationExamples?: Array<{
     role: 'user' | 'assistant'
     content: string
@@ -110,13 +127,24 @@ function isSituationPayload(v: any): v is SituationAnalysisMessagePayload {
 interface SituationChatMessageProps {
   content: string
   contextId?: string | null
+  metadata?: any // 메시지 metadata (cases 포함 가능)
 }
 
 /**
  * 상황분석 챗 답변을 구조화된 카드 형태로 렌더링
  * JSON 형식의 응답을 파싱하여 표시
  */
-export function SituationChatMessage({ content, contextId }: SituationChatMessageProps) {
+const CATEGORY_LABELS: Record<string, string> = {
+  all: '전체',
+  intern: '인턴/수습',
+  wage: '근로시간·임금',
+  stock: '스톡옵션',
+  freelancer: '프리랜서',
+  harassment: '직장 내 괴롭힘',
+}
+
+export function SituationChatMessage({ content, contextId, metadata }: SituationChatMessageProps) {
+  const router = useRouter()
   const [expandedRefs, setExpandedRefs] = useState<Record<number, boolean>>({})
   const [expandedActions, setExpandedActions] = useState<Record<number, boolean>>({})
   const [expandedExamples, setExpandedExamples] = useState<Record<number, boolean>>({})
@@ -124,6 +152,10 @@ export function SituationChatMessage({ content, contextId }: SituationChatMessag
   // JSON 파싱 시도
   const json = extractJsonFromMessage(content)
   const parsed = json && isSituationPayload(json) ? json : null
+  
+  // metadata에서 cases 가져오기 (JSON에 cases가 없을 때 fallback)
+  const casesFromMetadata = metadata?.cases && Array.isArray(metadata.cases) ? metadata.cases : null
+  const finalCases = parsed?.cases || casesFromMetadata || []
 
   // 파싱 실패 시 마크다운 렌더링 (fallback)
   if (!parsed) {
@@ -223,8 +255,65 @@ export function SituationChatMessage({ content, contextId }: SituationChatMessag
         </div>
       )}
 
-      {/* 대화 예시 */}
-      {parsed.conversationExamples && parsed.conversationExamples.length > 0 && (
+      {/* 유사 케이스 */}
+      {finalCases && finalCases.length > 0 && (
+        <div className="bg-gradient-to-br from-purple-50 to-indigo-50 border border-purple-200 rounded-lg p-4 space-y-3">
+          <h3 className="font-semibold text-purple-900 mb-3 flex items-center gap-2">
+            <BookOpen className="h-5 w-5" />
+            📚 유사한 사례
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {finalCases.map((caseItem: CaseCard) => (
+              <Card
+                key={caseItem.id}
+                className="rounded-xl border-2 border-purple-200 bg-white shadow-sm hover:shadow-md hover:border-purple-300 transition-all duration-200 cursor-pointer"
+                onClick={() => router.push(`/legal/cases/${caseItem.id}`)}
+              >
+                <CardContent className="p-4">
+                  {/* 상단 라벨 영역 */}
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-[10px] bg-slate-100 text-slate-700 rounded-full px-2 py-[2px] font-semibold">
+                      {CATEGORY_LABELS[caseItem.category || 'all']}
+                    </span>
+                    {caseItem.severity && (
+                      <span className={cn(
+                        "text-[10px] rounded-full px-2 py-[2px] font-semibold border",
+                        caseItem.severity === 'high'
+                          ? "bg-red-100 text-red-700 border-red-300"
+                          : caseItem.severity === 'medium'
+                          ? "bg-amber-100 text-amber-700 border-amber-300"
+                          : "bg-emerald-100 text-emerald-700 border-emerald-300"
+                      )}>
+                        {caseItem.severity === 'high' ? '높음' : caseItem.severity === 'medium' ? '중간' : '낮음'}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* 제목 */}
+                  <h4 className="text-xs font-semibold text-slate-900 mb-2 line-clamp-1 hover:text-purple-700 transition-colors">
+                    {caseItem.title}
+                  </h4>
+
+                  {/* 한 줄 설명 */}
+                  <p className="text-[11px] text-slate-600 mb-3 line-clamp-2 leading-relaxed">
+                    {caseItem.situation}
+                  </p>
+
+                  {/* 키워드 */}
+                  {caseItem.main_issues && caseItem.main_issues.length > 0 && (
+                    <p className="text-[10px] text-slate-500 line-clamp-1">
+                      키워드: {caseItem.main_issues.slice(0, 3).join(', ')}
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 대화 예시 (레거시 호환성 - cases가 없을 때만 표시) */}
+      {finalCases.length === 0 && parsed?.conversationExamples && parsed.conversationExamples.length > 0 && (
         <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 space-y-3">
           <h3 className="font-semibold text-purple-900 mb-3 flex items-center gap-2">
             <MessageSquare className="h-5 w-5" />

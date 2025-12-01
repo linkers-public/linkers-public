@@ -26,6 +26,8 @@ from models.schemas import (
     LegalIssue,
     LegalBasisItemV2,
     ToxicClauseDetail,
+    CaseCard,
+    LegalGroundingChunk,
 )
 from core.legal_rag_service import LegalRAGService
 from core.document_processor_v2 import DocumentProcessor
@@ -827,9 +829,83 @@ async def legal_chat_agent(
                 )
             )
     
-    # used_sources 구성 (Contract/Situation 모드는 기존 방식 유지)
-    if mode != LegalChatMode.plain:
+    # ---------- 4-1. 케이스 추출 (situation 모드 전용) ----------
+    extracted_cases: List[CaseCard] = []
+    if mode == LegalChatMode.situation:
         # Contract/Situation 모드는 기존 방식 유지
+        chat_result = await legal_service.chat_with_context(
+            query=message,
+            doc_ids=[contract_analysis.id] if contract_analysis else [],
+            selected_issue_id=None,
+            selected_issue=None,
+            analysis_summary=contract_analysis.summary if contract_analysis else (situation_analysis.summary if situation_analysis else None),
+            risk_score=contract_analysis.riskScore if contract_analysis else (situation_analysis.riskScore if situation_analysis else None),
+            total_issues=None,
+            top_k=8,
+            context_type=context_type,
+            context_data=context_data,
+        )
+        
+        # legal chunk에서 case 타입 추출
+        used_chunks = chat_result.get("used_chunks", {})
+        legal_chunks = used_chunks.get("legal", [])
+        
+        logger.info(f"[Agent API] legal_chunks 개수: {len(legal_chunks)}개")
+        # source_type별 개수 확인
+        source_type_counts = {}
+        for chunk in legal_chunks:
+            st = chunk.get("source_type", "unknown")
+            source_type_counts[st] = source_type_counts.get(st, 0) + 1
+        logger.info(f"[Agent API] source_type별 개수: {source_type_counts}")
+        
+        # case 타입 chunk를 케이스 카드로 변환
+        extracted_cases = await _extract_cases_from_chunks(legal_chunks, storage_service)
+        logger.info(f"[Agent API] 케이스 추출 완료: {len(extracted_cases)}개")
+        
+        # LLM 응답(answer_markdown)에서 JSON 추출 및 cases 필드를 실제 추출한 cases로 대체
+        if answer_markdown and extracted_cases:
+            try:
+                import re
+                # JSON 코드 블록 찾기
+                json_match = re.search(r'```json\s*(\{.*?\})\s*```', answer_markdown, re.DOTALL)
+                if not json_match:
+                    # ```json 없이 JSON만 있는 경우
+                    json_match = re.search(r'\{[\s\S]*"reportTitle"[\s\S]*\}', answer_markdown, re.DOTALL)
+                
+                if json_match:
+                    json_str = json_match.group(1) if json_match.lastindex else json_match.group(0)
+                    parsed_json = json.loads(json_str)
+                    
+                    # cases 필드를 실제 추출한 cases로 대체
+                    cases_data = [case.dict() for case in extracted_cases]
+                    parsed_json["cases"] = cases_data
+                    
+                    # JSON을 다시 문자열로 변환
+                    updated_json_str = json.dumps(parsed_json, ensure_ascii=False, indent=2)
+                    
+                    # 원본 JSON 부분을 업데이트된 JSON으로 교체
+                    if json_match.lastindex:
+                        answer_markdown = answer_markdown.replace(json_match.group(0), f"```json\n{updated_json_str}\n```")
+                    else:
+                        answer_markdown = answer_markdown.replace(json_match.group(0), updated_json_str)
+                    
+                    logger.info(f"[Agent API] LLM 응답 JSON에 cases {len(extracted_cases)}개 추가 완료")
+            except Exception as json_err:
+                logger.warning(f"[Agent API] JSON 파싱 및 cases 대체 실패: {str(json_err)}")
+                # 실패해도 계속 진행
+        
+        # used_sources 변환
+        for chunk in legal_chunks:
+            used_sources.append(
+                UsedSourceMeta(
+                    documentTitle=chunk.get("title", ""),
+                    fileUrl=None,
+                    sourceType=chunk.get("source_type", "law"),
+                    similarityScore=chunk.get("score"),
+                )
+            )
+    elif mode != LegalChatMode.plain:
+        # Contract 모드
         chat_result = await legal_service.chat_with_context(
             query=message,
             doc_ids=[contract_analysis.id] if contract_analysis else [],
@@ -873,6 +949,15 @@ async def legal_chat_agent(
         context_id=contract_analysis_id or situation_analysis_id,
     )
     
+    # assistant 메시지 metadata에 cases 추가 (situation 모드일 때만)
+    assistant_metadata = None
+    if mode == LegalChatMode.situation:
+        # extracted_cases가 비어있어도 빈 배열로 저장
+        assistant_metadata = {
+            "cases": [case.dict() for case in extracted_cases]
+        }
+        logger.info(f"[Agent API] assistant metadata에 cases 저장: {len(extracted_cases)}개")
+    
     await storage_service.save_chat_message(
         session_id=session_id,
         user_id=user_id,
@@ -881,6 +966,7 @@ async def legal_chat_agent(
         sequence_number=next_seq + 1,
         context_type=context_type,
         context_id=contract_analysis_id or situation_analysis_id,
+        metadata=assistant_metadata,
     )
     
     # ---------- 6. 응답 ----------
@@ -903,6 +989,7 @@ async def legal_chat_agent(
         usedSources=used_sources,
         contractAnalysis=contract_analysis,
         situationAnalysis=situation_analysis,
+        cases=extracted_cases if mode == LegalChatMode.situation else [],
     )
 
 
@@ -913,6 +1000,126 @@ def _context_type_from_mode(mode: LegalChatMode) -> str:
     if mode == LegalChatMode.situation:
         return "situation"
     return "none"
+
+
+async def _extract_cases_from_chunks(
+    legal_chunks: List[Dict[str, Any]], 
+    storage_service: Optional[ContractStorageService] = None
+) -> List[CaseCard]:
+    """
+    legal chunk 중 source_type이 'case'인 것들을 케이스 카드 형태로 변환
+    
+    Args:
+        legal_chunks: legal chunk 목록 (dict)
+        storage_service: DB에서 metadata를 조회하기 위한 서비스 (옵션)
+    
+    Returns:
+        CaseCard 목록
+    """
+    cases = []
+    seen_case_ids = set()  # 중복 제거용
+    
+    logger.info(f"[케이스 추출] legal_chunks 개수: {len(legal_chunks)}개")
+    
+    for chunk in legal_chunks:
+        # dict 형태 처리
+        source_type = chunk.get("source_type", "")
+        external_id = chunk.get("external_id") or chunk.get("externalId", "")
+        title = chunk.get("title", "")
+        snippet = chunk.get("snippet", "") or chunk.get("content", "")
+        
+        # case 타입만 처리
+        if source_type != "case":
+            continue
+        
+        logger.info(f"[케이스 추출] case 타입 발견: external_id={external_id}, title={title}")
+        
+        # 중복 제거 (같은 external_id는 한 번만)
+        case_id = external_id or title
+        if not case_id or case_id in seen_case_ids:
+            continue
+        seen_case_ids.add(case_id)
+        
+        # metadata 추출 (chunk에서 직접 또는 DB에서 조회)
+        metadata = chunk.get("metadata", {})
+        
+        # metadata가 없고 storage_service가 있으면 DB에서 조회 시도
+        if not metadata and storage_service and external_id:
+            try:
+                # legal_chunks 테이블에서 metadata 조회
+                from config import settings
+                from supabase import create_client
+                sb = create_client(settings.supabase_url, settings.supabase_key)
+                result = sb.table("legal_chunks")\
+                    .select("metadata")\
+                    .eq("external_id", external_id)\
+                    .eq("source_type", "case")\
+                    .limit(1)\
+                    .execute()
+                
+                if result.data and len(result.data) > 0:
+                    metadata = result.data[0].get("metadata", {})
+            except Exception as e:
+                logger.warning(f"[케이스 추출] DB에서 metadata 조회 실패 (external_id={external_id}): {str(e)}")
+        
+        # metadata가 문자열이면 파싱
+        if isinstance(metadata, str):
+            try:
+                import json
+                metadata = json.loads(metadata)
+            except:
+                metadata = {}
+        
+        # 케이스 카드 데이터 구성
+        situation = metadata.get("situation", snippet[:200] if snippet else "")
+        main_issues = metadata.get("issues", [])
+        if not main_issues and isinstance(metadata.get("main_issues"), list):
+            main_issues = metadata.get("main_issues", [])
+        
+        # category 추출 (metadata 또는 title에서)
+        category = metadata.get("category")
+        if not category:
+            # title에서 카테고리 추정
+            title_lower = title.lower()
+            if "인턴" in title_lower or "수습" in title_lower:
+                category = "intern"
+            elif "임금" in title_lower or "급여" in title_lower or "수당" in title_lower:
+                category = "wage"
+            elif "스톡" in title_lower or "옵션" in title_lower:
+                category = "stock"
+            elif "프리랜서" in title_lower or "용역" in title_lower:
+                category = "freelancer"
+            elif "괴롭힘" in title_lower or "모욕" in title_lower or "성희롭" in title_lower:
+                category = "harassment"
+            else:
+                category = "all"
+        
+        # severity 추정 (기본값: medium)
+        severity = metadata.get("severity", "medium")
+        
+        # keywords 생성
+        keywords = [f"#{issue}" for issue in main_issues[:3]]
+        
+        # legalIssues, learnings, actions는 metadata에서 추출 (없으면 빈 배열)
+        legal_issues = metadata.get("legalIssues", metadata.get("legal_issues", []))
+        learnings = metadata.get("learnings", [])
+        actions = metadata.get("actions", [])
+        
+        case_card = CaseCard(
+            id=case_id,
+            title=title,
+            situation=situation,
+            main_issues=main_issues,
+            category=category,
+            severity=severity,
+            keywords=keywords,
+            legalIssues=legal_issues if isinstance(legal_issues, list) else [],
+            learnings=learnings if isinstance(learnings, list) else [],
+            actions=actions if isinstance(actions, list) else [],
+        )
+        cases.append(case_card)
+    
+    return cases
 
 
 @router.get(

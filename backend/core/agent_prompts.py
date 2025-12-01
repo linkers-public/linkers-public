@@ -216,6 +216,8 @@ def build_agent_contract_prompt(
 
 **반드시 다음 JSON 구조를 정확히 따르세요:**
 
+**중요**: riskLevel은 반드시 "고", "중", "저" 중 하나만 사용하세요. 숫자나 다른 형식은 사용하지 마세요.
+
 ```json
 {{
   "summary": "계약서 전체 요약 (2-3문장으로 핵심 위험 요소 요약)",
@@ -248,7 +250,10 @@ def build_agent_contract_prompt(
 
 **답변 작성 지침:**
 1. **summary**: 계약서의 핵심 위험 요소를 2-3문장으로 요약하세요. 위에서 제공된 계약서 분석 결과의 요약을 참고하되, 더 구체적으로 작성하세요.
-2. **riskLevel**: 위험도 점수와 위험도 등급을 고려하여 "고", "중", "저" 중 하나를 선택하세요. 현재 위험도: {contract_analysis.get('risk_score', 0)}점 ({contract_analysis.get('risk_level', 'unknown')})
+2. **riskLevel**: 반드시 "고", "중", "저" 중 하나만 사용하세요. 숫자나 다른 형식("0점", "high", "medium" 등)은 절대 사용하지 마세요. 현재 위험도 점수: {contract_analysis.get('risk_score', 0)}점, 등급: {contract_analysis.get('risk_level', 'unknown')}를 참고하여 적절한 한글 위험도를 선택하세요.
+   - 70점 이상 또는 "high" → "고"
+   - 40-69점 또는 "medium" → "중"
+   - 39점 이하 또는 "low" → "저"
 3. **riskLevelDescription**: 왜 이 위험도인지, 어떤 법적 분쟁 위험이 있는지 상세히 설명하세요.
 4. **riskContent**: 발견된 위험 조항 중 가장 중요한 3-5개를 선택하여 배열로 작성하세요. 각 항목은 "내용"과 "설명"을 포함해야 합니다.
 5. **checklist**: 사용자가 확인해야 할 주요 항목들을 배열로 작성하세요. 각 항목은 "항목"과 "결론"을 포함해야 합니다.
@@ -349,12 +354,49 @@ def build_agent_situation_prompt(
     
     # RAG 검색 결과
     rag_context = ""
+    legal_refs = []
     if legal_chunks:
         rag_context = "\n## 참고 법령/가이드라인\n\n"
         for idx, chunk in enumerate(legal_chunks[:5], 1):
             title = getattr(chunk, 'title', '제목 없음')
             snippet = getattr(chunk, 'snippet', '')[:200]
             rag_context += f"{idx}. **{title}**\n   {snippet}...\n\n"
+            # 법적 근거로 사용
+            legal_refs.append({
+                "name": title,
+                "description": snippet[:300] if snippet else ""
+            })
+    
+    # 행동 항목 생성 (findings와 criteria 기반)
+    actions_list = []
+    criteria = situation_analysis.get('criteria', [])
+    findings = situation_analysis.get('findings', [])
+    
+    # criteria에서 행동 항목 추출
+    for idx, criterion in enumerate(criteria[:3], 1):
+        criterion_name = criterion.get('name', '')
+        if criterion_name:
+            actions_list.append({
+                "description": f"{criterion_name}에 대해 확인하세요",
+                "key": str(idx)
+            })
+    
+    # findings에서 추가 행동 항목 추출
+    for idx, finding in enumerate(findings[:2], len(actions_list) + 1):
+        finding_title = finding.get('title', '')
+        if finding_title:
+            actions_list.append({
+                "description": f"{finding_title} 관련 조치를 취하세요",
+                "key": str(idx)
+            })
+    
+    # 기본 행동 항목이 없으면 기본값 추가
+    if not actions_list:
+        actions_list = [
+            {"description": "현재 업체의 규정에 대해 파악하세요", "key": "1"},
+            {"description": "관련 법령을 확인하세요", "key": "2"},
+            {"description": "필요한 경우 전문가 상담을 받으세요", "key": "3"}
+        ]
     
     prompt = f"""당신은 상황 분석 결과를 바탕으로 사용자의 질문에 답변하는 법률 상담 AI입니다.
 
@@ -365,13 +407,100 @@ def build_agent_situation_prompt(
 ## 사용자 질문
 {query}
 
-위의 상황 분석 결과와 참고 법령을 바탕으로 사용자 질문에 대해 **마크다운 형식**으로 답변하세요.
+위의 상황 분석 결과와 참고 법령을 바탕으로 **JSON 형식**으로 상황 분석 리포트를 생성하세요.
+
+**반드시 다음 JSON 구조를 정확히 따르세요:**
+
+
+{{
+  "reportTitle": "상황 분석의 결과",
+  "legalPerspective": {{
+    "description": "법적 관점에서 본 현재 상황 설명 (2-3문장으로 핵심 내용 요약)",
+    "references": [
+      {{
+        "name": "법적 근거 이름 (예: 근로기준법 제26조)",
+        "description": "법적 근거 설명"
+      }}
+    ]
+  }},
+  "actions": [
+    {{
+      "description": "행동 항목 설명",
+      "key": "1"
+    }}
+  ],
+  "cases": [
+    {{
+      "id": "케이스 ID",
+      "title": "케이스 제목",
+      "situation": "상황 설명",
+      "main_issues": ["이슈1", "이슈2"],
+      "category": "intern",
+      "severity": "high",
+      "keywords": ["#이슈1", "#이슈2"],
+      "legalIssues": ["법적 쟁점1", "법적 쟁점2"],
+      "learnings": ["배울 점1", "배울 점2"],
+      "actions": ["행동 가이드1", "행동 가이드2"]
+    }}
+  ]
+}}
+
 
 **답변 작성 지침:**
-- 상황 분석 결과에서 언급된 법적 근거, 위험도, 권장 조치를 참고하여 답변하세요.
-- 사용자의 질문에 대해 구체적이고 실용적인 조언을 제공하세요.
-- 모든 답변은 한국어로만 작성하세요.
-- 마크다운 형식(제목, 목록, 강조 등)을 활용하세요.
+
+1. **reportTitle**: 상황 분석 리포트의 제목 (예: "상황 분석의 결과")
+
+2. **legalPerspective.description**: 
+   - 현재 상황을 법적으로 평가한 내용을 2-3문장으로 작성하세요.
+   - 위에서 제공된 상황 분석 결과의 요약과 법적 판단 기준을 참고하여 작성하세요.
+   - 관련 법령을 명시적으로 언급하세요.
+
+3. **legalPerspective.references**: 
+   - 위의 "참고 법령/가이드라인" 섹션에서 제공된 법령을 참고하여 작성하세요.
+   - 최소 1개 이상의 참고 문서를 포함하세요.
+   - 각 항목은 "name"과 "description"을 포함해야 합니다.
+
+4. **actions**: 
+   - 사용자가 할 수 있는 구체적인 행동 항목을 배열로 작성하세요.
+   - 상황 분석 결과의 criteria와 findings를 참고하여 작성하세요.
+   - 최소 3개 이상의 행동 항목을 포함하세요.
+   - 각 항목은 "description"과 "key" (예: "1", "2", "3")를 포함해야 합니다.
+
+5. **cases**: 
+   - 위의 "참고 법령/가이드라인" 섹션에서 source_type이 'case'인 항목들을 케이스 카드 형태로 변환하여 배열로 작성하세요.
+   - 각 케이스는 id, title, situation, main_issues, category, severity, keywords, legalIssues, learnings, actions를 포함해야 합니다.
+   - case 타입이 없으면 빈 배열 []을 반환하세요.
+
+**⚠️ 매우 중요한 출력 형식 규칙:**
+- **반드시 json 코드 블록 형식으로 응답하세요.**
+- **JSON 코드 블록 안에 유효한 JSON 객체만 포함하세요.**
+- **JSON 외에 다른 설명, 마크다운 헤더, 자연어, 번호 목록은 절대 포함하지 마세요.**
+- **"1. SituationChatResponse:" 같은 텍스트를 앞에 붙이지 마세요.**
+- **"2. 대화 예시:" 같은 추가 설명을 포함하지 마세요.**
+- 모든 문자열은 반드시 한국어로 작성하세요.
+
+**반환 형식 예시:**
+
+{{
+  "reportTitle": "상황 분석의 결과",
+  "legalPerspective": {{
+    "description": "당사는 법적으로 주말 근무에 대한 규정을 분석하였습니다. 현재, 우리 회사는 주말 근무를 원칙으로 제시하고 있지 않으며, 공공기관의 경우 법에 따라 주말 근무가 필요한 경우만 허용할 수 있습니다.",
+    "references": [
+      {{
+        "name": "공공기업 근로조건에 관한 법률",
+        "description": "이 법에 따르면, 공공기관은 주말 근무가 필요하고 있는 경우만 허용할 수 있습니다."
+      }}
+    ]
+  }},
+  "actions": [
+    {{
+      "description": "현재 업체의 규정에 대해 파악하세요",
+      "key": "1"
+    }}
+  ],
+  "cases": []
+}}
+
 """
     
     return prompt

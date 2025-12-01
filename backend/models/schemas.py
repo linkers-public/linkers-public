@@ -90,6 +90,7 @@ class LegalGroundingChunk(BaseModel):
     external_id: Optional[str] = None  # legal_chunks.external_id
     chunk_index: Optional[int] = None  # legal_chunks.chunk_index
     file_url: Optional[str] = None  # 스토리지 Signed URL
+    metadata: Optional[Dict[str, Any]] = Field(default_factory=dict, description="메타데이터 (JSONB)")
 
 
 class LegalAnalysisResult(BaseModel):
@@ -614,6 +615,20 @@ class SituationAnalysisSummary(BaseModel):
     summary: Optional[str] = Field(None, description="요약")
 
 
+class CaseCard(BaseModel):
+    """케이스 카드 데이터 구조"""
+    id: str = Field(..., description="케이스 ID")
+    title: str = Field(..., description="케이스 제목")
+    situation: str = Field(..., description="상황 설명")
+    main_issues: List[str] = Field(default_factory=list, description="주요 이슈 목록")
+    category: Optional[str] = Field(None, description="카테고리: all | intern | wage | stock | freelancer | harassment")
+    severity: Optional[str] = Field(None, description="심각도: low | medium | high")
+    keywords: Optional[List[str]] = Field(default_factory=list, description="키워드 목록")
+    legalIssues: Optional[List[str]] = Field(default_factory=list, description="법적 쟁점 목록")
+    learnings: Optional[List[str]] = Field(default_factory=list, description="배울 점 목록")
+    actions: Optional[List[str]] = Field(default_factory=list, description="행동 가이드 목록")
+
+
 class LegalChatAgentResponse(BaseModel):
     """Agent 기반 법률 챗 응답"""
     sessionId: str = Field(..., description="legal_chat_sessions.id")
@@ -625,3 +640,4 @@ class LegalChatAgentResponse(BaseModel):
     usedSources: List[UsedSourceMeta] = Field(default_factory=list, description="사용된 소스 목록")
     contractAnalysis: Optional[ContractAnalysisSummary] = Field(None, description="계약서 분석 요약")
     situationAnalysis: Optional[SituationAnalysisSummary] = Field(None, description="상황 분석 요약")
+    cases: Optional[List[CaseCard]] = Field(default_factory=list, description="유사 케이스 목록 (situation 모드 전용)")

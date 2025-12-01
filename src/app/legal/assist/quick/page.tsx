@@ -190,6 +190,7 @@ interface ChatMessage {
   reportId?: string // 리포트가 생성된 경우 리포트 ID
   context_type?: 'none' | 'situation' | 'contract'
   context_id?: string | null
+  metadata?: any // 메시지 metadata (cases 포함 가능)
 }
 
 // 리포트 타입 정의 (Supabase와 호환)
@@ -260,6 +261,80 @@ function getContextReportUrl(context_type?: string, context_id?: string | null):
 }
 
 // 컨텍스트 타입별 스타일 함수
+/**
+ * 메시지에서 상황분석 JSON 추출 (SituationChatMessage의 extractJsonFromMessage 로직과 동일)
+ */
+function extractSituationJsonFromMessage(raw: string): { isJson: boolean; parsed?: any } {
+  let text = raw.trim()
+
+  if (!text) {
+    return { isJson: false }
+  }
+
+  // ```json ... ``` 형식이면 코드펜스 제거
+  if (text.startsWith('```')) {
+    const firstNewline = text.indexOf('\n')
+    if (firstNewline !== -1) {
+      text = text.slice(firstNewline + 1)
+    }
+    if (text.endsWith('```')) {
+      text = text.slice(0, -3)
+    }
+    text = text.trim()
+  }
+
+  // --- 구분선 찾기 (JSON과 안내 문구 사이)
+  const separatorIndex = text.indexOf('---')
+  if (separatorIndex !== -1) {
+    text = text.substring(0, separatorIndex).trim()
+  }
+
+  // ⚠️ 뒤에 붙는 안내 문구 분리
+  const warningIndex = text.indexOf('⚠️')
+  if (warningIndex !== -1) {
+    text = text.substring(0, warningIndex).trim()
+  }
+
+  // JSON 객체 시작/끝 찾기 (중괄호 매칭)
+  const firstBrace = text.indexOf('{')
+  if (firstBrace !== -1) {
+    let braceCount = 0
+    let lastBrace = -1
+    for (let i = firstBrace; i < text.length; i++) {
+      if (text[i] === '{') {
+        braceCount++
+      } else if (text[i] === '}') {
+        braceCount--
+        if (braceCount === 0) {
+          lastBrace = i
+          break
+        }
+      }
+    }
+    if (lastBrace !== -1) {
+      text = text.substring(firstBrace, lastBrace + 1)
+    } else {
+      // 중괄호 매칭 실패 시 마지막 } 사용
+      const lastBraceIndex = text.lastIndexOf('}')
+      if (lastBraceIndex !== -1 && lastBraceIndex > firstBrace) {
+        text = text.substring(firstBrace, lastBraceIndex + 1)
+      }
+    }
+  }
+
+  try {
+    const parsed = JSON.parse(text)
+    // reportTitle과 legalPerspective가 있으면 상황분석 JSON으로 판단
+    const isJson = parsed && 
+                   typeof parsed.reportTitle === 'string' && 
+                   parsed.legalPerspective && 
+                   typeof parsed.legalPerspective.description === 'string'
+    return { isJson, parsed: isJson ? parsed : undefined }
+  } catch {
+    return { isJson: false }
+  }
+}
+
 function getContextStyle(type: 'situation' | 'contract') {
   if (type === 'situation') {
     return {
@@ -565,9 +640,9 @@ export default function QuickAssistPage() {
               for (const batch of batches) {
                 const chatSessionPromises = batch.map(async (session: ChatSession) => {
                   try {
-                    // 타임아웃 추가 (5초)
+                    // 타임아웃 추가 (15초로 증가 - 네트워크 지연 대응)
                     const timeoutPromise = new Promise((_, reject) => {
-                      setTimeout(() => reject(new Error('타임아웃')), 5000)
+                      setTimeout(() => reject(new Error('메시지 로드 시간이 초과되었습니다. 네트워크 상태를 확인해주세요.')), 15000)
                     })
                     
                     const messagesPromise = getChatMessages(session.id, userId)
@@ -587,6 +662,7 @@ export default function QuickAssistPage() {
                         timestamp: new Date(msg.created_at),
                         context_type: (msg.context_type as 'none' | 'situation' | 'contract') || 'none',
                         context_id: msg.context_id || null,
+                        metadata: msg.metadata || null,
                       }))
                     
                     // 대화 세션 생성
@@ -849,9 +925,9 @@ export default function QuickAssistPage() {
             if (isCancelled) return
             
             if (userId && conversation.sessionId) {
-              // 타임아웃 추가 (5초)
+              // 타임아웃 추가 (15초로 증가 - 네트워크 지연 대응)
               const timeoutPromise = new Promise((_, reject) => {
-                setTimeout(() => reject(new Error('타임아웃')), 5000)
+                setTimeout(() => reject(new Error('메시지 로드 시간이 초과되었습니다. 네트워크 상태를 확인해주세요.')), 15000)
               })
               
               const messagesPromise = getChatMessages(conversation.sessionId, userId)
@@ -881,6 +957,7 @@ export default function QuickAssistPage() {
                   timestamp: new Date(msg.created_at),
                   context_type: (msg.context_type as 'none' | 'situation' | 'contract') || 'none',
                   context_id: msg.context_id || null,
+                  metadata: msg.metadata || null,
                 }))
               
               if (isCancelled) return
@@ -899,9 +976,16 @@ export default function QuickAssistPage() {
               // 세션이 없거나 사용자 ID가 없으면 기존 메시지 사용 (이미 표시됨)
               // 추가 작업 없음
             }
-          } catch (error) {
+          } catch (error: any) {
             if (!isCancelled) {
-              console.warn('DB에서 최신 메시지 로드 실패, 기존 메시지 사용:', error)
+              const errorMessage = error?.message || '알 수 없는 오류'
+              console.warn('DB에서 최신 메시지 로드 실패, 기존 메시지 사용:', errorMessage)
+              
+              // 타임아웃 에러인 경우 사용자에게 알림 (선택적)
+              if (errorMessage.includes('시간이 초과') || errorMessage.includes('타임아웃')) {
+                // 조용히 처리 (기존 메시지 사용)
+                // 필요시 toast 알림 추가 가능
+              }
               // 기존 메시지는 이미 표시됨
             }
           }
@@ -1663,6 +1747,7 @@ export default function QuickAssistPage() {
             timestamp: new Date(),
             context_type: 'situation',
             context_id: chatResult.situationAnalysisId || null,
+            metadata: chatResult.cases && chatResult.cases.length > 0 ? { cases: chatResult.cases } : null,
           }
           
           // DB에 저장
@@ -2613,47 +2698,56 @@ export default function QuickAssistPage() {
                       "flex flex-col max-w-[85%] sm:max-w-[75%]",
                       message.role === 'user' ? 'items-end' : 'items-start'
                     )}>
-                      <div
-                        className={cn(
-                          "relative rounded-2xl px-5 py-3.5 shadow-md transition-all duration-200",
-                          "hover:shadow-lg",
-                          message.role === 'user'
-                            ? "bg-gradient-to-br from-blue-600 to-indigo-600 text-white rounded-br-sm"
-                            : "bg-white border border-slate-200/80 text-slate-900 rounded-bl-sm"
-                        )}
-                      >
-                        {message.role === 'assistant' ? (
-                          // context_type에 따라 다른 컴포넌트 사용
-                          // 상황분석 카드는 버블 밖에 표시되므로, 여기서는 간단한 텍스트만 표시
-                          (() => {
-                            // context_type === 'situation'인 경우 버블 안에는 간단한 안내만 표시
-                            // 실제 카드는 버블 밖에 표시됨
-                            if (message.context_type === 'situation') {
-                              return (
-                                <p className="text-sm text-slate-700">
-                                  상황을 정리해서 분석 리포트로 정리해 드렸어요.
-                                </p>
-                              )
-                            }
-                            
-                            // context_type === 'contract'인 경우도 간단한 안내만 표시
-                            if (message.context_type === 'contract') {
-                              return (
-                                <p className="text-sm text-slate-700">
-                                  업로드하신 계약서를 기준으로 위험 요소와 협상 포인트를 정리해 드렸어요.
-                                </p>
-                              )
-                            }
-                            
-                            // 그 외의 경우 일반 채팅 메시지 표시
-                            return <ChatAiMessage content={message.content} />
-                          })()
-                        ) : (
-                          <p className="whitespace-pre-wrap text-sm leading-relaxed text-white font-medium">
-                            {message.content}
-                          </p>
-                        )}
-                      </div>
+                      {(() => {
+                        // situation 모드에서 JSON 형식이면 버블 숨김 (카드만 표시)
+                        if (message.role === 'assistant' && message.context_type === 'situation') {
+                          const { isJson } = extractSituationJsonFromMessage(message.content)
+                          if (isJson) {
+                            // JSON 형식이면 버블을 렌더링하지 않음
+                            return null
+                          }
+                        }
+                        
+                        // 버블 렌더링
+                        return (
+                          <div
+                            className={cn(
+                              "relative rounded-2xl px-5 py-3.5 shadow-md transition-all duration-200",
+                              "hover:shadow-lg",
+                              message.role === 'user'
+                                ? "bg-gradient-to-br from-blue-600 to-indigo-600 text-white rounded-br-sm"
+                                : "bg-white border border-slate-200/80 text-slate-900 rounded-bl-sm"
+                            )}
+                          >
+                            {message.role === 'assistant' ? (
+                              // context_type에 따라 다른 컴포넌트 사용
+                              (() => {
+                                // context_type === 'situation'인 경우
+                                // JSON이 아니면 일반 텍스트로 표시
+                                if (message.context_type === 'situation') {
+                                  return <ChatAiMessage content={message.content} />
+                                }
+                                
+                                // context_type === 'contract'인 경우도 간단한 안내만 표시
+                                if (message.context_type === 'contract') {
+                                  return (
+                                    <p className="text-sm text-slate-700">
+                                      업로드하신 계약서를 기준으로 위험 요소와 협상 포인트를 정리해 드렸어요.
+                                    </p>
+                                  )
+                                }
+                                
+                                // 그 외의 경우 일반 채팅 메시지 표시
+                                return <ChatAiMessage content={message.content} />
+                              })()
+                            ) : (
+                              <p className="whitespace-pre-wrap text-sm leading-relaxed text-white font-medium">
+                                {message.content}
+                              </p>
+                            )}
+                          </div>
+                        )
+                      })()}
                       
                       {/* AI 메시지의 상황분석/계약서 분석 카드 (버블 밖에 표시) */}
                       {message.role === 'assistant' && (() => {
@@ -2665,11 +2759,14 @@ export default function QuickAssistPage() {
                         // 디버깅 로그 (개발 모드)
                         if (process.env.NODE_ENV === 'development') {
                           console.log('[메시지 렌더링]', {
+                            messageId: message.id,
                             messageContextType: message.context_type,
+                            contextId: message.context_id,
                             detectedContextType,
-                            // hasParsedJson: parsed.success,
-                            // parseMethod: parsed.method,
+                            role: message.role,
+                            contentLength: message.content.length,
                             contentPreview: message.content.substring(0, 100),
+                            willRenderContract: message.context_type === 'contract' || detectedContextType === 'contract',
                           })
                         }
                         
@@ -2680,6 +2777,7 @@ export default function QuickAssistPage() {
                               <SituationChatMessage 
                                 content={message.content} 
                                 contextId={message.context_id || null}
+                                metadata={message.metadata}
                               />
                             </div>
                           )
