@@ -25,10 +25,13 @@ import type {
 const getCategoryLabel = (category: SituationCategory): string => {
   const labels: Record<SituationCategory, string> = {
     harassment: '직장 내 괴롭힘',
-    unpaid_wage: '임금체불',
+    unpaid_wage: '임금 체불·무급 야근',
     unfair_dismissal: '부당해고',
     overtime: '근로시간 문제',
     probation: '수습·인턴 문제',
+    freelancer: '프리랜서/용역',
+    stock_option: '스톡옵션/성과급',
+    other: '기타/복합 상황',
     unknown: '기타',
   }
   return labels[category] || '알 수 없음'
@@ -110,14 +113,10 @@ export default function SituationDetailPage() {
         classifiedType: (analysis?.tags?.[0] || analysisData?.classifiedType || 'unknown') as SituationCategory,
         riskScore: analysis?.riskScore ?? analysisData?.riskScore ?? 0,
         summary: analysisData?.summary || analysis?.analysis?.summary || '',
-        // criteria는 새로운 구조(documentTitle, fileUrl, sourceType, similarityScore, snippet, usageReason)를 그대로 사용
         criteria: criteriaArray.map((criterion: any) => ({
-          documentTitle: criterion?.documentTitle || '',
-          fileUrl: criterion?.fileUrl || null,
-          sourceType: criterion?.sourceType || 'law',
-          similarityScore: criterion?.similarityScore || 0,
-          snippet: criterion?.snippet || '',
-          usageReason: criterion?.usageReason || '',
+          name: criterion?.name || '',
+          status: (criterion?.status || 'likely') as 'likely' | 'unclear' | 'unlikely',
+          reason: criterion?.reason || '',
         })),
 
         scripts: scripts,
@@ -261,8 +260,8 @@ export default function SituationDetailPage() {
                 {/* criteria 첫 번째 항목 배지 */}
                 {analysisResult.criteria && analysisResult.criteria.length > 0 && (
                   <div className="px-3 py-1.5 bg-gradient-to-r from-amber-500 to-orange-600 text-white rounded-lg shadow-md font-semibold text-sm flex items-center gap-2">
-                    <span>📄</span>
-                    <span className="max-w-[200px] truncate">{analysisResult.criteria[0].documentTitle}</span>
+                    <span>{analysisResult.criteria[0].status === 'likely' ? '🌙' : analysisResult.criteria[0].status === 'unclear' ? '📉' : '⚠️'}</span>
+                    <span className="max-w-[200px] truncate">{analysisResult.criteria[0].name}</span>
                   </div>
                 )}
               </div>
