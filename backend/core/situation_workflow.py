@@ -333,50 +333,64 @@ class SituationWorkflow:
             for chunk in grounding_chunks[:8]  # 최대 8개
         ]
         
-        # criteria에 legalBasis 추가
-        # 각 criterion에 대해 관련된 legalBasis를 매핑
-        # 현재는 모든 sources를 각 criterion에 할당 (나중에 LLM이 criterion별로 관련 sources를 명시하도록 개선 가능)
-        criteria_with_legal_basis = []
-        for criterion in criteria:
-            criterion_dict = criterion.copy() if isinstance(criterion, dict) else {
-                "name": getattr(criterion, "name", ""),
-                "status": getattr(criterion, "status", "unclear"),
-                "reason": getattr(criterion, "reason", ""),
-            }
+        # criteria를 grounding_chunks에서 직접 생성 (새로운 RAG 기반 구조)
+        # grounding_chunks를 criteria 형식으로 변환
+        from core.file_utils import get_document_file_url
+        
+        criteria_items = []
+        for chunk in grounding_chunks[:8]:  # 최대 8개
+            external_id = getattr(chunk, 'external_id', None)
+            source_type = chunk.source_type
+            file_url = getattr(chunk, 'file_url', None)
             
-            # 각 criterion에 legalBasis 배열 추가
-            # TODO: 나중에 LLM이 criterion별로 관련 sources를 명시하도록 프롬프트 개선
-            # 현재는 모든 sources를 할당 (또는 criterion의 name/reason과 유사한 sources만 필터링)
-            legal_basis_list = []
-            for source in formatted_sources:
-                legal_basis_item = {
-                    "docId": source.get("source_id", ""),
-                    "docTitle": source.get("title", ""),
-                    "docType": source.get("source_type", "law"),
-                    "snippet": source.get("snippet", ""),
-                    "similarityScore": source.get("score", 0.0),
-                    "externalId": source.get("external_id"),
-                    "fileUrl": source.get("file_url"),
-                }
-                # chunk_index가 있으면 추가
-                chunk_idx = None
-                for chunk in grounding_chunks:
-                    if chunk.source_id == source.get("source_id"):
-                        chunk_idx = getattr(chunk, 'chunk_index', None)
+            # file_url이 없으면 생성
+            if not file_url and external_id:
+                try:
+                    file_url = get_document_file_url(
+                        external_id=external_id,
+                        source_type=source_type
+                    )
+                except Exception as e:
+                    logger.warning(f"[워크플로우] fileUrl 생성 실패 (external_id={external_id}): {str(e)}")
+                    file_url = None
+            
+            # usageReason 생성 (LLM이 생성한 criteria의 reason을 사용하거나, 기본 메시지 생성)
+            usage_reason = ""
+            # LLM이 생성한 criteria에서 해당 문서와 관련된 reason 찾기
+            for criterion in criteria:
+                if isinstance(criterion, dict):
+                    criterion_name = criterion.get("name", "")
+                    criterion_reason = criterion.get("reason", "")
+                    # 문서 제목이 criterion name에 포함되어 있으면 reason 사용
+                    if chunk.title in criterion_name or criterion_name in chunk.title:
+                        usage_reason = criterion_reason
                         break
-                if chunk_idx is not None:
-                    legal_basis_item["chunkIndex"] = chunk_idx
-                
-                legal_basis_list.append(legal_basis_item)
+                else:
+                    criterion_name = getattr(criterion, "name", "")
+                    criterion_reason = getattr(criterion, "reason", "")
+                    if chunk.title in criterion_name or criterion_name in chunk.title:
+                        usage_reason = criterion_reason
+                        break
             
-            criterion_dict["legalBasis"] = legal_basis_list
-            criteria_with_legal_basis.append(criterion_dict)
+            # usageReason이 없으면 기본 메시지 생성
+            if not usage_reason:
+                usage_reason = f"현재 상황과 관련하여 {chunk.title}의 내용을 법적 판단 기준으로 사용했습니다."
+            
+            criteria_item = {
+                "documentTitle": chunk.title,
+                "fileUrl": file_url,
+                "sourceType": source_type,
+                "similarityScore": float(chunk.score),
+                "snippet": chunk.snippet,
+                "usageReason": usage_reason,
+            }
+            criteria_items.append(criteria_item)
         
         final_output = {
             "classified_type": classification.get("classified_type", "unknown"),
             "risk_score": classification.get("risk_score", 50),
             "summary": summary_report,  # generate_action_guide에서 생성된 4개 섹션 마크다운
-            "criteria": criteria_with_legal_basis,  # legalBasis 포함
+            "criteria": criteria_items,  # RAG 검색 결과 기반 (새로운 구조)
             "action_plan": action_plan,  # steps 구조
             "scripts": scripts,  # toCompany, toAdvisor
             "related_cases": formatted_related_cases,
@@ -952,11 +966,33 @@ class SituationWorkflow:
             for i, line in enumerate(lines):
                 line_stripped = line.strip()
                 
-                # 섹션 헤더 찾기 (키워드 기반)
+                # 섹션 헤더 찾기 (이모지 + 키워드 기반)
                 for section_info in section_patterns:
+                    # 먼저 정확한 헤더 형식 확인 (새로운 형식: 이모지 + 굵은 제목)
+                    if section_info["title"] in line_stripped:
+                        current_section_key = section_info["title"]
+                        if current_section_key not in section_contents:
+                            section_contents[current_section_key] = []
+                        break
+                    
+                    # 이모지로 확인
+                    emoji = section_info.get("emoji")
+                    if emoji and emoji in line_stripped:
+                        # 이모지 뒤에 키워드가 있는지 확인
+                        for keyword in section_info["keywords"]:
+                            if keyword != emoji and keyword in line_stripped:
+                                current_section_key = section_info["title"]
+                                if current_section_key not in section_contents:
+                                    section_contents[current_section_key] = []
+                                break
+                        if current_section_key:
+                            break
+                    
+                    # 키워드로 확인 (레거시 형식 지원)
                     for keyword in section_info["keywords"]:
+                        if keyword == emoji:
+                            continue  # 이미 이모지로 확인했으므로 스킵
                         # 헤더 형식 확인 (## 키워드, # 키워드, 또는 키워드만) - 더 유연한 매칭
-                        # 키워드가 포함되어 있고, 헤더 형식이거나 짧은 줄이면 섹션으로 인식
                         keyword_in_line = keyword.lower() in line_stripped.lower()
                         is_header_format = re.match(r'^##?\s*', line_stripped) is not None
                         is_short_line = len(line_stripped) < 80  # 더 긴 줄도 허용
@@ -974,7 +1010,26 @@ class SituationWorkflow:
                     # 헤더 라인이 아니면 내용으로 추가 - 더 유연한 헤더 감지
                     is_header = False
                     for section_info in section_patterns:
+                        # 정확한 헤더 형식 확인
+                        if section_info["title"] in line_stripped:
+                            is_header = True
+                            break
+                        
+                        # 이모지로 확인
+                        emoji = section_info.get("emoji")
+                        if emoji and emoji in line_stripped:
+                            # 이모지 뒤에 키워드가 있는지 확인
+                            for keyword in section_info["keywords"]:
+                                if keyword != emoji and keyword in line_stripped:
+                                    is_header = True
+                                    break
+                            if is_header:
+                                break
+                        
+                        # 키워드로 확인 (레거시 형식 지원)
                         for keyword in section_info["keywords"]:
+                            if keyword == emoji:
+                                continue
                             keyword_in_line = keyword.lower() in line_stripped.lower()
                             is_header_format = re.match(r'^##?\s*', line_stripped) is not None
                             is_short_line = len(line_stripped) < 80
@@ -1480,26 +1535,27 @@ class SituationWorkflow:
             summary = ""
         
         # summary에 4개 섹션이 모두 있는지 확인 (유연한 매칭)
+        # 새로운 형식: 📊 상황 분석, ⚖️ 법적 판단, 🔮 예상 시나리오, 💡 주의사항
         section_patterns = [
             {
-                "title": "## 상황 분석의 결과",
-                "keywords": ["상황 분석의 결과", "상황 분석", "분석의 결과"],
-                "emoji": None
+                "title": "📊 **상황 분석**:",
+                "keywords": ["📊", "상황 분석", "상황 분석의 결과"],
+                "emoji": "📊"
             },
             {
-                "title": "## 법적 관점에서 본 현재상황",
-                "keywords": ["법적 관점", "법적 관점에서 본 현재상황", "법적 관점에서"],
-                "emoji": None
+                "title": "⚖️ **법적 판단**:",
+                "keywords": ["⚖️", "법적 판단", "법적 관점", "법적 관점에서 본 현재상황"],
+                "emoji": "⚖️"
             },
             {
-                "title": "## 지금 당장 할 수 있는 행동",
-                "keywords": ["지금 당장 할 수 있는 행동", "할 수 있는 행동", "행동"],
-                "emoji": None
+                "title": "🔮 **예상 시나리오**:",
+                "keywords": ["🔮", "예상 시나리오", "예상", "시나리오"],
+                "emoji": "🔮"
             },
             {
-                "title": "## 이렇게 말해보세요",
-                "keywords": ["이렇게 말해보세요", "말해보세요"],
-                "emoji": None
+                "title": "💡 **주의사항**:",
+                "keywords": ["💡", "주의사항", "주의", "이렇게 말해보세요", "지금 당장 할 수 있는 행동"],
+                "emoji": "💡"
             },
         ]
         
@@ -1509,31 +1565,49 @@ class SituationWorkflow:
         
         for section_info in section_patterns:
             found = False
-            # 정확한 헤더 형식 확인
+            # 정확한 헤더 형식 확인 (새로운 형식: 이모지 + 굵은 제목)
             if section_info["title"] in summary:
                 found = True
             else:
-                # 키워드로 확인 (이모지와 ## 없이도 매칭) - 더 유연한 매칭
-                for keyword in section_info["keywords"]:
-                    keyword_lower = keyword.lower()
-                    summary_lower = summary.lower()
+                # 이모지로 먼저 확인
+                emoji = section_info.get("emoji")
+                if emoji and emoji in summary:
+                    # 이모지 주변 컨텍스트 확인
+                    emoji_pos = summary.find(emoji)
+                    start = max(0, emoji_pos - 20)
+                    end = min(len(summary), emoji_pos + 50)
+                    context = summary[start:end]
                     
-                    # 키워드가 포함되어 있는지 확인
-                    if keyword_lower in summary_lower:
-                        # 키워드 주변의 컨텍스트 확인 (헤더 형식인지)
-                        keyword_pos = summary_lower.find(keyword_lower)
-                        # 키워드 앞뒤로 최대 100자 확인
-                        start = max(0, keyword_pos - 50)
-                        end = min(len(summary), keyword_pos + len(keyword) + 50)
-                        context = summary[start:end]
-                        
-                        # 헤더 형식(## 또는 #)이 있거나, 키워드가 줄의 시작 부분에 있으면 섹션으로 인식
-                        has_header_marker = re.search(r'##?\s*', context, re.IGNORECASE) is not None
-                        is_line_start = keyword_pos == 0 or summary[keyword_pos - 1] == '\n'
-                        
-                        if has_header_marker or is_line_start:
+                    # 이모지 뒤에 "상황 분석", "법적 판단" 등의 키워드가 있는지 확인
+                    for keyword in section_info["keywords"]:
+                        if keyword in context and keyword != emoji:
                             found = True
                             break
+                
+                # 이모지로 찾지 못한 경우 키워드로 확인 (레거시 형식 지원)
+                if not found:
+                    for keyword in section_info["keywords"]:
+                        if keyword == emoji:
+                            continue  # 이미 이모지로 확인했으므로 스킵
+                        keyword_lower = keyword.lower()
+                        summary_lower = summary.lower()
+                        
+                        # 키워드가 포함되어 있는지 확인
+                        if keyword_lower in summary_lower:
+                            # 키워드 주변의 컨텍스트 확인 (헤더 형식인지)
+                            keyword_pos = summary_lower.find(keyword_lower)
+                            # 키워드 앞뒤로 최대 100자 확인
+                            start = max(0, keyword_pos - 50)
+                            end = min(len(summary), keyword_pos + len(keyword) + 50)
+                            context = summary[start:end]
+                            
+                            # 헤더 형식(## 또는 #)이 있거나, 키워드가 줄의 시작 부분에 있으면 섹션으로 인식
+                            has_header_marker = re.search(r'##?\s*', context, re.IGNORECASE) is not None
+                            is_line_start = keyword_pos == 0 or summary[keyword_pos - 1] == '\n'
+                            
+                            if has_header_marker or is_line_start:
+                                found = True
+                                break
             
             if found:
                 found_sections.append(section_info["title"])
