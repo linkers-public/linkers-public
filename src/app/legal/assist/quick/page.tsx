@@ -55,7 +55,7 @@ import {
 } from '@/apis/legal.service'
 import { ChatAiMessage } from '@/components/legal/ChatAiMessage'
 import { SituationChatMessage } from '@/components/legal/SituationChatMessage'
-// import { ContractChatMessage } from '@/components/legal/ContractChatMessage' // TODO: 컴포넌트 생성 필요
+import { ContractChatMessage } from '@/components/legal/ContractChatMessage'
 import type { 
   SituationAnalysisResponse,
   SituationCategory,
@@ -2409,18 +2409,12 @@ export default function QuickAssistPage() {
                         }
                         
                         if (message.context_type === 'contract' || detectedContextType === 'contract') {
-                          // TODO: ContractChatMessage 컴포넌트 생성 필요
                           return (
                             <div className="mt-1.5">
-                              {/* <ContractChatMessage 
+                              <ContractChatMessage 
                                 content={message.content}
                                 contextId={message.context_id || null}
-                              /> */}
-                              <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
-                                <p className="text-sm text-amber-800">
-                                  계약서 분석 리포트가 생성되었습니다. (컴포넌트 구현 필요)
-                                </p>
-                              </div>
+                              />
                             </div>
                           )
                         }

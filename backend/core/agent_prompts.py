@@ -110,6 +110,9 @@ def build_agent_contract_prompt(
     Returns:
         완성된 프롬프트 문자열
     """
+    # 첫 요청인지 확인 (히스토리가 없거나 첫 메시지인 경우)
+    is_first_request = not history_messages or len(history_messages) == 0
+    
     # 계약서 분석 결과 요약
     analysis_summary = f"""
 ## 계약서 분석 결과
@@ -121,31 +124,166 @@ def build_agent_contract_prompt(
 **발견된 위험 조항**: {len(contract_analysis.get('issues', []))}개
 """
     
-    # 주요 이슈 요약
-    issues_summary = ""
-    issues = contract_analysis.get('issues', [])[:5]  # 상위 5개만
+    # 주요 이슈 상세 정보 (JSON 생성에 필요)
+    issues_detail = ""
+    issues = contract_analysis.get('issues', [])
     if issues:
-        issues_summary = "\n### 주요 위험 조항\n\n"
-        for idx, issue in enumerate(issues, 1):
+        issues_detail = "\n### 발견된 위험 조항 상세\n\n"
+        for idx, issue in enumerate(issues[:10], 1):  # 최대 10개
             issue_name = issue.get('name', '알 수 없음')
             issue_severity = issue.get('severity', 'medium')
-            issue_summary = issue.get('summary', '')[:200]
-            issues_summary += f"{idx}. **{issue_name}** (위험도: {issue_severity})\n"
-            issues_summary += f"   {issue_summary}...\n\n"
+            issue_summary = issue.get('summary', '') or issue.get('description', '')
+            issue_category = issue.get('category', 'unknown')
+            issue_explanation = issue.get('explanation', '')
+            issue_original_text = issue.get('originalText', '')
+            
+            issues_detail += f"{idx}. **{issue_name}**\n"
+            issues_detail += f"   - 카테고리: {issue_category}\n"
+            issues_detail += f"   - 위험도: {issue_severity}\n"
+            issues_detail += f"   - 요약: {issue_summary[:300]}\n"
+            if issue_explanation:
+                issues_detail += f"   - 설명: {issue_explanation[:300]}\n"
+            if issue_original_text:
+                issues_detail += f"   - 원문: {issue_original_text[:200]}\n"
+            issues_detail += "\n"
     
-    # RAG 검색 결과
+    # RAG 검색 결과 (법적 근거)
     rag_context = ""
+    legal_refs = []
     if legal_chunks:
         rag_context = "\n## 참고 법령/가이드라인\n\n"
         for idx, chunk in enumerate(legal_chunks[:5], 1):
             title = getattr(chunk, 'title', '제목 없음')
             snippet = getattr(chunk, 'snippet', '')[:200]
             rag_context += f"{idx}. **{title}**\n   {snippet}...\n\n"
+            # 법적 근거로 사용
+            legal_refs.append({
+                "name": title,
+                "description": snippet[:300] if snippet else ""
+            })
     
-    prompt = f"""당신은 계약서 분석 결과를 바탕으로 사용자의 질문에 답변하는 법률 상담 AI입니다.
+    # 첫 요청일 때: JSON 형식으로 계약서 분석 리포트 생성
+    if is_first_request:
+        # 위험도 레벨 한글 변환
+        risk_level_kr = {
+            'high': '고',
+            'medium': '중',
+            'low': '저',
+        }.get(contract_analysis.get('risk_level', 'medium'), '중')
+        
+        # riskContent 생성 (주요 위험 조항들)
+        risk_content = []
+        for issue in issues[:5]:  # 상위 5개
+            issue_summary = issue.get('summary', '') or issue.get('description', '')
+            issue_explanation = issue.get('explanation', '')
+            if issue_summary:
+                risk_content.append({
+                    "내용": issue_summary[:200],
+                    "설명": issue_explanation[:300] if issue_explanation else "계약서 분석 결과에서 발견된 위험 조항입니다."
+                })
+        
+        # checklist 생성
+        checklist = []
+        for issue in issues[:5]:  # 상위 5개
+            issue_name = issue.get('name', '알 수 없음')
+            issue_summary = issue.get('summary', '') or issue.get('description', '')
+            if issue_name and issue_summary:
+                checklist.append({
+                    "항목": issue_name,
+                    "결론": issue_summary[:200]
+                })
+        
+        # negotiationPoints 생성 (수정안 제안)
+        negotiation_points = {}
+        for idx, issue in enumerate(issues[:3], 1):  # 상위 3개
+            issue_suggested = issue.get('suggestedRevision', '')
+            if issue_suggested:
+                negotiation_points[f"수정안{idx}"] = issue_suggested[:300]
+            else:
+                issue_name = issue.get('name', '알 수 없음')
+                negotiation_points[f"수정안{idx}"] = f"계약서를 수정하여 {issue_name} 관련 조항을 개선합니다."
+        
+        prompt = f"""당신은 계약서 분석 결과를 바탕으로 사용자에게 계약서 분석 리포트를 제공하는 법률 상담 AI입니다.
 
 {analysis_summary}
-{issues_summary}
+{issues_detail}
+{rag_context}
+
+## 사용자 질문
+{query}
+
+위의 계약서 분석 결과를 바탕으로 **JSON 형식**으로 계약서 분석 리포트를 생성하세요.
+
+**반드시 다음 JSON 구조를 정확히 따르세요:**
+
+```json
+{{
+  "summary": "계약서 전체 요약 (2-3문장으로 핵심 위험 요소 요약)",
+  "riskLevel": "{risk_level_kr}",
+  "riskLevelDescription": "위험 수준에 대한 상세 설명 (왜 이 위험도인지 설명)",
+  "riskContent": [
+    {{
+      "내용": "위험 요소 내용 (간단히)",
+      "설명": "위험 요소에 대한 상세 설명"
+    }}
+  ],
+  "checklist": [
+    {{
+      "항목": "체크리스트 항목",
+      "결론": "해당 항목에 대한 결론"
+    }}
+  ],
+  "negotiationPoints": {{
+    "수정안1": "첫 번째 수정 제안",
+    "수정안2": "두 번째 수정 제안"
+  }},
+  "legalReferences": [
+    {{
+      "name": "법적 근거 이름 (예: 근로기준법 제15조)",
+      "description": "법적 근거 설명"
+    }}
+  ]
+}}
+```
+
+**답변 작성 지침:**
+1. **summary**: 계약서의 핵심 위험 요소를 2-3문장으로 요약하세요. 위에서 제공된 계약서 분석 결과의 요약을 참고하되, 더 구체적으로 작성하세요.
+2. **riskLevel**: 위험도 점수와 위험도 등급을 고려하여 "고", "중", "저" 중 하나를 선택하세요. 현재 위험도: {contract_analysis.get('risk_score', 0)}점 ({contract_analysis.get('risk_level', 'unknown')})
+3. **riskLevelDescription**: 왜 이 위험도인지, 어떤 법적 분쟁 위험이 있는지 상세히 설명하세요.
+4. **riskContent**: 발견된 위험 조항 중 가장 중요한 3-5개를 선택하여 배열로 작성하세요. 각 항목은 "내용"과 "설명"을 포함해야 합니다.
+5. **checklist**: 사용자가 확인해야 할 주요 항목들을 배열로 작성하세요. 각 항목은 "항목"과 "결론"을 포함해야 합니다.
+6. **negotiationPoints**: 계약서 수정을 위한 구체적인 제안을 2-3개 작성하세요. 키는 "수정안1", "수정안2" 형식으로 하세요.
+7. **legalReferences**: 위에서 제공된 참고 법령/가이드라인을 참고하여 법적 근거를 배열로 작성하세요. 각 항목은 "name"과 "description"을 포함해야 합니다.
+8. **모든 필드는 반드시 포함**해야 하며, 빈 배열이나 빈 객체가 되지 않도록 하세요.
+9. **한국어로만 작성**하세요.
+10. **반환 형식**: 다음 형식으로 반환하세요:
+    - 먼저 ```json 코드 블록으로 JSON을 감싸세요
+    - JSON 다음에 빈 줄 하나
+    - 그 다음 "---" 구분선
+    - 그 다음 빈 줄 하나
+    - 마지막으로 "**⚠️ 참고:** 이 답변은 정보 안내를 위한 것이며 법률 자문이 아닙니다. 중요한 사안은 전문 변호사나 노동위원회 등 전문 기관에 상담하시기 바랍니다." 안내 문구 추가
+
+**반환 형식 예시:**
+```json
+{{
+  "summary": "...",
+  "riskLevel": "...",
+  ...
+}}
+```
+
+---
+
+**⚠️ 참고:** 이 답변은 정보 안내를 위한 것이며 법률 자문이 아닙니다. 중요한 사안은 전문 변호사나 노동위원회 등 전문 기관에 상담하시기 바랍니다.
+
+**중요**: 반드시 위의 JSON 구조를 정확히 따르고, 모든 필드를 채워서 반환하세요.
+"""
+    else:
+        # 후속 요청일 때: 마크다운 형식으로 답변
+        prompt = f"""당신은 계약서 분석 결과를 바탕으로 사용자의 질문에 답변하는 법률 상담 AI입니다.
+
+{analysis_summary}
+{issues_detail}
 {rag_context}
 
 ## 사용자 질문
