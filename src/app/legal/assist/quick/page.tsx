@@ -27,6 +27,9 @@ import {
   TrendingUp,
   Sparkles,
   Plus,
+  Paperclip,
+  Globe,
+  BookOpen,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
@@ -46,122 +49,134 @@ import {
   getChatMessages,
   updateChatSession,
   deleteChatSession,
+  chatWithAgent,
   type ChatSession,
   type ChatMessage as ChatMessageType,
 } from '@/apis/legal.service'
 import { ChatAiMessage } from '@/components/legal/ChatAiMessage'
 import { SituationChatMessage } from '@/components/legal/SituationChatMessage'
 // import { ContractChatMessage } from '@/components/legal/ContractChatMessage' // TODO: 컴포넌트 생성 필요
-import type { SituationAnalysisResponse } from '@/types/legal'
+import type { 
+  SituationAnalysisResponse,
+  SituationCategory,
+  EmploymentType,
+  WorkPeriod,
+} from '@/types/legal'
 // import { parseJsonFromMessage } from '@/utils/jsonParser' // TODO: 유틸 생성 필요
 
 // 색상 상수 (다른 페이지와 통일)
 const PRIMARY_GRADIENT = 'from-blue-600 to-indigo-600'
 const PRIMARY_GRADIENT_HOVER = 'hover:from-blue-700 hover:to-indigo-700'
 
-// 자주 있는 상황 템플릿
-const COMMON_SITUATIONS = [
+// 상황 분석 프리셋 템플릿
+const SITUATION_PRESETS = [
   {
     title: '인턴/수습 해고 통보',
-    text: '수습 기간 중 갑작스러운 해고 통보를 받은 경우',
     icon: Briefcase,
-    category: 'probation' as const,
-    exampleForm: `• 언제부터 이런 일이 발생했는지
-예: 2025년 1월부터, 수습 인턴으로 근무 중입니다. 최근 2주 전부터 팀장님이 수습이라서 언제든 내보낼 수 있다고 반복적으로 말하기 시작했습니다.
+    category: 'probation' as SituationCategory,
+    employmentType: 'intern' as EmploymentType,
+    workPeriod: '3개월 미만' as string, // 한글 형식
+    summary: '수습 인턴인데, 해고 통보를 받았어요',
+    description: '수습 기간 중 갑작스러운 해고 통보를 받은 경우',
+    details: `[언제부터]
+예: 2025년 1월부터, 수습 인턴으로 근무 중입니다.
 
-• 상대방(회사, 팀장, 클라이언트 등)이 누구인지
-예: OO회사 인사팀과 팀장 A씨입니다.
+[어떤 일이 반복되나요]
+예: 최근 2주 동안, 팀장님이...
 
-• 지금까지 어떤 대화를 나눴는지
-예: 갑자기 이번 주까지만 나오라고 통보만 받았고, 구체적인 사유는 없었습니다. 해고 사유를 물어봤지만 명확한 답변을 받지 못했습니다.
-
-• 가지고 있는 증거(카톡, 메일, 녹취 등)가 있는지
-예: 해고 통보 카카오톡 메시지와 근로계약서가 있습니다.`,
-  },
-  {
-    title: '무급 야근·추가 근무',
-    text: '연장근로 수당 없이 야근이나 추가 근무를 요구받는 경우',
-    icon: Clock,
-    category: 'overtime' as const,
-    exampleForm: `• 언제부터 이런 일이 발생했는지
-예: 2024년 10월쯤부터, 거의 매주 회의 때마다 야근을 요구받기 시작했습니다.
-
-• 상대방(회사, 팀장, 클라이언트 등)이 누구인지
-예: OO회사와 팀장 B씨입니다.
-
-• 지금까지 어떤 대화를 나눴는지
-예: 매일 밤 10시 이후까지 근무하는데, 연장근로 수당은 전혀 지급되지 않습니다. 수당에 대해 물어봤지만 "회사 사정상 어렵다"는 답변만 받았습니다.
-
-• 가지고 있는 증거(카톡, 메일, 녹취 등)가 있는지
-예: 야근 요청 카카오톡 메시지와 출퇴근 기록이 있습니다.`,
+[내가 느끼는 문제점]
+예: 수습이라서 언제든 내보낼 수 있다고 반복적으로 말하며...`,
+    socialInsurance: ['health', 'employment'] as string[],
   },
   {
     title: '임금 체불·수당 미지급',
-    text: '월급이나 수당이 지급되지 않거나 지연되는 경우',
     icon: DollarSign,
-    category: 'unpaid_wage' as const,
-    exampleForm: `• 언제부터 이런 일이 발생했는지
+    category: 'unpaid_wage' as SituationCategory,
+    employmentType: 'regular' as EmploymentType,
+    workPeriod: '1년 이상' as string, // 한글 형식
+    summary: '3개월째 월급이 매번 일주일 이상 늦게 들어와요',
+    description: '월급이나 수당이 지급되지 않거나 지연되는 경우',
+    details: `[언제부터]
 예: 2024년 9월부터 월급 지급이 불규칙해지기 시작했습니다.
 
-• 상대방(회사, 팀장, 클라이언트 등)이 누구인지
-예: OO회사 인사팀과 대표 C씨입니다.
+[어떤 일이 반복되나요]
+예: 계약서에는 매월 25일 지급이라고 되어 있는데, 실제로는 다음 달 초에야 들어옵니다.
 
-• 지금까지 어떤 대화를 나눴는지
-예: 계약서에는 매월 25일 지급이라고 되어 있는데, 실제로는 다음 달 초에야 들어옵니다. 월급 지급 지연에 대해 여러 번 문의했지만 "곧 지급하겠다"는 답변만 반복됩니다.
-
-• 가지고 있는 증거(카톡, 메일, 녹취 등)가 있는지
-예: 계약서, 급여명세서, 월급 지급 지연 관련 이메일이 있습니다.`,
-  },
-  {
-    title: '직장 내 괴롭힘·모욕 발언',
-    text: '상사나 동료로부터 모욕적 발언이나 괴롭힘을 당하는 경우',
-    icon: Users,
-    category: 'harassment' as const,
-    exampleForm: `• 언제부터 이런 일이 발생했는지
-예: 2024년 10월쯤부터, 거의 매주 회의 때마다 모욕적인 발언을 듣기 시작했습니다.
-
-• 상대방(회사, 팀장, 클라이언트 등)이 누구인지
-예: 팀장 D씨가 주로 그런 발언을 합니다.
-
-• 지금까지 어떤 대화를 나눴는지
-예: 팀장 D씨가 팀원들 다 있는 자리에서 특정 사람을 지목해 모욕적인 말을 합니다. "너 같은 사람은 어디 가도 안 된다"는 식의 발언을 반복합니다. 항의했지만 "농담이었다"며 넘어갑니다.
-
-• 가지고 있는 증거(카톡, 메일, 녹취 등)가 있는지
-예: 회의 중 모욕 발언 녹취와 관련 증인(동료들)이 있습니다.`,
+[내가 느끼는 문제점]
+예: 생활비 계획을 세우기 어려워서...`,
+    socialInsurance: ['health', 'employment'] as string[],
   },
   {
     title: '프리랜서/용역 대금 미지급',
-    text: '프리랜서나 용역 계약에서 대금이 지급되지 않는 경우',
     icon: FileText,
-    category: 'unpaid_wage' as const,
-    exampleForm: `• 언제부터 이런 일이 발생했는지
+    category: 'freelancer' as SituationCategory,
+    employmentType: 'freelancer' as EmploymentType,
+    workPeriod: '3~12개월' as string, // 한글 형식
+    summary: '프리랜서인데, 대금이 계속 밀려요',
+    description: '프리랜서나 용역 계약에서 대금이 지급되지 않는 경우',
+    details: `[언제부터]
 예: 2024년 11월부터, 프로젝트 완료 후 대금 지급이 계속 지연되고 있습니다.
 
-• 상대방(회사, 팀장, 클라이언트 등)이 누구인지
-예: OO기업과 프로젝트 담당자 E씨입니다.
+[어떤 일이 반복되나요]
+예: 계약서에는 "프로젝트 완료 후 7일 이내 지급"이라고 되어 있는데, 3개월째 미지급 상태입니다.
 
-• 지금까지 어떤 대화를 나눴는지
-예: 계약서에는 "프로젝트 완료 후 7일 이내 지급"이라고 되어 있는데, 3개월째 미지급 상태입니다. 대금 지급을 요청했지만 "회계 처리 중"이라는 답변만 반복됩니다.
+[내가 느끼는 문제점]
+예: 생활비를 충당하기 어려워서...`,
+    socialInsurance: [] as string[],
+  },
+  {
+    title: '무급 야근·추가 근무',
+    icon: Clock,
+    category: 'unpaid_wage' as SituationCategory,
+    employmentType: 'regular' as EmploymentType,
+    workPeriod: '1년 이상' as string, // 한글 형식
+    summary: '야근은 매일인데 수당은 없어요',
+    description: '연장근로 수당 없이 야근이나 추가 근무를 요구받는 경우',
+    details: `[언제부터]
+예: 2024년 10월쯤부터, 거의 매주 회의 때마다...
 
-• 가지고 있는 증거(카톡, 메일, 녹취 등)가 있는지
-예: 용역계약서, 프로젝트 완료 확인서, 대금 지급 요청 이메일이 있습니다.`,
+[어떤 일이 반복되나요]
+예: 매일 밤 10시 이후까지 근무하는데, 연장근로 수당은 전혀 지급되지 않습니다.
+
+[내가 느끼는 문제점]
+예: 법적으로 받아야 할 수당을 받지 못하고 있어서...`,
+    socialInsurance: ['health', 'employment'] as string[],
+  },
+  {
+    title: '직장 내 괴롭힘·모욕 발언',
+    icon: Users,
+    category: 'harassment' as SituationCategory,
+    employmentType: 'regular' as EmploymentType,
+    workPeriod: '1년 이상' as string, // 한글 형식
+    summary: '단톡방/회의에서 모욕적인 말을 들어요',
+    description: '상사나 동료로부터 모욕적 발언이나 괴롭힘을 당하는 경우',
+    details: `[언제부터]
+예: 2024년 10월쯤부터, 거의 매주 회의 때마다...
+
+[누가, 누구에게, 어떤 상황에서 그런 말을/행동을 하나요]
+예: 팀장 A가, 팀원들 다 있는 자리에서 특정 사람을 지목해...
+
+[내가 느끼기에 어떤 점이 가장 힘들었나요]
+예: 인격을 부정당하는 느낌이라 정신적으로 버티기 힘듦...`,
+    socialInsurance: ['health', 'employment'] as string[],
   },
   {
     title: '스톡옵션/성과급 관련 문제',
-    text: '스톡옵션이나 성과급 관련 약속이 지켜지지 않는 경우',
     icon: TrendingUp,
-    category: 'unknown' as const,
-    exampleForm: `• 언제부터 이런 일이 발생했는지
-예: 입사 시(2023년 3월) 스톡옵션을 받기로 약속받았는데, 2년이 지나도 지급되지 않았습니다.
+    category: 'stock_option' as SituationCategory,
+    employmentType: 'regular' as EmploymentType,
+    workPeriod: '1년 이상' as string, // 한글 형식
+    summary: '스톡옵션이나 성과급이 약속과 다르게 지급되지 않아요',
+    description: '스톡옵션이나 성과급 관련 약속이 지켜지지 않는 경우',
+    details: `[언제부터]
+예: 입사 시 스톡옵션을 받기로 약속받았는데...
 
-• 상대방(회사, 팀장, 클라이언트 등)이 누구인지
-예: OO스타트업과 대표 F씨입니다.
+[어떤 일이 반복되나요]
+예: 계약서에는 명시되어 있지 않고, 구두로만 약속받았습니다.
 
-• 지금까지 어떤 대화를 나눴는지
-예: 계약서에는 명시되어 있지 않고, 구두로만 약속받았습니다. 스톡옵션 지급에 대해 물어봤지만 "회사 상황을 봐야 한다"는 답변만 받았습니다.
-
-• 가지고 있는 증거(카톡, 메일, 녹취 등)가 있는지
-예: 입사 시 스톡옵션 약속 관련 이메일과 증인(동료들)이 있습니다.`,
+[내가 느끼는 문제점]
+예: 퇴사 시 스톡옵션을 받을 수 있을지 불확실해서...`,
+    socialInsurance: ['health', 'employment'] as string[],
   },
 ]
 
@@ -457,6 +472,11 @@ export default function QuickAssistPage() {
   const [showContextSelector, setShowContextSelector] = useState(false)
   const [contextSelectorType, setContextSelectorType] = useState<'situation' | 'contract' | null>(null)
   const [openReportMenu, setOpenReportMenu] = useState(false) // + 버튼 메뉴 열림 상태
+  const [selectedFile, setSelectedFile] = useState<File | null>(null) // 선택된 파일
+  const [showSituationForm, setShowSituationForm] = useState(false) // 상황 분석 폼 표시 여부
+  const [showSituationPresets, setShowSituationPresets] = useState(false) // 상황 분석 프리셋 칩 표시 여부
+  const [selectedSituationPreset, setSelectedSituationPreset] = useState<typeof SITUATION_PRESETS[0] | null>(null) // 선택된 프리셋
+  const fileInputRef = useRef<HTMLInputElement>(null)
   // 리포트 정보 캐시 (context_id -> 리포트 정보)
   const [reportCache, setReportCache] = useState<Map<string, { title: string; summary: string; type: 'situation' | 'contract' }>>(new Map())
   
@@ -1122,6 +1142,89 @@ export default function QuickAssistPage() {
     }
   }
 
+  // 파일 업로드 핸들러
+  const handleFileUpload = async (file: File) => {
+    try {
+      setIsAnalyzing(true)
+      setSelectedFile(file)
+      
+      // 사용자 ID 가져오기
+      const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client')
+      const supabase = createSupabaseBrowserClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      const userId = user?.id || null
+      
+      if (!userId) {
+        toast({
+          title: '로그인 필요',
+          description: '파일 업로드를 위해 로그인이 필요합니다.',
+          variant: 'destructive',
+        })
+        setIsAnalyzing(false)
+        setSelectedFile(null)
+        return
+      }
+      
+      // Agent API로 계약서 분석 시작
+      const response = await chatWithAgent({
+        mode: 'contract',
+        message: '이 계약서를 분석해주세요.',
+        file: file,
+      }, userId)
+      
+      // 분석 결과를 컨텍스트로 설정
+      if (response.contractAnalysisId) {
+        setCurrentContext({
+          type: 'contract',
+          id: response.contractAnalysisId,
+          label: response.contractAnalysis?.title || file.name,
+        })
+        
+        // 세션 ID 저장
+        if (response.sessionId) {
+          const newSessionId = `session-${response.sessionId}`
+          setSelectedConversationId(newSessionId)
+        }
+        
+        // 메시지 추가
+        const userMessage: ChatMessage = {
+          id: `msg-${Date.now()}`,
+          role: 'user',
+          content: `파일 업로드: ${file.name}`,
+          timestamp: new Date(),
+          context_type: 'contract',
+          context_id: response.contractAnalysisId,
+        }
+        
+        const assistantMessage: ChatMessage = {
+          id: `msg-${Date.now()}-assistant`,
+          role: 'assistant',
+          content: response.answerMarkdown,
+          timestamp: new Date(),
+          context_type: 'contract',
+          context_id: response.contractAnalysisId,
+        }
+        
+        setMessages((prev) => [...prev, userMessage, assistantMessage])
+        
+        toast({
+          title: '계약서 분석 완료',
+          description: '계약서가 분석되었습니다. 추가 질문을 해보세요.',
+        })
+      }
+    } catch (error: any) {
+      console.error('파일 업로드 실패:', error)
+      toast({
+        title: '파일 업로드 실패',
+        description: error.message || '파일 업로드 중 오류가 발생했습니다.',
+        variant: 'destructive',
+      })
+      setSelectedFile(null)
+    } finally {
+      setIsAnalyzing(false)
+    }
+  }
+
   // 메시지 전송
   const handleSendMessage = async () => {
     const trimmedMessage = inputMessage.trim()
@@ -1211,62 +1314,18 @@ export default function QuickAssistPage() {
         }
       }
     } else {
-      // 새 세션 생성 - DB에 저장
-      try {
-        if (userId) {
-          // 새 챗 세션 생성
-          const sessionTitle = generateQuestionSummary(inputMessage)
-          const initialContextType = currentContext.type
-          const initialContextId = currentContext.id
-          
-          const sessionResult = await createChatSession(
-            {
-              initial_context_type: initialContextType,
-              initial_context_id: initialContextId,
-              title: sessionTitle,
-            },
-            userId
-          )
-          
-          chatSessionId = sessionResult.id
-          const newSessionId = `session-${chatSessionId}`
-          
-          currentSession = {
-            id: newSessionId,
-            sessionId: chatSessionId,
-            title: sessionTitle,
-            messages: [userMessage],
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          }
-          setSelectedConversationId(newSessionId)
-        } else {
-          // 사용자 ID가 없으면 로컬 세션만 생성
+      // 새 대화 시작 시 - API에서 세션을 생성하므로 여기서는 로컬 세션만 생성
+      // API 응답에서 받은 sessionId로 나중에 업데이트됨
       const newSessionId = `conv-${Date.now()}`
       currentSession = {
         id: newSessionId,
-            sessionId: '',
+        sessionId: '', // API에서 생성된 세션 ID로 업데이트됨
         title: generateQuestionSummary(inputMessage),
         messages: [userMessage],
         createdAt: new Date(),
         updatedAt: new Date(),
       }
-      setSelectedConversationId(newSessionId)
-        }
-      } catch (error) {
-        console.warn('챗 세션 생성 실패, 로컬 세션 사용:', error)
-        // 실패 시 로컬 세션만 생성
-        const newSessionId = `conv-${Date.now()}`
-        currentSession = {
-          id: newSessionId,
-          sessionId: '',
-          title: generateQuestionSummary(inputMessage),
-          messages: [userMessage],
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        }
-        setSelectedConversationId(newSessionId)
-      }
+      // selectedConversationId는 API 응답 후에 설정됨
     }
 
     try {
@@ -1357,22 +1416,110 @@ export default function QuickAssistPage() {
         }
       } else {
         // 컨텍스트에 따라 분기
-        if (currentContext.type === 'situation' && currentContext.id) {
-          // 상황 분석 리포트를 컨텍스트로 사용하는 경우
-          const chatResult = await chatWithContractV2({
-            query: inputMessage.trim(),
-            docIds: [],
-            topK: 8,
-            contextType: 'situation',
-            contextId: currentContext.id,
-          })
+        // 프리셋이 선택되어 있고 아직 분석이 시작되지 않은 경우 (첫 요청)
+        if (selectedSituationPreset && !currentContext.id) {
+          // 상황 분석 첫 요청 - Agent API 사용
+          const chatResult = await chatWithAgent({
+            mode: 'situation',
+            message: inputMessage.trim(), // 사용자가 수정한 메시지 사용
+            ...(selectedConversationId && chatSessionId ? { sessionId: chatSessionId } : {}),
+            situationTemplateKey: selectedSituationPreset.category,
+            situationForm: {
+              situation: inputMessage.trim(), // 사용자가 수정한 메시지 사용
+              category: selectedSituationPreset.category,
+              employmentType: selectedSituationPreset.employmentType,
+              workPeriod: selectedSituationPreset.workPeriod,
+              socialInsurance: selectedSituationPreset.socialInsurance,
+            },
+          }, userId)
+          
+          // 세션 ID 업데이트
+          if (chatResult.sessionId) {
+            chatSessionId = chatResult.sessionId
+            const newSessionId = `session-${chatResult.sessionId}`
+            setSelectedConversationId(newSessionId)
+          }
+          
+          // 분석 결과를 컨텍스트로 설정
+          if (chatResult.situationAnalysisId) {
+            setCurrentContext({
+              type: 'situation',
+              id: chatResult.situationAnalysisId,
+              label: chatResult.situationAnalysis?.title || selectedSituationPreset.title,
+            })
+            // 프리셋 정보 초기화 (다음 요청부터는 후속 요청으로 처리)
+            setSelectedSituationPreset(null)
+          }
+          
+          assistantMessage = {
+            id: `msg-${Date.now()}-assistant`,
+            role: 'assistant',
+            content: chatResult.answerMarkdown || '답변을 생성할 수 없습니다.',
+            timestamp: new Date(),
+            context_type: 'situation',
+            context_id: chatResult.situationAnalysisId || null,
+          }
+          
+          // DB에 저장
+          if (userId && chatSessionId) {
+            try {
+              const dbMessages = await getChatMessages(chatSessionId, userId)
+              const maxSequenceNumber = dbMessages.length > 0 
+                ? Math.max(...dbMessages.map(m => m.sequence_number))
+                : -1
+              
+              const nextSequenceNumber = maxSequenceNumber + 1
+              
+              await saveChatMessage(
+                chatSessionId,
+                {
+                  sender_type: 'user',
+                  message: userMessage.content,
+                  sequence_number: nextSequenceNumber,
+                  context_type: 'situation',
+                  context_id: chatResult.situationAnalysisId || null,
+                },
+                userId
+              )
+              
+              await saveChatMessage(
+                chatSessionId,
+                {
+                  sender_type: 'assistant',
+                  message: assistantMessage.content,
+                  sequence_number: nextSequenceNumber + 1,
+                  context_type: 'situation',
+                  context_id: chatResult.situationAnalysisId || null,
+                },
+                userId
+              )
+            } catch (dbError) {
+              console.warn('새 테이블 메시지 저장 실패:', dbError)
+            }
+          }
+        } else if (currentContext.type === 'situation' && currentContext.id) {
+          // 상황 분석 리포트를 컨텍스트로 사용하는 경우 - Agent API 사용 (후속 요청)
+          // 새 대화 시작 시 (selectedConversationId가 null) sessionId를 전달하지 않음
+          const chatResult = await chatWithAgent({
+            mode: 'situation',
+            message: inputMessage.trim(),
+            ...(selectedConversationId && chatSessionId ? { sessionId: chatSessionId } : {}),
+            situationAnalysisId: currentContext.id, // 상황 분석 ID
+          }, userId)
+          
+          // 세션 ID 업데이트
+          if (chatResult.sessionId && chatSessionId !== chatResult.sessionId) {
+            chatSessionId = chatResult.sessionId
+            const newSessionId = `session-${chatResult.sessionId}`
+            setSelectedConversationId(newSessionId)
+          }
           
           console.log('챗 응답:', chatResult)
           
           assistantMessage = {
             id: `msg-${Date.now()}-assistant`,
             role: 'assistant',
-            content: chatResult?.answer || chatResult?.markdown || '답변을 생성할 수 없습니다.',
+            content: chatResult.answerMarkdown || '답변을 생성할 수 없습니다.',
             timestamp: new Date(),
             context_type: 'situation',
             context_id: currentContext.id,
@@ -1416,21 +1563,28 @@ export default function QuickAssistPage() {
             }
           }
         } else if (currentContext.type === 'contract' && currentContext.id) {
-          // 계약서 분석 리포트를 컨텍스트로 사용하는 경우
-          const chatResult = await chatWithContractV2({
-            query: inputMessage.trim(),
-            docIds: [currentContext.id], // 계약서 ID를 docIds에 포함
-            topK: 8,
-            contextType: 'contract',
-            contextId: currentContext.id,
-          })
+          // 계약서 분석 리포트를 컨텍스트로 사용하는 경우 - Agent API 사용
+          // 새 대화 시작 시 (selectedConversationId가 null) sessionId를 전달하지 않음
+          const chatResult = await chatWithAgent({
+            mode: 'contract',
+            message: inputMessage.trim(),
+            ...(selectedConversationId && chatSessionId ? { sessionId: chatSessionId } : {}),
+            contractAnalysisId: currentContext.id, // 계약서 분석 ID
+          }, userId)
+          
+          // 세션 ID 업데이트
+          if (chatResult.sessionId && chatSessionId !== chatResult.sessionId) {
+            chatSessionId = chatResult.sessionId
+            const newSessionId = `session-${chatResult.sessionId}`
+            setSelectedConversationId(newSessionId)
+          }
           
           console.log('계약서 컨텍스트 챗 응답:', chatResult)
           
           assistantMessage = {
             id: `msg-${Date.now()}-assistant`,
             role: 'assistant',
-            content: chatResult?.answer || chatResult?.markdown || '답변을 생성할 수 없습니다.',
+            content: chatResult.answerMarkdown || '답변을 생성할 수 없습니다.',
             timestamp: new Date(),
             context_type: 'contract',
             context_id: currentContext.id,
@@ -1474,24 +1628,29 @@ export default function QuickAssistPage() {
             }
           }
         } else if (currentContext.type === 'none') {
-          // 일반 챗 모드 - chatWithContractV2 사용
-            // 일반 챗 모드 - chatWithContractV2 사용
-            const chatResult = await chatWithContractV2({
-              query: inputMessage.trim(),
-              docIds: [],
-              topK: 8,
-              contextType: 'none',
-              contextId: null,
-            })
-            
-            assistantMessage = {
-              id: `msg-${Date.now()}-assistant`,
-              role: 'assistant',
-              content: chatResult.answer || '답변을 생성할 수 없습니다.',
-              timestamp: new Date(),
-              context_type: 'none',
-              context_id: null,
-            }
+          // 일반 챗 모드 - Agent API 사용 (plain 모드)
+          // 새 대화 시작 시 (selectedConversationId가 null) sessionId를 전달하지 않음
+          const chatResult = await chatWithAgent({
+            mode: 'plain',
+            message: inputMessage.trim(),
+            ...(selectedConversationId && chatSessionId ? { sessionId: chatSessionId } : {}),
+          }, userId)
+          
+          // 세션 ID 업데이트
+          if (chatResult.sessionId && chatSessionId !== chatResult.sessionId) {
+            chatSessionId = chatResult.sessionId
+            const newSessionId = `session-${chatResult.sessionId}`
+            setSelectedConversationId(newSessionId)
+          }
+          
+          assistantMessage = {
+            id: `msg-${Date.now()}-assistant`,
+            role: 'assistant',
+            content: chatResult.answerMarkdown || '답변을 생성할 수 없습니다.',
+            timestamp: new Date(),
+            context_type: 'none',
+            context_id: null,
+          }
             
             // 일반 챗도 새 테이블에 저장
             if (userId && chatSessionId) {
@@ -1674,6 +1833,7 @@ export default function QuickAssistPage() {
     // (URL 파라미터에서 온 경우는 페이지 로드 시 다시 설정됨)
     setSituationAnalysis(null)
     setSituationContext(null)
+    setSelectedFile(null) // 파일도 초기화
   }
 
   // 대화 선택
@@ -2362,6 +2522,41 @@ export default function QuickAssistPage() {
 
           {/* 입력 영역 - 화면 하단 고정 */}
           <div className="flex-shrink-0 border-t border-slate-200/80 bg-white/95 backdrop-blur-md px-5 py-4 shadow-lg">
+            {/* 상황 분석 프리셋 칩 영역 */}
+            {showSituationPresets && (
+              <div className="mb-4 space-y-2">
+                <div className="text-xs font-semibold text-slate-600 mb-2">
+                  상황 유형을 선택하세요
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {SITUATION_PRESETS.map((preset, index) => {
+                    const Icon = preset.icon
+                    return (
+                      <button
+                        key={index}
+                        type="button"
+                        onClick={() => {
+                          // 프리셋 선택 및 입력창에 텍스트 설정
+                          setSelectedSituationPreset(preset)
+                          setShowSituationPresets(false)
+                          setInputMessage(preset.details)
+                          
+                          // 입력창으로 포커스 이동
+                          setTimeout(() => {
+                            textareaRef.current?.focus()
+                          }, 100)
+                        }}
+                        className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 text-slate-700 hover:from-blue-100 hover:to-indigo-100 hover:border-blue-300 transition-all text-xs font-medium"
+                      >
+                        <Icon className="h-4 w-4 text-blue-600" />
+                        <span>{preset.title}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* 라벨 */}
             <label className="block text-sm font-semibold text-slate-800 mb-2">
               한 줄로 상황을 요약해 주세요
@@ -2370,16 +2565,6 @@ export default function QuickAssistPage() {
             {/* GPT 스타일 입력 바 */}
             <div className="relative">
               <div className="flex items-end rounded-3xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
-                {/* + 버튼 */}
-                <button
-                  type="button"
-                  data-report-menu-button
-                  onClick={() => setOpenReportMenu((v) => !v)}
-                  className="mr-2 flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors flex-shrink-0"
-                >
-                  <Plus className="h-4 w-4" />
-                </button>
-
                 {/* textarea (채팅 입력창 느낌) */}
                 <textarea
                   ref={textareaRef}
@@ -2405,12 +2590,8 @@ export default function QuickAssistPage() {
                   }}
                 />
 
-                {/* 오른쪽 영역: 글자수 + 전송 버튼 */}
+                {/* 오른쪽 영역: 전송 버튼 */}
                 <div className="ml-2 flex flex-col items-end gap-1 flex-shrink-0">
-                  <span className="text-[11px] text-slate-400">
-                    {inputMessage.length}자
-                  </span>
-
                   <button
                     type="button"
                     onClick={handleSendMessage}
@@ -2426,9 +2607,59 @@ export default function QuickAssistPage() {
                 </div>
               </div>
 
-              {/* + 버튼 눌렀을 때 뜨는 메뉴 (GPT의 … 메뉴 느낌) */}
+              {/* 하단 버튼 영역 */}
+              <div className="flex items-center gap-2 mt-2">
+                {/* 파일 첨부 버튼 */}
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex items-center gap-2 px-3 py-2 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors flex-shrink-0"
+                  title="파일 첨부"
+                >
+                  <Paperclip className="h-4 w-4" />
+                  <span className="text-xs font-medium">Attach</span>
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.hwp,.hwpx,.doc,.docx,.jpg,.jpeg,.png"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    if (file) {
+                      setSelectedFile(file)
+                      // 파일 선택 시 Agent API로 계약서 분석 시작
+                      handleFileUpload(file)
+                    }
+                  }}
+                />
+
+                {/* 리포트 불러오기 버튼 */}
+                <button
+                  type="button"
+                  onClick={() => setOpenReportMenu((v) => !v)}
+                  className="flex items-center gap-2 px-3 py-2 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors flex-shrink-0"
+                  title="리포트 불러오기"
+                >
+                  <Globe className="h-4 w-4" />
+                  <span className="text-xs font-medium">Report</span>
+                </button>
+
+                {/* 상황 분석 폼 버튼 */}
+                <button
+                  type="button"
+                  onClick={() => setShowSituationPresets((v) => !v)}
+                  className="flex items-center gap-2 px-3 py-2 rounded-full bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors flex-shrink-0"
+                  title="상황 분석 폼"
+                >
+                  <BookOpen className="h-4 w-4" />
+                  <span className="text-xs font-medium">Situation Analysis</span>
+                </button>
+              </div>
+
+              {/* 리포트 메뉴 (Globe 버튼 클릭 시) */}
               {openReportMenu && (
-                <div data-report-menu className="absolute left-2 bottom-full z-10 mb-2 w-64 rounded-2xl border border-slate-100 bg-white p-1 shadow-lg">
+                <div data-report-menu className="absolute left-0 bottom-full z-10 mb-2 w-64 rounded-2xl border border-slate-100 bg-white p-1 shadow-lg">
                   <div className="px-3 py-1.5 text-xs text-slate-500 font-medium border-b border-slate-100">
                     참고할 리포트
                   </div>
@@ -2461,6 +2692,29 @@ export default function QuickAssistPage() {
                     {currentContext.type === 'contract' && (
                       <CheckCircle2 className="w-4 h-4 text-blue-600 ml-auto" />
                     )}
+                  </button>
+                </div>
+              )}
+
+              {/* 선택된 파일 표시 */}
+              {selectedFile && (
+                <div className="mt-2 px-3 py-2 rounded-lg bg-blue-50/50 border border-blue-200/50 flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-xs">
+                    <FileText className="w-4 h-4 text-blue-600" />
+                    <span className="text-blue-700 font-medium">{selectedFile.name}</span>
+                    <span className="text-blue-500">({(selectedFile.size / 1024).toFixed(1)}KB)</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedFile(null)
+                      if (fileInputRef.current) {
+                        fileInputRef.current.value = ''
+                      }
+                    }}
+                    className="text-blue-600 hover:text-blue-800 transition-colors"
+                  >
+                    <X className="w-4 h-4" />
                   </button>
                 </div>
               )}
