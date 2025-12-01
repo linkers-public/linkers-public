@@ -40,6 +40,12 @@ from models.schemas import (
     ConversationRequestV2,
     CreateChatSessionRequest,
     ChatMessageRequest,
+    LegalChatMode,
+    LegalChatAgentResponse,
+    UsedReportMeta,
+    UsedSourceMeta,
+    ContractAnalysisSummary,
+    SituationAnalysisSummary,
 )
 from core.legal_rag_service import LegalRAGService
 from core.document_processor_v2 import DocumentProcessor

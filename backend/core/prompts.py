@@ -2148,6 +2148,20 @@ def build_situation_findings_prompt(
         employment_type, work_period, weekly_hours, is_probation, social_insurance
     )
     
+    # 실제 grounding_chunks의 제목 목록 생성 (LLM이 정확한 제목을 사용하도록)
+    # refinedSnippet 생성을 위해 전체 snippet도 포함
+    available_documents = []
+    if grounding_chunks:
+        for idx, chunk in enumerate(grounding_chunks[:8], 1):  # 상위 8개만
+            chunk_title = getattr(chunk, 'title', '제목 없음')
+            chunk_source_type = getattr(chunk, 'source_type', 'law')
+            chunk_snippet = getattr(chunk, 'snippet', '') if getattr(chunk, 'snippet', '') else ''
+            # 미리보기용 (150자)와 전체 snippet 모두 포함
+            chunk_snippet_preview = chunk_snippet[:150] if len(chunk_snippet) > 150 else chunk_snippet
+            available_documents.append(f"{idx}. [{chunk_source_type}] {chunk_title}\n   미리보기: {chunk_snippet_preview}...\n   전체 내용: {chunk_snippet}")
+    
+    available_docs_text = "\n".join(available_documents) if available_documents else "제공된 문서 없음"
+    
     prompt = f"""당신은 대한민국 근로기준법과 표준근로계약서를 참고해 **청년 근로자의 상황을 이해하기 쉽게 설명하는 법률 안내 도우미**입니다.
 
 **[입력 정보]**
@@ -2163,7 +2177,11 @@ def build_situation_findings_prompt(
 **법적 근거:**
 {context['legal_basis_text']}
 
-다음 JSON 형식으로 findings만 반환하세요:
+**⚠️ 매우 중요 - 사용 가능한 문서 목록:**
+다음은 실제로 검색된 문서들입니다. **basisText에서 참고할 문서 제목으로 사용하세요.**
+{available_docs_text}
+
+다음 JSON 형식으로 findings만 반환하세요 (source 객체는 포함하지 마세요):
 {{
     "findings": [
         {{
@@ -2171,36 +2189,29 @@ def build_situation_findings_prompt(
             "title": "법적 쟁점/카테고리 이름 (예: '직장 내 괴롭힘', '임금 체불', '부당해고')",
             "statusLabel": "충족|부분 해당|추가 확인 필요",
             "basisText": "근거 문장",
-            "source": {{
-                "documentTitle": "참고 문서의 제목",
-                "fileUrl": "문서 파일 URL (있는 경우)",
-                "sourceType": "guideline|standard_contract|statute",
-                "refinedSnippet": "RAG로 찾은 원문 청크를 문장 부호·띄어쓰기·어색한 표현을 다듬어 사람이 읽기 쉽게 정리한 문장. 내용과 뉘앙스는 원문과 최대한 동일하게 유지",
-                "similarityScore": 0.81
-            }}
+            "documentTitle": "참고 문서의 제목 (반드시 위 '사용 가능한 문서 목록'에 있는 제목만 사용)",
+            "refinedSnippet": "RAG로 찾은 원문 청크를 문장 부호·띄어쓰기·어색한 표현을 다듬어 사람이 읽기 쉽게 정리한 문장. 내용과 뉘앙스는 원문과 최대한 동일하게 유지"
         }}
     ]
 }}
 
 **findings 필드 (필수):**
 - 법적 쟁점 발견 항목을 생성하세요. criteria와 유사하지만 더 구조화된 형태입니다.
-- 각 finding은 {{"id": 1, "title": "법적 쟁점명", "statusLabel": "충족|부분 해당|추가 확인 필요", "basisText": "근거 문장", "source": {{"documentTitle": "...", "fileUrl": "...", "sourceType": "...", "refinedSnippet": "...", "similarityScore": 0.81}}}} 형태입니다.
+- 각 finding은 {{"id": 1, "title": "법적 쟁점명", "statusLabel": "충족|부분 해당|추가 확인 필요", "basisText": "근거 문장", "documentTitle": "문서 제목", "refinedSnippet": "다듬은 문장"}} 형태입니다.
 - **id**: 각 항목을 구분하기 위한 숫자 (1부터 시작)
 - **title**: 사용자에게 보여줄 법적 쟁점/카테고리 이름 (예: "직장 내 괴롭힘", "임금 체불", "부당해고", "모욕적인 말", "업무 능력 폄하")
 - **statusLabel**: 해당 쟁점이 현재 상황에 얼마나 해당하는지에 대한 한글 라벨 (예: "충족", "부분 해당", "추가 확인 필요"). 카드 우측 배지나 아이콘 옆에 그대로 노출됩니다.
 - **basisText**: **⚠️ 매우 중요: 반드시 "{{documentTitle}}에 따르면"으로 시작해야 합니다.** 사용자의 실제 상황 설명과 참고 문서 내용을 종합해서 만든 근거 문장. 왜 이 항목이 문제인지, 어떤 점이 법적 기준에 부합하는지를 한두 문장으로 정리. 예: "직장 내 괴롭힘 판단 및 예방 대응 매뉴얼.pdf에 따르면, 반복적인 사적 심부름 지시와 업무능력을 부당하게 깎아내리는 발언은 직장 내 괴롭힘에 해당할 수 있으며, 사용자님의 현재 상황도 이에 상당 부분 부합합니다."
-- **source.documentTitle**: 참고 문서의 제목 (예: "직장 내 괴롭힘 판단 및 예방 대응 매뉴얼.pdf"). '문서 보기' 링크에 함께 표시됩니다.
-- **source.fileUrl**: 참고 문서를 열람할 수 있는 스토리지 URL (있는 경우). '문서 보기' 버튼 클릭 시 이동하는 링크입니다.
-- **source.sourceType**: 참고 문서의 유형 (예: "guideline"=가이드라인·매뉴얼, "standard_contract"=표준계약서, "statute"=법령 조문, "manual"=매뉴얼)
-- **source.refinedSnippet**: **⚠️ 중요: RAG로 찾은 원문 청크(rawSnippet)를 그대로 요약하는 것이 아니라, 문장 부호·띄어쓰기·어색한 표현을 다듬어 사람이 읽기 쉽게 정리한 문장입니다. 내용과 뉘앙스는 원문과 최대한 동일하게 유지하되, 읽기 쉽게 다듬어야 합니다. UI에서 '관련 조항' 영역에 그대로 노출됩니다.**
-- **source.similarityScore**: 사용자 상황/질문과 이 문서 조각의 의미적 유사도 점수 (0~1). 정렬·필터링 또는 작은 '유사도 69.5%' 표시용입니다.
+- **documentTitle**: **⚠️ 매우 중요: 반드시 위 '사용 가능한 문서 목록'에 있는 제목을 정확히 사용하세요. 가상의 문서 제목을 만들지 마세요.** 참고 문서의 제목 (예: "직장 내 괴롭힘 판단 및 예방 대응 매뉴얼.pdf"). 백엔드에서 이 제목을 기반으로 source 정보를 자동으로 매핑합니다.
+- **refinedSnippet**: **⚠️ 매우 중요: 위 '사용 가능한 문서 목록'에서 해당 documentTitle과 일치하는 문서의 '전체 내용'을 찾아서, 그 원문(raw snippet)을 기반으로 문장 부호·띄어쓰기·어색한 표현을 다듬어 사람이 읽기 쉽게 정리한 문장을 생성하세요. 내용과 뉘앙스는 원문과 최대한 동일하게 유지하되, 읽기 쉽게 다듬어야 합니다. 원문의 핵심 내용을 그대로 유지하면서 자연스러운 문장으로 변환하세요. UI에서 '관련 조항' 영역에 그대로 노출됩니다.**
+- **⚠️ 주의: source 객체는 생성하지 마세요. documentTitle과 refinedSnippet만 포함하세요. fileUrl, sourceType, similarityScore는 백엔드에서 자동으로 채워집니다.**
 - **3~5개 정도로 구성하세요.** 사용자 상황과 가장 관련이 높은 법적 쟁점들을 선별하세요.
 - criteria와 유사하지만, findings는 더 사용자 친화적인 형태로 구조화되어 있습니다.
 
 **RAG 검색 결과 활용 필수:**
-- 위의 "참고 법령/가이드라인" 섹션에 제공된 법령/가이드라인을 바탕으로 findings를 생성하세요.
-- 각 finding의 source는 실제 검색된 문서 정보를 사용하세요.
-- **refinedSnippet은 반드시 제공된 법령/가이드라인 텍스트를 기반으로 생성하되, 읽기 쉽게 다듬어야 합니다.**
+- 위의 "참고 법령/가이드라인" 섹션과 "사용 가능한 문서 목록"에 제공된 법령/가이드라인을 바탕으로 findings를 생성하세요.
+- 각 finding의 documentTitle은 **반드시 "사용 가능한 문서 목록"에 있는 제목을 정확히 사용**하세요.
+- **가상의 문서 제목을 생성하지 마세요. 반드시 실제 검색된 문서의 제목만 사용하세요.**
 """
     
     return prompt

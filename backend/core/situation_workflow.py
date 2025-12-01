@@ -319,6 +319,12 @@ class SituationWorkflow:
             logger.error(f"[워크플로우] organizations 생성 실패: {organizations_result}", exc_info=organizations_result)
             organizations_result = []
         
+        # findings 생성 후 chunk 기반으로 source 정보 매핑
+        if isinstance(findings_result, list) and findings_result and grounding_chunks:
+            logger.info(f"[워크플로우] findings에 chunk 기반 source 정보 매핑 시작: {len(findings_result)}개")
+            findings_result = self._map_findings_to_chunks(findings_result, grounding_chunks)
+            logger.info(f"[워크플로우] findings source 정보 매핑 완료")
+        
         return {
             **state,
             "summary_report": summary_result if isinstance(summary_result, str) else "",
@@ -577,121 +583,12 @@ class SituationWorkflow:
             }
             criteria_items.append(criteria_item)
         
-        # findings 처리: LLM이 생성한 findings를 그대로 사용하되, source 정보 보완
-        findings_processed = []
-        if findings:
-            logger.info(f"[워크플로우] findings 처리 시작: {len(findings)}개")
-            for idx, finding in enumerate(findings):
-                if not isinstance(finding, dict):
-                    logger.warning(f"[워크플로우] finding[{idx}]이 dict가 아님: {type(finding)}")
-                    continue
-                
-                # source 정보 보완 (fileUrl이 없으면 생성)
-                source = finding.get("source", {})
-                if not isinstance(source, dict):
-                    logger.warning(f"[워크플로우] finding[{idx}] source가 dict가 아님: {type(source)}")
-                    source = {}
-                
-                document_title = source.get("documentTitle", "").strip()
-                source_type = source.get("sourceType", "law")
-                refined_snippet = source.get("refinedSnippet", "").strip()
-                external_id = None
-                matched_chunk = None
-                
-                # grounding_chunks에서 해당 문서 찾아서 external_id 및 fileUrl 보완
-                # 매칭 우선순위: 1) 정확한 제목 매칭, 2) 부분 제목 매칭, 3) snippet 유사도 매칭
-                for chunk in grounding_chunks:
-                    chunk_title = chunk.title.strip() if chunk.title else ""
-                    
-                    # 1. 정확한 제목 매칭
-                    if document_title and chunk_title == document_title:
-                        matched_chunk = chunk
-                        break
-                    
-                    # 2. 부분 제목 매칭 (양방향)
-                    if document_title and chunk_title:
-                        # documentTitle이 chunk.title에 포함되거나 그 반대
-                        if document_title in chunk_title or chunk_title in document_title:
-                            matched_chunk = chunk
-                            break
-                    
-                    # 3. snippet 유사도 매칭 (제목 매칭 실패 시)
-                    if refined_snippet and chunk.snippet:
-                        # snippet의 앞부분(50자)이 유사하면 매칭
-                        snippet_prefix = refined_snippet[:50].strip()
-                        chunk_snippet_prefix = chunk.snippet[:50].strip()
-                        if snippet_prefix and chunk_snippet_prefix:
-                            # 공통 단어가 3개 이상이면 매칭
-                            snippet_words = set(snippet_prefix.split())
-                            chunk_words = set(chunk_snippet_prefix.split())
-                            common_words = snippet_words & chunk_words
-                            if len(common_words) >= 3:
-                                matched_chunk = chunk
-                                break
-                
-                # 매칭된 chunk가 있으면 정보 보완
-                if matched_chunk:
-                    external_id = getattr(matched_chunk, 'external_id', None)
-                    source_type = matched_chunk.source_type  # grounding_chunks의 source_type 사용
-                    
-                    # fileUrl이 없거나 빈 문자열이면 생성 (relatedCases와 동일한 로직)
-                    current_file_url = source.get("fileUrl", "")
-                    if not current_file_url or current_file_url.strip() == "":
-                        # 1. 먼저 matched_chunk의 file_url 속성 사용 (legal_chunk로부터)
-                        chunk_file_url = getattr(matched_chunk, 'file_url', None)
-                        if chunk_file_url and chunk_file_url.strip():
-                            source["fileUrl"] = chunk_file_url
-                            logger.info(f"[워크플로우] finding[{idx}] fileUrl을 chunk.file_url에서 가져옴: {chunk_file_url[:50]}...")
-                        elif external_id:
-                            # 2. chunk에 file_url이 없으면 get_document_file_url 사용 (relatedCases와 동일)
-                            try:
-                                from core.file_utils import get_document_file_url
-                                file_url = get_document_file_url(
-                                    external_id=external_id,
-                                    source_type=source_type,
-                                    expires_in=3600
-                                )
-                                if file_url:
-                                    source["fileUrl"] = file_url
-                                    logger.info(f"[워크플로우] finding[{idx}] fileUrl 생성 성공 (get_document_file_url): {file_url[:50]}...")
-                                else:
-                                    logger.warning(f"[워크플로우] finding[{idx}] fileUrl 생성 결과 None (external_id={external_id})")
-                            except Exception as e:
-                                logger.warning(f"[워크플로우] finding[{idx}] source fileUrl 생성 실패: {str(e)}")
-                    elif current_file_url and current_file_url.strip():
-                        logger.debug(f"[워크플로우] finding[{idx}] fileUrl 이미 존재: {current_file_url[:50]}...")
-                    
-                    # similarityScore가 없으면 chunk.score 사용
-                    if not source.get("similarityScore"):
-                        source["similarityScore"] = float(matched_chunk.score)
-                    
-                    # refinedSnippet이 없으면 chunk.snippet 사용 (다듬지 않은 원문)
-                    if not source.get("refinedSnippet") or source.get("refinedSnippet", "").strip() == "":
-                        source["refinedSnippet"] = matched_chunk.snippet
-                    
-                    # documentTitle이 없으면 chunk.title 사용
-                    if not document_title:
-                        source["documentTitle"] = matched_chunk.title
-                else:
-                    # 매칭 실패 시 로깅
-                    logger.warning(f"[워크플로우] finding[{idx}] grounding_chunks에서 매칭 실패 - documentTitle: '{document_title}', sourceType: '{source_type}'")
-                    logger.warning(f"[워크플로우] finding[{idx}] 사용 가능한 grounding_chunks 제목: {[chunk.title for chunk in grounding_chunks[:5]]}")
-                    
-                    # fileUrl이 없으면 빈 문자열로 설정 (None 방지)
-                    if not source.get("fileUrl"):
-                        source["fileUrl"] = ""
-                
-                # sourceType 매핑 (guideline -> manual, statute -> law)
-                if source.get("sourceType") == "guideline":
-                    source["sourceType"] = "manual"
-                elif source.get("sourceType") == "statute":
-                    source["sourceType"] = "law"
-                
-                # source 정보 업데이트
-                finding["source"] = source
-                findings_processed.append(finding)
-            
-            logger.info(f"[워크플로우] findings 처리 완료: {len(findings_processed)}개")
+        # findings는 이미 generate_all_fields_node에서 chunk 기반으로 source 정보가 매핑되어 있음
+        # 여기서는 그대로 사용 (추가 처리 불필요)
+        findings_processed = findings if findings else []
+        
+        if findings_processed:
+            logger.info(f"[워크플로우] findings 사용 (이미 source 정보 매핑됨): {len(findings_processed)}개")
         else:
             logger.warning("[워크플로우] findings가 비어있거나 None입니다.")
         
@@ -714,6 +611,100 @@ class SituationWorkflow:
         }
     
     # ==================== 내부 헬퍼 함수들 ====================
+    
+    def _map_findings_to_chunks(
+        self,
+        findings: List[Dict[str, Any]],
+        grounding_chunks: List[Any]
+    ) -> List[Dict[str, Any]]:
+        """findings를 grounding_chunks와 매핑하여 source 정보 추가"""
+        from core.file_utils import get_document_file_url
+        
+        findings_mapped = []
+        for finding in findings:
+            if not isinstance(finding, dict):
+                findings_mapped.append(finding)
+                continue
+            
+            document_title = finding.get("documentTitle", "").strip()
+            refined_snippet = finding.get("refinedSnippet", "").strip()  # LLM이 생성한 refinedSnippet
+            
+            if not document_title:
+                logger.warning(f"[워크플로우] finding에 documentTitle이 없음: {finding.get('title', 'unknown')}")
+                findings_mapped.append(finding)
+                continue
+            
+            # grounding_chunks에서 매칭되는 chunk 찾기
+            matched_chunk = None
+            for chunk in grounding_chunks:
+                chunk_title = getattr(chunk, 'title', '').strip() if hasattr(chunk, 'title') else ''
+                
+                # 정확한 제목 매칭
+                if chunk_title == document_title:
+                    matched_chunk = chunk
+                    break
+                
+                # 부분 제목 매칭 (양방향)
+                if document_title in chunk_title or chunk_title in document_title:
+                    matched_chunk = chunk
+                    break
+            
+            if matched_chunk:
+                # chunk에서 source 정보 가져오기
+                external_id = getattr(matched_chunk, 'external_id', None)
+                source_type = getattr(matched_chunk, 'source_type', 'law')
+                chunk_score = float(getattr(matched_chunk, 'score', 0.0))
+                chunk_snippet = getattr(matched_chunk, 'snippet', '')  # raw snippet (fallback용)
+                
+                # fileUrl 생성
+                file_url = None
+                chunk_file_url = getattr(matched_chunk, 'file_url', None)
+                if chunk_file_url and chunk_file_url.strip():
+                    file_url = chunk_file_url
+                elif external_id:
+                    try:
+                        file_url = get_document_file_url(
+                            external_id=external_id,
+                            source_type=source_type,
+                            expires_in=3600
+                        )
+                    except Exception as e:
+                        logger.warning(f"[워크플로우] finding fileUrl 생성 실패 (external_id={external_id}): {str(e)}")
+                
+                # sourceType 매핑 (guideline -> manual, statute -> law)
+                mapped_source_type = source_type
+                if source_type == "guideline":
+                    mapped_source_type = "manual"
+                elif source_type == "statute":
+                    mapped_source_type = "law"
+                
+                # refinedSnippet: LLM이 생성한 것을 우선 사용, 없으면 chunk의 snippet 사용
+                final_refined_snippet = refined_snippet if refined_snippet else chunk_snippet
+                
+                # source 정보 추가
+                finding["source"] = {
+                    "documentTitle": document_title,
+                    "fileUrl": file_url or "",
+                    "sourceType": mapped_source_type,
+                    "refinedSnippet": final_refined_snippet,  # LLM이 생성한 refinedSnippet 우선 사용
+                    "similarityScore": chunk_score,
+                }
+                
+                logger.debug(f"[워크플로우] finding '{finding.get('title', 'unknown')}' 매핑 완료: documentTitle={document_title}, sourceType={mapped_source_type}, refinedSnippet 길이={len(final_refined_snippet)}")
+            else:
+                # 매칭 실패 시 기본 source 정보 생성
+                logger.warning(f"[워크플로우] finding '{finding.get('title', 'unknown')}'에 대한 chunk 매칭 실패: documentTitle='{document_title}'")
+                finding["source"] = {
+                    "documentTitle": document_title,
+                    "fileUrl": "",
+                    "sourceType": "law",
+                    "refinedSnippet": refined_snippet if refined_snippet else "",  # LLM이 생성한 refinedSnippet 사용
+                    "similarityScore": 0.0,
+                }
+            
+            findings_mapped.append(finding)
+        
+        return findings_mapped
     
     async def _get_embedding(self, text: str) -> List[float]:
         """임베딩 생성 (캐싱 지원)"""
@@ -2254,6 +2245,10 @@ class SituationWorkflow:
                 logger.info(f"[워크플로우] findings 파싱 성공: {len(findings)}개")
                 if findings:
                     logger.debug(f"[워크플로우] 첫 번째 finding 예시: {findings[0] if len(findings) > 0 else '없음'}")
+                    # documentTitle 확인 (source 없이 생성되었는지 확인)
+                    for idx, finding in enumerate(findings):
+                        if isinstance(finding, dict) and "documentTitle" not in finding:
+                            logger.warning(f"[워크플로우] finding[{idx}]에 documentTitle이 없음: {finding.get('title', 'unknown')}")
                 return findings
             else:
                 logger.warning(f"[워크플로우] findings JSON 패턴을 찾을 수 없음. 응답: {response[:200]}")
