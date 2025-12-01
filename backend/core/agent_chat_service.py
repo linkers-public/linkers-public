@@ -79,16 +79,24 @@ class AgentChatService:
             # LLM Provider에 따라 분기 처리
             if settings.use_ollama:
                 # Ollama 사용
-                response_text = await self.generator.generate(
-                    prompt=prompt,
-                    system_role="너는 유능한 법률 AI야. 한국어로만 답변해주세요."
-                )
-                llm_elapsed = time.time() - llm_start_time
-                logger.info(
-                    f"[Agent Plain] 답변 생성 완료: "
-                    f"길이={len(response_text)}자, LLM 호출 시간={llm_elapsed:.2f}초"
-                )
-                return response_text.strip(), legal_chunks
+                try:
+                    response_text = await self.generator.generate(
+                        prompt=prompt,
+                        system_role="너는 유능한 법률 AI야. 한국어로만 답변해주세요."
+                    )
+                    llm_elapsed = time.time() - llm_start_time
+                    logger.info(
+                        f"[Agent Plain] 답변 생성 완료: "
+                        f"길이={len(response_text)}자, LLM 호출 시간={llm_elapsed:.2f}초"
+                    )
+                    return response_text.strip(), legal_chunks
+                except Exception as e:
+                    llm_elapsed = time.time() - llm_start_time
+                    logger.error(
+                        f"[Agent Plain] Ollama 호출 실패 (소요 시간={llm_elapsed:.2f}초): {str(e)}",
+                        exc_info=True
+                    )
+                    raise
             elif settings.use_groq:
                 # Groq 사용 (해커톤 최적화: max_tokens=768로 제한하여 응답 속도 향상)
                 from llm_api import ask_groq_with_messages
@@ -98,32 +106,56 @@ class AgentChatService:
                     {"role": "user", "content": prompt}
                 ]
                 
-                response_text = ask_groq_with_messages(
-                    messages=messages,
-                    temperature=settings.llm_temperature,
-                    model=settings.groq_model,
-                    max_tokens=768  # 해커톤 최적화: 짧은 답변 유도로 속도 향상
-                )
-                llm_elapsed = time.time() - llm_start_time
-                logger.info(
-                    f"[Agent Plain] 답변 생성 완료: "
-                    f"길이={len(response_text)}자, LLM 호출 시간={llm_elapsed:.2f}초"
-                )
-                return response_text.strip(), legal_chunks
+                try:
+                    response_text = ask_groq_with_messages(
+                        messages=messages,
+                        temperature=settings.llm_temperature,
+                        model=settings.groq_model,
+                        max_tokens=768  # 해커톤 최적화: 짧은 답변 유도로 속도 향상
+                    )
+                    llm_elapsed = time.time() - llm_start_time
+                    logger.info(
+                        f"[Agent Plain] 답변 생성 완료: "
+                        f"길이={len(response_text)}자, LLM 호출 시간={llm_elapsed:.2f}초"
+                    )
+                    return response_text.strip(), legal_chunks
+                except Exception as e:
+                    llm_elapsed = time.time() - llm_start_time
+                    logger.error(
+                        f"[Agent Plain] Groq 호출 실패 (소요 시간={llm_elapsed:.2f}초): {str(e)}",
+                        exc_info=True
+                    )
+                    raise
             else:
                 # 기본값: generator 사용 (Ollama로 fallback)
-                response_text = await self.generator.generate(
-                    prompt=prompt,
-                    system_role="너는 유능한 법률 AI야. 한국어로만 답변해주세요."
-                )
-                llm_elapsed = time.time() - llm_start_time
-                logger.info(
-                    f"[Agent Plain] 답변 생성 완료: "
-                    f"길이={len(response_text)}자, LLM 호출 시간={llm_elapsed:.2f}초"
-                )
-                return response_text.strip(), legal_chunks
+                try:
+                    response_text = await self.generator.generate(
+                        prompt=prompt,
+                        system_role="너는 유능한 법률 AI야. 한국어로만 답변해주세요."
+                    )
+                    llm_elapsed = time.time() - llm_start_time
+                    logger.info(
+                        f"[Agent Plain] 답변 생성 완료: "
+                        f"길이={len(response_text)}자, LLM 호출 시간={llm_elapsed:.2f}초"
+                    )
+                    return response_text.strip(), legal_chunks
+                except Exception as e:
+                    llm_elapsed = time.time() - llm_start_time
+                    logger.error(
+                        f"[Agent Plain] Generator 호출 실패 (소요 시간={llm_elapsed:.2f}초): {str(e)}",
+                        exc_info=True
+                    )
+                    raise
         except Exception as e:
-            logger.error(f"[Agent Plain] 답변 생성 실패: {str(e)}", exc_info=True)
+            # 예외 발생 시에도 시간 측정 로그 출력
+            if 'llm_start_time' in locals():
+                llm_elapsed = time.time() - llm_start_time
+                logger.error(
+                    f"[Agent Plain] 답변 생성 실패 (소요 시간={llm_elapsed:.2f}초): {str(e)}",
+                    exc_info=True
+                )
+            else:
+                logger.error(f"[Agent Plain] 답변 생성 실패: {str(e)}", exc_info=True)
             answer = f"답변 생성 중 오류가 발생했습니다: {str(e)}"
             return answer, legal_chunks
     
