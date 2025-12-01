@@ -147,9 +147,7 @@ export function SituationChat({
       questions.push('법적 관점에서 가장 중요한 포인트는 무엇인가요?')
     }
     
-    if (analysisResult.actionPlan?.steps && analysisResult.actionPlan.steps.length > 0) {
-      questions.push('다음 단계로 무엇을 해야 하나요?')
-    }
+    // actionPlan 제거됨
 
     return questions.slice(0, 4) // 최대 4개
   }

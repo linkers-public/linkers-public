@@ -417,36 +417,7 @@ export default function SituationAnalysisPage() {
           externalId: source.externalId || source.external_id,
           fileUrl: source.fileUrl || source.file_url,
         })),
-        actionPlan: analysisData?.actionPlan || {
-          steps: [
-            {
-              title: '즉시 조치',
-              items: (() => {
-                // checklist가 있으면 사용
-                if (analysis?.checklist && analysis.checklist.length > 0) {
-                  return analysis.checklist.slice(0, 3)
-                }
-                // checklist가 없으면 summary에서 "지금 당장 할 수 있는 행동" 섹션 파싱
-                const summary = analysisData?.summary || analysis?.analysis?.summary || ''
-                const actionSectionMatch = summary.match(/##\s*🎯\s*지금\s*당장\s*할\s*수\s*있는\s*행동\s*\n([\s\S]*?)(?=##|$)/i)
-                if (actionSectionMatch) {
-                  const actionContent = actionSectionMatch[1].trim()
-                  const actionItems = actionContent
-                    .split('\n')
-                    .map((line: string) => line.replace(/^[-*]\s*/, '').trim())
-                    .filter((item: string) => item.length > 0)
-                    .slice(0, 5)
-                  return actionItems
-                }
-                return []
-              })(),
-            },
-            {
-              title: '권고사항',
-              items: analysisData?.recommendations || analysis?.analysis?.recommendations || [],
-            },
-          ],
-        },
+        actionPlan: null,
         scripts: analysisData?.scripts || analysis?.scripts || {
           toCompany: undefined,
           toAdvisor: undefined,
@@ -668,36 +639,7 @@ export default function SituationAnalysisPage() {
           status: (criterion?.status || 'likely') as 'likely' | 'unclear' | 'unlikely',
           reason: criterion?.reason || '',
         })),
-        actionPlan: {
-          steps: [
-            {
-              title: '즉시 조치',
-              items: (() => {
-                // checklist가 있으면 사용
-                if (result?.checklist && result.checklist.length > 0) {
-                  return result.checklist.slice(0, 3)
-                }
-                // checklist가 없으면 summary에서 "지금 당장 할 수 있는 행동" 섹션 파싱
-                const summary = result?.analysis?.summary || ''
-                const actionSectionMatch = summary.match(/##\s*🎯\s*지금\s*당장\s*할\s*수\s*있는\s*행동\s*\n([\s\S]*?)(?=##|$)/i)
-                if (actionSectionMatch) {
-                  const actionContent = actionSectionMatch[1].trim()
-                  const actionItems = actionContent
-                    .split('\n')
-                    .map((line: string) => line.replace(/^[-*]\s*/, '').trim())
-                    .filter((item: string) => item.length > 0)
-                    .slice(0, 5)
-                  return actionItems
-                }
-                return []
-              })(),
-            },
-            {
-              title: '권고사항',
-              items: result?.analysis?.recommendations || [],
-            },
-          ],
-        },
+        actionPlan: null,
         scripts: {
           toCompany: result?.scripts?.toCompany || undefined,
           toAdvisor: result?.scripts?.toAdvisor || undefined,

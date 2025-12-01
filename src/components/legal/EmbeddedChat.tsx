@@ -93,9 +93,10 @@ export function EmbeddedChat({
       initialMessage += `\n`
     }
     
-    if (analysisResult.actionPlan?.steps && analysisResult.actionPlan.steps.length > 0) {
+    // actionPlan 제거됨
+    if (false) { // actionPlan 제거됨
       initialMessage += `🎯 **다음 단계**\n`
-      analysisResult.actionPlan.steps[0].items.slice(0, 2).forEach((item) => {
+      [].forEach((item) => {
         initialMessage += `• ${item}\n`
       })
       initialMessage += `\n`

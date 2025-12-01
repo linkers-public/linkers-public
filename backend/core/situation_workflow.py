@@ -1036,10 +1036,12 @@ class SituationWorkflow:
                             break
                     
                     default_text = default_content.get(section_key_matched or section_key, "해당 섹션 내용을 확인하는 중입니다.")
-                    reconstructed_parts.append(title)
-                    reconstructed_parts.append("")
-                    reconstructed_parts.append(default_text)
-                    reconstructed_parts.append("")
+                    # 기본값 텍스트인 경우 섹션을 추가하지 않음
+                    if default_text and default_text != "관련 법령을 확인하여 현재 상황을 법적으로 평가해야 합니다." and default_text != "해당 섹션 내용을 확인하는 중입니다.":
+                        reconstructed_parts.append(title)
+                        reconstructed_parts.append("")
+                        reconstructed_parts.append(default_text)
+                        reconstructed_parts.append("")
             
             return '\n'.join(reconstructed_parts).strip()
         except Exception as e:
@@ -1506,7 +1508,9 @@ class SituationWorkflow:
                             break
                     
                     default_text = default_content.get(section_key_matched or section_key, "해당 섹션 내용을 확인하는 중입니다.")
-                    summary += f"\n\n{section_info['title']}\n\n{default_text}"
+                    # 기본값 텍스트인 경우 섹션을 추가하지 않음
+                    if default_text and default_text != "관련 법령을 확인하여 현재 상황을 법적으로 평가해야 합니다." and default_text != "해당 섹션 내용을 확인하는 중입니다.":
+                        summary += f"\n\n{section_info['title']}\n\n{default_text}"
         
         return {
             "summary": summary,

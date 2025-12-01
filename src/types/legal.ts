@@ -194,7 +194,7 @@ export interface SituationAnalysisResponse {
   riskScore: number // 0~100
   summary: string
   criteria: CriteriaItem[]
-  actionPlan: ActionPlan
+  actionPlan?: ActionPlan // 선택적 필드 (더 이상 사용하지 않음)
   scripts: Scripts
   relatedCases: RelatedCase[]
   sources?: SourceItem[] // RAG 검색 출처

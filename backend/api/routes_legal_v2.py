@@ -1278,40 +1278,23 @@ async def analyze_situation(
                 "status": criteria.get("status", "likely"),  # status 필드 보존
             })
         
-        # action_plan.steps에서 checklist와 recommendations 구분
-        action_plan = result.get("action_plan", {})
-        steps = action_plan.get("steps", [])
-        
-        # action_plan이 비어있으면 summary에서 "지금 당장 할 수 있는 행동" 섹션 파싱
-        if len(steps) == 0:
-            summary_text = result.get("summary", "")
-            # "## 지금 당장 할 수 있는 행동" 섹션 추출
-            action_section_match = re.search(
-                r'##\s*지금\s*당장\s*할\s*수\s*있는\s*행동\s*\n(.*?)(?=##|$)',
-                summary_text,
-                re.DOTALL | re.IGNORECASE
-            )
-            if action_section_match:
-                action_content = action_section_match.group(1).strip()
-                # "- " 또는 "* "로 시작하는 리스트 항목 추출
-                action_items = re.findall(r'[-*]\s*(.+?)(?=\n[-*]|\n##|$)', action_content, re.MULTILINE)
-                action_items = [item.strip() for item in action_items if item.strip()]
-                if action_items:
-                    # 첫 번째 step으로 추가
-                    steps = [{
-                        "title": "즉시 조치",
-                        "items": action_items[:5]  # 최대 5개
-                    }]
-        
-        # checklist: 첫 번째 step의 items만 사용
+        # checklist: summary에서 "지금 당장 할 수 있는 행동" 섹션 파싱
         checklist = []
-        if len(steps) > 0:
-            checklist = steps[0].get("items", [])
+        summary_text = result.get("summary", "")
+        # "## 지금 당장 할 수 있는 행동" 섹션 추출
+        action_section_match = re.search(
+            r'##\s*지금\s*당장\s*할\s*수\s*있는\s*행동\s*\n(.*?)(?=##|$)',
+            summary_text,
+            re.DOTALL | re.IGNORECASE
+        )
+        if action_section_match:
+            action_content = action_section_match.group(1).strip()
+            # "- " 또는 "* "로 시작하는 리스트 항목 추출
+            action_items = re.findall(r'[-*]\s*(.+?)(?=\n[-*]|\n##|$)', action_content, re.MULTILINE)
+            checklist = [item.strip() for item in action_items if item.strip()][:5]  # 최대 5개
         
-        # recommendations: 나머지 steps의 items 병합
+        # recommendations: 빈 배열 (더 이상 사용하지 않음)
         recommendations = []
-        for step in steps[1:]:
-            recommendations.extend(step.get("items", []))
         
         # scripts 변환
         scripts_data = result.get("scripts", {})
@@ -1456,7 +1439,6 @@ async def analyze_situation(
                 "summary": analysis_summary,
                 "sources": sources,  # RAG 검색 출처
                 "criteria": result.get("criteria", []),  # 법적 판단 기준
-                "actionPlan": result.get("action_plan", {}),  # 행동 계획
                 "scripts": result.get("scripts", {}),  # 말하기 템플릿
                 "classifiedType": result.get("classified_type", "unknown"),  # 분류 유형
                 "riskScore": float(result.get("risk_score", 0)),  # 위험도 점수
@@ -1517,15 +1499,22 @@ async def analyze_situation(
                 else:
                     criteria_items.append(criterion)
         
-        # actionPlan을 ActionPlan 모델로 변환
-        action_plan_dict = result.get("action_plan", {})
-        action_plan_model = None
-        if action_plan_dict and isinstance(action_plan_dict, dict) and action_plan_dict.get("steps"):
-            try:
-                action_plan_model = ActionPlan(**action_plan_dict)
-            except Exception as e:
-                _logger.warning(f"[analyze-situation] actionPlan 변환 실패: {str(e)}, 원본 사용: {action_plan_dict}")
-                action_plan_model = None
+        # summary에서 기본값 텍스트 제거
+        summary_text = result.get("summary", "")
+        default_texts = [
+            "관련 법령을 확인하여 현재 상황을 법적으로 평가해야 합니다.",
+            "해당 섹션 내용을 확인하는 중입니다."
+        ]
+        
+        # 각 섹션에서 기본값 텍스트만 있는 경우 해당 섹션 제거
+        import re
+        for default_text in default_texts:
+            # 섹션 헤더 다음에 기본값 텍스트만 있는 경우 (빈 줄 포함) 해당 섹션 전체 제거
+            # 패턴: ## 섹션제목\n\n기본값텍스트\n\n 또는 ## 섹션제목\n\n기본값텍스트\n## (다음 섹션)
+            pattern = rf'(##\s*[^\n]+\n\n){re.escape(default_text)}(\n\n|##|$)'
+            summary_text = re.sub(pattern, r'\2', summary_text, flags=re.MULTILINE)
+            # 연속된 빈 줄 정리
+            summary_text = re.sub(r'\n\n\n+', '\n\n', summary_text)
         
         response_dict = {
             "id": situation_analysis_id,  # DB 저장 후 ID 포함
@@ -1533,7 +1522,7 @@ async def analyze_situation(
             "riskLevel": risk_level,
             "tags": tags,
             "analysis": {
-                "summary": result.get("summary", ""),
+                "summary": summary_text,
                 "legalBasis": legal_basis,
                 "recommendations": recommendations[:5],  # 최대 5개
             },
@@ -1543,7 +1532,7 @@ async def analyze_situation(
             "sources": sources,  # RAG 검색 출처
             # 프론트엔드가 기대하는 추가 필드들 (이제 모델에 포함됨)
             "criteria": criteria_items,  # 법적 판단 기준
-            "actionPlan": action_plan_model,  # 행동 계획
+            "actionPlan": None,  # 더 이상 사용하지 않음
             "organizations": result.get("organizations", []),  # 추천 기관 목록
         }
         response = SituationResponseV2(**response_dict)
