@@ -1244,17 +1244,23 @@ export default function QuickAssistPage() {
   const handleSendMessage = async () => {
     const trimmedMessage = inputMessage.trim()
     
-    // 입력 검증
-    if (!trimmedMessage) {
+    // 파일이 선택되어 있으면 message는 선택사항 (빈 값이어도 됨)
+    const hasFile = selectedFile !== null
+    
+    // 입력 검증 (파일이 없을 때만 message 필수)
+    if (!hasFile && !trimmedMessage) {
       toast({
         title: '입력 필요',
-        description: '메시지를 입력해주세요.',
+        description: '메시지를 입력하거나 파일을 첨부해주세요.',
         variant: 'destructive',
       })
       return
     }
     
-    if (trimmedMessage.length < 5) {
+    // 파일이 있을 때는 message가 없어도 기본 메시지 사용
+    const messageToSend = trimmedMessage || (hasFile ? '이 계약서를 분석해주세요.' : '')
+    
+    if (!hasFile && messageToSend.length < 5) {
       toast({
         title: '입력이 너무 짧습니다',
         description: '최소 5자 이상 입력해주세요.',
@@ -1263,7 +1269,7 @@ export default function QuickAssistPage() {
       return
     }
     
-    if (trimmedMessage.length > 2000) {
+    if (messageToSend.length > 2000) {
       toast({
         title: '입력이 너무 깁니다',
         description: '최대 2000자까지 입력 가능합니다.',
@@ -1283,7 +1289,7 @@ export default function QuickAssistPage() {
     const userMessage: ChatMessage = {
       id: `msg-${Date.now()}`,
       role: 'user',
-      content: trimmedMessage,
+      content: hasFile ? `파일 업로드: ${selectedFile?.name}` : messageToSend,
       timestamp: new Date(),
     }
 
@@ -1346,8 +1352,117 @@ export default function QuickAssistPage() {
     try {
       let assistantMessage: ChatMessage
       
+      // 파일이 선택되어 있으면 contract 모드로 전송 (최우선)
+      if (hasFile && selectedFile) {
+        // contract 모드 - Agent API 사용
+        const { chatWithAgent } = await import('@/apis/legal.service')
+        
+        // 첫 요청인지 후속 요청인지 확인
+        const isFirstRequest = currentContext.type !== 'contract' || !currentContext.id
+        
+        let chatResult
+        if (isFirstRequest) {
+          // 첫 요청: mode=contract, message, file (필수), sessionId (선택)
+          chatResult = await chatWithAgent({
+            mode: 'contract',
+            message: messageToSend,
+            file: selectedFile,
+            ...(selectedConversationId && chatSessionId ? { sessionId: chatSessionId } : {}),
+          }, userId)
+          
+          // 파일 전송 후 선택 해제
+          setSelectedFile(null)
+          if (fileInputRef.current) {
+            fileInputRef.current.value = ''
+          }
+          
+          // 분석 결과를 컨텍스트로 설정
+          if (chatResult.contractAnalysisId) {
+            setCurrentContext({
+              type: 'contract',
+              id: chatResult.contractAnalysisId,
+              label: chatResult.contractAnalysis?.title || selectedFile.name,
+            })
+          }
+        } else {
+          // 후속 요청: mode=contract, message, contractAnalysisId (필수), sessionId (권장)
+          chatResult = await chatWithAgent({
+            mode: 'contract',
+            message: messageToSend,
+            contractAnalysisId: currentContext.id,
+            ...(selectedConversationId && chatSessionId ? { sessionId: chatSessionId } : {}),
+          }, userId)
+          
+          // 파일 전송 후 선택 해제
+          setSelectedFile(null)
+          if (fileInputRef.current) {
+            fileInputRef.current.value = ''
+          }
+        }
+        
+        // 세션 ID 업데이트
+        if (chatResult.sessionId) {
+          chatSessionId = chatResult.sessionId
+          const newSessionId = `session-${chatResult.sessionId}`
+          setSelectedConversationId(newSessionId)
+        }
+        
+        assistantMessage = {
+          id: `msg-${Date.now()}-assistant`,
+          role: 'assistant',
+          content: chatResult.answerMarkdown || '답변을 생성할 수 없습니다.',
+          timestamp: new Date(),
+          context_type: 'contract',
+          context_id: chatResult.contractAnalysisId || currentContext.id,
+        }
+        
+        // DB에 저장
+        if (userId && chatSessionId) {
+          try {
+            const dbMessages = await getChatMessages(chatSessionId, userId)
+            const maxSequenceNumber = dbMessages.length > 0 
+              ? Math.max(...dbMessages.map(m => m.sequence_number))
+              : -1
+            
+            const nextSequenceNumber = maxSequenceNumber + 1
+            
+            await saveChatMessage(
+              chatSessionId,
+              {
+                sender_type: 'user',
+                message: userMessage.content,
+                sequence_number: nextSequenceNumber,
+                context_type: 'contract',
+                context_id: chatResult.contractAnalysisId || currentContext.id,
+              },
+              userId
+            )
+            
+            await saveChatMessage(
+              chatSessionId,
+              {
+                sender_type: 'assistant',
+                message: assistantMessage.content,
+                sequence_number: nextSequenceNumber + 1,
+                context_type: 'contract',
+                context_id: chatResult.contractAnalysisId || currentContext.id,
+              },
+              userId
+            )
+          } catch (dbError) {
+            console.warn('새 테이블 메시지 저장 실패:', dbError)
+          }
+        }
+        
+        toast({
+          title: isFirstRequest ? '계약서 분석 완료' : '질문 전송 완료',
+          description: isFirstRequest 
+            ? '계약서가 분석되었습니다. 추가 질문을 해보세요.' 
+            : '질문이 전송되었습니다.',
+        })
+      }
       // 상황 분석 결과가 있으면 chatWithContractV2 사용 (컨텍스트 포함)
-      if (situationAnalysis && situationContext) {
+      else if (situationAnalysis && situationContext) {
         // 법적 관점 내용을 컨텍스트로 변환 (새로운 CriteriaItemV2 구조 사용)
         const legalContext = situationAnalysis.criteria
           .map((criterion, index) => {
@@ -1436,11 +1551,11 @@ export default function QuickAssistPage() {
           // 상황 분석 첫 요청 - Agent API 사용
           const chatResult = await chatWithAgent({
             mode: 'situation',
-            message: inputMessage.trim(), // 사용자가 수정한 메시지 사용
+            message: messageToSend,
             ...(selectedConversationId && chatSessionId ? { sessionId: chatSessionId } : {}),
             situationTemplateKey: selectedSituationPreset.category,
             situationForm: {
-              situation: inputMessage.trim(), // 사용자가 수정한 메시지 사용
+              situation: messageToSend,
               category: selectedSituationPreset.category,
               employmentType: selectedSituationPreset.employmentType,
               workPeriod: selectedSituationPreset.workPeriod,
@@ -1517,7 +1632,7 @@ export default function QuickAssistPage() {
           // 새 대화 시작 시 (selectedConversationId가 null) sessionId를 전달하지 않음
           const chatResult = await chatWithAgent({
             mode: 'situation',
-            message: inputMessage.trim(),
+            message: messageToSend,
             ...(selectedConversationId && chatSessionId ? { sessionId: chatSessionId } : {}),
             situationAnalysisId: currentContext.id, // 상황 분석 ID
           }, userId)
@@ -1578,13 +1693,14 @@ export default function QuickAssistPage() {
             }
           }
         } else if (currentContext.type === 'contract' && currentContext.id) {
-          // 계약서 분석 리포트를 컨텍스트로 사용하는 경우 - Agent API 사용
-          // 새 대화 시작 시 (selectedConversationId가 null) sessionId를 전달하지 않음
+          // 계약서 분석 리포트를 컨텍스트로 사용하는 경우 - Agent API 사용 (후속 요청)
+          // mode=contract, message, contractAnalysisId (필수), sessionId (권장)
+          const { chatWithAgent } = await import('@/apis/legal.service')
           const chatResult = await chatWithAgent({
             mode: 'contract',
-            message: inputMessage.trim(),
-            ...(selectedConversationId && chatSessionId ? { sessionId: chatSessionId } : {}),
+            message: messageToSend,
             contractAnalysisId: currentContext.id, // 계약서 분석 ID
+            ...(selectedConversationId && chatSessionId ? { sessionId: chatSessionId } : {}),
           }, userId)
           
           // 세션 ID 업데이트
@@ -1647,7 +1763,7 @@ export default function QuickAssistPage() {
           // 새 대화 시작 시 (selectedConversationId가 null) sessionId를 전달하지 않음
           const chatResult = await chatWithAgent({
             mode: 'plain',
-            message: inputMessage.trim(),
+            message: messageToSend,
             ...(selectedConversationId && chatSessionId ? { sessionId: chatSessionId } : {}),
           }, userId)
           
@@ -2642,9 +2758,8 @@ export default function QuickAssistPage() {
                   onChange={(e) => {
                     const file = e.target.files?.[0]
                     if (file) {
+                      // 파일만 선택하고 전송은 하지 않음 (전송 버튼 클릭 시 전송)
                       setSelectedFile(file)
-                      // 파일 선택 시 Agent API로 계약서 분석 시작
-                      handleFileUpload(file)
                     }
                   }}
                 />
