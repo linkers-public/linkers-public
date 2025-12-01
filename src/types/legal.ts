@@ -203,7 +203,7 @@ export interface OrganizationInfo {
   phone?: string
 }
 
-// CriteriaItemV2 타입 정의 (RAG 기반 구조)
+// CriteriaItemV2 타입 정의 (RAG 기반 구조) - 레거시 호환성 유지
 export interface CriteriaItemV2 {
   documentTitle: string; // 문서 제목
   fileUrl?: string | null; // 문서 파일 URL (Signed URL)
@@ -218,11 +218,29 @@ export interface CriteriaItemV2 {
   reason?: string; // 레거시: usageReason 대체
 }
 
+// Finding Source 타입 정의 (새로운 API 구조)
+export interface FindingSource {
+  documentTitle: string; // 참고 문서의 제목
+  fileUrl?: string; // 참고 문서를 열람할 수 있는 스토리지 URL
+  sourceType: string; // 참고 문서의 유형 (guideline, standard_contract, statute 등)
+  refinedSnippet: string; // 원문 청크를 다듬어 사람이 읽기 쉽게 정리한 문장
+  similarityScore: number; // 의미적 유사도 점수 (0~1)
+}
+
+// Finding 타입 정의 (새로운 API 구조)
+export interface Finding {
+  id: number | string; // 각 항목을 구분하기 위한 ID
+  title: string; // 사용자에게 보여줄 법적 쟁점/카테고리 이름
+  statusLabel: string; // 해당 쟁점이 현재 상황에 얼마나 해당하는지에 대한 한글 라벨
+  basisText: string; // 사용자의 실제 상황 설명과 참고 문서 내용을 종합해서 만든 '근거 문장'
+  source: FindingSource; // 이 finding을 판단할 때 참고한 문서와 관련 문장 정보
+}
+
 export interface SituationAnalysisResponse {
   classifiedType: SituationCategory
   riskScore: number // 0~100
   summary: string
-  criteria: CriteriaItemV2[] // 새로운 RAG 기반 구조 사용
+  findings?: Finding[] // 법적 판단 기준 (findings API 구조)
   actionPlan?: ActionPlan // 선택적 필드 (더 이상 사용하지 않음)
   scripts: Scripts
   relatedCases: RelatedCase[]

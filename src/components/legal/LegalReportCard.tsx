@@ -104,35 +104,30 @@ export function LegalReportCard({ analysisResult, onCopy }: LegalReportCardProps
   }
 
   /**
-   * 각 criterion에 대한 legalBasis 가져오기
-   * criterion에 legalBasis가 있으면 사용, 없으면 fallback으로 모든 sources 사용
+   * 각 finding에 대한 legalBasis 가져오기
+   * finding의 source를 LegalBasisDetail 형식으로 변환
    */
-  const getLegalBasisForCriterion = (criterionIndex: number): LegalBasisDetail[] => {
-    const criterion = analysisResult.criteria?.[criterionIndex]
-    if (!criterion) {
+  const getLegalBasisForFinding = (findingIndex: number): LegalBasisDetail[] => {
+    const finding = analysisResult.findings?.[findingIndex]
+    if (!finding || !finding.source) {
       return []
     }
     
-    // criterion에 legalBasis가 있으면 사용 (API 응답 구조: analysis.legalBasis가 criteria에 매핑됨)
-    if (criterion.legalBasis && Array.isArray(criterion.legalBasis) && criterion.legalBasis.length > 0) {
-      return criterion.legalBasis.map((basis: any) => ({
-        docId: basis.docId || '',
-        docTitle: basis.docTitle || basis.title || '',
-        docType: (basis.docType || basis.sourceType || 'law') as 'law' | 'manual' | 'case' | 'standard_contract',
-        chunkIndex: basis.chunkIndex,
-        article: basis.article,
-        snippet: basis.snippet || '',
-        snippetHighlight: basis.snippetHighlight,
-        reason: basis.reason || basis.status || '',
-        explanation: basis.explanation,
-        similarityScore: basis.similarityScore || 0,
-        fileUrl: basis.fileUrl,
-        externalId: basis.externalId,
-      }))
-    }
-    
-    // fallback: 모든 sources를 반환
-    return convertSourcesToLegalBasis(evidenceSources)
+    const source = finding.source
+    return [{
+      docId: '',
+      docTitle: source.documentTitle || '',
+      docType: (source.sourceType || 'law') as 'law' | 'manual' | 'case' | 'standard_contract',
+      chunkIndex: undefined,
+      article: undefined,
+      snippet: source.refinedSnippet || '',
+      snippetHighlight: undefined,
+      reason: finding.basisText || '',
+      explanation: undefined,
+      similarityScore: source.similarityScore || 0,
+      fileUrl: source.fileUrl,
+      externalId: undefined,
+    }]
   }
 
   return (
@@ -255,122 +250,168 @@ export function LegalReportCard({ analysisResult, onCopy }: LegalReportCardProps
            </div>
          )}
 
-        {/* 섹션 5: 법적 판단 기준 (새 API 형식) */}
-        {analysisResult.criteria && analysisResult.criteria.length > 0 && (
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 mb-2">
-              <Scale className="w-5 h-5 text-amber-600" />
-              <h3 className="text-lg font-bold text-slate-900">법적 판단 기준</h3>
-            </div>
-            <div className="space-y-3">
-              {analysisResult.criteria.map((criterion: any, idx: number) => {
-                // 새로운 API 형식: documentTitle, fileUrl, sourceType, similarityScore, snippet, usageReason
-                const documentTitle = criterion.documentTitle || criterion.name || '문서 제목 없음'
-                const fileUrl = criterion.fileUrl || null
-                const sourceType = criterion.sourceType || 'law'
-                const similarityScore = criterion.similarityScore || 0
-                const snippet = criterion.snippet || ''
-                const usageReason = criterion.usageReason || criterion.reason || ''
-                
-                // sourceType에 따른 라벨 및 아이콘
-                const getSourceTypeLabel = (type: string) => {
-                  switch (type) {
-                    case 'standard_contract':
-                      return '표준 계약서'
-                    case 'law':
-                      return '법령'
-                    case 'manual':
-                      return '가이드라인'
-                    case 'case':
-                      return '판례'
-                    default:
-                      return type
-                  }
-                }
-                
-                const getSourceTypeColor = (type: string) => {
-                  switch (type) {
-                    case 'standard_contract':
-                      return 'bg-blue-100 text-blue-800 border-blue-300'
-                    case 'law':
-                      return 'bg-purple-100 text-purple-800 border-purple-300'
-                    case 'manual':
-                      return 'bg-green-100 text-green-800 border-green-300'
-                    case 'case':
-                      return 'bg-orange-100 text-orange-800 border-orange-300'
-                    default:
-                      return 'bg-slate-100 text-slate-800 border-slate-300'
-                  }
-                }
-                
-                return (
-                  <div key={idx} className="bg-white border border-slate-200 rounded-lg p-4 hover:shadow-md transition-shadow">
-                    <div className="flex items-start gap-3">
-                      {/* 번호 뱃지 */}
-                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-slate-600 text-white font-bold text-sm flex items-center justify-center">
-                        {idx + 1}
-                      </div>
-                      
-                      <div className="flex-1 min-w-0">
-                        {/* 문서 제목 + 소스 타입 배지 */}
-                        <div className="flex items-center gap-2 mb-2 flex-wrap">
-                          <h4 className="font-semibold text-slate-900 flex-1 min-w-0 break-words">
-                            {documentTitle}
-                          </h4>
-                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border flex-shrink-0 ${getSourceTypeColor(sourceType)}`}>
-                            {getSourceTypeLabel(sourceType)}
-                          </span>
-                          {similarityScore > 0 && (
-                            <span className="text-xs text-slate-500 flex-shrink-0">
-                              유사도: {(similarityScore * 100).toFixed(1)}%
-                            </span>
-                          )}
+        {/* 섹션 5: 법적 판단 기준 (findings API 형식) */}
+        {(() => {
+          // 디버깅: findings 데이터 확인
+          console.log('[LegalReportCard] findings 확인:', {
+            'analysisResult.findings': analysisResult.findings,
+            'findings 존재': !!analysisResult.findings,
+            'findings.length': analysisResult.findings?.length,
+            '조건 만족': analysisResult.findings && analysisResult.findings.length > 0
+          })
+          
+          if (!analysisResult.findings || analysisResult.findings.length === 0) {
+            return null
+          }
+          
+          const findings = analysisResult.findings
+          
+          // sourceType에 따른 라벨 및 아이콘
+          const getSourceTypeLabel = (type: string) => {
+            switch (type) {
+              case 'standard_contract':
+                return '표준 계약서'
+              case 'statute':
+                return '법령'
+              case 'guideline':
+              case 'manual':
+                return '가이드라인'
+              case 'case':
+                return '판례'
+              case 'law':
+                return '법령'
+              default:
+                return type
+            }
+          }
+          
+          const getSourceTypeColor = (type: string) => {
+            switch (type) {
+              case 'standard_contract':
+                return 'bg-blue-100 text-blue-800 border-blue-300'
+              case 'statute':
+              case 'law':
+                return 'bg-purple-100 text-purple-800 border-purple-300'
+              case 'guideline':
+              case 'manual':
+                return 'bg-green-100 text-green-800 border-green-300'
+              case 'case':
+                return 'bg-orange-100 text-orange-800 border-orange-300'
+              default:
+                return 'bg-slate-100 text-slate-800 border-slate-300'
+            }
+          }
+          
+          const getStatusLabelColor = (statusLabel: string) => {
+            if (statusLabel.includes('충족') || statusLabel.includes('해당')) {
+              return 'bg-red-100 text-red-800 border-red-300'
+            } else if (statusLabel.includes('부분') || statusLabel.includes('추가')) {
+              return 'bg-yellow-100 text-yellow-800 border-yellow-300'
+            } else {
+              return 'bg-slate-100 text-slate-800 border-slate-300'
+            }
+          }
+          
+          return (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Scale className="w-5 h-5 text-amber-600" />
+                <h3 className="text-lg font-bold text-slate-900">법적 판단 기준</h3>
+              </div>
+              <div className="space-y-3">
+                {findings.map((finding: any, idx: number) => {
+                    const source = finding.source || {}
+                    const documentTitle = source.documentTitle || '문서 제목 없음'
+                    const fileUrl = source.fileUrl || null
+                    const sourceType = source.sourceType || 'law'
+                    const similarityScore = source.similarityScore || 0
+                    const refinedSnippet = source.refinedSnippet || ''
+                    const title = finding.title || ''
+                    const statusLabel = finding.statusLabel || ''
+                    const basisText = finding.basisText || ''
+                    
+                    return (
+                      <div key={finding.id || idx} className="bg-white border border-slate-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                        <div className="flex items-start gap-3">
+                          {/* 번호 뱃지 */}
+                          <div className="flex-shrink-0 w-8 h-8 rounded-full bg-slate-600 text-white font-bold text-sm flex items-center justify-center">
+                            {idx + 1}
+                          </div>
+                          
+                          <div className="flex-1 min-w-0">
+                            {/* 쟁점 제목 + 상태 라벨 */}
+                            <div className="flex items-center gap-2 mb-2 flex-wrap">
+                              <h4 className="font-semibold text-slate-900 flex-1 min-w-0 break-words">
+                                {title}
+                              </h4>
+                              {statusLabel && (
+                                <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border flex-shrink-0 ${getStatusLabelColor(statusLabel)}`}>
+                                  {statusLabel}
+                                </span>
+                              )}
+                            </div>
+                            
+                            {/* 근거 설명 (basisText) */}
+                            {basisText && basisText.trim() ? (
+                              <div className="mb-3">
+                                <p className="text-xs font-semibold text-slate-600 mb-1">판단 근거:</p>
+                                <p className="text-sm text-slate-700 leading-relaxed">
+                                  {basisText}
+                                </p>
+                              </div>
+                            ) : null}
+                            
+                            {/* 참고 문서 정보 */}
+                            <div className="mb-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
+                              <div className="flex items-center gap-2 mb-2 flex-wrap">
+                                <p className="text-xs font-semibold text-slate-600">참고 문서:</p>
+                                <span className={`px-2 py-0.5 rounded-full text-xs font-semibold border flex-shrink-0 ${getSourceTypeColor(sourceType)}`}>
+                                  {getSourceTypeLabel(sourceType)}
+                                </span>
+                                {similarityScore > 0 && (
+                                  <span className="text-xs text-slate-500 flex-shrink-0">
+                                    유사도: {(similarityScore * 100).toFixed(1)}%
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-sm font-medium text-slate-900 mb-2">{documentTitle}</p>
+                              
+                              {/* 관련 조항 (refinedSnippet) */}
+                              {refinedSnippet && refinedSnippet.trim() ? (
+                                <div className="mt-2 pt-2 border-t border-slate-200">
+                                  <p className="text-xs font-semibold text-slate-600 mb-1">관련 조항:</p>
+                                  <p className="text-sm text-slate-700 leading-relaxed">
+                                    {refinedSnippet}
+                                  </p>
+                                </div>
+                              ) : null}
+                            </div>
+                            
+                            {/* 문서보기 버튼 */}
+                            {fileUrl && (
+                              <div className="mt-3">
+                                <a
+                                  href={fileUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg shadow-sm transition-all hover:shadow-md"
+                                >
+                                  <FileText className="w-4 h-4" />
+                                  <span>문서보기</span>
+                                  <ExternalLink className="w-3 h-3" />
+                                </a>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                        
-                        {/* 사용 이유 (usageReason) */}
-                        {usageReason && usageReason.trim() ? (
-                          <div className="mb-3">
-                            <p className="text-xs font-semibold text-slate-600 mb-1">판단 근거:</p>
-                            <p className="text-sm text-slate-700 leading-relaxed">
-                              {usageReason}
-                            </p>
-                          </div>
-                        ) : null}
-                        
-                        {/* 스니펫 (snippet) */}
-                        {snippet && snippet.trim() ? (
-                          <div className="mb-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
-                            <p className="text-xs font-semibold text-slate-600 mb-1">관련 조항:</p>
-                            <p className="text-sm text-slate-700 leading-relaxed line-clamp-3">
-                              {snippet}
-                            </p>
-                          </div>
-                        ) : null}
-                        
-                        {/* 문서보기 버튼 */}
-                        {fileUrl && (
-                          <div className="mt-3">
-                            <a
-                              href={fileUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold rounded-lg shadow-sm transition-all hover:shadow-md"
-                            >
-                              <FileText className="w-4 h-4" />
-                              <span>문서보기</span>
-                              <ExternalLink className="w-3 h-3" />
-                            </a>
-                          </div>
-                        )}
                       </div>
-                    </div>
-                  </div>
-                )
-              })}
+                    )
+                  })}
+              </div>
+              <hr className="border-gray-200" />
             </div>
-            <hr className="border-gray-200" />
-          </div>
-        )}
+          )
+        })()}
 
         {/* 섹션 6: 참고 문헌 및 관련 사례 */}
         {((analysisResult.relatedCases && analysisResult.relatedCases.length > 0) || evidenceSources.length > 0) && (
@@ -533,16 +574,30 @@ export function LegalReportCard({ analysisResult, onCopy }: LegalReportCardProps
       )}
 
       {/* 법적 근거 모달 */}
-      {selectedCriterionIndex !== null && analysisResult.criteria && analysisResult.criteria[selectedCriterionIndex] && (
-        <LegalBasisModal
-          isOpen={selectedCriterionIndex !== null}
-          onClose={() => setSelectedCriterionIndex(null)}
-          issueTitle={analysisResult.criteria[selectedCriterionIndex].name || analysisResult.criteria[selectedCriterionIndex].documentTitle}
-          issueStatus={analysisResult.criteria[selectedCriterionIndex].status || 'unclear'}
-          detailSummary={analysisResult.criteria[selectedCriterionIndex].reason || analysisResult.criteria[selectedCriterionIndex].usageReason}
-          legalBasis={getLegalBasisForCriterion(selectedCriterionIndex)}
-        />
-      )}
+      {selectedCriterionIndex !== null && analysisResult.findings && analysisResult.findings[selectedCriterionIndex] && (() => {
+        const finding = analysisResult.findings![selectedCriterionIndex]
+        // statusLabel을 issueStatus 타입으로 변환
+        const statusLabel = finding.statusLabel || ''
+        let issueStatus: 'likely' | 'unclear' | 'unlikely' = 'unclear'
+        if (statusLabel.includes('충족') || statusLabel.includes('해당')) {
+          issueStatus = 'likely'
+        } else if (statusLabel.includes('부분') || statusLabel.includes('추가')) {
+          issueStatus = 'unclear'
+        } else {
+          issueStatus = 'unclear'
+        }
+        
+        return (
+          <LegalBasisModal
+            isOpen={selectedCriterionIndex !== null}
+            onClose={() => setSelectedCriterionIndex(null)}
+            issueTitle={finding.title}
+            issueStatus={issueStatus}
+            detailSummary={finding.basisText}
+            legalBasis={getLegalBasisForFinding(selectedCriterionIndex)}
+          />
+        )
+      })()}
     </Card>
   )
 }
