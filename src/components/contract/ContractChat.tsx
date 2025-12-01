@@ -78,6 +78,7 @@ export function ContractChat({
   const chatContainerRef = useRef<HTMLDivElement>(null)
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true)
   const [isUserScrolling, setIsUserScrolling] = useState(false)
+  const [sessionId, setSessionId] = useState<string | undefined>(undefined)
 
   // 분석 결과 기반 추천 질문 생성 (해커톤용 강화)
   const generateSuggestedQuestions = (): string[] => {
@@ -154,60 +155,32 @@ export function ContractChat({
     setChatLoading(true)
 
     try {
-      // 선택된 이슈 정보 가져오기
-      const selectedIssue = selectedIssueId 
-        ? analysisResult.issues.find(i => i.id === selectedIssueId)
-        : undefined
-
-      // 분석 요약 생성
-      const analysisSummary = `위험도: ${analysisResult.riskScore}점, 총 ${analysisResult.totalIssues}개 조항 발견. ${analysisResult.summary || ''}`
-
-      // v2 API 직접 호출 (Dual RAG 지원)
-      const { chatWithContractV2 } = await import('@/apis/legal.service')
+      // Agent API 호출
+      const { chatWithAgent } = await import('@/apis/legal.service')
       
-      // legalBasis 타입 변환 (string[] → LegalBasisItemV2[])
-      let legalBasisV2: any[] | undefined = undefined
-      if (selectedIssue?.legalBasis) {
-        // legalBasis가 string[]인 경우 LegalBasisItemV2[]로 변환
-        if (Array.isArray(selectedIssue.legalBasis)) {
-          if (selectedIssue.legalBasis.length > 0) {
-            // 첫 번째 요소가 string인지 객체인지 확인
-            if (typeof selectedIssue.legalBasis[0] === 'string') {
-              // string[] → LegalBasisItemV2[] 변환
-              legalBasisV2 = (selectedIssue.legalBasis as string[]).map((basis: string) => ({
-                title: basis,
-                snippet: basis,
-                sourceType: 'law',
-              }))
-            } else {
-              // 이미 LegalBasisItemV2[] 형식
-              legalBasisV2 = selectedIssue.legalBasis as any[]
-            }
-          }
-        }
+      // 사용자 ID 가져오기
+      const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client')
+      const supabase = createSupabaseBrowserClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      const userId = user?.id || null
+      
+      // docId를 contractAnalysisId로 사용 (이미 분석된 계약서)
+      const data = await chatWithAgent({
+        mode: 'contract',
+        message: query,
+        sessionId: sessionId,
+        contractAnalysisId: docId, // 이미 분석된 계약서의 ID
+      }, userId)
+      
+      // 세션 ID 저장
+      if (data.sessionId) {
+        setSessionId(data.sessionId)
       }
-      
-      const data = await chatWithContractV2({
-        query: query,
-        docIds: [docId],
-        selectedIssueId: selectedIssue?.id,
-        selectedIssue: selectedIssue ? {
-          category: selectedIssue.category,
-          summary: selectedIssue.summary,
-          severity: selectedIssue.severity,
-          originalText: selectedIssue.originalText,
-          legalBasis: legalBasisV2,
-        } : undefined,
-        analysisSummary: analysisSummary,
-        riskScore: analysisResult.riskScore,
-        totalIssues: analysisResult.totalIssues,
-        topK: 8,
-      })
       
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: data.answer || '답변을 생성할 수 없습니다.',
+        content: data.answerMarkdown || '답변을 생성할 수 없습니다.',
         timestamp: new Date(),
       }
       setMessages((prev) => [...prev, assistantMessage])
@@ -226,7 +199,7 @@ export function ContractChat({
     } finally {
       setChatLoading(false)
     }
-  }, [docId, selectedIssueId, analysisResult, inputMessage])
+  }, [docId, sessionId, inputMessage])
 
   // 재시도 함수
   const handleRetry = useCallback((originalQuery: string) => {

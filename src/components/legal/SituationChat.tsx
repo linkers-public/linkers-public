@@ -8,7 +8,6 @@ import { MarkdownRenderer } from '@/components/rag/MarkdownRenderer'
 import { SituationChatMessage } from './SituationChatMessage'
 import { cn } from '@/lib/utils'
 import type { SituationAnalysisResponse } from '@/types/legal'
-import { chatWithContractV2 } from '@/apis/legal.service'
 
 interface Message {
   id: string
@@ -124,6 +123,7 @@ export function SituationChat({
   const chatContainerRef = useRef<HTMLDivElement>(null)
   const [shouldAutoScroll, setShouldAutoScroll] = useState(true)
   const [isUserScrolling, setIsUserScrolling] = useState(false)
+  const [sessionId, setSessionId] = useState<string | undefined>(undefined)
 
   // 분석 결과 기반 추천 질문 생성
   const generateSuggestedQuestions = (): string[] => {
@@ -195,25 +195,32 @@ export function SituationChat({
     setChatLoading(true)
 
     try {
-      // 법적 관점 내용을 컨텍스트로 포함한 분석 요약 생성
-      const legalContext = getLegalContext()
-      const analysisSummary = `${legalContext}\n\n${situationSummary || ''}`
-
-      // v2 API 호출 (상황 분석 결과 기반)
-      // docIds는 비워두고, analysisSummary에 법적 관점 내용 포함
-      const data = await chatWithContractV2({
-        query: query,
-        docIds: [], // 상황 분석은 docId 없음
-        analysisSummary: analysisSummary,
-        riskScore: analysisResult.riskScore,
-        totalIssues: analysisResult.criteria?.length || 0,
-        topK: 8,
-      })
+      // Agent API 호출
+      const { chatWithAgent } = await import('@/apis/legal.service')
+      
+      // 사용자 ID 가져오기
+      const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client')
+      const supabase = createSupabaseBrowserClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      const userId = user?.id || null
+      
+      // analysisId를 situationAnalysisId로 사용 (이미 분석된 상황)
+      const data = await chatWithAgent({
+        mode: 'situation',
+        message: query,
+        sessionId: sessionId,
+        situationAnalysisId: analysisId || undefined, // 이미 분석된 상황의 ID
+      }, userId)
+      
+      // 세션 ID 저장
+      if (data.sessionId) {
+        setSessionId(data.sessionId)
+      }
       
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: data.answer || '답변을 생성할 수 없습니다.',
+        content: data.answerMarkdown || '답변을 생성할 수 없습니다.',
         timestamp: new Date(),
       }
       setMessages((prev) => [...prev, assistantMessage])
@@ -231,7 +238,7 @@ export function SituationChat({
     } finally {
       setChatLoading(false)
     }
-  }, [analysisResult, situationSummary, inputMessage])
+  }, [analysisId, sessionId, inputMessage])
 
   // 재시도 함수
   const handleRetry = useCallback((originalQuery: string) => {

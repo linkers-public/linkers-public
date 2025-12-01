@@ -2073,3 +2073,165 @@ export const deleteSituationEvidence = async (
   }
 }
 
+// ============================================================================
+// Agent 기반 통합 챗 API
+// ============================================================================
+
+export type AgentChatMode = 'plain' | 'contract' | 'situation'
+
+export interface AgentChatRequest {
+  mode: AgentChatMode
+  message: string
+  sessionId?: string
+  // contract 모드
+  file?: File
+  contractAnalysisId?: string
+  // situation 모드
+  situationTemplateKey?: string
+  situationForm?: {
+    situation: string
+    category?: string
+    employmentType?: string
+    workPeriod?: string
+    socialInsurance?: string[]
+  }
+  situationAnalysisId?: string
+}
+
+export interface UsedReportMeta {
+  type: 'contract' | 'situation'
+  analysisId: string
+  findingsIds?: string[]
+}
+
+export interface UsedSourceMeta {
+  documentTitle: string
+  fileUrl?: string
+  sourceType: string
+  similarityScore?: number
+}
+
+export interface ContractAnalysisSummary {
+  id: string
+  title?: string
+  riskScore?: number
+  riskLevel?: 'low' | 'medium' | 'high'
+  summary?: string
+}
+
+export interface SituationAnalysisSummary {
+  id: string
+  title?: string
+  riskScore?: number
+  riskLevel?: 'low' | 'medium' | 'high'
+  summary?: string
+}
+
+export interface AgentChatResponse {
+  sessionId: string
+  mode: AgentChatMode
+  contractAnalysisId?: string
+  situationAnalysisId?: string
+  answerMarkdown: string
+  usedReports: UsedReportMeta[]
+  usedSources: UsedSourceMeta[]
+  contractAnalysis?: ContractAnalysisSummary
+  situationAnalysis?: SituationAnalysisSummary
+}
+
+/**
+ * Agent 기반 통합 챗 API
+ */
+export const chatWithAgent = async (
+  request: AgentChatRequest,
+  userId?: string | null
+): Promise<AgentChatResponse> => {
+  try {
+    const url = `${LEGAL_API_BASE_V2}/agent/chat`
+    
+    // 인증 헤더 가져오기
+    const authHeaders = await getAuthHeaders()
+    
+    // FormData 생성
+    const formData = new FormData()
+    formData.append('mode', request.mode)
+    formData.append('message', request.message)
+    
+    if (request.sessionId) {
+      formData.append('sessionId', request.sessionId)
+    }
+    
+    // contract 모드 처리
+    if (request.mode === 'contract') {
+      if (request.file) {
+        // 첫 요청: 파일 업로드 (필수)
+        formData.append('file', request.file)
+      } else if (request.contractAnalysisId) {
+        // 후속 요청: 기존 분석 ID 사용
+        formData.append('contractAnalysisId', request.contractAnalysisId)
+      } else {
+        // 첫 요청인데 file이 없으면 에러
+        throw new Error('contract 모드 첫 요청 시 file이 필수입니다.')
+      }
+    }
+    
+    // situation 모드 처리
+    if (request.mode === 'situation') {
+      if (request.situationForm && request.situationTemplateKey) {
+        // 첫 요청: 상황 폼 제출
+        formData.append('situationTemplateKey', request.situationTemplateKey)
+        formData.append('situationForm', JSON.stringify(request.situationForm))
+      } else if (request.situationAnalysisId) {
+        // 후속 요청: 기존 분석 ID 사용
+        formData.append('situationAnalysisId', request.situationAnalysisId)
+      } else {
+        // 첫 요청인데 situationForm이 없으면 에러
+        throw new Error('situation 모드 첫 요청 시 situationTemplateKey와 situationForm이 필수입니다.')
+      }
+    }
+    
+    // FormData 전송 시 Content-Type은 브라우저가 자동으로 설정하므로 제거
+    const headersForFormData: Record<string, string> = {
+      ...(authHeaders as Record<string, string>),
+    }
+    delete headersForFormData['Content-Type']
+    
+    // X-User-Id 헤더 추가 (명세에 따라 필수)
+    if (userId !== undefined && userId !== null) {
+      headersForFormData['X-User-Id'] = userId
+    }
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: headersForFormData,
+      body: formData,
+    })
+    
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`Agent 챗 실패: ${response.status} - ${errorText}`)
+    }
+    
+    const data: AgentChatResponse = await response.json()
+    return data
+  } catch (error) {
+    console.error('Agent 챗 오류:', error)
+    
+    // Failed to fetch 오류인 경우 더 자세한 정보 제공
+    if (error instanceof TypeError && error.message === 'Failed to fetch') {
+      const backendUrl = `${BACKEND_API_URL}/api/v2/legal/agent/chat`
+      const detailedError = new Error(
+        `백엔드 서버에 연결할 수 없습니다. 다음을 확인해주세요:\n` +
+        `1. 백엔드 서버가 실행 중인지 확인 (${BACKEND_API_URL})\n` +
+        `2. 환경 변수 NEXT_PUBLIC_BACKEND_API_URL이 올바르게 설정되었는지 확인\n` +
+        `3. 네트워크 연결 상태 확인\n` +
+        `요청 URL: ${backendUrl}`
+      )
+      console.error('상세 오류 정보:', detailedError.message)
+      throw detailedError
+    }
+    
+    throw error
+  }
+}
+
