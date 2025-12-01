@@ -594,14 +594,56 @@ class SituationWorkflow:
                 
                 document_title = source.get("documentTitle", "").strip()
                 source_type = source.get("sourceType", "law")
+                refined_snippet = source.get("refinedSnippet", "").strip()
                 external_id = None
+                matched_chunk = None
                 
                 # grounding_chunks에서 해당 문서 찾아서 external_id 및 fileUrl 보완
+                # 매칭 우선순위: 1) 정확한 제목 매칭, 2) 부분 제목 매칭, 3) snippet 유사도 매칭
                 for chunk in grounding_chunks:
-                    if document_title and (chunk.title == document_title or document_title in chunk.title):
-                        external_id = getattr(chunk, 'external_id', None)
-                        source_type = chunk.source_type  # grounding_chunks의 source_type 사용
-                        if not source.get("fileUrl") and external_id:
+                    chunk_title = chunk.title.strip() if chunk.title else ""
+                    
+                    # 1. 정확한 제목 매칭
+                    if document_title and chunk_title == document_title:
+                        matched_chunk = chunk
+                        break
+                    
+                    # 2. 부분 제목 매칭 (양방향)
+                    if document_title and chunk_title:
+                        # documentTitle이 chunk.title에 포함되거나 그 반대
+                        if document_title in chunk_title or chunk_title in document_title:
+                            matched_chunk = chunk
+                            break
+                    
+                    # 3. snippet 유사도 매칭 (제목 매칭 실패 시)
+                    if refined_snippet and chunk.snippet:
+                        # snippet의 앞부분(50자)이 유사하면 매칭
+                        snippet_prefix = refined_snippet[:50].strip()
+                        chunk_snippet_prefix = chunk.snippet[:50].strip()
+                        if snippet_prefix and chunk_snippet_prefix:
+                            # 공통 단어가 3개 이상이면 매칭
+                            snippet_words = set(snippet_prefix.split())
+                            chunk_words = set(chunk_snippet_prefix.split())
+                            common_words = snippet_words & chunk_words
+                            if len(common_words) >= 3:
+                                matched_chunk = chunk
+                                break
+                
+                # 매칭된 chunk가 있으면 정보 보완
+                if matched_chunk:
+                    external_id = getattr(matched_chunk, 'external_id', None)
+                    source_type = matched_chunk.source_type  # grounding_chunks의 source_type 사용
+                    
+                    # fileUrl이 없거나 빈 문자열이면 생성 (relatedCases와 동일한 로직)
+                    current_file_url = source.get("fileUrl", "")
+                    if not current_file_url or current_file_url.strip() == "":
+                        # 1. 먼저 matched_chunk의 file_url 속성 사용 (legal_chunk로부터)
+                        chunk_file_url = getattr(matched_chunk, 'file_url', None)
+                        if chunk_file_url and chunk_file_url.strip():
+                            source["fileUrl"] = chunk_file_url
+                            logger.info(f"[워크플로우] finding[{idx}] fileUrl을 chunk.file_url에서 가져옴: {chunk_file_url[:50]}...")
+                        elif external_id:
+                            # 2. chunk에 file_url이 없으면 get_document_file_url 사용 (relatedCases와 동일)
                             try:
                                 from core.file_utils import get_document_file_url
                                 file_url = get_document_file_url(
@@ -609,17 +651,35 @@ class SituationWorkflow:
                                     source_type=source_type,
                                     expires_in=3600
                                 )
-                                source["fileUrl"] = file_url
-                                logger.debug(f"[워크플로우] finding[{idx}] fileUrl 생성: {file_url[:50]}...")
+                                if file_url:
+                                    source["fileUrl"] = file_url
+                                    logger.info(f"[워크플로우] finding[{idx}] fileUrl 생성 성공 (get_document_file_url): {file_url[:50]}...")
+                                else:
+                                    logger.warning(f"[워크플로우] finding[{idx}] fileUrl 생성 결과 None (external_id={external_id})")
                             except Exception as e:
                                 logger.warning(f"[워크플로우] finding[{idx}] source fileUrl 생성 실패: {str(e)}")
-                        # similarityScore가 없으면 chunk.score 사용
-                        if not source.get("similarityScore"):
-                            source["similarityScore"] = float(chunk.score)
-                        # refinedSnippet이 없으면 chunk.snippet 사용 (다듬지 않은 원문)
-                        if not source.get("refinedSnippet"):
-                            source["refinedSnippet"] = chunk.snippet
-                        break
+                    elif current_file_url and current_file_url.strip():
+                        logger.debug(f"[워크플로우] finding[{idx}] fileUrl 이미 존재: {current_file_url[:50]}...")
+                    
+                    # similarityScore가 없으면 chunk.score 사용
+                    if not source.get("similarityScore"):
+                        source["similarityScore"] = float(matched_chunk.score)
+                    
+                    # refinedSnippet이 없으면 chunk.snippet 사용 (다듬지 않은 원문)
+                    if not source.get("refinedSnippet") or source.get("refinedSnippet", "").strip() == "":
+                        source["refinedSnippet"] = matched_chunk.snippet
+                    
+                    # documentTitle이 없으면 chunk.title 사용
+                    if not document_title:
+                        source["documentTitle"] = matched_chunk.title
+                else:
+                    # 매칭 실패 시 로깅
+                    logger.warning(f"[워크플로우] finding[{idx}] grounding_chunks에서 매칭 실패 - documentTitle: '{document_title}', sourceType: '{source_type}'")
+                    logger.warning(f"[워크플로우] finding[{idx}] 사용 가능한 grounding_chunks 제목: {[chunk.title for chunk in grounding_chunks[:5]]}")
+                    
+                    # fileUrl이 없으면 빈 문자열로 설정 (None 방지)
+                    if not source.get("fileUrl"):
+                        source["fileUrl"] = ""
                 
                 # sourceType 매핑 (guideline -> manual, statute -> law)
                 if source.get("sourceType") == "guideline":
@@ -2088,30 +2148,64 @@ class SituationWorkflow:
         
         try:
             response = await self._call_llm(prompt)
-            # JSON 파싱하여 summary만 추출
-            try:
-                import json
+            
+            # 프롬프트는 마크다운 텍스트만 반환하도록 지시하므로, JSON 파싱 없이 응답을 그대로 사용
+            if response:
+                # 코드 블록 제거 (```markdown, ``` 등)
                 import re
-                json_match = re.search(r'\{.*\}', response, re.DOTALL)
+                response_clean = response.strip()
+                
+                # 마크다운 코드 블록 제거
+                if response_clean.startswith("```markdown"):
+                    response_clean = response_clean[11:]  # ```markdown 제거
+                elif response_clean.startswith("```"):
+                    response_clean = response_clean[3:]  # ``` 제거
+                
+                if response_clean.endswith("```"):
+                    response_clean = response_clean[:-3]  # 끝의 ``` 제거
+                
+                response_clean = response_clean.strip()
+                
+                # JSON 형식으로 잘못 반환된 경우 처리 (혹시 모를 경우 대비)
+                json_match = re.search(r'\{.*"summary".*\}', response_clean, re.DOTALL)
                 if json_match:
-                    result = json.loads(json_match.group())
-                    summary = result.get('summary', '')
-                    if summary:
-                        logger.info(f"[워크플로우] summary 생성 성공 - 길이: {len(summary)}자")
-                        return summary
+                    try:
+                        import json
+                        result = json.loads(json_match.group())
+                        summary = result.get('summary', '')
+                        if summary:
+                            logger.info(f"[워크플로우] summary JSON에서 추출 성공 - 길이: {len(summary)}자")
+                            return summary
+                    except json.JSONDecodeError:
+                        # JSON 파싱 실패 시 원본 응답 사용
+                        pass
+                
+                # 마크다운 텍스트로 반환 (기본 케이스)
+                if response_clean:
+                    # 4개 섹션이 모두 있는지 확인
+                    has_situation = "📊" in response_clean or "상황 분석" in response_clean
+                    has_legal = "⚖️" in response_clean or "법적 판단" in response_clean or "법적 관점" in response_clean
+                    has_scenario = "🔮" in response_clean or "예상 시나리오" in response_clean
+                    has_warning = "💡" in response_clean or "주의사항" in response_clean
+                    
+                    if has_situation and has_legal and (has_scenario or has_warning):
+                        logger.info(f"[워크플로우] summary 생성 성공 (마크다운) - 길이: {len(response_clean)}자")
+                        return response_clean
                     else:
-                        logger.warning("[워크플로우] summary 필드가 비어있음")
-            except json.JSONDecodeError as e:
-                logger.error(f"[워크플로우] summary JSON 파싱 실패: {e}")
-                logger.error(f"[워크플로우] LLM 응답 (처음 500자): {response[:500] if response else 'None'}")
-            except Exception as e:
-                logger.error(f"[워크플로우] summary 파싱 중 예외 발생: {e}", exc_info=True)
+                        logger.warning(f"[워크플로우] summary에 필수 섹션이 누락됨 - 상황: {has_situation}, 법적: {has_legal}, 시나리오: {has_scenario}, 주의: {has_warning}")
+                        logger.warning(f"[워크플로우] 응답 (처음 500자): {response_clean[:500]}")
+                else:
+                    logger.warning("[워크플로우] summary 응답이 비어있음")
+            else:
+                logger.warning("[워크플로우] LLM 응답이 None")
+                
         except Exception as e:
             logger.error(f"[워크플로우] summary LLM 호출 실패: {e}", exc_info=True)
             # LLM 호출 실패 시 기본 summary 반환 (4개 섹션 구조 유지)
             return "## 📊 상황 분석의 결과\n\n상황을 분석했습니다. 아래 법적 관점과 행동 가이드를 참고하세요.\n\n## ⚖️ 법적 관점에서 본 현재 상황\n\n관련 법령을 확인하는 중입니다.\n\n## 🎯 지금 당장 할 수 있는 행동\n\n- 상황을 다시 확인해주세요\n- 잠시 후 다시 시도해주세요\n\n## 💬 이렇게 말해보세요\n\n상담 기관에 문의하시기 바랍니다."
         
         # 파싱 실패 시 기본 summary 반환
+        logger.warning("[워크플로우] summary 생성 실패, 기본값 반환")
         return "## 📊 상황 분석의 결과\n\n상황을 분석했습니다. 아래 법적 관점과 행동 가이드를 참고하세요.\n\n## ⚖️ 법적 관점에서 본 현재 상황\n\n관련 법령을 확인하는 중입니다.\n\n## 🎯 지금 당장 할 수 있는 행동\n\n- 상황을 다시 확인해주세요\n- 잠시 후 다시 시도해주세요\n\n## 💬 이렇게 말해보세요\n\n상담 기관에 문의하시기 바랍니다."
     
     async def _llm_generate_findings(
