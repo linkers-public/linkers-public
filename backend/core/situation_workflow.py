@@ -276,6 +276,7 @@ class SituationWorkflow:
             "action_plan": normalized_result.get("action_plan", {"steps": []}),  # steps 구조
             "scripts": normalized_result.get("scripts", {}),  # toCompany, toAdvisor
             "criteria": normalized_result.get("criteria", []),  # name, status, reason
+            "findings": normalized_result.get("findings", []),  # 법적 쟁점 발견 항목
             "organizations": normalized_result.get("organizations", []),  # 추천 기관 목록
         }
     
@@ -289,6 +290,7 @@ class SituationWorkflow:
         action_plan = state.get("action_plan", {})
         scripts = state.get("scripts", {})
         criteria = state.get("criteria", [])
+        findings = state.get("findings", [])  # 법적 쟁점 발견 항목
         organizations = state.get("organizations", [])  # 추천 기관 목록
         summary_report = state.get("summary_report", "")  # generate_action_guide에서 생성됨
         legal_basis = state.get("legal_basis", [])  # legal_basis 정보 가져오기
@@ -468,11 +470,49 @@ class SituationWorkflow:
             }
             criteria_items.append(criteria_item)
         
+        # findings 처리: LLM이 생성한 findings를 그대로 사용하되, source 정보 보완
+        findings_processed = []
+        if findings:
+            for finding in findings:
+                if isinstance(finding, dict):
+                    # source 정보 보완 (fileUrl이 없으면 생성)
+                    source = finding.get("source", {})
+                    if isinstance(source, dict):
+                        document_title = source.get("documentTitle", "")
+                        source_type = source.get("sourceType", "law")
+                        external_id = None
+                        
+                        # grounding_chunks에서 해당 문서 찾아서 external_id 및 fileUrl 보완
+                        for chunk in grounding_chunks:
+                            if chunk.title == document_title or document_title in chunk.title:
+                                external_id = getattr(chunk, 'external_id', None)
+                                if not source.get("fileUrl") and external_id:
+                                    try:
+                                        from core.file_utils import get_document_file_url
+                                        file_url = get_document_file_url(
+                                            external_id=external_id,
+                                            source_type=source_type,
+                                            expires_in=3600
+                                        )
+                                        source["fileUrl"] = file_url
+                                    except Exception as e:
+                                        logger.warning(f"[워크플로우] finding source fileUrl 생성 실패: {str(e)}")
+                                break
+                        
+                        # sourceType 매핑 (guideline -> manual)
+                        if source.get("sourceType") == "guideline":
+                            source["sourceType"] = "manual"
+                        elif source.get("sourceType") == "statute":
+                            source["sourceType"] = "law"
+                    
+                    findings_processed.append(finding)
+        
         final_output = {
             "classified_type": classification.get("classified_type", "unknown"),
             "risk_score": classification.get("risk_score", 50),
             "summary": summary_report,  # generate_action_guide에서 생성된 4개 섹션 마크다운
             "criteria": criteria_items,  # RAG 검색 결과 기반 (새로운 구조)
+            "findings": findings_processed,  # 법적 쟁점 발견 항목
             "action_plan": action_plan,  # steps 구조
             "scripts": scripts,  # toCompany, toAdvisor
             "related_cases": formatted_related_cases,
@@ -942,7 +982,7 @@ class SituationWorkflow:
                 else:
                     action_plan_steps_count = 0
                 
-                logger.info(f"[워크플로우] 파싱된 action_result: summary 길이={len(result.get('summary', ''))}, criteria 개수={len(result.get('criteria', []))}, action_plan steps={action_plan_steps_count}")
+                logger.info(f"[워크플로우] 파싱된 action_result: summary 길이={len(result.get('summary', ''))}, criteria 개수={len(result.get('criteria', []))}, findings 개수={len(result.get('findings', []))}, action_plan steps={action_plan_steps_count}")
                 return result
             except json.JSONDecodeError as e:
                 logger.error(f"[워크플로우] JSON 파싱 실패: {str(e)}")
@@ -1548,7 +1588,92 @@ class SituationWorkflow:
         result["action_plan"] = action_plan
         result["scripts"] = validated_scripts
         
-        # 3. organizations 검증 및 정규화
+        # 3. findings 검증 및 정규화
+        findings = result.get("findings", [])
+        logger.info(f"[워크플로우] findings 원본 개수: {len(findings) if isinstance(findings, list) else 0}")
+        if findings and isinstance(findings, list):
+            validated_findings = []
+            for idx, finding in enumerate(findings):
+                if not isinstance(finding, dict):
+                    logger.debug(f"[워크플로우] finding[{idx}]이 dict가 아님: {type(finding)}")
+                    continue
+                
+                # 필수 필드 검증
+                id_val = finding.get("id")
+                title = finding.get("title", "").strip()
+                status_label = finding.get("statusLabel", "").strip()
+                basis_text = finding.get("basisText", "").strip()
+                source = finding.get("source", {})
+                
+                logger.debug(f"[워크플로우] finding[{idx}] 검증 시작: title={title[:30] if title else '(없음)'}, statusLabel={status_label}, basisText 길이={len(basis_text)}")
+                
+                # source 검증 (basisText 보완을 위해 먼저 확인)
+                if not isinstance(source, dict):
+                    logger.debug(f"[워크플로우] finding[{idx}] source가 dict가 아님: {type(source)}")
+                    source = {}
+                
+                # source 필수 필드 검증
+                document_title = source.get("documentTitle", "").strip()
+                source_type = source.get("sourceType", "law").strip()
+                refined_snippet = source.get("refinedSnippet", "").strip()
+                # refinedSnippet이 없으면 snippet을 사용 (fallback)
+                if not refined_snippet:
+                    refined_snippet = source.get("snippet", "").strip()
+                similarity_score = source.get("similarityScore", 0.0)
+                
+                logger.debug(f"[워크플로우] finding[{idx}] source 필드: documentTitle={document_title[:30] if document_title else '(없음)'}, refinedSnippet 길이={len(refined_snippet)}")
+                
+                # documentTitle이 없으면 title을 사용 (fallback)
+                if not document_title:
+                    document_title = source.get("title", "").strip()
+                
+                # source 필수 필드가 없으면 제외
+                if not document_title or not refined_snippet:
+                    logger.warning(f"[워크플로우] finding[{idx}] source 필수 필드 누락으로 제외: documentTitle={bool(document_title)}, refinedSnippet={bool(refined_snippet)}, finding={finding}")
+                    continue
+                
+                # basisText에 "{documentTitle}에 따르면" 포함 여부 확인 및 보완
+                if document_title:
+                    # "에 따르면" 패턴 확인
+                    if "에 따르면" not in basis_text:
+                        # basisText 시작 부분에 "{documentTitle}에 따르면" 추가
+                        if basis_text:
+                            basis_text = f"{document_title}에 따르면, {basis_text}"
+                        else:
+                            basis_text = f"{document_title}에 따르면, 관련 법적 기준에 부합할 수 있습니다."
+                        logger.debug(f"[워크플로우] basisText에 '{document_title}에 따르면' 추가: {basis_text[:100]}...")
+                    # "{documentTitle}에 따르면"이 있지만 documentTitle이 포함되지 않은 경우 보완
+                    elif document_title not in basis_text:
+                        # 기존 "에 따르면" 앞에 documentTitle 추가
+                        basis_text = basis_text.replace("에 따르면", f"{document_title}에 따르면", 1)
+                        logger.debug(f"[워크플로우] basisText에 documentTitle 추가: {basis_text[:100]}...")
+                
+                # 필수 필드가 없으면 제외
+                if not title or not status_label or not basis_text:
+                    logger.debug(f"[워크플로우] 필수 필드가 없는 finding 제외: {finding}")
+                    continue
+                
+                validated_findings.append({
+                    "id": id_val if id_val is not None else len(validated_findings) + 1,
+                    "title": title,
+                    "statusLabel": status_label,
+                    "basisText": basis_text,
+                    "source": {
+                        "documentTitle": document_title,
+                        "fileUrl": source.get("fileUrl"),  # 선택적 필드
+                        "sourceType": source_type,
+                        "refinedSnippet": refined_snippet,
+                        "similarityScore": float(similarity_score) if similarity_score else 0.0,
+                    }
+                })
+            
+            result["findings"] = validated_findings
+            logger.info(f"[워크플로우] findings 검증 완료: {len(validated_findings)}개 (원본 {len(findings)}개 중)")
+        else:
+            result["findings"] = []
+            logger.warning(f"[워크플로우] findings가 없거나 유효하지 않음: findings 타입={type(findings)}, 값={findings}")
+        
+        # 4. organizations 검증 및 정규화
         organizations = result.get("organizations", [])
         if not organizations or len(organizations) == 0:
             logger.warning("[워크플로우] organizations가 비어있습니다. 기본 organizations 생성")

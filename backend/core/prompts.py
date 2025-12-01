@@ -1430,6 +1430,21 @@ def build_situation_action_guide_prompt(
             "requiredDocs": ["근로계약서", "문자/카톡 대화", "기타 증거 자료"],
             "legalBasis": "노무사법: 근로 분쟁 전문 법률 서비스"
         }}
+    ],
+    "findings": [
+        {{
+            "id": 1,
+            "title": "법적 쟁점/카테고리 이름 (예: '직장 내 괴롭힘', '임금 체불', '부당해고')",
+            "statusLabel": "충족|부분 해당|추가 확인 필요",
+            "basisText": "사용자의 실제 상황 설명과 참고 문서 내용을 종합해서 만든 근거 문장. 왜 이 항목이 문제인지, 어떤 점이 법적 기준에 부합하는지를 한두 문장으로 정리",
+            "source": {{
+                "documentTitle": "참고 문서의 제목",
+                "fileUrl": "문서 파일 URL (있는 경우)",
+                "sourceType": "guideline|standard_contract|statute",
+                "refinedSnippet": "RAG로 찾은 원문 청크를 문장 부호·띄어쓰기·어색한 표현을 다듬어 사람이 읽기 쉽게 정리한 문장. 내용과 뉘앙스는 원문과 최대한 동일하게 유지",
+                "similarityScore": 0.81
+            }}
+        }}
     ]
 }}
 
@@ -1820,6 +1835,20 @@ summary 필드는 반드시 다음 4개 섹션을 순서대로 포함한 마크�
   - "unlikely": 해당 기준이 충족되지 않는 경우 (법적 요건을 만족하지 않음)
 - 3~5개 정도로 구성하세요.
 - 각 criteria는 제공된 상황과 관련 법령을 바탕으로 구체적인 판단 기준을 제시해야 합니다.
+
+4. **findings 필드 (필수):**
+   - 법적 쟁점 발견 항목을 생성하세요. criteria와 유사하지만 더 구조화된 형태입니다.
+   - 각 finding은 {{"id": 1, "title": "법적 쟁점명", "statusLabel": "충족|부분 해당|추가 확인 필요", "basisText": "근거 문장", "source": {{"documentTitle": "...", "fileUrl": "...", "sourceType": "...", "refinedSnippet": "...", "similarityScore": 0.81}}}} 형태입니다.
+   - **title**: 사용자에게 보여줄 법적 쟁점/카테고리 이름 (예: "직장 내 괴롭힘", "임금 체불", "부당해고")
+   - **statusLabel**: 해당 쟁점이 현재 상황에 얼마나 해당하는지에 대한 한글 라벨 (예: "충족", "부분 해당", "추가 확인 필요")
+   - **basisText**: **⚠️ 매우 중요: 반드시 "{{documentTitle}}에 따르면"으로 시작해야 합니다.** 사용자의 실제 상황 설명과 참고 문서 내용을 종합해서 만든 근거 문장. 왜 이 항목이 문제인지, 어떤 점이 법적 기준에 부합하는지를 한두 문장으로 정리. 예: "직장 내 괴롭힘 판단 및 예방 대응 매뉴얼.pdf에 따르면, 반복적인 사적 심부름 지시와 업무능력을 부당하게 깎아내리는 발언은 직장 내 괴롭힘에 해당할 수 있으며, 사용자님의 현재 상황도 이에 상당 부분 부합합니다."
+   - **source.documentTitle**: 참고 문서의 제목
+   - **source.fileUrl**: 참고 문서를 열람할 수 있는 스토리지 URL (있는 경우)
+   - **source.sourceType**: 참고 문서의 유형 (예: "guideline", "standard_contract", "statute")
+   - **source.refinedSnippet**: RAG로 찾은 원문 청크(rawSnippet)를 문장 부호·띄어쓰기·어색한 표현을 다듬어 사람이 읽기 쉽게 정리한 문장. 내용과 뉘앙스는 원문과 최대한 동일하게 유지
+   - **source.similarityScore**: 사용자 상황/질문과 이 문서 조각의 의미적 유사도 점수 (0~1)
+   - 3~5개 정도로 구성하세요.
+   - criteria와 유사하지만, findings는 더 사용자 친화적인 형태로 구조화되어 있습니다.
 
 **organizations 필드 (필수):**
 - 상황 유형에 맞는 추천 기관 목록을 생성하세요.

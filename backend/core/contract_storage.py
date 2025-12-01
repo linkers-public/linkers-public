@@ -754,25 +754,23 @@ class ContractStorageService:
             elif not isinstance(criteria, list):
                 criteria = []
             
+            # findings 가져오기
+            findings = analysis_data.get("findings", [])
+            if not isinstance(findings, list):
+                findings = []
+            
+            # organizations 가져오기
+            organizations = analysis_data.get("organizations", [])
+            if not isinstance(organizations, list):
+                organizations = []
+            
             # 디버깅: criteria 확인
             import logging
             logger = logging.getLogger(__name__)
             logger.info(f"[get_situation_analysis] analysis_data 키: {list(analysis_data.keys()) if isinstance(analysis_data, dict) else 'Not a dict'}")
             logger.info(f"[get_situation_analysis] criteria 개수: {len(criteria) if isinstance(criteria, list) else 0}")
-            logger.info(f"[get_situation_analysis] criteria 내용: {criteria}")
-            logger.info(f"[get_situation_analysis] criteria 타입: {type(criteria)}")
-            
-            # legalBasis는 criteria에서 변환 (레거시 호환성)
-            legal_basis = []
-            if criteria and len(criteria) > 0:
-                for criterion in criteria:
-                    legal_basis.append({
-                        "title": criterion.get("name", ""),
-                        "snippet": criterion.get("reason", ""),
-                        "status": criterion.get("status", "likely"),
-                    })
-            elif analysis_data.get("legalBasis"):
-                legal_basis = analysis_data.get("legalBasis", [])
+            logger.info(f"[get_situation_analysis] findings 개수: {len(findings) if isinstance(findings, list) else 0}")
+            logger.info(f"[get_situation_analysis] organizations 개수: {len(organizations) if isinstance(organizations, list) else 0}")
             
             # recommendations는 actionPlan에서 추출 (레거시 호환성)
             recommendations = []
@@ -793,15 +791,16 @@ class ContractStorageService:
                 "tags": [classified_type or analysis.get("category", "unknown")],
                 "analysis": {
                     "summary": summary,
-                    "legalBasis": legal_basis,
                     "recommendations": recommendations,
                 },
                 "criteria": criteria,  # 최상위 레벨에 criteria 추가 (프론트엔드가 기대하는 구조)
+                "findings": findings,  # 최상위 레벨에 findings 추가
                 "actionPlan": action_plan,  # 최상위 레벨에 actionPlan 추가
                 "sources": sources,  # 최상위 레벨에 sources 추가
                 "checklist": analysis.get("checklist", []),
                 "relatedCases": related_cases,  # analysis JSONB 또는 별도 필드에서 가져온 값
                 "scripts": scripts,  # scripts 추가
+                "organizations": organizations,  # 최상위 레벨에 organizations 추가
                 "created_at": analysis.get("created_at"),
             }
         except Exception as e:

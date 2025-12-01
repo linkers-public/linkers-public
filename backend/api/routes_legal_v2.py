@@ -1269,11 +1269,6 @@ async def analyze_situation(
         elif result["risk_score"] >= 40:
             risk_level = "medium"
         
-        # legalBasis는 더 이상 criteria에서 추출하지 않음
-        # criteria가 이미 RAG 검색 결과 기반 구조이므로 legalBasis는 빈 배열로 설정
-        # (하위 호환성을 위해 유지하되, 실제로는 criteria를 사용)
-        legal_basis = []
-        
         # action_plan, checklist, recommendations는 더 이상 사용하지 않음
         checklist = []
         recommendations = []
@@ -1562,6 +1557,7 @@ async def analyze_situation(
                 "summary": analysis_summary,
                 "sources": sources,  # RAG 검색 출처
                 "criteria": result.get("criteria", []),  # 법적 판단 기준
+                "findings": result.get("findings", []),  # 법적 쟁점 발견 항목
                 "scripts": result.get("scripts", {}),  # 말하기 템플릿
                 "relatedCases": related_cases,  # 관련 사례 (문서 단위로 그룹핑됨)
                 "classifiedType": result.get("classified_type", "unknown"),  # 분류 유형
@@ -1647,7 +1643,6 @@ async def analyze_situation(
             "tags": tags,
             "analysis": {
                 "summary": result.get("summary", ""),
-                "legalBasis": legal_basis,
                 "recommendations": [],  # 더 이상 사용하지 않음
             },
             "checklist": [],  # 더 이상 사용하지 않음
@@ -1656,6 +1651,7 @@ async def analyze_situation(
             "sources": sources,  # RAG 검색 출처
             # 프론트엔드가 기대하는 추가 필드들 (이제 모델에 포함됨)
             "criteria": criteria_items,  # 법적 판단 기준 (RAG 검색 결과 기반)
+            "findings": result.get("findings", []),  # 법적 쟁점 발견 항목
             "actionPlan": None,  # 더 이상 사용하지 않음
             "organizations": result.get("organizations", []),  # 추천 기관 목록
         }
@@ -1774,7 +1770,6 @@ async def get_chat_sessions(
 ):
     """
     사용자의 챗 세션 목록 조회
->>>>>>> 1f335a0c7d26807d74acf6d6ded6fa42c6a5d750
     """
     try:
         storage_service = get_storage_service()
@@ -1931,124 +1926,6 @@ async def delete_chat_session(
         )
 
 
-@router.post("/chat/sessions", response_model=dict)
-async def create_chat_session(
-    payload: CreateChatSessionRequest,
-    x_user_id: Optional[str] = Header(None, alias="X-User-Id", description="사용자 ID"),
-):
-    """
-    새로운 채팅 세션 생성
-    """
-    if not x_user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="사용자 ID가 필요합니다",
-        )
-    
-    try:
-        storage_service = get_storage_service()
-        session_id = await storage_service.create_chat_session(
-            user_id=x_user_id,
-            initial_context_type=payload.initial_context_type,
-            initial_context_id=payload.initial_context_id,
-            title=payload.title,
-        )
-        return {"id": session_id, "success": True}
-    except Exception as e:
-        logger.error(f"채팅 세션 생성 중 오류 발생: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"채팅 세션 생성 중 오류가 발생했습니다: {str(e)}",
-        )
-
-
-@router.post("/chat/messages", response_model=dict)
-async def save_chat_message(
-    payload: ChatMessageRequest,
-    x_user_id: Optional[str] = Header(None, alias="X-User-Id", description="사용자 ID"),
-):
-    """
-    채팅 메시지 저장
-    """
-    if not x_user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="사용자 ID가 필요합니다",
-        )
-    
-    try:
-        storage_service = get_storage_service()
-        message_id = await storage_service.save_chat_message(
-            session_id=payload.session_id,
-            user_id=x_user_id,
-            message=payload.message,
-            sender_type=payload.sender_type,
-            sequence_number=payload.sequence_number,
-            context_type=payload.context_type,
-            context_id=payload.context_id,
-            metadata=payload.metadata,
-        )
-        return {"id": message_id, "success": True}
-    except Exception as e:
-        logger.error(f"채팅 메시지 저장 중 오류 발생: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"채팅 메시지 저장 중 오류가 발생했습니다: {str(e)}",
-        )
-
-
-@router.get("/chat/sessions", response_model=List[dict])
-async def get_user_chat_sessions(
-    limit: int = 50,
-    offset: int = 0,
-    x_user_id: Optional[str] = Header(None, alias="X-User-Id", description="사용자 ID"),
-):
-    """
-    사용자의 채팅 세션 목록 조회
-    """
-    if not x_user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="사용자 ID가 필요합니다",
-        )
-    
-    try:
-        storage_service = get_storage_service()
-        sessions = await storage_service.get_user_chat_sessions(
-            user_id=x_user_id,
-            limit=limit,
-            offset=offset,
-        )
-        return sessions
-    except Exception as e:
-        logger.error(f"채팅 세션 목록 조회 중 오류 발생: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"채팅 세션 목록 조회 중 오류가 발생했습니다: {str(e)}",
-        )
-
-
-@router.get("/chat/sessions/{session_id}/messages", response_model=List[dict])
-async def get_chat_messages(
-    session_id: str,
-    x_user_id: Optional[str] = Header(None, alias="X-User-Id", description="사용자 ID"),
-):
-    """
-    채팅 메시지 조회
-    """
-    try:
-        storage_service = get_storage_service()
-        messages = await storage_service.get_chat_messages(
-            session_id=session_id,
-            user_id=x_user_id,
-        )
-        return messages
-    except Exception as e:
-        logger.error(f"채팅 메시지 조회 중 오류 발생: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"채팅 메시지 조회 중 오류가 발생했습니다: {str(e)}",
-        )
 
 
 @router.post("/chat", response_model=LegalChatResponseV2)
