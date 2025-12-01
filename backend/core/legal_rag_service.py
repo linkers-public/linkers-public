@@ -2417,7 +2417,16 @@ class LegalRAGService:
                 "summary": "LLM 분석이 비활성화되어 있습니다. RAG 검색 결과만 제공됩니다.",
                 "criteria": [],
                 "action_plan": {"steps": []},
-                "scripts": {},
+                "scripts": {
+                    "to_company": {
+                        "subject": "근로계약 관련 확인 요청",
+                        "body": "상황을 분석한 결과, 관련 법령 및 표준계약서를 참고하여 확인이 필요합니다. 자세한 내용은 상담 기관에 문의하시기 바랍니다."
+                    },
+                    "to_advisor": {
+                        "subject": "노무 상담 요청",
+                        "body": "근로 관련 문제로 상담을 받고자 합니다. 상황에 대한 자세한 내용은 상담 시 말씀드리겠습니다."
+                    }
+                },
                 "related_cases": [],
                 "grounding_chunks": grounding_chunks,  # RAG 검색 결과는 포함
             }
@@ -2688,6 +2697,56 @@ class LegalRAGService:
                     
                     summary = summary.strip()
                 
+                # scripts 변환 (레거시 형식 지원)
+                scripts_raw = diagnosis.get("scripts", {})
+                scripts = {}
+                if isinstance(scripts_raw, dict):
+                    # to_company 변환
+                    to_company_raw = scripts_raw.get("to_company", {})
+                    if isinstance(to_company_raw, str):
+                        # 레거시 형식 (문자열)
+                        scripts["to_company"] = {
+                            "subject": "근로계약 관련 확인 요청",
+                            "body": to_company_raw[:200] if len(to_company_raw) > 200 else to_company_raw
+                        }
+                    elif isinstance(to_company_raw, dict) and "subject" in to_company_raw and "body" in to_company_raw:
+                        # 새로운 형식
+                        scripts["to_company"] = to_company_raw
+                    else:
+                        scripts["to_company"] = {
+                            "subject": "근로계약 관련 확인 요청",
+                            "body": ""
+                        }
+                    
+                    # to_advisor 변환
+                    to_advisor_raw = scripts_raw.get("to_advisor", {})
+                    if isinstance(to_advisor_raw, str):
+                        # 레거시 형식 (문자열)
+                        scripts["to_advisor"] = {
+                            "subject": "노무 상담 요청",
+                            "body": to_advisor_raw[:200] if len(to_advisor_raw) > 200 else to_advisor_raw
+                        }
+                    elif isinstance(to_advisor_raw, dict) and "subject" in to_advisor_raw and "body" in to_advisor_raw:
+                        # 새로운 형식
+                        scripts["to_advisor"] = to_advisor_raw
+                    else:
+                        scripts["to_advisor"] = {
+                            "subject": "노무 상담 요청",
+                            "body": ""
+                        }
+                else:
+                    # scripts가 없거나 잘못된 형식
+                    scripts = {
+                        "to_company": {
+                            "subject": "근로계약 관련 확인 요청",
+                            "body": ""
+                        },
+                        "to_advisor": {
+                            "subject": "노무 상담 요청",
+                            "body": ""
+                        }
+                    }
+                
                 # 응답 형식 변환
                 return {
                     "classified_type": diagnosis.get("classified_type", category_hint),
@@ -2695,7 +2754,7 @@ class LegalRAGService:
                     "summary": summary,
                     "criteria": diagnosis.get("criteria", []),
                     "action_plan": diagnosis.get("action_plan", {"steps": []}),
-                    "scripts": diagnosis.get("scripts", {}),
+                    "scripts": scripts,
                     "related_cases": [],  # 나중에 추가됨
                 }
             except json.JSONDecodeError as e:
@@ -2714,12 +2773,21 @@ class LegalRAGService:
         
         # LLM 호출 실패 시 기본 응답 (grounding_chunks 포함)
         return {
-            "classified_type": category_hint,
+            "classified_type": category_hint or "unknown",
             "risk_score": 50,
             "summary": "진단을 생성하는 중 오류가 발생했습니다. 다시 시도해주세요.",
             "criteria": [],
             "action_plan": {"steps": []},
-            "scripts": {},
+            "scripts": {
+                "to_company": {
+                    "subject": "근로계약 관련 확인 요청",
+                    "body": "상황을 분석한 결과, 관련 법령 및 표준계약서를 참고하여 확인이 필요합니다. 자세한 내용은 상담 기관에 문의하시기 바랍니다."
+                },
+                "to_advisor": {
+                    "subject": "노무 상담 요청",
+                    "body": "근로 관련 문제로 상담을 받고자 합니다. 상황에 대한 자세한 내용은 상담 시 말씀드리겠습니다."
+                }
+            },
             "related_cases": [],
             "grounding_chunks": grounding_chunks,  # RAG 검색 결과는 포함
         }
