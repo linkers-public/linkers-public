@@ -5,7 +5,7 @@ Legal RAG API Routes v2
 
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, status, Query, Header
 from fastapi.responses import StreamingResponse, RedirectResponse
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 import tempfile
 import os
 import logging
@@ -2221,4 +2221,554 @@ async def get_legal_file(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"파일 서빙 중 오류가 발생했습니다: {str(e)}"
         )
+
+
+# ============================================================================
+# Agent 기반 통합 챗 API
+# ============================================================================
+
+@router.post(
+    "/agent/chat",
+    response_model=LegalChatAgentResponse,
+    summary="Agent 기반 통합 법률 상담 챗 (일반/계약/상황)"
+)
+async def legal_chat_agent(
+    mode: LegalChatMode = Form(..., description="plain | contract | situation"),
+    message: str = Form(..., description="사용자 질문 텍스트"),
+    session_id: Optional[str] = Form(None, alias="sessionId", description="기존 legal_chat_sessions.id"),
+    contract_analysis_id: Optional[str] = Form(None, alias="contractAnalysisId"),
+    situation_analysis_id: Optional[str] = Form(None, alias="situationAnalysisId"),
+    situation_template_key: Optional[str] = Form(None, alias="situationTemplateKey"),
+    situation_form_json: Optional[str] = Form(None, alias="situationForm", description="상황 분석용 폼 데이터 JSON 문자열"),
+    file: Optional[UploadFile] = File(None, description="계약서 분석용 파일 (PDF/HWPX/이미지 등)"),
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id", description="사용자 ID"),
+):
+    """
+    Agent 기반 통합 챗 엔드포인트
+    
+    - mode=plain: 일반 Q&A
+    - mode=contract: 계약서 파일 기반 분석 + 챗
+    - mode=situation: 폼 기반 상황분석 + 유사케이스 + 챗
+    """
+    import json
+    from uuid import UUID
+    
+    if not x_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="사용자 ID가 필요합니다. X-User-Id 헤더를 제공해주세요.",
+        )
+    
+    user_id = x_user_id
+    storage_service = get_storage_service()
+    legal_service = get_legal_service()
+    
+    # ---------- 1. 세션 로드 or 생성 ----------
+    if session_id:
+        session = await storage_service.get_chat_session(session_id, user_id)
+        if not session:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Chat session not found",
+            )
+    else:
+        session_id = await storage_service.create_chat_session(
+            user_id=user_id,
+            initial_context_type="none",
+            initial_context_id=None,
+        )
+    
+    # ---------- 2. 모드별 컨텍스트 준비 ----------
+    contract_analysis = None
+    situation_analysis = None
+    used_reports: List[UsedReportMeta] = []
+    used_sources: List[UsedSourceMeta] = []
+    
+    # 상황 폼 JSON 파싱
+    situation_form: Optional[Dict[str, Any]] = None
+    if situation_form_json:
+        try:
+            situation_form = json.loads(situation_form_json)
+        except json.JSONDecodeError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid situationForm JSON",
+            )
+    
+    # 2-1. 계약 모드
+    if mode == LegalChatMode.contract:
+        # 최초 요청: 파일 포함 → 분석 실행
+        if contract_analysis_id is None and file is not None:
+            # 기존 analyze_contract 엔드포인트 로직 재사용
+            logger.info(f"[Agent Chat] 계약서 분석 시작: file={file.filename}")
+            
+            # 임시 파일 저장
+            suffix = Path(file.filename).suffix if file.filename else ".tmp"
+            temp_file = tempfile.NamedTemporaryFile(
+                delete=False,
+                suffix=suffix,
+                dir=TEMP_DIR
+            )
+            temp_path = temp_file.name
+            
+            content = await file.read()
+            temp_file.write(content)
+            temp_file.close()
+            
+            # 텍스트 추출
+            processor = get_processor()
+            extracted_text, _ = processor.process_file(
+                temp_path,
+                file_type=None,
+                mode="contract"
+            )
+            
+            if not extracted_text or extracted_text.strip() == "":
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="업로드된 파일에서 텍스트를 추출할 수 없습니다.",
+                )
+            
+            # 계약서 분석 실행
+            doc_id = str(uuid.uuid4())
+            clauses = extract_clauses(extracted_text)
+            
+            result = await legal_service.analyze_contract(
+                extracted_text=extracted_text,
+                description=None,
+                doc_id=doc_id,
+                clauses=clauses,
+            )
+            
+            # DB에 저장
+            analysis_result = ContractAnalysisResponseV2(
+                docId=doc_id,
+                title=file.filename or "계약서",
+                riskScore=result.risk_score,
+                riskLevel=result.risk_level,
+                sections={},
+                issues=result.issues,
+                summary=result.summary,
+                retrievedContexts=[],
+                contractText=extracted_text,
+                clauses=[],
+                highlightedTexts=[],
+                createdAt=datetime.utcnow().isoformat() + "Z",
+            )
+            
+            await storage_service.save_contract_analysis(
+                doc_id=doc_id,
+                title=file.filename or "계약서",
+                original_filename=file.filename,
+                doc_type=None,
+                risk_score=result.risk_score,
+                risk_level=result.risk_level,
+                sections={},
+                summary=result.summary,
+                retrieved_contexts=[],
+                issues=[{
+                    "id": issue.name,
+                    "category": issue.category or "unknown",
+                    "severity": issue.severity,
+                    "summary": issue.summary or issue.description,
+                    "description": issue.description,
+                } for issue in result.issues],
+                user_id=user_id,
+                contract_text=extracted_text,
+            )
+            
+            # DB에서 저장된 분석 결과 조회하여 ID 가져오기
+            saved_analysis = await storage_service.get_contract_analysis(doc_id, user_id)
+            if saved_analysis:
+                contract_analysis_id = saved_analysis.get("id") or doc_id
+            else:
+                contract_analysis_id = doc_id
+            
+            # 세션 컨텍스트 업데이트
+            await storage_service.update_chat_session(
+                session_id=session_id,
+                user_id=user_id,
+                title=None,
+            )
+            
+            # 임시 파일 삭제
+            try:
+                os.unlink(temp_path)
+            except:
+                pass
+        
+        # 후속 요청: 기존 분석 참고
+        if contract_analysis_id is not None and contract_analysis is None:
+            saved_analysis = await storage_service.get_contract_analysis(contract_analysis_id, user_id)
+            if saved_analysis:
+                contract_analysis = ContractAnalysisSummary(
+                    id=saved_analysis.get("id", contract_analysis_id),
+                    title=saved_analysis.get("title"),
+                    riskScore=saved_analysis.get("riskScore") or saved_analysis.get("risk_score"),
+                    riskLevel=saved_analysis.get("riskLevel") or saved_analysis.get("risk_level"),
+                    summary=saved_analysis.get("summary"),
+                )
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Contract analysis not found",
+                )
+        
+        if contract_analysis:
+            used_reports.append(
+                UsedReportMeta(
+                    type="contract",
+                    analysisId=contract_analysis.id,
+                    findingsIds=None,
+                )
+            )
+    
+    # 2-2. 상황 모드
+    elif mode == LegalChatMode.situation:
+        # 최초 요청: situation_form 으로 상황 분석 실행
+        if situation_analysis_id is None:
+            if not situation_template_key or not situation_form:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="situationTemplateKey and situationForm are required for first situation analysis",
+                )
+            
+            # SituationRequestV2 형식으로 변환
+            situation_request = SituationRequestV2(
+                situation=situation_form.get("situation", ""),
+                category=situation_form.get("category"),
+                employmentType=situation_form.get("employmentType"),
+                workPeriod=situation_form.get("workPeriod"),
+                socialInsurance=situation_form.get("socialInsurance", []),
+            )
+            
+            # 기존 analyze_situation 엔드포인트 로직 재사용
+            result = await legal_service.analyze_situation_detailed(
+                category_hint=situation_request.category or "unknown",
+                situation_text=situation_request.situation,
+                summary=None,
+                details=None,
+                employment_type=situation_request.employmentType,
+                work_period=situation_request.workPeriod,
+                weekly_hours=None,
+                is_probation=None,
+                social_insurance=", ".join(situation_request.socialInsurance) if situation_request.socialInsurance else None,
+                use_workflow=True,
+            )
+            
+            # DB에 저장 (기존 analyze_situation 엔드포인트 로직 재사용)
+            risk_level = "low"
+            if result.get("risk_score", 0) >= 70:
+                risk_level = "high"
+            elif result.get("risk_score", 0) >= 40:
+                risk_level = "medium"
+            
+            # relatedCases 변환 (문서 단위 그룹핑)
+            from collections import defaultdict
+            grounding_chunks = result.get("grounding_chunks", [])
+            grouped_by_document = defaultdict(list)
+            
+            for chunk in grounding_chunks:
+                if isinstance(chunk, dict):
+                    title = chunk.get("title", "")
+                    external_id = chunk.get("external_id") or chunk.get("externalId")
+                else:
+                    title = getattr(chunk, "title", "")
+                    external_id = getattr(chunk, "external_id", None)
+                
+                group_key = external_id if external_id else title
+                if group_key:
+                    grouped_by_document[group_key].append(chunk)
+            
+            related_cases = []
+            for group_key, chunk_items in list(grouped_by_document.items())[:5]:
+                if not chunk_items:
+                    continue
+                first_chunk = chunk_items[0]
+                if isinstance(first_chunk, dict):
+                    document_title = first_chunk.get("title", "")
+                    source_type = first_chunk.get("source_type", "law")
+                    external_id = first_chunk.get("external_id") or group_key
+                else:
+                    document_title = getattr(first_chunk, "title", "")
+                    source_type = getattr(first_chunk, "source_type", "law")
+                    external_id = getattr(first_chunk, "external_id", None) or group_key
+                
+                overall_similarity = max(
+                    float(chunk.get("score", 0.0)) if isinstance(chunk, dict) else float(getattr(chunk, "score", 0.0))
+                    for chunk in chunk_items
+                )
+                
+                snippets = []
+                for chunk in chunk_items:
+                    snippet_text = chunk.get("snippet", "") if isinstance(chunk, dict) else getattr(chunk, "snippet", "")
+                    similarity_score = float(chunk.get("score", 0.0)) if isinstance(chunk, dict) else float(getattr(chunk, "score", 0.0))
+                    snippets.append({
+                        "snippet": snippet_text[:500] if len(snippet_text) > 500 else snippet_text,
+                        "similarityScore": similarity_score,
+                        "usageReason": "",
+                    })
+                
+                related_cases.append({
+                    "documentTitle": document_title,
+                    "fileUrl": None,
+                    "sourceType": source_type,
+                    "externalId": external_id,
+                    "overallSimilarity": overall_similarity,
+                    "summary": f"{document_title}의 내용을 참고하여 법적 판단 기준으로 사용했습니다.",
+                    "snippets": snippets,
+                })
+            
+            # sources 변환
+            sources = []
+            for chunk in grounding_chunks:
+                if isinstance(chunk, dict):
+                    source_id = chunk.get("source_id", "")
+                    source_type = chunk.get("source_type", "law")
+                    title = chunk.get("title", "")
+                    snippet = chunk.get("snippet", "")
+                    score = float(chunk.get("score", 0.0))
+                    external_id = chunk.get("external_id") or chunk.get("externalId")
+                else:
+                    source_id = getattr(chunk, "source_id", "")
+                    source_type = getattr(chunk, "source_type", "law")
+                    title = getattr(chunk, "title", "")
+                    snippet = getattr(chunk, "snippet", "")
+                    score = float(getattr(chunk, "score", 0.0))
+                    external_id = getattr(chunk, "external_id", None)
+                
+                sources.append({
+                    "sourceId": source_id,
+                    "sourceType": source_type,
+                    "title": title,
+                    "snippet": snippet,
+                    "snippetAnalyzed": None,
+                    "score": score,
+                    "externalId": external_id,
+                    "fileUrl": None,
+                })
+            
+            # analysis_json 구성
+            analysis_json = {
+                "summary": result.get("summary", ""),
+                "sources": sources,
+                "criteria": result.get("criteria", []),
+                "findings": result.get("findings", []),
+                "scripts": result.get("scripts", {}),
+                "relatedCases": related_cases,
+                "classifiedType": result.get("classified_type", "unknown"),
+                "riskScore": float(result.get("risk_score", 0)),
+                "organizations": result.get("organizations", []),
+            }
+            
+            situation_id = await storage_service.save_situation_analysis(
+                situation=situation_request.situation,
+                category=situation_request.category,
+                employment_type=situation_request.employmentType,
+                company_size=None,
+                work_period=situation_request.workPeriod,
+                has_written_contract=None,
+                social_insurance=situation_request.socialInsurance,
+                risk_score=float(result.get("risk_score", 0)),
+                risk_level=risk_level,
+                analysis=analysis_json,
+                checklist=[],
+                related_cases=related_cases,
+                user_id=user_id,
+                question=situation_request.situation,
+                answer=result.get("summary", ""),
+                details=None,
+                category_hint=situation_request.category,
+                classified_type=result.get("classified_type", "unknown"),
+            )
+            
+            situation_analysis_id = situation_id
+            
+            # 세션 컨텍스트 업데이트
+            await storage_service.update_chat_session(
+                session_id=session_id,
+                user_id=user_id,
+                title=None,
+            )
+        
+        # 후속 요청: 기존 분석 참고
+        if situation_analysis_id is not None and situation_analysis is None:
+            saved_analysis = await storage_service.get_situation_analysis(situation_analysis_id, user_id)
+            if saved_analysis:
+                situation_analysis = SituationAnalysisSummary(
+                    id=saved_analysis.get("id", situation_analysis_id),
+                    title=saved_analysis.get("title"),
+                    riskScore=saved_analysis.get("riskScore") or saved_analysis.get("risk_score"),
+                    riskLevel=saved_analysis.get("riskLevel") or saved_analysis.get("risk_level"),
+                    summary=saved_analysis.get("summary") or saved_analysis.get("answer", ""),
+                )
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Situation analysis not found",
+                )
+        
+        if situation_analysis:
+            used_reports.append(
+                UsedReportMeta(
+                    type="situation",
+                    analysisId=situation_analysis.id,
+                    findingsIds=None,
+                )
+            )
+    
+    # ---------- 3. 히스토리 로드 ----------
+    history_messages = await storage_service.get_chat_messages(session_id, user_id)
+    # 최근 30개만 사용 (sequence_number 역순으로 정렬되어 있으므로 뒤에서 30개)
+    history_messages = history_messages[-30:] if len(history_messages) > 30 else history_messages
+    
+    # ---------- 4. LLM 컨텍스트 구성 + 답변 생성 ----------
+    # 컨텍스트 데이터 준비
+    context_type = _context_type_from_mode(mode)
+    context_data = None
+    
+    if contract_analysis:
+        saved_analysis = await storage_service.get_contract_analysis(contract_analysis.id, user_id)
+        if saved_analysis:
+            context_data = {
+                "type": "contract",
+                "analysis": saved_analysis,
+            }
+    elif situation_analysis:
+        saved_analysis = await storage_service.get_situation_analysis(situation_analysis.id, user_id)
+        if saved_analysis:
+            context_data = {
+                "type": "situation",
+                "analysis": saved_analysis,
+            }
+    
+    # RAG 검색 및 답변 생성
+    chat_result = await legal_service.chat_with_context(
+        query=message,
+        doc_ids=[contract_analysis.id] if contract_analysis else [],
+        selected_issue_id=None,
+        selected_issue=None,
+        analysis_summary=contract_analysis.summary if contract_analysis else (situation_analysis.summary if situation_analysis else None),
+        risk_score=contract_analysis.riskScore if contract_analysis else (situation_analysis.riskScore if situation_analysis else None),
+        total_issues=None,
+        top_k=8,
+        context_type=context_type,
+        context_data=context_data,
+    )
+    
+    answer_markdown = chat_result.get("answer", "")
+    
+    # used_sources 변환
+    used_chunks = chat_result.get("used_chunks", {})
+    for chunk in used_chunks.get("legal", []):
+        used_sources.append(
+            UsedSourceMeta(
+                documentTitle=chunk.get("title", ""),
+                fileUrl=None,
+                sourceType=chunk.get("source_type", "law"),
+                similarityScore=chunk.get("score"),
+            )
+        )
+    
+    # ---------- 5. 메시지 저장 ----------
+    # 시퀀스 번호 계산
+    if history_messages:
+        max_seq = max(msg.get("sequence_number", 0) for msg in history_messages)
+        next_seq = max_seq + 1
+    else:
+        next_seq = 1
+    
+    await storage_service.save_chat_message(
+        session_id=session_id,
+        user_id=user_id,
+        sender_type="user",
+        message=message,
+        sequence_number=next_seq,
+        context_type=context_type,
+        context_id=contract_analysis_id or situation_analysis_id,
+    )
+    
+    await storage_service.save_chat_message(
+        session_id=session_id,
+        user_id=user_id,
+        sender_type="assistant",
+        message=answer_markdown,
+        sequence_number=next_seq + 1,
+        context_type=context_type,
+        context_id=contract_analysis_id or situation_analysis_id,
+    )
+    
+    # ---------- 6. 응답 ----------
+    return LegalChatAgentResponse(
+        sessionId=session_id,
+        mode=mode,
+        contractAnalysisId=contract_analysis_id,
+        situationAnalysisId=situation_analysis_id,
+        answerMarkdown=answer_markdown,
+        usedReports=used_reports,
+        usedSources=used_sources,
+        contractAnalysis=contract_analysis,
+        situationAnalysis=situation_analysis,
+    )
+
+
+def _context_type_from_mode(mode: LegalChatMode) -> str:
+    """모드에서 컨텍스트 타입 추출"""
+    if mode == LegalChatMode.contract:
+        return "contract"
+    if mode == LegalChatMode.situation:
+        return "situation"
+    return "none"
+
+
+@router.get(
+    "/agent/analyses/contracts/{analysis_id}",
+    response_model=ContractAnalysisSummary,
+    summary="계약서 분석 리포트 조회"
+)
+async def get_contract_analysis_agent(
+    analysis_id: str,
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id", description="사용자 ID"),
+):
+    """계약서 분석 리포트 조회"""
+    storage_service = get_storage_service()
+    analysis = await storage_service.get_contract_analysis(analysis_id, x_user_id)
+    if not analysis:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Contract analysis not found",
+        )
+    return ContractAnalysisSummary(
+        id=analysis.get("id", analysis_id),
+        title=analysis.get("title"),
+        riskScore=analysis.get("riskScore") or analysis.get("risk_score"),
+        riskLevel=analysis.get("riskLevel") or analysis.get("risk_level"),
+        summary=analysis.get("summary"),
+    )
+
+
+@router.get(
+    "/agent/analyses/situations/{analysis_id}",
+    response_model=SituationAnalysisSummary,
+    summary="상황 분석 리포트 조회"
+)
+async def get_situation_analysis_agent(
+    analysis_id: str,
+    x_user_id: Optional[str] = Header(None, alias="X-User-Id", description="사용자 ID"),
+):
+    """상황 분석 리포트 조회"""
+    storage_service = get_storage_service()
+    analysis = await storage_service.get_situation_analysis(analysis_id, x_user_id)
+    if not analysis:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Situation analysis not found",
+        )
+    return SituationAnalysisSummary(
+        id=analysis.get("id", analysis_id),
+        title=analysis.get("title"),
+        riskScore=analysis.get("riskScore") or analysis.get("risk_score"),
+        riskLevel=analysis.get("riskLevel") or analysis.get("risk_level"),
+        summary=analysis.get("summary") or analysis.get("answer", ""),
+    )
 
