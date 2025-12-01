@@ -778,7 +778,7 @@ export default function QuickAssistPage() {
             classifiedType: analysis.tags?.[0] as any || 'unknown',
             riskScore: analysis.riskScore,
             summary: analysis.analysis?.summary || '',
-            criteria: analysis.criteria || [],
+            findings: analysis.findings || [], // findings 필드 사용
             scripts: analysis.scripts || { toCompany: { subject: '', body: '' }, toAdvisor: { subject: '', body: '' } },
             relatedCases: analysis.relatedCases || [],
             sources: analysis.sources,
@@ -825,6 +825,9 @@ export default function QuickAssistPage() {
 
   // 선택된 대화의 메시지 로드 (DB에서 최신 메시지 가져오기)
   useEffect(() => {
+    // 세션이 변경될 때 분석 상태 초기화 (다른 세션으로 전환 시 이전 세션의 상태가 유지되지 않도록)
+    setIsAnalyzing(false)
+    
     if (selectedConversationId) {
       const conversation = conversations.find(c => c.id === selectedConversationId)
       if (conversation) {
@@ -1244,17 +1247,23 @@ export default function QuickAssistPage() {
   const handleSendMessage = async () => {
     const trimmedMessage = inputMessage.trim()
     
-    // 입력 검증
-    if (!trimmedMessage) {
+    // 파일이 선택되어 있으면 message는 선택사항 (빈 값이어도 됨)
+    const hasFile = selectedFile !== null
+    
+    // 입력 검증 (파일이 없을 때만 message 필수)
+    if (!hasFile && !trimmedMessage) {
       toast({
         title: '입력 필요',
-        description: '메시지를 입력해주세요.',
+        description: '메시지를 입력하거나 파일을 첨부해주세요.',
         variant: 'destructive',
       })
       return
     }
     
-    if (trimmedMessage.length < 5) {
+    // 파일이 있을 때는 message가 없어도 기본 메시지 사용
+    const messageToSend = trimmedMessage || (hasFile ? '이 계약서를 분석해주세요.' : '')
+    
+    if (!hasFile && messageToSend.length < 5) {
       toast({
         title: '입력이 너무 짧습니다',
         description: '최소 5자 이상 입력해주세요.',
@@ -1263,7 +1272,7 @@ export default function QuickAssistPage() {
       return
     }
     
-    if (trimmedMessage.length > 2000) {
+    if (messageToSend.length > 2000) {
       toast({
         title: '입력이 너무 깁니다',
         description: '최대 2000자까지 입력 가능합니다.',
@@ -1280,10 +1289,76 @@ export default function QuickAssistPage() {
       return
     }
 
+    // 사용자 메시지 생성: 파일이나 상황 분석 프리셋이 있으면 정보와 메시지를 모두 표시
+    let userMessageContent = messageToSend
+    
+    // 상황 분석 프리셋 정보 구성
+    let situationInfo = ''
+    if (selectedSituationPreset && !currentContext.id) {
+      const preset = selectedSituationPreset
+      const infoParts: string[] = []
+      infoParts.push(`📋 상황 분석: ${preset.title}`)
+      if (preset.category) {
+        const categoryMap: Record<string, string> = {
+          'probation': '수습/인턴',
+          'unpaid_wage': '임금 체불',
+          'freelancer': '프리랜서',
+          'harassment': '괴롭힘',
+          'stock_option': '스톡옵션',
+        }
+        infoParts.push(`카테고리: ${categoryMap[preset.category] || preset.category}`)
+      }
+      if (preset.employmentType) {
+        const employmentMap: Record<string, string> = {
+          'regular': '정규직',
+          'intern': '인턴/수습',
+          'freelancer': '프리랜서',
+          'part_time': '파트타임',
+        }
+        infoParts.push(`고용 형태: ${employmentMap[preset.employmentType] || preset.employmentType}`)
+      }
+      if (preset.workPeriod) {
+        infoParts.push(`근무 기간: ${preset.workPeriod}`)
+      }
+      if (preset.socialInsurance && preset.socialInsurance.length > 0) {
+        const insuranceMap: Record<string, string> = {
+          'health': '건강보험',
+          'employment': '고용보험',
+          'pension': '국민연금',
+          'industrial': '산재보험',
+        }
+        const insuranceNames = preset.socialInsurance.map(ins => insuranceMap[ins] || ins)
+        infoParts.push(`사회보험: ${insuranceNames.join(', ')}`)
+      }
+      situationInfo = infoParts.join('\n')
+    }
+    
+    // 파일 정보 구성
+    let fileInfo = ''
+    if (hasFile && selectedFile) {
+      fileInfo = `📎 파일: ${selectedFile.name} (${(selectedFile.size / 1024).toFixed(1)}KB)`
+    }
+    
+    // 모든 정보를 조합
+    const infoParts: string[] = []
+    if (situationInfo) infoParts.push(situationInfo)
+    if (fileInfo) infoParts.push(fileInfo)
+    
+    if (infoParts.length > 0) {
+      const combinedInfo = infoParts.join('\n\n')
+      if (messageToSend && messageToSend.trim()) {
+        // 정보와 메시지를 함께 표시
+        userMessageContent = `${combinedInfo}\n\n${messageToSend}`
+      } else {
+        // 정보만 표시
+        userMessageContent = combinedInfo
+      }
+    }
+    
     const userMessage: ChatMessage = {
       id: `msg-${Date.now()}`,
       role: 'user',
-      content: trimmedMessage,
+      content: userMessageContent,
       timestamp: new Date(),
     }
 
@@ -1294,9 +1369,6 @@ export default function QuickAssistPage() {
     setMessages(newMessages)
     setInputMessage('')
     setIsAnalyzing(true)
-    
-    // 에러 발생 시 재시도를 위한 메시지 백업
-    const messageToSend = trimmedMessage
 
     // 사용자 ID 가져오기 (세션 생성 및 메시지 저장에 필요)
     const { createSupabaseBrowserClient } = await import('@/supabase/supabase-client')
@@ -1305,6 +1377,8 @@ export default function QuickAssistPage() {
     const userId = user?.id || null
 
     // 현재 대화 세션 업데이트 또는 생성
+    // API 호출 전에 세션 ID를 저장하여, 응답 시 세션이 변경되었는지 확인
+    const sessionIdAtRequestStart = selectedConversationId
     let currentSession: ConversationSession
     let chatSessionId: string | null = null  // legal_chat_sessions의 ID
     
@@ -1346,14 +1420,130 @@ export default function QuickAssistPage() {
     try {
       let assistantMessage: ChatMessage
       
+      // 파일이 선택되어 있으면 contract 모드로 전송 (최우선)
+      if (hasFile && selectedFile) {
+        // contract 모드 - Agent API 사용
+        const { chatWithAgent } = await import('@/apis/legal.service')
+        
+        // 첫 요청인지 후속 요청인지 확인
+        const isFirstRequest = currentContext.type !== 'contract' || !currentContext.id
+        
+        let chatResult
+        if (isFirstRequest) {
+          // 첫 요청: mode=contract, message, file (필수), sessionId (선택)
+          chatResult = await chatWithAgent({
+            mode: 'contract',
+            message: messageToSend,
+            file: selectedFile,
+            ...(selectedConversationId && chatSessionId ? { sessionId: chatSessionId } : {}),
+          }, userId)
+          
+          // 파일 전송 후 선택 해제
+          setSelectedFile(null)
+          if (fileInputRef.current) {
+            fileInputRef.current.value = ''
+          }
+          
+          // 분석 결과를 컨텍스트로 설정
+          if (chatResult.contractAnalysisId) {
+            setCurrentContext({
+              type: 'contract',
+              id: chatResult.contractAnalysisId,
+              label: chatResult.contractAnalysis?.title || selectedFile.name,
+            })
+          }
+        } else {
+          // 후속 요청: mode=contract, message, contractAnalysisId (필수), sessionId (권장)
+          chatResult = await chatWithAgent({
+            mode: 'contract',
+            message: messageToSend,
+            contractAnalysisId: currentContext.id || undefined, // null을 undefined로 변환
+            ...(selectedConversationId && chatSessionId ? { sessionId: chatSessionId } : {}),
+          }, userId)
+          
+          // 파일 전송 후 선택 해제
+          setSelectedFile(null)
+          if (fileInputRef.current) {
+            fileInputRef.current.value = ''
+          }
+        }
+        
+        // 세션 ID 업데이트
+        if (chatResult.sessionId) {
+          chatSessionId = chatResult.sessionId
+          const newSessionId = `session-${chatResult.sessionId}`
+          setSelectedConversationId(newSessionId)
+        }
+        
+        assistantMessage = {
+          id: `msg-${Date.now()}-assistant`,
+          role: 'assistant',
+          content: chatResult.answerMarkdown || '답변을 생성할 수 없습니다.',
+          timestamp: new Date(),
+          context_type: 'contract',
+          context_id: chatResult.contractAnalysisId || currentContext.id,
+        }
+        
+        // DB에 저장
+        if (userId && chatSessionId) {
+          try {
+            const dbMessages = await getChatMessages(chatSessionId, userId)
+            const maxSequenceNumber = dbMessages.length > 0 
+              ? Math.max(...dbMessages.map(m => m.sequence_number))
+              : -1
+            
+            const nextSequenceNumber = maxSequenceNumber + 1
+            
+            await saveChatMessage(
+              chatSessionId,
+              {
+                sender_type: 'user',
+                message: userMessage.content,
+                sequence_number: nextSequenceNumber,
+                context_type: 'contract',
+                context_id: chatResult.contractAnalysisId || currentContext.id,
+              },
+              userId
+            )
+            
+            await saveChatMessage(
+              chatSessionId,
+              {
+                sender_type: 'assistant',
+                message: assistantMessage.content,
+                sequence_number: nextSequenceNumber + 1,
+                context_type: 'contract',
+                context_id: chatResult.contractAnalysisId || currentContext.id,
+              },
+              userId
+            )
+          } catch (dbError) {
+            console.warn('새 테이블 메시지 저장 실패:', dbError)
+          }
+        }
+        
+        toast({
+          title: isFirstRequest ? '계약서 분석 완료' : '질문 전송 완료',
+          description: isFirstRequest 
+            ? '계약서가 분석되었습니다. 추가 질문을 해보세요.' 
+            : '질문이 전송되었습니다.',
+        })
+      }
       // 상황 분석 결과가 있으면 chatWithContractV2 사용 (컨텍스트 포함)
-      if (situationAnalysis && situationContext) {
-        // 법적 관점 내용을 컨텍스트로 변환 (새로운 CriteriaItemV2 구조 사용)
-        const legalContext = situationAnalysis.criteria
-          .map((criterion, index) => {
-            // CriteriaItemV2 구조: documentTitle, usageReason, snippet 등
-            const reason = criterion.usageReason || `${criterion.documentTitle}: ${criterion.snippet.substring(0, 50)}`
-            return `${index + 1}. ${reason}`
+      else if (situationAnalysis && situationContext) {
+        // 법적 관점 내용을 컨텍스트로 변환 (findings 사용)
+        const legalContext = (situationAnalysis.findings || [])
+          .map((finding: any, index: number) => {
+            // Finding 구조 또는 CriteriaItemV2 구조 지원
+            if (finding.usageReason || finding.documentTitle) {
+              // CriteriaItemV2 구조
+              const reason = finding.usageReason || `${finding.documentTitle}: ${finding.snippet?.substring(0, 50) || ''}`
+              return `${index + 1}. ${reason}`
+            } else if (finding.basisText || finding.title) {
+              // Finding 구조
+              return `${index + 1}. ${finding.basisText || finding.title}`
+            }
+            return `${index + 1}. ${JSON.stringify(finding)}`
           })
           .join('\n')
         
@@ -1365,7 +1555,7 @@ export default function QuickAssistPage() {
           docIds: [], // 상황 분석은 docId 없음
           analysisSummary: analysisSummary,
           riskScore: situationAnalysis.riskScore,
-          totalIssues: situationAnalysis.criteria?.length || 0,
+          totalIssues: situationAnalysis.findings?.length || 0,
           topK: 8,
           contextType: currentContext.type,
           contextId: currentContext.id,
@@ -1436,11 +1626,11 @@ export default function QuickAssistPage() {
           // 상황 분석 첫 요청 - Agent API 사용
           const chatResult = await chatWithAgent({
             mode: 'situation',
-            message: inputMessage.trim(), // 사용자가 수정한 메시지 사용
+            message: messageToSend,
             ...(selectedConversationId && chatSessionId ? { sessionId: chatSessionId } : {}),
             situationTemplateKey: selectedSituationPreset.category,
             situationForm: {
-              situation: inputMessage.trim(), // 사용자가 수정한 메시지 사용
+              situation: messageToSend,
               category: selectedSituationPreset.category,
               employmentType: selectedSituationPreset.employmentType,
               workPeriod: selectedSituationPreset.workPeriod,
@@ -1517,7 +1707,7 @@ export default function QuickAssistPage() {
           // 새 대화 시작 시 (selectedConversationId가 null) sessionId를 전달하지 않음
           const chatResult = await chatWithAgent({
             mode: 'situation',
-            message: inputMessage.trim(),
+            message: messageToSend,
             ...(selectedConversationId && chatSessionId ? { sessionId: chatSessionId } : {}),
             situationAnalysisId: currentContext.id, // 상황 분석 ID
           }, userId)
@@ -1578,13 +1768,14 @@ export default function QuickAssistPage() {
             }
           }
         } else if (currentContext.type === 'contract' && currentContext.id) {
-          // 계약서 분석 리포트를 컨텍스트로 사용하는 경우 - Agent API 사용
-          // 새 대화 시작 시 (selectedConversationId가 null) sessionId를 전달하지 않음
+          // 계약서 분석 리포트를 컨텍스트로 사용하는 경우 - Agent API 사용 (후속 요청)
+          // mode=contract, message, contractAnalysisId (필수), sessionId (권장)
+          const { chatWithAgent } = await import('@/apis/legal.service')
           const chatResult = await chatWithAgent({
             mode: 'contract',
-            message: inputMessage.trim(),
+            message: messageToSend,
+            contractAnalysisId: currentContext.id || undefined, // null을 undefined로 변환
             ...(selectedConversationId && chatSessionId ? { sessionId: chatSessionId } : {}),
-            contractAnalysisId: currentContext.id, // 계약서 분석 ID
           }, userId)
           
           // 세션 ID 업데이트
@@ -1647,7 +1838,7 @@ export default function QuickAssistPage() {
           // 새 대화 시작 시 (selectedConversationId가 null) sessionId를 전달하지 않음
           const chatResult = await chatWithAgent({
             mode: 'plain',
-            message: inputMessage.trim(),
+            message: messageToSend,
             ...(selectedConversationId && chatSessionId ? { sessionId: chatSessionId } : {}),
           }, userId)
           
@@ -1717,7 +1908,7 @@ export default function QuickAssistPage() {
           assistantMessage = {
             id: `msg-${Date.now()}-assistant`,
             role: 'assistant',
-            content: result.analysis.summary,
+            content: result.analysis?.summary || '분석 결과를 불러올 수 없습니다.',
             timestamp: new Date(),
             context_type: result.id ? 'situation' : 'none',
             context_id: result.id || null,
@@ -1745,9 +1936,9 @@ export default function QuickAssistPage() {
             const report: Report = {
               id: result.id,
               question: inputMessage.trim(),
-              answer: result.analysis.summary,
-              legalBasis: result.analysis.legalBasis?.map((b: any) => b.snippet) || [],
-              recommendations: result.analysis.recommendations || [],
+              answer: result.analysis?.summary || '',
+              legalBasis: result.analysis?.legalBasis?.map((b: any) => b.snippet) || [],
+              recommendations: result.analysis?.recommendations || [],
               riskScore: result.riskScore,
               tags: result.tags || [],
               createdAt: new Date(),
@@ -1757,6 +1948,91 @@ export default function QuickAssistPage() {
             setReports(updatedReports)
           }
         }
+      }
+
+      // API 응답 후 세션이 변경되었는지 확인
+      // 세션이 변경되었다면 (새 대화를 시작했다면) 응답을 무시
+      const currentSessionId = selectedConversationId
+      const sessionChanged = sessionIdAtRequestStart !== currentSessionId
+      
+      if (sessionChanged) {
+        // 세션이 변경되었으므로 응답을 무시하고 DB에만 저장 (나중에 확인 가능)
+        console.log('세션이 변경되어 응답을 무시합니다. 원래 세션:', sessionIdAtRequestStart, '현재 세션:', currentSessionId)
+        
+        // DB에는 저장 (나중에 해당 세션을 선택하면 볼 수 있음)
+        if (userId && chatSessionId) {
+          try {
+            const dbMessages = await getChatMessages(chatSessionId, userId)
+            const maxSequenceNumber = dbMessages.length > 0 
+              ? Math.max(...dbMessages.map(m => m.sequence_number))
+              : -1
+            
+            const nextSequenceNumber = maxSequenceNumber + 1
+            
+            // 사용자 메시지 저장
+            await saveChatMessage(
+              chatSessionId,
+              {
+                sender_type: 'user',
+                message: userMessage.content,
+                sequence_number: nextSequenceNumber,
+                context_type: userMessage.context_type || 'none',
+                context_id: userMessage.context_id || null,
+              },
+              userId
+            )
+            
+            // AI 응답 메시지 저장
+            await saveChatMessage(
+              chatSessionId,
+              {
+                sender_type: 'assistant',
+                message: assistantMessage.content,
+                sequence_number: nextSequenceNumber + 1,
+                context_type: assistantMessage.context_type || 'none',
+                context_id: assistantMessage.context_id || null,
+              },
+              userId
+            )
+          } catch (dbError) {
+            console.warn('세션 변경 후 메시지 저장 실패:', dbError)
+          }
+        }
+        
+        // 현재 세션의 대화 목록은 업데이트하지 않음 (이미 다른 세션으로 전환됨)
+        // 하지만 원래 세션의 대화 목록은 업데이트해야 함 (나중에 선택하면 볼 수 있도록)
+        if (sessionIdAtRequestStart) {
+          setConversations(prevConversations => {
+            const originalSession = prevConversations.find(c => c.id === sessionIdAtRequestStart)
+            if (originalSession) {
+              // userMessage가 이미 포함되어 있는지 확인 (중복 방지)
+              const hasUserMessage = originalSession.messages.some(m => 
+                m.id === userMessage.id || 
+                (m.role === 'user' && m.content === userMessage.content && 
+                 Math.abs(m.timestamp.getTime() - userMessage.timestamp.getTime()) < 1000)
+              )
+              
+              const messagesToAdd = hasUserMessage 
+                ? [assistantMessage] 
+                : [userMessage, assistantMessage]
+              
+              const finalMessages = [...originalSession.messages, ...messagesToAdd]
+              const updatedSession = {
+                ...originalSession,
+                messages: finalMessages,
+                updatedAt: new Date(),
+              }
+              const updatedConversations = prevConversations.map(c => 
+                c.id === sessionIdAtRequestStart ? updatedSession : c
+              )
+              saveConversations(updatedConversations)
+              return updatedConversations
+            }
+            return prevConversations
+          })
+        }
+        
+        return // 세션이 변경되었으므로 더 이상 진행하지 않음
       }
 
       const finalMessages = [...newMessages, assistantMessage]
@@ -1844,6 +2120,7 @@ export default function QuickAssistPage() {
     setHasInitialGreeting(false)
     setCurrentContext({ type: 'none', id: null })
     setInputMessage('')
+    setIsAnalyzing(false) // 분석 상태 초기화 (다른 세션의 상태가 유지되지 않도록)
     // 새 대화를 시작할 때는 상황 분석 결과도 초기화
     // (URL 파라미터에서 온 경우는 페이지 로드 시 다시 설정됨)
     setSituationAnalysis(null)
@@ -1879,10 +2156,10 @@ export default function QuickAssistPage() {
   }, [])
 
   // 상황 템플릿 선택 - 카드 클릭 시 입력창에 예시 문장 자동 채우기
-  const handleSituationSelect = (situation: typeof COMMON_SITUATIONS[0]) => {
+  const handleSituationSelect = (situation: typeof SITUATION_PRESETS[0]) => {
     // 카드 클릭 시 입력창에 예시 문장 자동 채우기
     // 예: "인턴인데 수습 기간 중에 회사가 일방적으로 계약 해지를 통보했습니다."
-    const exampleText = situation.text
+    const exampleText = situation.details || situation.summary || ''
     setInputMessage(exampleText)
     // 입력창으로 포커스 이동
     setTimeout(() => {
@@ -2423,7 +2700,8 @@ export default function QuickAssistPage() {
                       })()}
                       
                       {/* 사용자 메시지의 리포트 카드 (버블 밖에 표시, 살짝 붙어있는 느낌) */}
-                      {message.role === 'user' && (
+                      {/* 파일 첨부 시 답변기준 정보는 표시하지 않음 */}
+                      {message.role === 'user' && message.context_type !== 'contract' && (
                         <div className="mt-1.5">
                           <UserMessageWithContext 
                             message={message}
@@ -2604,7 +2882,7 @@ export default function QuickAssistPage() {
                   <button
                     type="button"
                     onClick={handleSendMessage}
-                    disabled={!inputMessage.trim() || isAnalyzing}
+                    disabled={(!inputMessage.trim() && !selectedFile) || isAnalyzing}
                     className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-r from-indigo-400 to-violet-400 text-white shadow-md disabled:opacity-40 disabled:cursor-not-allowed hover:shadow-lg transition-all"
                   >
                     {isAnalyzing ? (
@@ -2636,9 +2914,8 @@ export default function QuickAssistPage() {
                   onChange={(e) => {
                     const file = e.target.files?.[0]
                     if (file) {
+                      // 파일만 선택하고 전송은 하지 않음 (전송 버튼 클릭 시 전송)
                       setSelectedFile(file)
-                      // 파일 선택 시 Agent API로 계약서 분석 시작
-                      handleFileUpload(file)
                     }
                   }}
                 />
