@@ -205,6 +205,24 @@ class CriteriaItem(BaseModel):
     usageReason: str = Field(..., description="이 문서를 어떤 기준·비교·판단 목적으로 사용했는지에 대한 자연어 설명")
 
 
+class FindingSource(BaseModel):
+    """Finding의 참고 문서 정보"""
+    documentTitle: str = Field(..., description="참고 문서의 제목")
+    fileUrl: Optional[str] = Field(None, description="참고 문서를 열람할 수 있는 스토리지 URL")
+    sourceType: str = Field(..., description="참고 문서의 유형 (예: guideline, standard_contract, statute 등)")
+    refinedSnippet: str = Field(..., description="RAG로 찾은 원문 청크를 문장 부호·띄어쓰기·어색한 표현을 다듬어 사람이 읽기 쉽게 정리한 문장")
+    similarityScore: float = Field(..., description="사용자 상황/질문과 이 문서 조각의 의미적 유사도 점수 (0~1)")
+
+
+class Finding(BaseModel):
+    """법적 쟁점 발견 항목"""
+    id: Union[int, str] = Field(..., description="각 항목을 구분하기 위한 숫자 또는 문자열 ID")
+    title: str = Field(..., description="사용자에게 보여줄 법적 쟁점/카테고리 이름 (예: '직장 내 괴롭힘', '모욕적인 말')")
+    statusLabel: str = Field(..., description="해당 쟁점이 현재 상황에 얼마나 해당하는지에 대한 한글 라벨 (예: '충족', '부분 해당', '추가 확인 필요')")
+    basisText: str = Field(..., description="사용자의 실제 상황 설명과 참고 문서 내용을 종합해서 만든 근거 문장")
+    source: FindingSource = Field(..., description="이 finding을 판단할 때 참고한 문서와 관련 문장 정보")
+
+
 class ActionStep(BaseModel):
     """행동 가이드 단계"""
     title: str = Field(..., description="단계 제목")
@@ -288,8 +306,8 @@ class LegalBasisItem(BaseModel):
 class SituationAnalysisV2(BaseModel):
     """상황 분석 결과 (v2)"""
     summary: str
-    legalBasis: List[LegalBasisItem]
-    recommendations: List[str]
+    legalBasis: List[LegalBasisItem] = Field(default_factory=list, description="법적 근거 (더 이상 사용하지 않음, 호환성을 위해 유지)")
+    recommendations: List[str] = Field(default_factory=list, description="권고사항 (더 이상 사용하지 않음, 호환성을 위해 유지)")
 
 
 class SnippetAnalyzed(BaseModel):
@@ -365,6 +383,7 @@ class SituationResponseV2(BaseModel):
     relatedCases: List[RelatedCaseV2]
     sources: List[SourceItemV2] = Field(default_factory=list, description="RAG 검색 출처 (법령/가이드라인)")
     criteria: Optional[List[CriteriaItem]] = Field(default_factory=list, description="법적 판단 기준")
+    findings: Optional[List[Finding]] = Field(default_factory=list, description="법적 쟁점 발견 항목")
     actionPlan: Optional[ActionPlan] = Field(None, description="행동 계획")
     organizations: Optional[List[OrganizationInfoV2]] = Field(default_factory=list, description="추천 기관 목록")
 

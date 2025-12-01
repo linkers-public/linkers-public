@@ -561,7 +561,7 @@ const getUserId = async (): Promise<string | null> => {
 /**
  * 인증 헤더 가져오기 (Supabase 액세스 토큰)
  */
-const getAuthHeaders = async (): Promise<HeadersInit> => {
+export const getAuthHeaders = async (): Promise<HeadersInit> => {
   const headers: HeadersInit = {};
   
   try {

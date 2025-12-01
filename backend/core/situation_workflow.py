@@ -28,6 +28,10 @@ from core.generator_v2 import LLMGenerator
 from core.prompts import (
     build_situation_classify_prompt,
     build_situation_action_guide_prompt,
+    build_situation_summary_prompt,
+    build_situation_findings_prompt,
+    build_situation_scripts_prompt,
+    build_situation_organizations_prompt,
 )
 
 logger = logging.getLogger(__name__)
@@ -65,10 +69,12 @@ class SituationWorkflowState(TypedDict):
     related_cases: Optional[List[LegalCasePreview]]  # 케이스
     legal_basis: Optional[List[Dict[str, Any]]]  # 법적 근거 구조 (criteria 가공용)
     
-    # 액션 가이드 생성 결과
+    # 액션 가이드 생성 결과 (병렬 생성)
     action_plan: Optional[Dict[str, Any]]  # {steps: [...]}
     scripts: Optional[Dict[str, str]]  # {to_company, to_advisor}
     criteria: Optional[List[Dict[str, Any]]]  # 법적 판단 기준
+    findings: Optional[List[Dict[str, Any]]]  # 법적 쟁점 발견 항목
+    organizations: Optional[List[Dict[str, Any]]]  # 추천 기관 목록
     
     # 최종 결과
     summary_report: Optional[str]  # 마크다운 형식 리포트
@@ -90,7 +96,7 @@ class SituationWorkflow:
         self.graph = self._build_graph()
     
     def _build_graph(self) -> StateGraph:
-        """워크플로우 그래프 구성"""
+        """워크플로우 그래프 구성 (병렬 실행 구조)"""
         workflow = StateGraph(SituationWorkflowState)
         
         # 노드 추가
@@ -98,7 +104,10 @@ class SituationWorkflow:
         workflow.add_node("classify_situation", self.classify_situation_node)
         workflow.add_node("filter_rules", self.filter_rules_node)
         workflow.add_node("retrieve_guides", self.retrieve_guides_node)
-        workflow.add_node("generate_action_guide", self.generate_action_guide_node)
+        
+        # 병렬 실행 노드 (retrieve_guides 이후 모든 필드를 병렬로 생성)
+        workflow.add_node("generate_all_fields", self.generate_all_fields_node)
+        
         workflow.add_node("merge_output", self.merge_output_node)
         
         # 엣지 정의
@@ -106,8 +115,8 @@ class SituationWorkflow:
         workflow.add_edge("prepare_query", "classify_situation")
         workflow.add_edge("classify_situation", "filter_rules")
         workflow.add_edge("filter_rules", "retrieve_guides")
-        workflow.add_edge("retrieve_guides", "generate_action_guide")
-        workflow.add_edge("generate_action_guide", "merge_output")  # generate_summary 제거
+        workflow.add_edge("retrieve_guides", "generate_all_fields")
+        workflow.add_edge("generate_all_fields", "merge_output")
         workflow.add_edge("merge_output", END)
         
         return workflow.compile()
@@ -223,7 +232,98 @@ class SituationWorkflow:
             "legal_basis": legal_basis,
         }
     
-    async def generate_action_guide_node(self, state: SituationWorkflowState) -> SituationWorkflowState:
+    async def generate_all_fields_node(self, state: SituationWorkflowState) -> SituationWorkflowState:
+        """5. 모든 필드 병렬 생성 (summary, findings, scripts, organizations)"""
+        logger.info("[워크플로우] generate_all_fields_node 시작 - 병렬 실행")
+        
+        classification = state.get("classification", {})
+        grounding_chunks = state.get("grounding_chunks", [])
+        legal_basis = state.get("legal_basis", [])
+        query_text = state.get("query_text", "")
+        
+        logger.info(f"[워크플로우] 입력 데이터 확인 - classification: {bool(classification)}, grounding_chunks: {len(grounding_chunks)}개, legal_basis: {len(legal_basis)}개, query_text 길이: {len(query_text)}자")
+        
+        # legal_basis가 빈 배열일 때 fallback
+        if not legal_basis:
+            logger.warning("[워크플로우] legal_basis가 비어있습니다. 기본 criteria 생성")
+            legal_basis = [{
+                "title": "법적 근거 확인 필요",
+                "snippet": "관련 법령 정보를 확인하는 중입니다.",
+                "source_type": "unknown",
+            }]
+        
+        # 병렬로 모든 필드 생성
+        logger.info("[워크플로우] 병렬 LLM 호출 시작 (summary, findings, scripts, organizations)...")
+        start_time = asyncio.get_event_loop().time()
+        
+        summary_result, findings_result, scripts_result, organizations_result = await asyncio.gather(
+            self._llm_generate_summary(
+                situation_text=query_text,
+                classification=classification,
+                grounding_chunks=grounding_chunks,
+                legal_basis=legal_basis,
+                employment_type=state.get("employment_type"),
+                work_period=state.get("work_period"),
+                weekly_hours=state.get("weekly_hours"),
+                is_probation=state.get("is_probation"),
+                social_insurance=state.get("social_insurance"),
+            ),
+            self._llm_generate_findings(
+                situation_text=query_text,
+                classification=classification,
+                grounding_chunks=grounding_chunks,
+                legal_basis=legal_basis,
+                employment_type=state.get("employment_type"),
+                work_period=state.get("work_period"),
+                weekly_hours=state.get("weekly_hours"),
+                is_probation=state.get("is_probation"),
+                social_insurance=state.get("social_insurance"),
+            ),
+            self._llm_generate_scripts(
+                situation_text=query_text,
+                classification=classification,
+                grounding_chunks=grounding_chunks,
+                legal_basis=legal_basis,
+                employment_type=state.get("employment_type"),
+                work_period=state.get("work_period"),
+                weekly_hours=state.get("weekly_hours"),
+                is_probation=state.get("is_probation"),
+                social_insurance=state.get("social_insurance"),
+            ),
+            self._llm_generate_organizations(
+                situation_text=query_text,
+                classification=classification,
+            ),
+            return_exceptions=True
+        )
+        
+        elapsed_time = asyncio.get_event_loop().time() - start_time
+        logger.info(f"[워크플로우] 병렬 LLM 호출 완료 - 소요 시간: {elapsed_time:.2f}초")
+        
+        # 예외 처리
+        if isinstance(summary_result, Exception):
+            logger.error(f"[워크플로우] summary 생성 실패: {summary_result}", exc_info=summary_result)
+            summary_result = ""
+        if isinstance(findings_result, Exception):
+            logger.error(f"[워크플로우] findings 생성 실패: {findings_result}", exc_info=findings_result)
+            findings_result = []
+        if isinstance(scripts_result, Exception):
+            logger.error(f"[워크플로우] scripts 생성 실패: {scripts_result}", exc_info=scripts_result)
+            scripts_result = {}
+        if isinstance(organizations_result, Exception):
+            logger.error(f"[워크플로우] organizations 생성 실패: {organizations_result}", exc_info=organizations_result)
+            organizations_result = []
+        
+        return {
+            **state,
+            "summary_report": summary_result if isinstance(summary_result, str) else "",
+            "scripts": scripts_result if isinstance(scripts_result, dict) else {},
+            "findings": findings_result if isinstance(findings_result, list) else [],
+            "organizations": organizations_result if isinstance(organizations_result, list) else [],
+        }
+    
+    # 기존 함수는 주석 처리 (레거시 호환성 유지)
+    async def generate_action_guide_node_OLD(self, state: SituationWorkflowState) -> SituationWorkflowState:
         """5. 행동 가이드 생성 (summary, criteria, actionPlan, scripts 모두 생성)"""
         logger.info("[워크플로우] generate_action_guide_node 시작")
         
@@ -276,6 +376,7 @@ class SituationWorkflow:
             "action_plan": normalized_result.get("action_plan", {"steps": []}),  # steps 구조
             "scripts": normalized_result.get("scripts", {}),  # toCompany, toAdvisor
             "criteria": normalized_result.get("criteria", []),  # name, status, reason
+            "findings": normalized_result.get("findings", []),  # 법적 쟁점 발견 항목
             "organizations": normalized_result.get("organizations", []),  # 추천 기관 목록
         }
     
@@ -289,6 +390,7 @@ class SituationWorkflow:
         action_plan = state.get("action_plan", {})
         scripts = state.get("scripts", {})
         criteria = state.get("criteria", [])
+        findings = state.get("findings", [])  # 법적 쟁점 발견 항목
         organizations = state.get("organizations", [])  # 추천 기관 목록
         summary_report = state.get("summary_report", "")  # generate_action_guide에서 생성됨
         legal_basis = state.get("legal_basis", [])  # legal_basis 정보 가져오기
@@ -468,11 +570,70 @@ class SituationWorkflow:
             }
             criteria_items.append(criteria_item)
         
+        # findings 처리: LLM이 생성한 findings를 그대로 사용하되, source 정보 보완
+        findings_processed = []
+        if findings:
+            logger.info(f"[워크플로우] findings 처리 시작: {len(findings)}개")
+            for idx, finding in enumerate(findings):
+                if not isinstance(finding, dict):
+                    logger.warning(f"[워크플로우] finding[{idx}]이 dict가 아님: {type(finding)}")
+                    continue
+                
+                # source 정보 보완 (fileUrl이 없으면 생성)
+                source = finding.get("source", {})
+                if not isinstance(source, dict):
+                    logger.warning(f"[워크플로우] finding[{idx}] source가 dict가 아님: {type(source)}")
+                    source = {}
+                
+                document_title = source.get("documentTitle", "").strip()
+                source_type = source.get("sourceType", "law")
+                external_id = None
+                
+                # grounding_chunks에서 해당 문서 찾아서 external_id 및 fileUrl 보완
+                for chunk in grounding_chunks:
+                    if document_title and (chunk.title == document_title or document_title in chunk.title):
+                        external_id = getattr(chunk, 'external_id', None)
+                        source_type = chunk.source_type  # grounding_chunks의 source_type 사용
+                        if not source.get("fileUrl") and external_id:
+                            try:
+                                from core.file_utils import get_document_file_url
+                                file_url = get_document_file_url(
+                                    external_id=external_id,
+                                    source_type=source_type,
+                                    expires_in=3600
+                                )
+                                source["fileUrl"] = file_url
+                                logger.debug(f"[워크플로우] finding[{idx}] fileUrl 생성: {file_url[:50]}...")
+                            except Exception as e:
+                                logger.warning(f"[워크플로우] finding[{idx}] source fileUrl 생성 실패: {str(e)}")
+                        # similarityScore가 없으면 chunk.score 사용
+                        if not source.get("similarityScore"):
+                            source["similarityScore"] = float(chunk.score)
+                        # refinedSnippet이 없으면 chunk.snippet 사용 (다듬지 않은 원문)
+                        if not source.get("refinedSnippet"):
+                            source["refinedSnippet"] = chunk.snippet
+                        break
+                
+                # sourceType 매핑 (guideline -> manual, statute -> law)
+                if source.get("sourceType") == "guideline":
+                    source["sourceType"] = "manual"
+                elif source.get("sourceType") == "statute":
+                    source["sourceType"] = "law"
+                
+                # source 정보 업데이트
+                finding["source"] = source
+                findings_processed.append(finding)
+            
+            logger.info(f"[워크플로우] findings 처리 완료: {len(findings_processed)}개")
+        else:
+            logger.warning("[워크플로우] findings가 비어있거나 None입니다.")
+        
         final_output = {
             "classified_type": classification.get("classified_type", "unknown"),
             "risk_score": classification.get("risk_score", 50),
             "summary": summary_report,  # generate_action_guide에서 생성된 4개 섹션 마크다운
             "criteria": criteria_items,  # RAG 검색 결과 기반 (새로운 구조)
+            "findings": findings_processed,  # 법적 쟁점 발견 항목
             "action_plan": action_plan,  # steps 구조
             "scripts": scripts,  # toCompany, toAdvisor
             "related_cases": formatted_related_cases,
@@ -942,7 +1103,7 @@ class SituationWorkflow:
                 else:
                     action_plan_steps_count = 0
                 
-                logger.info(f"[워크플로우] 파싱된 action_result: summary 길이={len(result.get('summary', ''))}, criteria 개수={len(result.get('criteria', []))}, action_plan steps={action_plan_steps_count}")
+                logger.info(f"[워크플로우] 파싱된 action_result: summary 길이={len(result.get('summary', ''))}, criteria 개수={len(result.get('criteria', []))}, findings 개수={len(result.get('findings', []))}, action_plan steps={action_plan_steps_count}")
                 return result
             except json.JSONDecodeError as e:
                 logger.error(f"[워크플로우] JSON 파싱 실패: {str(e)}")
@@ -1087,7 +1248,7 @@ class SituationWorkflow:
                     emoji = section_info.get("emoji")
                     if emoji and emoji in line_stripped:
                         # 이모지 뒤에 키워드가 있는지 확인
-                        for keyword in section_info["keywords"]:
+                    for keyword in section_info["keywords"]:
                             if keyword != emoji and keyword in line_stripped:
                                 current_section_key = section_info["title"]
                                 if current_section_key not in section_contents:
@@ -1127,7 +1288,7 @@ class SituationWorkflow:
                         emoji = section_info.get("emoji")
                         if emoji and emoji in line_stripped:
                             # 이모지 뒤에 키워드가 있는지 확인
-                            for keyword in section_info["keywords"]:
+                        for keyword in section_info["keywords"]:
                                 if keyword != emoji and keyword in line_stripped:
                                     is_header = True
                                     break
@@ -1227,10 +1388,10 @@ class SituationWorkflow:
                     default_text = default_content.get(section_key_matched or section_key, "해당 섹션 내용을 확인하는 중입니다.")
                     # 기본값 텍스트인 경우 섹션을 추가하지 않음
                     if default_text and default_text != "관련 법령을 확인하여 현재 상황을 법적으로 평가해야 합니다." and default_text != "해당 섹션 내용을 확인하는 중입니다.":
-                        reconstructed_parts.append(title)
-                        reconstructed_parts.append("")
-                        reconstructed_parts.append(default_text)
-                        reconstructed_parts.append("")
+                    reconstructed_parts.append(title)
+                    reconstructed_parts.append("")
+                    reconstructed_parts.append(default_text)
+                    reconstructed_parts.append("")
             
             return '\n'.join(reconstructed_parts).strip()
         except Exception as e:
@@ -1548,7 +1709,92 @@ class SituationWorkflow:
         result["action_plan"] = action_plan
         result["scripts"] = validated_scripts
         
-        # 3. organizations 검증 및 정규화
+        # 3. findings 검증 및 정규화
+        findings = result.get("findings", [])
+        logger.info(f"[워크플로우] findings 원본 개수: {len(findings) if isinstance(findings, list) else 0}")
+        if findings and isinstance(findings, list):
+            validated_findings = []
+            for idx, finding in enumerate(findings):
+                if not isinstance(finding, dict):
+                    logger.debug(f"[워크플로우] finding[{idx}]이 dict가 아님: {type(finding)}")
+                    continue
+                
+                # 필수 필드 검증
+                id_val = finding.get("id")
+                title = finding.get("title", "").strip()
+                status_label = finding.get("statusLabel", "").strip()
+                basis_text = finding.get("basisText", "").strip()
+                source = finding.get("source", {})
+                
+                logger.debug(f"[워크플로우] finding[{idx}] 검증 시작: title={title[:30] if title else '(없음)'}, statusLabel={status_label}, basisText 길이={len(basis_text)}")
+                
+                # source 검증 (basisText 보완을 위해 먼저 확인)
+                if not isinstance(source, dict):
+                    logger.debug(f"[워크플로우] finding[{idx}] source가 dict가 아님: {type(source)}")
+                    source = {}
+                
+                # source 필수 필드 검증
+                document_title = source.get("documentTitle", "").strip()
+                source_type = source.get("sourceType", "law").strip()
+                refined_snippet = source.get("refinedSnippet", "").strip()
+                # refinedSnippet이 없으면 snippet을 사용 (fallback)
+                if not refined_snippet:
+                    refined_snippet = source.get("snippet", "").strip()
+                similarity_score = source.get("similarityScore", 0.0)
+                
+                logger.debug(f"[워크플로우] finding[{idx}] source 필드: documentTitle={document_title[:30] if document_title else '(없음)'}, refinedSnippet 길이={len(refined_snippet)}")
+                
+                # documentTitle이 없으면 title을 사용 (fallback)
+                if not document_title:
+                    document_title = source.get("title", "").strip()
+                
+                # source 필수 필드가 없으면 제외
+                if not document_title or not refined_snippet:
+                    logger.warning(f"[워크플로우] finding[{idx}] source 필수 필드 누락으로 제외: documentTitle={bool(document_title)}, refinedSnippet={bool(refined_snippet)}, finding={finding}")
+                    continue
+                
+                # basisText에 "{documentTitle}에 따르면" 포함 여부 확인 및 보완
+                if document_title:
+                    # "에 따르면" 패턴 확인
+                    if "에 따르면" not in basis_text:
+                        # basisText 시작 부분에 "{documentTitle}에 따르면" 추가
+                        if basis_text:
+                            basis_text = f"{document_title}에 따르면, {basis_text}"
+                        else:
+                            basis_text = f"{document_title}에 따르면, 관련 법적 기준에 부합할 수 있습니다."
+                        logger.debug(f"[워크플로우] basisText에 '{document_title}에 따르면' 추가: {basis_text[:100]}...")
+                    # "{documentTitle}에 따르면"이 있지만 documentTitle이 포함되지 않은 경우 보완
+                    elif document_title not in basis_text:
+                        # 기존 "에 따르면" 앞에 documentTitle 추가
+                        basis_text = basis_text.replace("에 따르면", f"{document_title}에 따르면", 1)
+                        logger.debug(f"[워크플로우] basisText에 documentTitle 추가: {basis_text[:100]}...")
+                
+                # 필수 필드가 없으면 제외
+                if not title or not status_label or not basis_text:
+                    logger.debug(f"[워크플로우] 필수 필드가 없는 finding 제외: {finding}")
+                    continue
+                
+                validated_findings.append({
+                    "id": id_val if id_val is not None else len(validated_findings) + 1,
+                    "title": title,
+                    "statusLabel": status_label,
+                    "basisText": basis_text,
+                    "source": {
+                        "documentTitle": document_title,
+                        "fileUrl": source.get("fileUrl"),  # 선택적 필드
+                        "sourceType": source_type,
+                        "refinedSnippet": refined_snippet,
+                        "similarityScore": float(similarity_score) if similarity_score else 0.0,
+                    }
+                })
+            
+            result["findings"] = validated_findings
+            logger.info(f"[워크플로우] findings 검증 완료: {len(validated_findings)}개 (원본 {len(findings)}개 중)")
+        else:
+            result["findings"] = []
+            logger.warning(f"[워크플로우] findings가 없거나 유효하지 않음: findings 타입={type(findings)}, 값={findings}")
+        
+        # 4. organizations 검증 및 정규화
         organizations = result.get("organizations", [])
         if not organizations or len(organizations) == 0:
             logger.warning("[워크플로우] organizations가 비어있습니다. 기본 organizations 생성")
@@ -1687,10 +1933,10 @@ class SituationWorkflow:
                     context = summary[start:end]
                     
                     # 이모지 뒤에 "상황 분석", "법적 판단" 등의 키워드가 있는지 확인
-                    for keyword in section_info["keywords"]:
+                for keyword in section_info["keywords"]:
                         if keyword in context and keyword != emoji:
-                            found = True
-                            break
+                        found = True
+                        break
                 
                 # 이모지로 찾지 못한 경우 키워드로 확인 (레거시 형식 지원)
                 if not found:
@@ -1714,8 +1960,8 @@ class SituationWorkflow:
                             is_line_start = keyword_pos == 0 or summary[keyword_pos - 1] == '\n'
                             
                             if has_header_marker or is_line_start:
-                                found = True
-                                break
+                        found = True
+                        break
             
             if found:
                 found_sections.append(section_info["title"])
@@ -1797,7 +2043,7 @@ class SituationWorkflow:
                     default_text = default_content.get(section_key_matched or section_key, "해당 섹션 내용을 확인하는 중입니다.")
                     # 기본값 텍스트인 경우 섹션을 추가하지 않음
                     if default_text and default_text != "관련 법령을 확인하여 현재 상황을 법적으로 평가해야 합니다." and default_text != "해당 섹션 내용을 확인하는 중입니다.":
-                        summary += f"\n\n{section_info['title']}\n\n{default_text}"
+                    summary += f"\n\n{section_info['title']}\n\n{default_text}"
         
         return {
             "summary": summary,
@@ -1806,6 +2052,160 @@ class SituationWorkflow:
             "scripts": validated_scripts,
             "organizations": organizations,
         }
+    
+    async def _llm_generate_summary(
+        self,
+        situation_text: str,
+        classification: Dict[str, Any],
+        grounding_chunks: List[LegalGroundingChunk],
+        legal_basis: List[Dict[str, Any]],
+        employment_type: Optional[str] = None,
+        work_period: Optional[str] = None,
+        weekly_hours: Optional[int] = None,
+        is_probation: Optional[bool] = None,
+        social_insurance: Optional[str] = None,
+    ) -> str:
+        """summary만 생성 (분리된 프롬프트 사용)"""
+        logger.info("[워크플로우] _llm_generate_summary 시작")
+        prompt = build_situation_summary_prompt(
+            situation_text=situation_text,
+            classification=classification,
+            grounding_chunks=grounding_chunks,
+            legal_basis=legal_basis,
+            employment_type=employment_type,
+            work_period=work_period,
+            weekly_hours=weekly_hours,
+            is_probation=is_probation,
+            social_insurance=social_insurance,
+        )
+        
+        response = await self._call_llm(prompt)
+        # JSON 파싱하여 summary만 추출
+        try:
+            import json
+            import re
+            json_match = re.search(r'\{.*\}', response, re.DOTALL)
+            if json_match:
+                result = json.loads(json_match.group())
+                return result.get('summary', '')
+        except Exception as e:
+            logger.error(f"[워크플로우] summary JSON 파싱 실패: {e}")
+        return ""
+    
+    async def _llm_generate_findings(
+        self,
+        situation_text: str,
+        classification: Dict[str, Any],
+        grounding_chunks: List[LegalGroundingChunk],
+        legal_basis: List[Dict[str, Any]],
+        employment_type: Optional[str] = None,
+        work_period: Optional[str] = None,
+        weekly_hours: Optional[int] = None,
+        is_probation: Optional[bool] = None,
+        social_insurance: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """findings만 생성 (분리된 프롬프트 사용)"""
+        logger.info("[워크플로우] _llm_generate_findings 시작")
+        prompt = build_situation_findings_prompt(
+            situation_text=situation_text,
+            classification=classification,
+            grounding_chunks=grounding_chunks,
+            legal_basis=legal_basis,
+            employment_type=employment_type,
+            work_period=work_period,
+            weekly_hours=weekly_hours,
+            is_probation=is_probation,
+            social_insurance=social_insurance,
+        )
+        response = await self._call_llm(prompt)
+        logger.info(f"[워크플로우] findings LLM 응답 길이: {len(response)}자")
+        logger.debug(f"[워크플로우] findings LLM 응답 (처음 500자): {response[:500]}")
+        
+        try:
+            import json
+            import re
+            # JSON 블록 추출 (```json ... ``` 또는 {...} 패턴)
+            json_match = re.search(r'```json\s*(\{.*?\})\s*```', response, re.DOTALL)
+            if not json_match:
+                json_match = re.search(r'\{.*\}', response, re.DOTALL)
+            
+            if json_match:
+                json_str = json_match.group(1) if json_match.lastindex else json_match.group()
+                # JSON 문자열 정리
+                json_str = json_str.strip()
+                result = json.loads(json_str)
+                findings = result.get('findings', [])
+                logger.info(f"[워크플로우] findings 파싱 성공: {len(findings)}개")
+                if findings:
+                    logger.debug(f"[워크플로우] 첫 번째 finding 예시: {findings[0] if len(findings) > 0 else '없음'}")
+                return findings
+            else:
+                logger.warning(f"[워크플로우] findings JSON 패턴을 찾을 수 없음. 응답: {response[:200]}")
+        except json.JSONDecodeError as e:
+            logger.error(f"[워크플로우] findings JSON 파싱 실패: {e}, 응답 (처음 500자): {response[:500]}")
+        except Exception as e:
+            logger.error(f"[워크플로우] findings 생성 중 예외 발생: {e}", exc_info=True)
+        return []
+    
+    async def _llm_generate_scripts(
+        self,
+        situation_text: str,
+        classification: Dict[str, Any],
+        grounding_chunks: List[LegalGroundingChunk],
+        legal_basis: List[Dict[str, Any]],
+        employment_type: Optional[str] = None,
+        work_period: Optional[str] = None,
+        weekly_hours: Optional[int] = None,
+        is_probation: Optional[bool] = None,
+        social_insurance: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """scripts만 생성 (분리된 프롬프트 사용)"""
+        logger.info("[워크플로우] _llm_generate_scripts 시작")
+        prompt = build_situation_scripts_prompt(
+            situation_text=situation_text,
+            classification=classification,
+            grounding_chunks=grounding_chunks,
+            legal_basis=legal_basis,
+            employment_type=employment_type,
+            work_period=work_period,
+            weekly_hours=weekly_hours,
+            is_probation=is_probation,
+            social_insurance=social_insurance,
+        )
+        response = await self._call_llm(prompt)
+        try:
+            import json
+            import re
+            json_match = re.search(r'\{.*\}', response, re.DOTALL)
+            if json_match:
+                result = json.loads(json_match.group())
+                return result.get('scripts', {})
+        except Exception as e:
+            logger.error(f"[워크플로우] scripts JSON 파싱 실패: {e}")
+        return {}
+    
+    async def _llm_generate_organizations(
+        self,
+        situation_text: str,
+        classification: Dict[str, Any],
+    ) -> List[Dict[str, Any]]:
+        """organizations만 생성 (분리된 프롬프트 사용)"""
+        logger.info("[워크플로우] _llm_generate_organizations 시작")
+        prompt = build_situation_organizations_prompt(
+            situation_text=situation_text,
+            classification=classification,
+        )
+        response = await self._call_llm(prompt)
+        try:
+            import json
+            import re
+            json_match = re.search(r'\{.*\}', response, re.DOTALL)
+            if json_match:
+                result = json.loads(json_match.group())
+                return result.get('organizations', [])
+        except Exception as e:
+            logger.error(f"[워크플로우] organizations JSON 파싱 실패: {e}")
+        return []
     
     async def _call_llm(self, prompt: str) -> str:
         """LLM 호출 (Groq/Ollama) - 타임아웃 및 로깅 포함"""
